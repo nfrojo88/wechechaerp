@@ -42,6 +42,14 @@
                 <i class="fas fa-shield-halved me-1"></i> Global Admin Override
             </span>
             @endif
+            @if($isGlobalAdmin || $isAdmin || $isPurchaseManagerUser || $isStoreManagerUser)
+            <form action="{{ route('procurement.purge-zero-items') }}" method="POST" class="d-inline" onsubmit="return confirm('Clean and purge all empty requisitions that have zero (0) items added?');">
+                @csrf
+                <button type="submit" class="btn btn-outline-warning shadow-sm fw-bold" title="Purge zero-item empty requisitions">
+                    <i class="fas fa-broom me-1"></i> Clean Zero-Item Requests
+                </button>
+            </form>
+            @endif
             @if(!$isAuditorUser)
             <a href="{{ route('purchase-requests.create') }}" class="btn btn-primary shadow-sm fw-bold">
                 <i class="fas fa-plus me-1"></i> New Purchase Request
@@ -141,6 +149,21 @@
                             <div class="h2 mb-0 font-weight-bold">{{ $kpi['completed'] }}</div>
                         </div>
                         <i class="fas fa-check-circle fa-2x text-white-50"></i>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <!-- Card 5: Deleted & Cancelled (Requisition Archive) -->
+        <div class="col-12 col-sm-6 col-xl">
+            <a href="{{ route('procurement.my-queue', array_merge(request()->query(), ['tab' => 'deleted'])) }}" class="text-decoration-none">
+                <div class="card border-0 shadow-sm text-white h-100 {{ $currentTab === 'deleted' ? 'border border-2 border-white' : '' }}" style="background: linear-gradient(135deg, #64748b, #475569) !important; cursor: pointer; transition: transform 0.15s ease;">
+                    <div class="card-body p-3 d-flex align-items-center justify-content-between">
+                        <div>
+                            <div class="text-white-50 small font-weight-bold">Deleted &amp; Cancelled</div>
+                            <div class="h2 mb-0 font-weight-bold">{{ $kpi['deleted'] ?? 0 }}</div>
+                        </div>
+                        <i class="fas fa-trash-can fa-2x text-white-50"></i>
                     </div>
                 </div>
             </a>
@@ -293,6 +316,14 @@
                     </a>
                 </li>
                 @endif
+                <!-- Tab 5: Deleted & Cancelled Requisitions ("Deleted Questions") -->
+                <li class="nav-item">
+                    <a class="nav-link {{ $currentTab === 'deleted' ? 'active shadow-sm' : '' }} fw-bold" 
+                       href="{{ route('procurement.my-queue', array_merge(request()->query(), ['tab' => 'deleted'])) }}">
+                        <i class="fas fa-trash-can me-1 text-danger"></i> Deleted &amp; Cancelled
+                        <span class="badge {{ $currentTab === 'deleted' ? 'bg-white text-danger' : 'bg-danger text-white' }} ms-1">{{ $kpi['deleted'] ?? 0 }}</span>
+                    </a>
+                </li>
             </ul>
 
             <div class="text-muted small">
@@ -302,6 +333,8 @@
                     <span class="badge bg-light text-dark border"><i class="fas fa-check-circle me-1 text-success"></i> Stocked &amp; Intake Completed Archives</span>
                 @elseif($currentTab === 'all')
                     <span class="badge bg-light text-dark border"><i class="fas fa-globe me-1 text-secondary"></i> Organization-wide Procurement</span>
+                @elseif($currentTab === 'deleted')
+                    <span class="badge bg-light text-dark border"><i class="fas fa-trash-can me-1 text-danger"></i> Deleted &amp; Cancelled Questions Category</span>
                 @else
                     <span class="badge bg-light text-dark border"><i class="fas fa-inbox me-1 text-warning"></i> Role Pending Action Feed</span>
                 @endif
@@ -934,6 +967,220 @@
                 @if($allPrs->hasPages())
                 <div class="card-footer bg-white border-0 py-3">
                     {{ $allPrs->links() }}
+                </div>
+                @endif
+
+            {{-- ════════════════════════════════════════════════════════════════ --}}
+            {{-- TAB 5: DELETED & CANCELLED REQUISITIONS (QUESTION ARCHIVE)       --}}
+            {{-- ════════════════════════════════════════════════════════════════ --}}
+            @elseif($currentTab === 'deleted')
+                <div class="p-3 bg-light border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <div>
+                        <h6 class="fw-bold text-danger mb-0">
+                            <i class="fas fa-trash-can me-2"></i>Deleted &amp; Cancelled Requisitions ("Deleted Questions")
+                        </h6>
+                        <small class="text-muted">Dedicated category for soft-deleted requests, cancelled PRs, and rejected requisitions.</small>
+                    </div>
+                    <span class="badge bg-danger rounded-pill px-3 py-2">{{ ($deletedPrs->total() ?? 0) + ($deletedMrs->count() ?? 0) }} Total In Category</span>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Category / Ref #</th>
+                                <th>Project &amp; Store</th>
+                                <th>Requester</th>
+                                <th>Requested Items Summary</th>
+                                <th>Status / Archive Reason</th>
+                                <th>Archived Date</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {{-- Soft-deleted or cancelled/rejected PRs --}}
+                            @forelse($deletedPrs as $dPr)
+                            <tr>
+                                <td>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <div class="p-2 rounded bg-danger bg-opacity-10 text-danger">
+                                            <i class="fas fa-file-invoice"></i>
+                                        </div>
+                                        <div>
+                                            <span class="fw-bold font-monospace text-dark">{{ $dPr->pr_no }}</span>
+                                            <div>
+                                                @if($dPr->trashed())
+                                                    <span class="badge bg-danger text-white" style="font-size:9px;">Soft-Deleted PR</span>
+                                                @elseif($dPr->status === \App\Models\PurchaseRequest::STATUS_CANCELLED)
+                                                    <span class="badge bg-dark text-white" style="font-size:9px;">Cancelled PR</span>
+                                                @elseif($dPr->status === \App\Models\PurchaseRequest::STATUS_REJECTED)
+                                                    <span class="badge bg-danger bg-opacity-75 text-white" style="font-size:9px;">Rejected PR</span>
+                                                @else
+                                                    <span class="badge bg-secondary text-white" style="font-size:9px;">{{ $dPr->status_label }}</span>
+                                                @endif
+
+                                                @if($dPr->material_request_id)
+                                                    <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25" style="font-size:9px;">From MR</span>
+                                                @endif
+                                            </div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="fw-semibold text-dark">{{ $dPr->project?->name ?? 'Head Office / Unassigned' }}</div>
+                                    <small class="text-muted"><i class="fas fa-warehouse me-1"></i>{{ $dPr->store?->name ?? 'Store Unassigned' }}</small>
+                                </td>
+                                <td>
+                                    <div class="fw-semibold text-dark">{{ $dPr->requestedBy?->name ?? 'System' }}</div>
+                                    <small class="text-muted">{{ $dPr->requestedBy?->email ?? '' }}</small>
+                                </td>
+                                <td>
+                                    <div class="fw-bold small text-dark mb-1">
+                                        <i class="fas fa-boxes-stacked me-1 text-secondary"></i>{{ $dPr->items->count() }} Material Item(s)
+                                    </div>
+                                    <div class="text-muted small" style="font-size:11px;">
+                                        @foreach($dPr->items->take(2) as $itm)
+                                            <span class="badge bg-light text-dark border me-1">
+                                                {{ $itm->product?->name ?? 'Item' }}: {{ (float)$itm->quantity }} {{ $itm->unit }}
+                                            </span>
+                                        @endforeach
+                                        @if($dPr->items->count() > 2)
+                                            <span class="text-muted">+{{ $dPr->items->count() - 2 }} more</span>
+                                        @endif
+                                    </div>
+                                </td>
+                                <td>
+                                    @if($dPr->trashed())
+                                        <span class="badge bg-danger py-1 px-2 mb-1"><i class="fas fa-trash me-1"></i>Deleted From Active Queue</span>
+                                    @elseif($dPr->status === \App\Models\PurchaseRequest::STATUS_REJECTED)
+                                        <span class="badge bg-danger py-1 px-2 mb-1"><i class="fas fa-ban me-1"></i>Rejected</span>
+                                    @elseif($dPr->status === \App\Models\PurchaseRequest::STATUS_CANCELLED)
+                                        <span class="badge bg-dark py-1 px-2 mb-1"><i class="fas fa-xmark me-1"></i>Cancelled</span>
+                                    @endif
+
+                                    @if($dPr->rejection_reason)
+                                        <div class="text-danger small fst-italic mt-1" style="max-width: 260px;">
+                                            <i class="fas fa-comment-dots me-1"></i>Reason: {{ Str::limit($dPr->rejection_reason, 90) }}
+                                        </div>
+                                    @elseif($dPr->pm_sendback_reason)
+                                        <div class="text-warning small fst-italic mt-1" style="max-width: 260px;">
+                                            <i class="fas fa-reply me-1"></i>Sendback: {{ Str::limit($dPr->pm_sendback_reason, 90) }}
+                                        </div>
+                                    @endif
+                                </td>
+                                <td>
+                                    <div class="fw-semibold text-dark">
+                                        {{ ($dPr->deleted_at ?? $dPr->updated_at)->format('M d, Y') }}
+                                    </div>
+                                    <small class="text-muted">
+                                        {{ ($dPr->deleted_at ?? $dPr->updated_at)->diffForHumans() }}
+                                    </small>
+                                </td>
+                                <td class="text-end">
+                                    <div class="d-flex justify-content-end align-items-center gap-1">
+                                        @if(!$dPr->trashed())
+                                        <a href="{{ route('purchase-requests.show', $dPr->id) }}" class="btn btn-sm btn-outline-info shadow-xs fw-semibold">
+                                            <i class="fas fa-eye me-1"></i> Details
+                                        </a>
+                                        @endif
+
+                                        @if($dPr->trashed() && ($isGlobalAdmin || $isAdmin))
+                                        <form action="{{ route('purchase-requests.restore', $dPr->id) }}" method="POST" class="d-inline" onsubmit="return confirm('Restore Purchase Request {{ $dPr->pr_no }} back to active queue?');">
+                                            @csrf
+                                            <button type="submit" class="btn btn-sm btn-outline-success shadow-xs fw-bold" title="Restore back to active queue">
+                                                <i class="fas fa-trash-arrow-up me-1"></i> Restore
+                                            </button>
+                                        </form>
+                                        @endif
+                                    </div>
+                                </td>
+                            </tr>
+                            @empty
+                                @if($deletedMrs->isEmpty())
+                                <tr>
+                                    <td colspan="7" class="text-center py-5 text-muted">
+                                        <i class="fas fa-trash-can fa-3x mb-3 text-secondary opacity-50 d-block"></i>
+                                        <h6 class="fw-bold text-dark">No deleted or cancelled requisitions found.</h6>
+                                        <p class="small text-muted mb-0">Any requisitions or purchase requests that get cancelled, rejected, or soft-deleted are kept in this category.</p>
+                                    </td>
+                                </tr>
+                                @endif
+                            @endforelse
+
+                            {{-- Also show rejected or cancelled Material Requests (Requisitions) --}}
+                            @foreach($deletedMrs as $dMr)
+                            <tr class="table-light">
+                                <td>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <div class="p-2 rounded bg-secondary bg-opacity-10 text-secondary">
+                                            <i class="fas fa-clipboard-question"></i>
+                                        </div>
+                                        <div>
+                                            <span class="fw-bold font-monospace text-dark">{{ $dMr->reference_number }}</span>
+                                            <div>
+                                                <span class="badge bg-warning bg-opacity-25 text-dark" style="font-size:9px;">Material Requisition</span>
+                                                <span class="badge bg-danger text-white" style="font-size:9px;">{{ ucfirst($dMr->status) }}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="fw-semibold text-dark">{{ $dMr->project?->name ?? 'Head Office / General' }}</div>
+                                    <small class="text-muted"><i class="fas fa-warehouse me-1"></i>{{ $dMr->store?->name ?? 'Store Unassigned' }}</small>
+                                </td>
+                                <td>
+                                    <div class="fw-semibold text-dark">{{ $dMr->creator?->name ?? $dMr->requestedBy?->name ?? 'Unknown' }}</div>
+                                    <small class="text-muted">{{ $dMr->creator?->email ?? '' }}</small>
+                                </td>
+                                <td>
+                                    <div class="fw-bold small text-dark mb-1">
+                                        <i class="fas fa-boxes-stacked me-1 text-secondary"></i>{{ $dMr->items->count() }} Material Item(s)
+                                    </div>
+                                    <div class="text-muted small" style="font-size:11px;">
+                                        @foreach($dMr->items->take(2) as $itm)
+                                            <span class="badge bg-light text-dark border me-1">
+                                                {{ $itm->product?->name ?? 'Item' }}: {{ (float)$itm->quantity }} {{ $itm->unit }}
+                                            </span>
+                                        @endforeach
+                                        @if($dMr->items->count() > 2)
+                                            <span class="text-muted">+{{ $dMr->items->count() - 2 }} more</span>
+                                        @endif
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="badge bg-{{ $dMr->status === 'rejected' ? 'danger' : 'dark' }} py-1 px-2 mb-1">
+                                        <i class="fas {{ $dMr->status === 'rejected' ? 'fa-ban' : 'fa-xmark' }} me-1"></i>{{ ucfirst($dMr->status) }}
+                                    </span>
+                                    @if(!empty($dMr->planning_rejection_reason))
+                                        <div class="text-danger small fst-italic mt-1" style="max-width: 260px;">
+                                            <i class="fas fa-comment-dots me-1"></i>Reason: {{ Str::limit($dMr->planning_rejection_reason, 90) }}
+                                        </div>
+                                    @elseif(!empty($dMr->rejection_reason))
+                                        <div class="text-danger small fst-italic mt-1" style="max-width: 260px;">
+                                            <i class="fas fa-comment-dots me-1"></i>Reason: {{ Str::limit($dMr->rejection_reason, 90) }}
+                                        </div>
+                                    @endif
+                                </td>
+                                <td>
+                                    <div class="fw-semibold text-dark">{{ $dMr->updated_at->format('M d, Y') }}</div>
+                                    <small class="text-muted">{{ $dMr->updated_at->diffForHumans() }}</small>
+                                </td>
+                                <td class="text-end">
+                                    <div class="d-flex justify-content-end align-items-center gap-1">
+                                        <a href="{{ route('material-requests.show', $dMr->id) }}" class="btn btn-sm btn-outline-info shadow-xs fw-semibold">
+                                            <i class="fas fa-eye me-1"></i> Details
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+
+                @if($deletedPrs->hasPages())
+                <div class="card-footer bg-white border-0 py-3">
+                    {{ $deletedPrs->links() }}
                 </div>
                 @endif
             @endif

@@ -28,9 +28,10 @@ class ProcurementLifecycleController extends Controller
                 ->update(['current_owner_role' => 'purchase_manager']);
         } catch (\Throwable $e) {}
 
-        // Auto-heal / Sync: Ensure every Material Request is seamlessly integrated into the Purchase Request Procurement Lifecycle
+        // Auto-heal / Sync: Ensure Material Requests WITH ITEMS are seamlessly integrated into the PR lifecycle
         try {
-            $unlinkedMrs = MaterialRequest::whereDoesntHave('purchaseRequests')
+            $unlinkedMrs = MaterialRequest::whereHas('items')
+                ->whereDoesntHave('purchaseRequests')
                 ->with(['items.product', 'project'])
                 ->get();
             foreach ($unlinkedMrs as $uMr) {
@@ -38,6 +39,29 @@ class ProcurementLifecycleController extends Controller
             }
         } catch (\Throwable $e) {
             \Log::error("ProcurementLifecycleController::myQueue auto-sync MRs to PR flow error: " . $e->getMessage());
+        }
+
+        // Auto-clean / Purge: Automatically delete empty PRs and MRs that have ZERO items and no financial/intake activity
+        try {
+            $zeroItemPrs = PurchaseRequest::whereDoesntHave('items')
+                ->whereDoesntHave('payment')
+                ->whereDoesntHave('receipt')
+                ->whereDoesntHave('deliveryReceipts')
+                ->whereDoesntHave('driverBooking')
+                ->whereDoesntHave('creditLedger')
+                ->get();
+            foreach ($zeroItemPrs as $zPr) {
+                $zPr->forceDelete();
+            }
+
+            $zeroItemMrs = MaterialRequest::whereDoesntHave('items')
+                ->whereDoesntHave('purchaseRequests')
+                ->get();
+            foreach ($zeroItemMrs as $zMr) {
+                $zMr->delete();
+            }
+        } catch (\Throwable $e) {
+            \Log::error("ProcurementLifecycleController::myQueue auto-clean zero item requests error: " . $e->getMessage());
         }
 
         $user = Auth::user();
@@ -190,8 +214,9 @@ class ProcurementLifecycleController extends Controller
             if ($user->hasRole('planning'))           $targetRoles[] = 'planning';
         }
 
-        // 2. Fetch PRs awaiting action by this user's role(s)
+        // 2. Fetch PRs awaiting action by this user's role(s) (must have items)
         $prQuery = PurchaseRequest::with(['project', 'requestedBy', 'store', 'materialRequest.project', 'materialRequest.creator', 'items.product'])
+            ->whereHas('items')
             ->latest();
 
         if (!$isAdmin && !$isAuditor) {
@@ -281,10 +306,11 @@ class ProcurementLifecycleController extends Controller
 
         $myPrs = $prQuery->paginate(15, ['*'], 'pr_page')->withQueryString();
 
-        // 3. Emergency / Pending MR approval queue for Planning Team
+        // 3. Emergency / Pending MR approval queue for Planning Team (must have items)
         $emergencyMrs = collect();
         if ($user->hasRole('planning') || $user->hasRole('planning_manager') || $isAdmin) {
             $emergencyMrs = MaterialRequest::with(['project', 'creator', 'requestedBy', 'maintenanceRequest', 'items.product', 'purchaseRequests'])
+                ->whereHas('items')
                 ->where(function($q) {
                     $q->where('planning_approval_status', 'pending')
                       ->orWhereIn('status', ['pending_planning', 'submitted', 'pending']);
@@ -294,9 +320,10 @@ class ProcurementLifecycleController extends Controller
                 ->get();
         }
 
-        // 4. Material & Maintenance Requisitions (Store & Coordinator Procurement Phase)
+        // 4. Material & Maintenance Requisitions (Store & Coordinator Procurement Phase - must have items)
         // STRICT RULE: Once an MR has been converted or sent to PR, it belongs strictly to PR lifecycle and must NOT show in this pending MR queue.
         $mrQuery = MaterialRequest::with(['project', 'store', 'creator', 'requestedBy', 'maintenanceRequest', 'items.product', 'purchaseRequests'])
+            ->whereHas('items')
             ->whereNotIn('status', ['sent_to_pr', 'completed', 'approved', 'rejected', 'cancelled'])
             ->whereDoesntHave('purchaseRequests')
             ->latest();
@@ -327,11 +354,13 @@ class ProcurementLifecycleController extends Controller
         $pendingStoreOfficeCount = 0;
         $pendingFinanceOfficeCount = 0;
 
-        // 5. User's Created Requisitions & Purchase Requests History ("they created question history")
+        // 5. User's Created Requisitions & Purchase Requests History (must have items)
         $createdPrQuery = PurchaseRequest::with(['project', 'requestedBy', 'store', 'materialRequest', 'items.product', 'deliveryReceipts'])
+            ->whereHas('items')
             ->latest();
 
         $createdMrQuery = MaterialRequest::with(['project', 'store', 'creator', 'requestedBy', 'items.product', 'purchaseRequests'])
+            ->whereHas('items')
             ->latest();
 
         if (!$isAdmin && !$isAuditor) {
@@ -354,11 +383,12 @@ class ProcurementLifecycleController extends Controller
         $myCreatedMrs = $createdMrQuery->take(50)->get();
 
         $myCreatedCount = ($isAdmin || $isAuditor)
-            ? (PurchaseRequest::count() + MaterialRequest::count())
-            : (PurchaseRequest::where('requested_by', $user->id)->count() + MaterialRequest::where('created_by', $user->id)->count());
+            ? (PurchaseRequest::whereHas('items')->count() + MaterialRequest::whereHas('items')->whereDoesntHave('purchaseRequests')->count())
+            : (PurchaseRequest::whereHas('items')->where('requested_by', $user->id)->count() + MaterialRequest::whereHas('items')->whereDoesntHave('purchaseRequests')->where('created_by', $user->id)->count());
 
-        // 6. Completed History
+        // 6. Completed History (must have items)
         $completedPrQuery = PurchaseRequest::with(['project', 'requestedBy', 'store', 'materialRequest', 'items.product', 'deliveryReceipts'])
+            ->whereHas('items')
             ->where('status', PurchaseRequest::STATUS_INTAKE_COMPLETE)
             ->latest();
 
@@ -370,8 +400,9 @@ class ProcurementLifecycleController extends Controller
         }
         $completedPrs = $completedPrQuery->paginate(15, ['*'], 'completed_page')->withQueryString();
 
-        // 7. All Company PR History (Oversight)
+        // 7. All Company PR History (Oversight - must have items)
         $allPrQuery = PurchaseRequest::with(['project', 'requestedBy', 'store', 'materialRequest', 'items.product'])
+            ->whereHas('items')
             ->latest();
 
         $applyPrStoreScope($allPrQuery);
@@ -385,16 +416,58 @@ class ProcurementLifecycleController extends Controller
         }
         $allPrs = $allPrQuery->paginate(15, ['*'], 'all_pr_page')->withQueryString();
 
-        // 8. Summary Counters
+        // 8. Deleted & Cancelled Requisitions Query ("deleted question category")
+        $deletedPrQuery = PurchaseRequest::withTrashed()
+            ->where(function ($q) {
+                $q->whereNotNull('deleted_at')
+                  ->orWhereIn('status', [PurchaseRequest::STATUS_CANCELLED, PurchaseRequest::STATUS_REJECTED]);
+            })
+            ->with(['project', 'requestedBy', 'store', 'materialRequest.project', 'materialRequest.creator', 'items.product'])
+            ->latest('updated_at');
+
+        if (!$isAdmin && !$isAuditor) {
+            $deletedPrQuery->where(function ($q) use ($user) {
+                $q->where('requested_by', $user->id)
+                  ->orWhereHas('materialRequest', fn($mq) => $mq->where('created_by', $user->id));
+            });
+        }
+
+        $applyPrStoreScope($deletedPrQuery);
+        $applyTypeFilter($deletedPrQuery);
+
+        if ($request->filled('project_id')) {
+            $deletedPrQuery->where('project_id', $request->project_id);
+        }
+
+        $deletedPrs = $deletedPrQuery->paginate(15, ['*'], 'deleted_page')->withQueryString();
+
+        // Also deleted/cancelled MRs that don't have PRs
+        $deletedMrQuery = MaterialRequest::whereIn('status', ['cancelled', 'rejected'])
+            ->whereDoesntHave('purchaseRequests')
+            ->with(['project', 'store', 'creator', 'requestedBy', 'items.product'])
+            ->latest('updated_at');
+
+        if (!$isAdmin && !$isAuditor) {
+            $deletedMrQuery->where('created_by', $user->id);
+        }
+        $applyMrStoreScope($deletedMrQuery);
+        if ($request->filled('project_id')) {
+            $deletedMrQuery->where('project_id', $request->project_id);
+        }
+        $deletedMrs = $deletedMrQuery->take(50)->get();
+
+        $deletedCount = $deletedPrs->total() + $deletedMrs->count();
+
+        // 9. Summary Counters
         $pendingCount = $isAuditor
-            ? PurchaseRequest::where('status', '!=', PurchaseRequest::STATUS_INTAKE_COMPLETE)->count()
+            ? PurchaseRequest::whereHas('items')->where('status', '!=', PurchaseRequest::STATUS_INTAKE_COMPLETE)->count()
             : ($myPrs->total() + $materialRequestsQueue->count());
 
-        $completedCountQuery = PurchaseRequest::where('status', PurchaseRequest::STATUS_INTAKE_COMPLETE);
+        $completedCountQuery = PurchaseRequest::whereHas('items')->where('status', PurchaseRequest::STATUS_INTAKE_COMPLETE);
         $applyPrStoreScope($completedCountQuery);
         $applyTypeFilter($completedCountQuery);
 
-        $allPrCountQuery = PurchaseRequest::query();
+        $allPrCountQuery = PurchaseRequest::whereHas('items');
         $applyPrStoreScope($allPrCountQuery);
         $applyTypeFilter($allPrCountQuery);
 
@@ -408,6 +481,7 @@ class ProcurementLifecycleController extends Controller
             'pending_finance_office_requests'=> $pendingFinanceOfficeCount,
             'completed'                      => $completedCountQuery->count(),
             'all_prs'                        => $allPrCountQuery->count(),
+            'deleted'                        => $deletedCount,
         ];
 
         // Determine active tab: if no pending actions and user has created requests, show their created history tab
@@ -432,9 +506,76 @@ class ProcurementLifecycleController extends Controller
 
         return view('procurement.lifecycle.my-queue', compact(
             'myPrs', 'emergencyMrs', 'materialRequestsQueue', 'kpi', 'projects',
-            'myCreatedPrs', 'myCreatedMrs', 'completedPrs', 'allPrs', 'activeTab',
+            'myCreatedPrs', 'myCreatedMrs', 'completedPrs', 'allPrs', 'deletedPrs', 'deletedMrs', 'activeTab',
             'isHr', 'isCoordinator', 'isStoreManager', 'isStoreKeeper', 'isPurchaseManager', 'isFinanceHead', 'isAuditor', 'isAdmin', 'isGm',
             'assignedStore'
         ));
+    }
+
+    /**
+     * Purge all zero-item empty requisitions.
+     */
+    public function purgeZeroItemRequests(Request $request)
+    {
+        $user = Auth::user();
+        $isAdmin = $user && ($user->hasRole('global_admin') || $user->hasRole('admin'));
+
+        $purgedPrCount = 0;
+        $purgedMrCount = 0;
+
+        try {
+            $zeroPrsQuery = PurchaseRequest::whereDoesntHave('items')
+                ->whereDoesntHave('payment')
+                ->whereDoesntHave('receipt')
+                ->whereDoesntHave('deliveryReceipts')
+                ->whereDoesntHave('driverBooking')
+                ->whereDoesntHave('creditLedger');
+
+            if (!$isAdmin) {
+                $zeroPrsQuery->where('requested_by', $user->id);
+            }
+
+            $prs = $zeroPrsQuery->get();
+            $purgedPrCount = $prs->count();
+            foreach ($prs as $pr) {
+                $pr->forceDelete();
+            }
+
+            $zeroMrsQuery = MaterialRequest::whereDoesntHave('items')
+                ->whereDoesntHave('purchaseRequests');
+
+            if (!$isAdmin) {
+                $zeroMrsQuery->where('created_by', $user->id);
+            }
+
+            $mrs = $zeroMrsQuery->get();
+            $purgedMrCount = $mrs->count();
+            foreach ($mrs as $mr) {
+                $mr->delete();
+            }
+
+            $total = $purgedPrCount + $purgedMrCount;
+
+            return redirect()->back()->with('success', "Cleaned {$total} empty requisitions with zero items ({$purgedPrCount} Purchase Requests, {$purgedMrCount} Material Requests).");
+        } catch (\Throwable $e) {
+            \Log::error("purgeZeroItemRequests failed: " . $e->getMessage());
+            return redirect()->back()->with('error', "Failed to clean zero-item requests: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Restore a soft-deleted Purchase Request.
+     */
+    public function restorePr($id)
+    {
+        $user = Auth::user();
+        if (!$user || (!$user->hasRole('global_admin') && !$user->hasRole('admin'))) {
+            abort(403, 'Unauthorized.');
+        }
+
+        $pr = PurchaseRequest::onlyTrashed()->findOrFail($id);
+        $pr->restore();
+
+        return redirect()->back()->with('success', "Purchase Request {$pr->pr_no} was restored successfully.");
     }
 }

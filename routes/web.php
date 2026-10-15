@@ -1819,6 +1819,8 @@ Route::middleware(['auth'])->group(function () {
 
     // ── Procurement Lifecycle Upgraded Routes ──────────────────────────────
     Route::get('procurement/my-queue', [App\Http\Controllers\ProcurementLifecycleController::class, 'myQueue'])->name('procurement.my-queue');
+    Route::post('procurement/purge-zero-items', [App\Http\Controllers\ProcurementLifecycleController::class, 'purgeZeroItemRequests'])->name('procurement.purge-zero-items');
+    Route::post('purchase-requests/{id}/restore', [App\Http\Controllers\ProcurementLifecycleController::class, 'restorePr'])->name('purchase-requests.restore');
 
     Route::post('purchase-requests/{purchaseRequest}/send-to-pm', [App\Http\Controllers\PurchaseRequestController::class, 'sendToProcurementManager'])->name('purchase-requests.send-to-pm');
     Route::post('purchase-requests/{purchaseRequest}/selective-transfer', [App\Http\Controllers\PurchaseRequestController::class, 'selectiveTransfer'])->name('purchase-requests.selective-transfer');
