@@ -54,154 +54,188 @@ class ChartOfAccount extends Model
         $coaId = $coa->id;
 
         \Illuminate\Support\Facades\DB::transaction(function () use ($coa, $coaId, $reverseCounterPartyBalances) {
-            // 1. Handle all COA transfers involving this account
-            if (\Illuminate\Support\Facades\Schema::hasTable('coa_transfers')) {
-                $transfers = \Illuminate\Support\Facades\DB::table('coa_transfers')
-                    ->where('from_coa_id', $coaId)
-                    ->orWhere('to_coa_id', $coaId)
-                    ->get();
+            $driver = \Illuminate\Support\Facades\DB::connection()->getDriverName();
+            try {
+                if ($driver === 'mysql') {
+                    \Illuminate\Support\Facades\DB::statement('SET FOREIGN_KEY_CHECKS=0;');
+                } elseif ($driver === 'sqlite') {
+                    \Illuminate\Support\Facades\DB::statement('PRAGMA foreign_keys = OFF;');
+                }
 
                 $journalEntryIds = [];
 
-                foreach ($transfers as $trf) {
-                    if (!empty($trf->journal_entry_id)) {
-                        $journalEntryIds[] = $trf->journal_entry_id;
-                    }
+                // 1. Handle all COA transfers involving this account
+                if (\Illuminate\Support\Facades\Schema::hasTable('coa_transfers')) {
+                    $transfers = \Illuminate\Support\Facades\DB::table('coa_transfers')
+                        ->where('from_coa_id', $coaId)
+                        ->orWhere('to_coa_id', $coaId)
+                        ->get();
 
-                    // Revert balance on the counter-party account if requested
-                    if ($reverseCounterPartyBalances) {
-                        $amt = (float) $trf->amount;
-                        if ($trf->from_coa_id == $coaId && !empty($trf->to_coa_id) && $trf->to_coa_id != $coaId) {
-                            $other = self::find($trf->to_coa_id);
-                            if ($other) {
-                                if (in_array($other->type, ['asset', 'expense'])) {
-                                    $other->decrement('current_balance', $amt);
-                                } else {
-                                    $other->increment('current_balance', $amt);
+                    foreach ($transfers as $trf) {
+                        if (!empty($trf->journal_entry_id)) {
+                            $journalEntryIds[] = $trf->journal_entry_id;
+                        }
+
+                        // Revert balance on the counter-party account if requested
+                        if ($reverseCounterPartyBalances) {
+                            $amt = (float) $trf->amount;
+                            if ($trf->from_coa_id == $coaId && !empty($trf->to_coa_id) && $trf->to_coa_id != $coaId) {
+                                $other = self::find($trf->to_coa_id);
+                                if ($other) {
+                                    if (in_array($other->type, ['asset', 'expense'])) {
+                                        $other->decrement('current_balance', $amt);
+                                    } else {
+                                        $other->increment('current_balance', $amt);
+                                    }
                                 }
-                            }
-                        } elseif ($trf->to_coa_id == $coaId && !empty($trf->from_coa_id) && $trf->from_coa_id != $coaId) {
-                            $other = self::find($trf->from_coa_id);
-                            if ($other) {
-                                if (in_array($other->type, ['asset', 'expense'])) {
-                                    $other->increment('current_balance', $amt);
-                                } else {
-                                    $other->decrement('current_balance', $amt);
+                            } elseif ($trf->to_coa_id == $coaId && !empty($trf->from_coa_id) && $trf->from_coa_id != $coaId) {
+                                $other = self::find($trf->from_coa_id);
+                                if ($other) {
+                                    if (in_array($other->type, ['asset', 'expense'])) {
+                                        $other->increment('current_balance', $amt);
+                                    } else {
+                                        $other->decrement('current_balance', $amt);
+                                    }
                                 }
                             }
                         }
+
+                        // Delete attachment if exists
+                        if (!empty($trf->attachment_path) && class_exists(\App\Services\FileUploadService::class)) {
+                            \App\Services\FileUploadService::delete($trf->attachment_path);
+                        }
                     }
 
-                    // Delete attachment if exists
-                    if (!empty($trf->attachment_path) && class_exists(\App\Services\FileUploadService::class)) {
-                        \App\Services\FileUploadService::delete($trf->attachment_path);
-                    }
+                    // Delete the transfers themselves
+                    \Illuminate\Support\Facades\DB::table('coa_transfers')
+                        ->where('from_coa_id', $coaId)
+                        ->orWhere('to_coa_id', $coaId)
+                        ->delete();
                 }
 
-                // Delete the transfers themselves
-                \Illuminate\Support\Facades\DB::table('coa_transfers')
-                    ->where('from_coa_id', $coaId)
-                    ->orWhere('to_coa_id', $coaId)
-                    ->delete();
-
-                // Delete associated journal entries and their lines
-                if (!empty($journalEntryIds)) {
-                    $journalEntryIds = array_unique($journalEntryIds);
-                    if (\Illuminate\Support\Facades\Schema::hasTable('journal_entry_lines')) {
-                        \Illuminate\Support\Facades\DB::table('journal_entry_lines')->whereIn('journal_entry_id', $journalEntryIds)->delete();
+                // 2. Delete any journal lines directly referencing this account
+                if (\Illuminate\Support\Facades\Schema::hasTable('journal_entry_lines')) {
+                    $orphanQuery = \Illuminate\Support\Facades\DB::table('journal_entry_lines')->where('account_id', $coaId);
+                    if (\Illuminate\Support\Facades\Schema::hasColumn('journal_entry_lines', 'coa_id')) {
+                        $orphanQuery->orWhere('coa_id', $coaId);
                     }
-                    if (\Illuminate\Support\Facades\Schema::hasTable('journal_entries')) {
-                        \Illuminate\Support\Facades\DB::table('journal_entries')->whereIn('id', $journalEntryIds)->delete();
+                    $jeIdsFromLines = $orphanQuery->pluck('journal_entry_id')->unique()->toArray();
+                    $orphanQuery->delete();
+
+                    $journalEntryIds = array_unique(array_merge($journalEntryIds, $jeIdsFromLines));
+                }
+
+                // Clean up empty journal entries if present
+                if (\Illuminate\Support\Facades\Schema::hasTable('journal_entries') && !empty($journalEntryIds)) {
+                    // Nullify references to these journal entries before deleting
+                    if (\Illuminate\Support\Facades\Schema::hasTable('income_records') && \Illuminate\Support\Facades\Schema::hasColumn('income_records', 'journal_entry_id')) {
+                        \Illuminate\Support\Facades\DB::table('income_records')->whereIn('journal_entry_id', $journalEntryIds)->update(['journal_entry_id' => null]);
                     }
-                }
-            }
+                    if (\Illuminate\Support\Facades\Schema::hasTable('petty_cash_replenishments') && \Illuminate\Support\Facades\Schema::hasColumn('petty_cash_replenishments', 'journal_entry_id')) {
+                        \Illuminate\Support\Facades\DB::table('petty_cash_replenishments')->whereIn('journal_entry_id', $journalEntryIds)->update(['journal_entry_id' => null]);
+                    }
 
-            // 2. Delete any journal lines directly referencing this account
-            if (\Illuminate\Support\Facades\Schema::hasTable('journal_entry_lines')) {
-                $orphanQuery = \Illuminate\Support\Facades\DB::table('journal_entry_lines')->where('account_id', $coaId);
-                if (\Illuminate\Support\Facades\Schema::hasColumn('journal_entry_lines', 'coa_id')) {
-                    $orphanQuery->orWhere('coa_id', $coaId);
-                }
-                $jeIdsToCheck = $orphanQuery->pluck('journal_entry_id')->unique()->toArray();
-                $orphanQuery->delete();
-
-                if (\Illuminate\Support\Facades\Schema::hasTable('journal_entries') && !empty($jeIdsToCheck)) {
-                    foreach ($jeIdsToCheck as $jeId) {
+                    foreach ($journalEntryIds as $jeId) {
                         $hasLines = \Illuminate\Support\Facades\DB::table('journal_entry_lines')->where('journal_entry_id', $jeId)->exists();
                         if (!$hasLines) {
                             \Illuminate\Support\Facades\DB::table('journal_entries')->where('id', $jeId)->delete();
                         }
                     }
                 }
-            }
 
-            // 3. Bank Accounts linked to this COA
-            if (\Illuminate\Support\Facades\Schema::hasTable('bank_accounts')) {
-                $bankAccountIds = \Illuminate\Support\Facades\DB::table('bank_accounts')->where('coa_id', $coaId)->pluck('id')->toArray();
-                if (!empty($bankAccountIds)) {
-                    if (\Illuminate\Support\Facades\Schema::hasTable('bank_transactions')) {
-                        \Illuminate\Support\Facades\DB::table('bank_transactions')->whereIn('bank_account_id', $bankAccountIds)->delete();
+                // 3. Bank Accounts linked to this COA: Safely unlink coa_id without destroying bank accounts or violating foreign keys
+                if (\Illuminate\Support\Facades\Schema::hasTable('bank_accounts')) {
+                    \Illuminate\Support\Facades\DB::table('bank_accounts')->where('coa_id', $coaId)->update(['coa_id' => null]);
+                }
+
+                // 4. Safely nullify or clean all referencing module tables
+                if (\Illuminate\Support\Facades\Schema::hasTable('petty_cash_replenishments')) {
+                    $pcrIds = \Illuminate\Support\Facades\DB::table('petty_cash_replenishments')
+                        ->where('chart_of_account_id', $coaId)
+                        ->orWhere('source_coa_id', $coaId)
+                        ->pluck('id')->toArray();
+
+                    if (!empty($pcrIds) && \Illuminate\Support\Facades\Schema::hasTable('petty_cash_replenishment_items')) {
+                        \Illuminate\Support\Facades\DB::table('petty_cash_replenishment_items')->whereIn('petty_cash_replenishment_id', $pcrIds)->delete();
                     }
-                    \Illuminate\Support\Facades\DB::table('bank_accounts')->whereIn('id', $bankAccountIds)->delete();
+
+                    if (\Illuminate\Support\Facades\Schema::hasColumn('petty_cash_replenishments', 'chart_of_account_id')) {
+                        \Illuminate\Support\Facades\DB::table('petty_cash_replenishments')->where('chart_of_account_id', $coaId)->delete();
+                    }
+                    if (\Illuminate\Support\Facades\Schema::hasColumn('petty_cash_replenishments', 'source_coa_id')) {
+                        \Illuminate\Support\Facades\DB::table('petty_cash_replenishments')->where('source_coa_id', $coaId)->update(['source_coa_id' => null]);
+                    }
                 }
-            }
 
-            // 4. Other module references (safely nullify or delete)
-            if (\Illuminate\Support\Facades\Schema::hasTable('petty_cash_replenishments')) {
-                if (\Illuminate\Support\Facades\Schema::hasColumn('petty_cash_replenishments', 'chart_of_account_id')) {
-                    \Illuminate\Support\Facades\DB::table('petty_cash_replenishments')->where('chart_of_account_id', $coaId)->delete();
+                if (\Illuminate\Support\Facades\Schema::hasTable('expense_requests')) {
+                    if (\Illuminate\Support\Facades\Schema::hasColumn('expense_requests', 'coa_id')) {
+                        \Illuminate\Support\Facades\DB::table('expense_requests')->where('coa_id', $coaId)->update(['coa_id' => null]);
+                    }
+                    if (\Illuminate\Support\Facades\Schema::hasColumn('expense_requests', 'chart_of_account_id')) {
+                        \Illuminate\Support\Facades\DB::table('expense_requests')->where('chart_of_account_id', $coaId)->update(['chart_of_account_id' => null]);
+                    }
                 }
-                if (\Illuminate\Support\Facades\Schema::hasColumn('petty_cash_replenishments', 'source_coa_id')) {
-                    \Illuminate\Support\Facades\DB::table('petty_cash_replenishments')->where('source_coa_id', $coaId)->update(['source_coa_id' => null]);
+
+                if (\Illuminate\Support\Facades\Schema::hasTable('income_records') && \Illuminate\Support\Facades\Schema::hasColumn('income_records', 'chart_of_account_id')) {
+                    \Illuminate\Support\Facades\DB::table('income_records')->where('chart_of_account_id', $coaId)->update(['chart_of_account_id' => null]);
                 }
-            }
 
-            if (\Illuminate\Support\Facades\Schema::hasTable('expense_requests')) {
-                if (\Illuminate\Support\Facades\Schema::hasColumn('expense_requests', 'coa_id')) {
-                    \Illuminate\Support\Facades\DB::table('expense_requests')->where('coa_id', $coaId)->update(['coa_id' => null]);
+                if (\Illuminate\Support\Facades\Schema::hasTable('projects') && \Illuminate\Support\Facades\Schema::hasColumn('projects', 'petty_cash_account_id')) {
+                    \Illuminate\Support\Facades\DB::table('projects')->where('petty_cash_account_id', $coaId)->update(['petty_cash_account_id' => null]);
                 }
-                if (\Illuminate\Support\Facades\Schema::hasColumn('expense_requests', 'chart_of_account_id')) {
-                    \Illuminate\Support\Facades\DB::table('expense_requests')->where('chart_of_account_id', $coaId)->update(['chart_of_account_id' => null]);
+
+                if (\Illuminate\Support\Facades\Schema::hasTable('stores') && \Illuminate\Support\Facades\Schema::hasColumn('stores', 'petty_cash_account_id')) {
+                    \Illuminate\Support\Facades\DB::table('stores')->where('petty_cash_account_id', $coaId)->update(['petty_cash_account_id' => null]);
                 }
-            }
 
-            if (\Illuminate\Support\Facades\Schema::hasTable('credit_store_ledger') && \Illuminate\Support\Facades\Schema::hasColumn('credit_store_ledger', 'coa_account_id')) {
-                \Illuminate\Support\Facades\DB::table('credit_store_ledger')->where('coa_account_id', $coaId)->update(['coa_account_id' => null]);
-            }
+                if (\Illuminate\Support\Facades\Schema::hasTable('petty_cash_material_purchases') && \Illuminate\Support\Facades\Schema::hasColumn('petty_cash_material_purchases', 'chart_of_account_id')) {
+                    \Illuminate\Support\Facades\DB::table('petty_cash_material_purchases')->where('chart_of_account_id', $coaId)->update(['chart_of_account_id' => null]);
+                }
 
-            if (\Illuminate\Support\Facades\Schema::hasTable('tax_settlements') && \Illuminate\Support\Facades\Schema::hasColumn('tax_settlements', 'coa_id')) {
-                \Illuminate\Support\Facades\DB::table('tax_settlements')->where('coa_id', $coaId)->update(['coa_id' => null]);
-            }
+                if (\Illuminate\Support\Facades\Schema::hasTable('credit_store_ledger') && \Illuminate\Support\Facades\Schema::hasColumn('credit_store_ledger', 'coa_account_id')) {
+                    \Illuminate\Support\Facades\DB::table('credit_store_ledger')->where('coa_account_id', $coaId)->update(['coa_account_id' => null]);
+                }
 
-            if (\Illuminate\Support\Facades\Schema::hasTable('office_material_requests') && \Illuminate\Support\Facades\Schema::hasColumn('office_material_requests', 'coa_id')) {
-                \Illuminate\Support\Facades\DB::table('office_material_requests')->where('coa_id', $coaId)->update(['coa_id' => null]);
-            }
+                if (\Illuminate\Support\Facades\Schema::hasTable('tax_settlements') && \Illuminate\Support\Facades\Schema::hasColumn('tax_settlements', 'coa_id')) {
+                    \Illuminate\Support\Facades\DB::table('tax_settlements')->where('coa_id', $coaId)->update(['coa_id' => null]);
+                }
 
-            if (\Illuminate\Support\Facades\Schema::hasTable('stores') && \Illuminate\Support\Facades\Schema::hasColumn('stores', 'petty_cash_account_id')) {
-                \Illuminate\Support\Facades\DB::table('stores')->where('petty_cash_account_id', $coaId)->update(['petty_cash_account_id' => null]);
-            }
+                if (\Illuminate\Support\Facades\Schema::hasTable('office_material_requests') && \Illuminate\Support\Facades\Schema::hasColumn('office_material_requests', 'coa_id')) {
+                    \Illuminate\Support\Facades\DB::table('office_material_requests')->where('coa_id', $coaId)->update(['coa_id' => null]);
+                }
 
-            if (\Illuminate\Support\Facades\Schema::hasTable('letters') && \Illuminate\Support\Facades\Schema::hasColumn('letters', 'chart_of_account_id')) {
-                \Illuminate\Support\Facades\DB::table('letters')->where('chart_of_account_id', $coaId)->update(['chart_of_account_id' => null]);
-            }
+                if (\Illuminate\Support\Facades\Schema::hasTable('letters') && \Illuminate\Support\Facades\Schema::hasColumn('letters', 'chart_of_account_id')) {
+                    \Illuminate\Support\Facades\DB::table('letters')->where('chart_of_account_id', $coaId)->update(['chart_of_account_id' => null]);
+                }
 
-            if (\Illuminate\Support\Facades\Schema::hasTable('procurement_payments') && \Illuminate\Support\Facades\Schema::hasColumn('procurement_payments', 'chart_of_account_id')) {
-                \Illuminate\Support\Facades\DB::table('procurement_payments')->where('chart_of_account_id', $coaId)->update(['chart_of_account_id' => null]);
-            }
+                if (\Illuminate\Support\Facades\Schema::hasTable('procurement_payments') && \Illuminate\Support\Facades\Schema::hasColumn('procurement_payments', 'chart_of_account_id')) {
+                    \Illuminate\Support\Facades\DB::table('procurement_payments')->where('chart_of_account_id', $coaId)->update(['chart_of_account_id' => null]);
+                }
 
-            // 5. Unparent any children
-            \Illuminate\Support\Facades\DB::table('chart_of_accounts')->where('parent_id', $coaId)->update(['parent_id' => null]);
+                if (\Illuminate\Support\Facades\Schema::hasTable('procurement_purchase_orders') && \Illuminate\Support\Facades\Schema::hasColumn('procurement_purchase_orders', 'coa_account_id')) {
+                    \Illuminate\Support\Facades\DB::table('procurement_purchase_orders')->where('coa_account_id', $coaId)->update(['coa_account_id' => null]);
+                }
 
-            // 6. Delete the chart of account itself (force delete)
-            \Illuminate\Support\Facades\DB::table('chart_of_accounts')->where('id', $coaId)->delete();
+                // 5. Unparent any children
+                \Illuminate\Support\Facades\DB::table('chart_of_accounts')->where('parent_id', $coaId)->update(['parent_id' => null]);
 
-            // 7. Log activity
-            if (class_exists(\App\Models\ActivityLog::class)) {
-                \App\Models\ActivityLog::log(
-                    'deleted',
-                    "Deleted Chart of Account [{$coa->code}] {$coa->name} and all associated transfers, journal entries, and references.",
-                    'Finance / COA'
-                );
+                // 6. Delete the chart of account itself (force delete)
+                \Illuminate\Support\Facades\DB::table('chart_of_accounts')->where('id', $coaId)->delete();
+
+                // 7. Log activity
+                if (class_exists(\App\Models\ActivityLog::class)) {
+                    \App\Models\ActivityLog::log(
+                        'deleted',
+                        "Deleted Chart of Account [{$coa->code}] {$coa->name} and all associated references.",
+                        'Finance / COA'
+                    );
+                }
+            } finally {
+                if ($driver === 'mysql') {
+                    \Illuminate\Support\Facades\DB::statement('SET FOREIGN_KEY_CHECKS=1;');
+                } elseif ($driver === 'sqlite') {
+                    \Illuminate\Support\Facades\DB::statement('PRAGMA foreign_keys = ON;');
+                }
             }
         });
 

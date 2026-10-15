@@ -2257,6 +2257,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('finance/coa/initial-balances', [App\Http\Controllers\ChartOfAccountController::class, 'initialBalances'])->name('coa.initial-balances');
     Route::post('finance/coa/initial-balances', [App\Http\Controllers\ChartOfAccountController::class, 'saveInitialBalances'])->name('coa.initial-balances.save');
     Route::resource('coa', App\Http\Controllers\ChartOfAccountController::class)->except(['show']);
+    Route::post('coa/{coa}/delete', [App\Http\Controllers\ChartOfAccountController::class, 'destroy'])->name('coa.destroy.post');
     Route::resource('coa-transfers', App\Http\Controllers\CoaTransferController::class)->only(['index', 'create', 'store', 'show']);
     Route::resource('bank-accounts', App\Http\Controllers\BankAccountController::class)->except(['destroy']);
     

@@ -340,12 +340,27 @@ class ChartOfAccountController extends Controller
         return redirect()->route('coa.index')->with('success', 'Account updated successfully.');
     }
 
-    public function destroy(ChartOfAccount $coa)
+    public function destroy(Request $request, $coa)
     {
-        $code = $coa->code;
-        $name = $coa->name;
-        ChartOfAccount::deleteAccountAndRelated($coa, true);
+        if ($coa instanceof ChartOfAccount) {
+            $account = $coa;
+        } else {
+            $account = ChartOfAccount::withTrashed()->where('id', $coa)->orWhere('code', $coa)->first();
+        }
 
-        return redirect()->route('coa.index')->with('success', "Account {$code} ({$name}) and all associated history have been permanently deleted.");
+        if (!$account) {
+            return redirect()->route('coa.index')->with('error', 'Chart of Account not found or already deleted.');
+        }
+
+        $code = $account->code;
+        $name = $account->name;
+
+        try {
+            ChartOfAccount::deleteAccountAndRelated($account, true);
+            return redirect()->route('coa.index')->with('success', "Account {$code} ({$name}) and all associated history have been permanently deleted.");
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error("Failed to delete Chart of Account {$code}: " . $e->getMessage() . "\n" . $e->getTraceAsString());
+            return redirect()->route('coa.index')->with('error', "Failed to delete account {$code}: " . $e->getMessage());
+        }
     }
 }

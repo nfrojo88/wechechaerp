@@ -100,7 +100,13 @@
                                     </a>
                                     @unless($a->is_system)
                                     <a href="{{ route('coa.edit', $a) }}" class="btn btn-xs btn-outline-warning py-1 px-2" title="Edit Account"><i class="fas fa-edit"></i></a>
-                                    <button type="button" class="btn btn-xs btn-outline-danger py-1 px-2" title="Delete Account and History" data-bs-toggle="modal" data-bs-target="#deleteCoaModal{{ $a->id }}">
+                                    <button type="button" class="btn btn-xs btn-outline-danger py-1 px-2 btn-delete-coa" 
+                                            title="Delete Account and History"
+                                            data-account-id="{{ $a->id }}"
+                                            data-account-code="{{ $a->code }}"
+                                            data-account-name="{{ $a->name }}"
+                                            data-delete-url="{{ route('coa.destroy.post', $a->id) }}"
+                                            data-delete-legacy-url="{{ route('coa.destroy', $a->id) }}">
                                         <i class="fas fa-trash-alt"></i>
                                     </button>
                                     @endunless
@@ -117,39 +123,87 @@
         <div class="card-footer bg-white border-top py-3">{{ $accounts->links() }}</div>
     </div>
 
-    @foreach($accounts as $a)
-        @unless($a->is_system)
-        <div class="modal fade" id="deleteCoaModal{{ $a->id }}" tabindex="-1" aria-labelledby="deleteCoaModalLabel{{ $a->id }}" aria-hidden="true">
-            <div class="modal-dialog modal-dialog-centered">
-                <div class="modal-content border-0 shadow">
-                    <div class="modal-header bg-danger text-white">
-                        <h5 class="modal-title fw-bold" id="deleteCoaModalLabel{{ $a->id }}">
-                            <i class="fas fa-exclamation-triangle me-2"></i>Delete Account {{ $a->code }}
-                        </h5>
-                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <form action="{{ route('coa.destroy', $a) }}" method="POST">
-                        @csrf
-                        @method('DELETE')
-                        <div class="modal-body p-4">
-                            <p class="text-danger fw-bold mb-2">Warning: This action is permanent and cannot be undone.</p>
-                            <p class="mb-3">Are you sure you want to delete account <strong>{{ $a->code }} - {{ $a->name }}</strong>?</p>
-                            <div class="alert alert-warning small mb-0">
-                                <i class="fas fa-info-circle me-1"></i>
-                                Deleting this account will permanently remove all transfer history, journal entries, and transactions linked to it, and reverse counter-party account balances to keep the ledger balanced.
-                            </div>
-                        </div>
-                        <div class="modal-footer bg-light">
-                            <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-                            <button type="submit" class="btn btn-danger btn-sm fw-bold">
-                                <i class="fas fa-trash-alt me-1"></i>Delete Everything
-                            </button>
-                        </div>
-                    </form>
+    <!-- Centralized Delete Confirmation Modal -->
+    <div class="modal fade" id="deleteCoaModal" tabindex="-1" aria-labelledby="deleteCoaModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title fw-bold" id="deleteCoaModalLabel">
+                        <i class="fas fa-exclamation-triangle me-2"></i>Delete Chart of Account
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
+                <form id="deleteCoaForm" action="" method="POST">
+                    @csrf
+                    @method('DELETE')
+                    <div class="modal-body p-4">
+                        <p class="text-danger fw-bold mb-2">Warning: This action is permanent and cannot be undone.</p>
+                        <p class="mb-3">Are you sure you want to delete account <strong id="deleteCoaAccountName">---</strong>?</p>
+                        <div class="alert alert-warning small mb-0">
+                            <i class="fas fa-info-circle me-1"></i>
+                            Deleting this account will permanently remove all transfer history, journal entries, and transactions linked to it, and reverse counter-party account balances to keep the ledger balanced.
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light">
+                        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-danger btn-sm fw-bold" id="btnConfirmDeleteCoa">
+                            <i class="fas fa-trash-alt me-1"></i>Delete Everything
+                        </button>
+                    </div>
+                </form>
             </div>
         </div>
-        @endunless
-    @endforeach
+    </div>
 </div>
 @endsection
+
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const deleteModalEl = document.getElementById('deleteCoaModal');
+    // Move modal directly under body to avoid container z-index or stacking context clipping
+    if (deleteModalEl && deleteModalEl.parentElement !== document.body) {
+        document.body.appendChild(deleteModalEl);
+    }
+
+    const form = document.getElementById('deleteCoaForm');
+    const nameLabel = document.getElementById('deleteCoaAccountName');
+    const submitBtn = document.getElementById('btnConfirmDeleteCoa');
+
+    document.querySelectorAll('.btn-delete-coa').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+            e.preventDefault();
+            const id = this.getAttribute('data-account-id');
+            const code = this.getAttribute('data-account-code');
+            const name = this.getAttribute('data-account-name');
+            const url = this.getAttribute('data-delete-url') || this.getAttribute('data-delete-legacy-url');
+
+            if (form && nameLabel) {
+                form.action = url;
+                nameLabel.textContent = '[' + code + '] ' + name;
+
+                if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+                    const bsModal = bootstrap.Modal.getOrCreateInstance(deleteModalEl);
+                    bsModal.show();
+                } else if (window.$ && typeof $(deleteModalEl).modal === 'function') {
+                    $(deleteModalEl).modal('show');
+                } else {
+                    if (confirm('Are you sure you want to permanently delete account [' + code + '] ' + name + ' and all related data?')) {
+                        form.submit();
+                    }
+                }
+            }
+        });
+    });
+
+    if (form) {
+        form.addEventListener('submit', function () {
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Deleting...';
+            }
+        });
+    }
+});
+</script>
+@endpush
