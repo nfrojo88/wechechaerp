@@ -733,7 +733,11 @@ class AttendanceController extends Controller
             $query->where('employee_id', $request->employee_id);
         }
         if ($request->filled('project_id')) {
-            $query->where('project_id', $request->project_id);
+            if ($request->project_id === 'other') {
+                $query->whereNull('project_id');
+            } else {
+                $query->where('project_id', $request->project_id);
+            }
         }
         if ($request->filled('requested_by')) {
             $query->where('requested_by', $request->requested_by);
@@ -794,29 +798,45 @@ class AttendanceController extends Controller
 
         \App\Models\SiteDeploymentRequest::ensureTableExists();
 
+        $isOther = ($request->input('project_id') === 'other');
+
         $validated = $request->validate([
-            'employee_id'           => 'nullable|exists:employees,id',
-            'employee_ids'          => 'nullable|array',
-            'employee_ids.*'        => 'exists:employees,id',
-            'project_id'            => 'nullable|exists:projects,id',
-            'site_name'             => 'nullable|string|max:255',
-            'duration_type'         => 'nullable|string|in:single_day,date_range',
-            'single_date'           => 'nullable|date',
-            'attendance_date'       => 'nullable|date',
-            'start_date'            => 'nullable|date',
-            'end_date'              => 'nullable|date',
-            'session_type'          => 'nullable|string|in:full_day,morning,afternoon,custom',
-            'include_morning_in'    => 'nullable',
-            'morning_in'            => 'nullable|string',
-            'include_morning_out'   => 'nullable',
-            'morning_out'           => 'nullable|string',
-            'include_afternoon_in'  => 'nullable',
-            'afternoon_in'          => 'nullable|string',
-            'include_afternoon_out' => 'nullable',
-            'afternoon_out'         => 'nullable|string',
-            'task_notes'            => 'nullable|string|max:500',
-            'hours_worked'          => 'nullable|numeric|min:0.5|max:24',
+            'employee_id'              => 'nullable|exists:employees,id',
+            'employee_ids'             => 'nullable|array',
+            'employee_ids.*'           => 'exists:employees,id',
+            'project_id'               => 'required',
+            'other_site_description'   => $isOther ? 'required|string|min:2|max:500' : 'nullable|string|max:500',
+            'site_name'                => 'nullable|string|max:255',
+            'duration_type'            => 'nullable|string|in:single_day,date_range',
+            'single_date'              => 'nullable|date',
+            'attendance_date'          => 'nullable|date',
+            'start_date'               => 'nullable|date',
+            'end_date'                 => 'nullable|date',
+            'session_type'             => 'nullable|string|in:full_day,morning,afternoon,custom',
+            'include_morning_in'       => 'nullable',
+            'morning_in'               => 'nullable|string',
+            'include_morning_out'      => 'nullable',
+            'morning_out'              => 'nullable|string',
+            'include_afternoon_in'     => 'nullable',
+            'afternoon_in'             => 'nullable|string',
+            'include_afternoon_out'    => 'nullable',
+            'afternoon_out'            => 'nullable|string',
+            'task_notes'               => 'nullable|string|max:500',
+            'task_description'         => 'nullable|string|max:500',
+            'hours_worked'             => 'nullable|numeric|min:0.5|max:24',
+        ], [
+            'project_id.required'              => 'Please select a construction project or select "Other Site".',
+            'other_site_description.required'  => 'Description is required when selecting "Other Site".',
+            'other_site_description.min'       => 'Please provide a valid description for the Other Site (at least 2 characters).',
         ]);
+
+        if (!$isOther && !empty($validated['project_id'])) {
+            $request->validate([
+                'project_id' => 'exists:projects,id',
+            ], [
+                'project_id.exists' => 'The selected project does not exist.',
+            ]);
+        }
 
         // Support both single employee and multiple employees array
         $employeeIds = [];
@@ -857,7 +877,11 @@ class AttendanceController extends Controller
 
         $projectName = 'Job Site';
         $siteProjectId = null;
-        if (!empty($validated['project_id'])) {
+        if ($isOther) {
+            $otherDesc = trim($validated['other_site_description'] ?? '');
+            $projectName = $otherDesc !== '' ? $otherDesc : 'Other Site';
+            $siteProjectId = null;
+        } elseif (!empty($validated['project_id'])) {
             $proj = \App\Models\Project::find($validated['project_id']);
             if ($proj) {
                 $projectName = $proj->name;
@@ -866,6 +890,8 @@ class AttendanceController extends Controller
         } elseif (!empty($validated['site_name'])) {
             $projectName = trim($validated['site_name']);
         }
+
+        $taskNotes = $validated['task_notes'] ?? ($validated['task_description'] ?? null);
 
         // Capture who decided this deployment
         $user = auth()->user();
@@ -946,7 +972,7 @@ class AttendanceController extends Controller
                 'afternoon_in'      => $configuredAIn,
                 'afternoon_out'     => $configuredAOut,
                 'hours_worked'      => $hours,
-                'task_notes'        => $validated['task_notes'] ?? null,
+                'task_notes'        => $taskNotes,
                 'status'            => $status,
                 'hr_reviewed_by'    => $status === 'approved' ? $user?->id : null,
                 'hr_reviewed_at'    => $status === 'approved' ? now() : null,

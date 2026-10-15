@@ -878,12 +878,28 @@
 
                     <div class="mb-3">
                         <label class="form-label fw-bold small">Destination Project / Site <span class="text-danger">*</span></label>
-                        <select name="project_id" class="form-select form-select-sm" required>
-                            <option value="">Select Project...</option>
+                        <select name="project_id" id="site_attendance_project_id" class="form-select form-select-sm" required onchange="handleSiteIndexProjectChange(this.value)">
+                            <option value="">Select Project / Site...</option>
                             @foreach($projects as $proj)
-                            <option value="{{ $proj->id }}">{{ $proj->name }}</option>
+                            <option value="{{ $proj->id }}">🏗️ {{ $proj->name }}</option>
                             @endforeach
+                            <option value="other">📌 Other Site / Location (ሌላ ሳይት)...</option>
                         </select>
+                    </div>
+
+                    {{-- Conditional Other Site Description Container --}}
+                    <div id="siteIndexOtherContainer" class="mb-3 d-none">
+                        <div class="p-2 border rounded-3 bg-warning-subtle border-warning">
+                            <div class="d-flex align-items-center justify-content-between mb-1">
+                                <label class="form-label fw-bold small text-dark mb-0">
+                                    <i class="fa-solid fa-map-location-dot text-warning me-1"></i>
+                                    Other Site Description &amp; Details <span class="text-danger">*</span>
+                                </label>
+                                <span class="badge bg-warning text-dark small" style="font-size:0.68rem;">Required (ግዴታ)</span>
+                            </div>
+                            <textarea name="other_site_description" id="site_index_other_description" rows="2" class="form-control form-control-sm" placeholder="Required: Describe the specific site name, location details, or mission..."></textarea>
+                            <small class="text-muted d-block mt-1" style="font-size:0.72rem;">Description is required when selecting Other site.</small>
+                        </div>
                     </div>
 
                     <div class="mb-3">
@@ -1642,6 +1658,23 @@ function updatePdfSelectedCount() {
         } else {
             badge.className = 'badge bg-success text-white';
             badge.textContent = `${checked} Employee${checked > 1 ? 's' : ''} Selected`;
+        }
+    }
+}
+
+function handleSiteIndexProjectChange(val) {
+    const otherBox = document.getElementById('siteIndexOtherContainer');
+    const otherText = document.getElementById('site_index_other_description');
+    if (val === 'other') {
+        if (otherBox) otherBox.classList.remove('d-none');
+        if (otherText) {
+            otherText.required = true;
+            otherText.focus();
+        }
+    } else {
+        if (otherBox) otherBox.classList.add('d-none');
+        if (otherText) {
+            otherText.required = false;
         }
     }
 }

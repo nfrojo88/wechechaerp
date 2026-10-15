@@ -162,12 +162,13 @@
                 <div class="col-md-3">
                     <label class="form-label small fw-semibold text-muted mb-1">Project / Site</label>
                     <select name="project_id" class="form-select form-select-sm">
-                        <option value="">All Projects</option>
+                        <option value="">All Projects / Sites</option>
                         @foreach($projects as $p)
                             <option value="{{ $p->id }}" {{ request('project_id') == $p->id ? 'selected' : '' }}>
                                 {{ $p->name }}
                             </option>
                         @endforeach
+                        <option value="other" {{ request('project_id') === 'other' ? 'selected' : '' }}>📌 Other / Non-Project Sites</option>
                     </select>
                 </div>
                 <div class="col-md-2">
@@ -272,8 +273,8 @@
                                         <i class="fa-solid fa-building me-1 text-primary"></i>{{ $d->siteProject->name }}
                                     </span>
                                 @elseif(!empty($d->site_name))
-                                    <span class="badge bg-light text-dark border px-2 py-1">
-                                        <i class="fa-solid fa-location-dot me-1 text-danger"></i>{{ $d->site_name }}
+                                    <span class="badge bg-warning-subtle text-dark border border-warning px-2 py-1" title="Other Site Dispatch">
+                                        <i class="fa-solid fa-map-location-dot me-1 text-warning"></i>{{ $d->site_name }}
                                     </span>
                                 @else
                                     <span class="badge bg-light text-dark border px-2 py-1">
@@ -808,22 +809,41 @@
                     <div class="row g-3 mb-3">
                         <div class="col-md-7">
                             <label class="form-label fw-bold small text-muted text-uppercase">
-                                Construction Project (የግንባታ ፕሮጀክት) <span class="text-danger">*</span>
+                                Construction Project / Site (የግንባታ ፕሮጀክት / ሳይት) <span class="text-danger">*</span>
                             </label>
-                            <select name="project_id" class="form-select" required>
-                                <option value="">-- Select Project --</option>
+                            <select name="project_id" id="deploy_project_id" class="form-select" required onchange="handleDeployProjectChange(this.value)">
+                                <option value="">-- Select Project / Site --</option>
                                 @foreach($projects as $proj)
                                     <option value="{{ $proj->id }}">
                                         🏗️ {{ $proj->name }} @if(!empty($proj->code))({{ $proj->code }})@endif
                                     </option>
                                 @endforeach
+                                <option value="other">📌 Other Site / Location (ሌላ ሳይት)...</option>
                             </select>
                         </div>
-                        <div class="col-md-5">
+                        <div class="col-md-5" id="specificSiteLocationCol">
                             <label class="form-label fw-bold small text-muted text-uppercase">
                                 Specific Site Location (ካለ)
                             </label>
-                            <input type="text" name="site_name" class="form-control" placeholder="e.g. Block B, Substation, Quarry...">
+                            <input type="text" name="site_name" id="deploy_site_name" class="form-control" placeholder="e.g. Block B, Substation, Quarry...">
+                        </div>
+                    </div>
+
+                    {{-- Conditional Other Site Description Container (Shown only when 'Other' is selected) --}}
+                    <div id="otherSiteContainer" class="mb-3 d-none">
+                        <div class="p-3 border rounded-3 bg-warning-subtle border-warning shadow-xs">
+                            <div class="d-flex align-items-center justify-content-between mb-1">
+                                <label class="form-label fw-bold small text-dark mb-0">
+                                    <i class="fa-solid fa-map-location-dot text-warning me-1"></i>
+                                    Other Site Description &amp; Details (የሌላ ሳይት ስም እና ዝርዝር መግለጫ) <span class="text-danger">*</span>
+                                </label>
+                                <span class="badge bg-warning text-dark small fw-bold">Required (ግዴታ ነው)</span>
+                            </div>
+                            <textarea name="other_site_description" id="deploy_other_site_description" rows="2" class="form-control" placeholder="Required: Enter the specific site name, location details, client, or mission description..."></textarea>
+                            <small class="text-muted d-block mt-1">
+                                <i class="fa-solid fa-circle-info me-1 text-primary"></i>
+                                Since this site is not in the registered projects list, a clear description is required for attendance verification.
+                            </small>
                         </div>
                     </div>
 
@@ -1158,8 +1178,50 @@ function onPunchToggleChanged() {
     }
 }
 
+function handleDeployProjectChange(val) {
+    const otherBox = document.getElementById('otherSiteContainer');
+    const otherText = document.getElementById('deploy_other_site_description');
+    const specificLocCol = document.getElementById('specificSiteLocationCol');
+
+    if (val === 'other') {
+        if (otherBox) otherBox.classList.remove('d-none');
+        if (otherText) {
+            otherText.required = true;
+            otherText.focus();
+        }
+        if (specificLocCol) specificLocCol.classList.add('d-none');
+    } else {
+        if (otherBox) otherBox.classList.add('d-none');
+        if (otherText) {
+            otherText.required = false;
+        }
+        if (specificLocCol) specificLocCol.classList.remove('d-none');
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     updatePunchInputsVisual();
+
+    const deployForm = document.getElementById('siteDeploymentForm');
+    if (deployForm) {
+        deployForm.addEventListener('submit', function(e) {
+            const projSelect = document.getElementById('deploy_project_id');
+            const otherText = document.getElementById('deploy_other_site_description');
+            if (projSelect && projSelect.value === 'other') {
+                if (!otherText || !otherText.value.trim()) {
+                    e.preventDefault();
+                    alert('Please enter a description for the Other Site (የሌላ ሳይት መግለጫ ያስገቡ).');
+                    if (otherText) otherText.focus();
+                    return false;
+                }
+            }
+        });
+    }
+
+    const initialProjSelect = document.getElementById('deploy_project_id');
+    if (initialProjSelect && initialProjSelect.value === 'other') {
+        handleDeployProjectChange('other');
+    }
 });
 </script>
 @endpush
