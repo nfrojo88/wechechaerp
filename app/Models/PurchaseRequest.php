@@ -339,22 +339,30 @@ class PurchaseRequest extends Model
             'lowest_total_proforma'=> $proformas->sortBy('grand_total')->first(),
         ];
 
+        $minGrandTotal = $proformas->where('grand_total', '>', 0)->min('grand_total');
+        $selectedProfId = $proformas->firstWhere('gm_selected', true)?->id ?? $proformas->first()?->id;
+
         foreach ($proformas as $prof) {
+            $isLowestOverall = ($minGrandTotal !== null && (float)$prof->grand_total == (float)$minGrandTotal);
+            $isSelected = ($prof->id === $selectedProfId || (bool)$prof->gm_selected);
+
             $matrix['proformas'][$prof->id] = [
-                'id'            => $prof->id,
-                'proforma_no'   => $prof->proforma_no,
-                'supplier_id'   => $prof->supplier_id,
-                'supplier_name' => $prof->supplier?->name ?? ($prof->supplier_name ?: 'Vendor #' . $prof->supplier_id),
-                'supplier_phone'=> $prof->supplier?->phone,
-                'proforma_date' => $prof->proforma_date?->format('M d, Y'),
-                'valid_until'   => $prof->valid_until?->format('M d, Y'),
-                'subtotal'      => (float)$prof->subtotal,
-                'tax_amount'    => (float)$prof->tax_amount,
-                'grand_total'   => (float)$prof->grand_total,
-                'gm_selected'   => (bool)$prof->gm_selected,
-                'file_path'     => $prof->file_path,
-                'file_url'      => \App\Services\FileUploadService::url($prof->file_path),
-                'notes'         => $prof->notes,
+                'id'                => $prof->id,
+                'proforma_no'       => $prof->proforma_no,
+                'supplier_id'       => $prof->supplier_id,
+                'supplier_name'     => $prof->supplier?->name ?? ($prof->supplier_name ?: 'Vendor #' . $prof->supplier_id),
+                'supplier_phone'    => $prof->supplier?->phone,
+                'proforma_date'     => $prof->proforma_date?->format('M d, Y'),
+                'valid_until'       => $prof->valid_until?->format('M d, Y'),
+                'subtotal'          => (float)$prof->subtotal,
+                'tax_amount'        => (float)$prof->tax_amount,
+                'grand_total'       => (float)$prof->grand_total,
+                'gm_selected'       => (bool)$prof->gm_selected,
+                'is_selected'       => $isSelected,
+                'is_lowest_overall' => $isLowestOverall,
+                'file_path'         => $prof->file_path,
+                'file_url'          => \App\Services\FileUploadService::url($prof->file_path),
+                'notes'             => $prof->notes,
             ];
         }
 

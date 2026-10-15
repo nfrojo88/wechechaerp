@@ -2373,21 +2373,21 @@
                                         Qty & Unit
                                     </th>
                                     @foreach($proformaMatrix['proformas'] as $profId => $profMeta)
-                                    <th style="min-width: 220px;" class="p-2 matrix-vendor-col-header {{ $profMeta['is_selected'] ? 'bg-primary-subtle border-primary' : '' }}" id="matrixVendorCol_{{ $profId }}">
+                                    <th style="min-width: 220px;" class="p-2 matrix-vendor-col-header {{ !empty($profMeta['is_selected']) ? 'bg-primary-subtle border-primary' : '' }}" id="matrixVendorCol_{{ $profId }}">
                                         <div class="d-flex justify-content-between align-items-start">
                                             <div>
-                                                <div class="fw-bold text-dark fs-6">{{ $profMeta['supplier_name'] }}</div>
+                                                <div class="fw-bold text-dark fs-6">{{ $profMeta['supplier_name'] ?? 'Vendor' }}</div>
                                                 <div class="small font-monospace text-muted" style="font-size: 11px;">
-                                                    <code>{{ $profMeta['proforma_no'] }}</code>
-                                                    @if($profMeta['is_lowest_overall'])
+                                                    <code>{{ $profMeta['proforma_no'] ?? '-' }}</code>
+                                                    @if(!empty($profMeta['is_lowest_overall']))
                                                         <span class="badge bg-success-subtle text-success border border-success-subtle ms-1" style="font-size: 9px;"><i class="fas fa-award me-1"></i>Lowest Total</span>
                                                     @endif
                                                 </div>
-                                                @if($profMeta['valid_until'])
+                                                @if(!empty($profMeta['valid_until']))
                                                     <div class="text-muted" style="font-size: 10px;">Valid: {{ \Carbon\Carbon::parse($profMeta['valid_until'])->format('M d, Y') }}</div>
                                                 @endif
                                             </div>
-                                            @if($profMeta['file_url'])
+                                            @if(!empty($profMeta['file_url']))
                                                 <a href="{{ $profMeta['file_url'] }}" target="_blank" class="btn btn-xs btn-outline-secondary py-0 px-1" title="View attached document">
                                                     <i class="fas fa-paperclip"></i>
                                                 </a>
@@ -2395,7 +2395,7 @@
                                         </div>
                                         <div class="mt-2 pt-1 border-top d-flex justify-content-between align-items-center">
                                             <div>
-                                                <div class="fw-bold text-primary">{{ number_format($profMeta['grand_total'], 2) }} ETB</div>
+                                                <div class="fw-bold text-primary">{{ number_format($profMeta['grand_total'] ?? 0, 2) }} ETB</div>
                                                 <div class="text-muted" style="font-size: 10px;">Quote Total</div>
                                             </div>
                                             @if($canActOnCurrentStage && $purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_GM)
@@ -2478,7 +2478,7 @@
                                     </th>
                                     @foreach($proformaMatrix['proformas'] as $profId => $profMeta)
                                     <th class="text-center p-2">
-                                        <div class="fw-bold text-primary fs-6">{{ number_format($profMeta['grand_total'], 2) }} ETB</div>
+                                        <div class="fw-bold text-primary fs-6">{{ number_format($profMeta['grand_total'] ?? 0, 2) }} ETB</div>
                                         @if($canActOnCurrentStage && $purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_GM)
                                         <button type="button" class="btn btn-xs btn-outline-primary w-100 mt-1 shadow-xs" onclick="selectGmProformaForEntirePr({{ $profId }})">
                                             <i class="fas fa-check me-1"></i> Choose All
