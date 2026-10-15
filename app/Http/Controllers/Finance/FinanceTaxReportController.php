@@ -577,6 +577,9 @@ class FinanceTaxReportController extends Controller
             $financeStaff = User::where('is_active', true)->orderBy('name')->get();
         }
 
+        $authUser = Auth::user();
+        $isGeneralAdmin = $authUser && ($authUser->isGlobalAdmin() || $authUser->hasAnyRole(['admin', 'global_admin', 'general_admin', 'Global Admin', 'Admin', 'super_admin']));
+
         return view('finance.tax-deductions.index', compact(
             'records',
             'tab',
@@ -621,7 +624,8 @@ class FinanceTaxReportController extends Controller
             'netVatDetails',
             'monthWithholding',
             'monthNetDisbursed',
-            'monthlyTrend'
+            'monthlyTrend',
+            'isGeneralAdmin'
         ));
     }
 
@@ -1295,6 +1299,241 @@ class FinanceTaxReportController extends Controller
         });
 
         return back()->with('success', "Tax Payment Request #{$settlement->settlement_number} cancelled. Records released back to active pool.");
+    }
+
+    /**
+     * General Admin: Clear VAT & Withholding Tax deductions for a specific Ethiopian month.
+     * Stamps matching records as settled so the active ledger starts from zero (0.00 ETB).
+     */
+    public function adminClearMonth(Request $request)
+    {
+        $this->ensureSchema();
+
+        $user = Auth::user();
+        $isAdmin = $user && ($user->isGlobalAdmin() || $user->hasAnyRole(['admin', 'global_admin', 'general_admin', 'Global Admin', 'Admin', 'super_admin']));
+        if (!$isAdmin) {
+            abort(403, 'Unauthorized. Only General Admin / Global Admin can clear tax deductions to start from zero.');
+        }
+
+        $validated = $request->validate([
+            'ethiopian_year'  => 'required|integer|min:2010|max:2050',
+            'ethiopian_month' => 'required|integer|min:1|max:13',
+            'clear_target'    => 'required|in:both,vat,withholding',
+            'action_type'     => 'required|in:clear,reopen',
+            'reference'       => 'nullable|string|max:100',
+            'admin_notes'     => 'nullable|string|max:1000',
+            'attachment'      => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
+        ]);
+
+        $ethYear     = (int)$validated['ethiopian_year'];
+        $ethMonth    = (int)$validated['ethiopian_month'];
+        $clearTarget = $validated['clear_target'];
+        $actionType  = $validated['action_type'];
+
+        $monthRange  = EthiopianDate::monthRange($ethYear, $ethMonth);
+        $periodStart = $monthRange['start'];
+        $periodEnd   = $monthRange['end'];
+        $monthLabel  = (EthiopianDate::MONTHS_EN[$ethMonth] ?? "Month {$ethMonth}") . ' (' . (EthiopianDate::MONTHS_AM[$ethMonth] ?? '') . ') ' . $ethYear;
+
+        if ($actionType === 'reopen') {
+            // Re-open previously settled records for this month back to active pool
+            $query = ExpenseRequest::where('status', ExpenseRequest::STATUS_PAID)
+                ->whereBetween('created_at', [$periodStart, $periodEnd]);
+
+            if ($clearTarget === 'vat') {
+                $query->where('vat_settled', true);
+            } elseif ($clearTarget === 'withholding') {
+                $query->where('withholding_settled', true);
+            } else {
+                $query->where(function($q) {
+                    $q->where('vat_settled', true)->orWhere('withholding_settled', true);
+                });
+            }
+
+            $records = $query->get();
+            if ($records->isEmpty()) {
+                return back()->with('error', "No settled records found for {$monthLabel} to re-open.");
+            }
+
+            $recordIds = $records->pluck('id');
+            if ($clearTarget === 'vat') {
+                ExpenseRequest::whereIn('id', $recordIds)->update([
+                    'vat_settled' => false,
+                    'vat_settled_at' => null,
+                    'vat_settlement_id' => null,
+                ]);
+            } elseif ($clearTarget === 'withholding') {
+                ExpenseRequest::whereIn('id', $recordIds)->update([
+                    'withholding_settled' => false,
+                    'withholding_settled_at' => null,
+                    'withholding_settlement_id' => null,
+                ]);
+            } else {
+                ExpenseRequest::whereIn('id', $recordIds)->update([
+                    'vat_settled' => false,
+                    'withholding_settled' => false,
+                    'vat_settled_at' => null,
+                    'withholding_settled_at' => null,
+                    'tax_settled_at' => null,
+                    'tax_settlement_id' => null,
+                    'vat_settlement_id' => null,
+                    'withholding_settlement_id' => null,
+                ]);
+            }
+
+            // Mark any admin clearance settlements for this period as cancelled
+            TaxSettlement::where('payment_method', 'admin_cleared')
+                ->where('period_from', $periodStart)
+                ->where('period_to', $periodEnd)
+                ->update(['status' => TaxSettlement::STATUS_CANCELLED]);
+
+            return back()->with('success', "Tax records for {$monthLabel} have been re-opened to active unsettled status ({$records->count()} records restored).");
+        }
+
+        // Action: CLEAR (stamp month to start from zero)
+        $query = ExpenseRequest::where('status', ExpenseRequest::STATUS_PAID)
+            ->whereBetween('created_at', [$periodStart, $periodEnd]);
+
+        if ($clearTarget === 'vat') {
+            $query->where('vat_settled', false)
+                  ->whereNull('vat_settlement_id')
+                  ->where(function ($q) {
+                      $q->where('vat_amount', '>', 0)
+                        ->orWhereIn('vat_type', ['exclusive', 'inclusive', 'vat_b']);
+                  });
+        } elseif ($clearTarget === 'withholding') {
+            $query->where('withholding_settled', false)
+                  ->whereNull('withholding_settlement_id')
+                  ->where(function ($q) {
+                      $q->where('has_withholding', true)
+                        ->orWhere('withholding_amount', '>', 0);
+                  });
+        } else {
+            $query->where(function ($q) {
+                $q->where(function ($sub) {
+                    $sub->where('vat_settled', false)->whereNull('vat_settlement_id')
+                        ->where(function ($v) { $v->where('vat_amount', '>', 0)->orWhereIn('vat_type', ['exclusive', 'inclusive', 'vat_b']); });
+                })->orWhere(function ($sub) {
+                    $sub->where('withholding_settled', false)->whereNull('withholding_settlement_id')
+                        ->where(function ($w) { $w->where('has_withholding', true)->orWhere('withholding_amount', '>', 0); });
+                });
+            });
+        }
+
+        $records = $query->orderBy('created_at')->get();
+
+        if ($records->isEmpty()) {
+            $targetName = $clearTarget === 'vat' ? 'VAT' : ($clearTarget === 'withholding' ? '3% Withholding Tax' : 'VAT and Withholding');
+            return back()->with('error', "No unsettled {$targetName} records found for {$monthLabel}. It is already at zero (0.00 ETB).");
+        }
+
+        // Calculate amounts
+        $totalBase = $records->sum(fn($i) => (float)($i->gross_amount > 0 ? $i->gross_amount : $i->amount));
+        $vatSum = $records->sum(function ($item) {
+            if ($item->vat_settled) return 0.0;
+            if ((float)$item->vat_amount > 0 && ($item->vat_type ?? '') === 'exclusive') return (float)$item->vat_amount;
+            $gross = (float)($item->gross_amount > 0 ? $item->gross_amount : $item->amount);
+            $vatType = $item->vat_type ?? 'none';
+            $vatRate = (float)($item->vat_rate ?? 15.00);
+            if (in_array($vatType, ['inclusive', 'vat_b'])) {
+                $base = round($gross / (1 + ($vatRate / 100)), 2);
+                return round($gross - $base, 2);
+            } elseif ($vatType === 'exclusive') {
+                return round($gross * ($vatRate / 100), 2);
+            }
+            return 0.0;
+        });
+
+        $whtSum = $records->sum(function ($item) {
+            if ($item->withholding_settled) return 0.0;
+            return (float)$item->calculated_withholding_amount;
+        });
+
+        $totalPayable = 0.0;
+        if ($clearTarget === 'vat') {
+            $totalPayable = $vatSum;
+            $whtSum = 0.0;
+        } elseif ($clearTarget === 'withholding') {
+            $totalPayable = $whtSum;
+            $vatSum = 0.0;
+        } else {
+            $totalPayable = round($vatSum + $whtSum, 2);
+        }
+
+        $attachmentPath = null;
+        if ($request->hasFile('attachment')) {
+            $file = $request->file('attachment');
+            $filename = 'admin_tax_clearance_' . time() . '_' . Str::random(6) . '.' . $file->getClientOriginalExtension();
+            $file->move(public_path('uploads/tax_receipts'), $filename);
+            $attachmentPath = 'uploads/tax_receipts/' . $filename;
+        }
+
+        return DB::transaction(function () use (
+            $records, $clearTarget, $totalBase, $vatSum, $whtSum, $totalPayable,
+            $periodStart, $periodEnd, $ethYear, $ethMonth, $monthLabel,
+            $user, $attachmentPath, $validated
+        ) {
+            $prefix = $clearTarget === 'vat' ? 'ADM-VAT-' : ($clearTarget === 'withholding' ? 'ADM-WHT-' : 'ADM-CLR-');
+            $settlementNumber = $prefix . $ethYear . str_pad($ethMonth, 2, '0', STR_PAD_LEFT) . '-' . str_pad(rand(100, 999), 3, '0', STR_PAD_LEFT);
+            while (TaxSettlement::where('settlement_number', $settlementNumber)->exists()) {
+                $settlementNumber = $prefix . $ethYear . str_pad($ethMonth, 2, '0', STR_PAD_LEFT) . '-' . str_pad(rand(100, 999), 3, '0', STR_PAD_LEFT);
+            }
+
+            $customRef = !empty($validated['reference']) ? $validated['reference'] : 'GENERAL-ADMIN-CLEARED-START-ZERO';
+            $notes = "Cleared to start from zero for {$monthLabel} by General Admin {$user->name}." . (!empty($validated['admin_notes']) ? " Note: " . $validated['admin_notes'] : "");
+
+            $settlement = TaxSettlement::create([
+                'settlement_number'         => $settlementNumber,
+                'tax_type'                  => $clearTarget,
+                'period_from'               => $periodStart,
+                'period_to'                 => $periodEnd,
+                'total_base_amount'         => $totalBase,
+                'vat_amount'                => $vatSum,
+                'withholding_amount'        => $whtSum,
+                'total_tax_paid'            => $totalPayable,
+                'records_count'             => $records->count(),
+                'status'                    => TaxSettlement::STATUS_PAID,
+                'finance_head_id'           => $user->id,
+                'assigned_finance_staff_id' => $user->id,
+                'paid_by'                   => $user->id,
+                'paid_at'                   => now(),
+                'payment_method'            => 'admin_cleared',
+                'payment_reference'         => $customRef,
+                'attachment'                => $attachmentPath,
+                'payment_notes'             => $notes,
+            ]);
+
+            $recordIds = $records->pluck('id');
+            if ($clearTarget === 'vat') {
+                ExpenseRequest::whereIn('id', $recordIds)->update([
+                    'vat_settled'       => true,
+                    'vat_settled_at'    => now(),
+                    'vat_settlement_id' => $settlement->id,
+                    'tax_settled_at'    => now(),
+                ]);
+            } elseif ($clearTarget === 'withholding') {
+                ExpenseRequest::whereIn('id', $recordIds)->update([
+                    'withholding_settled'       => true,
+                    'withholding_settled_at'    => now(),
+                    'withholding_settlement_id' => $settlement->id,
+                    'tax_settled_at'            => now(),
+                ]);
+            } else {
+                ExpenseRequest::whereIn('id', $recordIds)->update([
+                    'vat_settled'               => true,
+                    'withholding_settled'       => true,
+                    'vat_settled_at'            => now(),
+                    'withholding_settled_at'    => now(),
+                    'tax_settled_at'            => now(),
+                    'tax_settlement_id'         => $settlement->id,
+                    'vat_settlement_id'         => $settlement->id,
+                    'withholding_settlement_id' => $settlement->id,
+                ]);
+            }
+
+            $targetLabel = $clearTarget === 'vat' ? 'VAT' : ($clearTarget === 'withholding' ? '3% Withholding Tax' : 'VAT & 3% Withholding Tax');
+            return back()->with('success', "{$targetLabel} for {$monthLabel} has been cleared to ZERO by General Admin. {$records->count()} records marked as settled. Ref: {$settlementNumber}");
+        });
     }
 
     /**

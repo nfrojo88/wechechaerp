@@ -2308,6 +2308,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('finance/tax-deductions/settle', [App\Http\Controllers\Finance\FinanceTaxReportController::class, 'initiateSettlement'])->name('finance.tax-deductions.settle');
     Route::post('finance/tax-deductions/settle/{settlement}/pay', [App\Http\Controllers\Finance\FinanceTaxReportController::class, 'recordPayment'])->name('finance.tax-deductions.settle.pay');
     Route::post('finance/tax-deductions/settle/{settlement}/cancel', [App\Http\Controllers\Finance\FinanceTaxReportController::class, 'cancelSettlement'])->name('finance.tax-deductions.settle.cancel');
+    Route::post('finance/tax-deductions/admin-clear', [App\Http\Controllers\Finance\FinanceTaxReportController::class, 'adminClearMonth'])->name('finance.tax-deductions.admin-clear');
 
     Route::resource('payments', App\Http\Controllers\PaymentController::class)->only(['index','create','store','show']);
 

@@ -141,6 +141,12 @@
 
                     {{-- Utilities Group --}}
                     <div class="d-flex align-items-center gap-2">
+                        @if($isGeneralAdmin ?? false)
+                        <button type="button" class="btn btn-warning text-dark btn-sm rounded-pill px-3 py-2 shadow-xs fw-bold d-inline-flex align-items-center gap-1.5" data-bs-toggle="modal" data-bs-target="#adminClearTaxModal" title="General Admin: Clear VAT & Withholding for a month to start from zero">
+                            <i class="fa-solid fa-broom text-dark"></i>
+                            <span>Clear Month (Start from Zero)</span>
+                        </button>
+                        @endif
                         <button type="button" class="btn btn-primary btn-sm rounded-pill px-3 py-2 shadow-xs fw-semibold d-inline-flex align-items-center gap-1.5" data-bs-toggle="modal" data-bs-target="#addReceiptModal">
                             <i class="fa-solid fa-cloud-arrow-up"></i>
                             <span>+ Add Receipt (OCR)</span>
@@ -469,6 +475,14 @@
                                        title="Filter whole page to this month">
                                         <i class="fa-solid fa-filter"></i>
                                     </a>
+                                    @if($isGeneralAdmin ?? false)
+                                    <button type="button" 
+                                            class="btn btn-sm btn-outline-warning text-dark rounded-pill px-2 py-1 small" 
+                                            onclick="openAdminClearModalForMonth({{ $selectedEthYear }}, {{ $mNum }}, '{{ $mTrend['month_name'] }}')"
+                                            title="General Admin: Clear {{ $mTrend['month_name'] }} to start from zero">
+                                        <i class="fa-solid fa-broom"></i>
+                                    </button>
+                                    @endif
                                 </div>
                             </td>
                         </tr>
@@ -3067,6 +3081,168 @@
     </div>
 </div>
 
+{{-- ── General Admin Clear Tax (Start From Zero) Modal ────────────────────── --}}
+@if($isGeneralAdmin ?? false)
+<div class="modal fade" id="adminClearTaxModal" tabindex="-1" aria-labelledby="adminClearTaxModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <form method="POST" action="{{ route('finance.tax-deductions.admin-clear') }}" enctype="multipart/form-data" class="modal-content border-0 shadow-lg rounded-4 overflow-hidden" id="adminClearTaxForm">
+            @csrf
+            {{-- Header --}}
+            <div class="modal-header bg-dark text-white py-3 px-4" style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%) !important;">
+                <div class="d-flex align-items-center gap-2.5">
+                    <div class="p-2 rounded-circle text-warning" style="background: rgba(245,158,11,0.2);">
+                        <i class="fa-solid fa-broom fs-5"></i>
+                    </div>
+                    <div>
+                        <h5 class="modal-title fw-bold mb-0 text-white" id="adminClearTaxModalLabel">Clear VAT &amp; Withholding Tax (Start from Zero)</h5>
+                        <small class="text-white-50">General Admin Authority &bull; Monthly Tax Clearance &amp; Reset</small>
+                    </div>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            {{-- Body --}}
+            <div class="modal-body p-4 bg-light">
+                {{-- Banner notice --}}
+                <div class="alert alert-warning border-warning d-flex align-items-start gap-2.5 py-2.5 px-3 mb-3 rounded-3 shadow-2xs">
+                    <i class="fa-solid fa-shield-halved text-warning fs-5 mt-0.5 flex-shrink-0"></i>
+                    <div class="small">
+                        <strong class="text-dark d-block mb-0.5">Start Month From Zero (0.00 ETB)</strong>
+                        <span class="text-secondary">
+                            This administrative action stamps the accrued tax deductions for the selected Ethiopian month as <strong>Settled / Cleared</strong>, creating an audit settlement record and resetting the active liability balance of that month to zero. You may also undo this action at any time using the <em>Re-open Month</em> mode.
+                        </span>
+                    </div>
+                </div>
+
+                {{-- Action Type Selector (Clear vs Reopen) --}}
+                <div class="card border rounded-3 mb-3 bg-white shadow-2xs">
+                    <div class="card-body p-3">
+                        <label class="form-label small fw-bold text-dark text-uppercase mb-2" style="font-size:0.75rem; letter-spacing:0.5px;">
+                            <i class="fa-solid fa-sliders text-primary me-1"></i>Action Mode
+                        </label>
+                        <div class="row g-2">
+                            <div class="col-sm-6">
+                                <label class="border rounded-3 p-2.5 d-flex align-items-start gap-2.5 cursor-pointer w-100 action-mode-option selected-action" id="opt-action-clear" style="border-color:#f59e0b !important; background:#fffbeb;">
+                                    <input type="radio" name="action_type" value="clear" class="form-check-input mt-1" checked onchange="toggleAdminClearActionMode('clear')">
+                                    <div>
+                                        <div class="fw-bold text-dark small"><i class="fa-solid fa-broom text-warning me-1"></i>Clear to Zero (0.00 ETB)</div>
+                                        <div class="text-muted" style="font-size:0.78rem;">Stamp records as settled &amp; reset active monthly tax pool to zero.</div>
+                                    </div>
+                                </label>
+                            </div>
+                            <div class="col-sm-6">
+                                <label class="border rounded-3 p-2.5 d-flex align-items-start gap-2.5 cursor-pointer w-100 action-mode-option" id="opt-action-reopen">
+                                    <input type="radio" name="action_type" value="reopen" class="form-check-input mt-1" onchange="toggleAdminClearActionMode('reopen')">
+                                    <div>
+                                        <div class="fw-bold text-dark small"><i class="fa-solid fa-rotate-left text-primary me-1"></i>Re-open Month (Undo)</div>
+                                        <div class="text-muted" style="font-size:0.78rem;">Revert settled records back to active unsettled status for recalculation.</div>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Ethiopian Tax Period --}}
+                <div class="card border rounded-3 mb-3 bg-white shadow-2xs">
+                    <div class="card-body p-3">
+                        <label class="form-label small fw-bold text-dark text-uppercase mb-2" style="font-size:0.75rem; letter-spacing:0.5px;">
+                            <i class="fa-regular fa-calendar-days text-primary me-1"></i>Ethiopian Tax Period (ወርና ዓ.ም.)
+                        </label>
+                        <div class="row g-2">
+                            <div class="col-7">
+                                <label class="form-label small text-muted mb-1" style="font-size:0.75rem;">Month (ወር)</label>
+                                <select name="ethiopian_month" id="admin_clear_eth_month" class="form-select form-select-sm fw-semibold" required>
+                                    @foreach($availableEthMonths as $mId => $m)
+                                        <option value="{{ $mId }}" {{ $selectedEthMonth == $mId ? 'selected' : '' }}>
+                                            {{ $m['label'] }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="col-5">
+                                <label class="form-label small text-muted mb-1" style="font-size:0.75rem;">Year (ዓ.ም.)</label>
+                                <select name="ethiopian_year" id="admin_clear_eth_year" class="form-select form-select-sm fw-semibold" required>
+                                    @foreach($availableEthYears as $y)
+                                        <option value="{{ $y }}" {{ $selectedEthYear == $y ? 'selected' : '' }}>
+                                            {{ $y }} ዓ.ም.
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Tax Type Target --}}
+                <div class="card border rounded-3 mb-3 bg-white shadow-2xs">
+                    <div class="card-body p-3">
+                        <label class="form-label small fw-bold text-dark text-uppercase mb-2" style="font-size:0.75rem; letter-spacing:0.5px;">
+                            <i class="fa-solid fa-receipt text-primary me-1"></i>Target Deductions to Clear / Reset
+                        </label>
+                        <div class="row g-2">
+                            <div class="col-md-4">
+                                <label class="border rounded-3 p-2.5 d-flex align-items-center gap-2 cursor-pointer w-100 mb-0">
+                                    <input type="radio" name="clear_target" value="both" class="form-check-input" checked>
+                                    <span class="small fw-semibold text-dark">Both VAT &amp; 3% WHT</span>
+                                </label>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="border rounded-3 p-2.5 d-flex align-items-center gap-2 cursor-pointer w-100 mb-0">
+                                    <input type="radio" name="clear_target" value="vat" class="form-check-input">
+                                    <span class="small fw-semibold text-dark">15% VAT Only</span>
+                                </label>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="border rounded-3 p-2.5 d-flex align-items-center gap-2 cursor-pointer w-100 mb-0">
+                                    <input type="radio" name="clear_target" value="withholding" class="form-check-input">
+                                    <span class="small fw-semibold text-dark">3% Withholding Only</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Reference & Notes & Proof Slip --}}
+                <div class="card border rounded-3 bg-white shadow-2xs">
+                    <div class="card-body p-3">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold text-dark mb-1">
+                                    <i class="fa-solid fa-hashtag text-secondary me-1"></i>Official / ERCA Reference Number (Optional)
+                                </label>
+                                <input type="text" name="reference" class="form-control form-control-sm" placeholder="e.g. ERCA-TAX-CLEAR-2018-02 / Slip #">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold text-dark mb-1">
+                                    <i class="fa-solid fa-paperclip text-secondary me-1"></i>Settlement Slip / Proof Document (Optional)
+                                </label>
+                                <input type="file" name="attachment" class="form-control form-control-sm" accept=".pdf,.jpg,.jpeg,.png">
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label small fw-bold text-dark mb-1">
+                                    <i class="fa-regular fa-comment-dots text-secondary me-1"></i>Administrative Notes / Reason
+                                </label>
+                                <textarea name="admin_notes" rows="2" class="form-control form-control-sm" placeholder="e.g. Approved monthly tax declaration clearance by General Admin. All deductions reconciled."></textarea>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {{-- Footer --}}
+            <div class="modal-footer bg-light border-top py-2.5 px-4 d-flex justify-content-between align-items-center">
+                <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-warning text-dark fw-bold btn-sm rounded-pill px-4 shadow-xs" id="adminClearSubmitBtn">
+                    <i class="fa-solid fa-broom me-1.5"></i>
+                    <span>Confirm &amp; Clear Month to Zero</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+@endif
+
 <script>
     // ── Add Receipt (AI OCR) Modal Handlers & Automatic Calculations ────────────
     function triggerAddReceiptScan() {
@@ -4765,5 +4941,92 @@
         printWindow.focus();
         setTimeout(() => { printWindow.print(); }, 400);
     }
+
+    // ── General Admin: Clear Month (Start from Zero) Handlers ──────────────────
+    function openAdminClearModalForMonth(ethYear, ethMonth, monthLabel) {
+        const modalEl = document.getElementById('adminClearTaxModal');
+        if (!modalEl) return;
+
+        const yearSelect = document.getElementById('admin_clear_eth_year');
+        const monthSelect = document.getElementById('admin_clear_eth_month');
+
+        if (yearSelect && ethYear) {
+            yearSelect.value = ethYear;
+        }
+        if (monthSelect && ethMonth) {
+            monthSelect.value = ethMonth;
+        }
+
+        // Reset to clear action mode
+        const clearRadio = modalEl.querySelector('input[name="action_type"][value="clear"]');
+        if (clearRadio) {
+            clearRadio.checked = true;
+            toggleAdminClearActionMode('clear');
+        }
+
+        if (window.bootstrap && bootstrap.Modal) {
+            const bsModal = bootstrap.Modal.getOrCreateInstance(modalEl);
+            bsModal.show();
+        } else if (window.$ && typeof $(modalEl).modal === 'function') {
+            $(modalEl).modal('show');
+        }
+    }
+
+    function toggleAdminClearActionMode(mode) {
+        const optClear = document.getElementById('opt-action-clear');
+        const optReopen = document.getElementById('opt-action-reopen');
+        const submitBtn = document.getElementById('adminClearSubmitBtn');
+
+        if (mode === 'reopen') {
+            if (optClear) {
+                optClear.style.borderColor = '#e2e8f0';
+                optClear.style.backgroundColor = '#ffffff';
+            }
+            if (optReopen) {
+                optReopen.style.borderColor = '#0284c7';
+                optReopen.style.backgroundColor = '#f0f9ff';
+            }
+            if (submitBtn) {
+                submitBtn.className = 'btn btn-primary fw-bold btn-sm rounded-pill px-4 shadow-xs';
+                submitBtn.innerHTML = '<i class="fa-solid fa-rotate-left me-1.5"></i> <span>Confirm & Re-open Month</span>';
+            }
+        } else {
+            if (optClear) {
+                optClear.style.borderColor = '#f59e0b';
+                optClear.style.backgroundColor = '#fffbeb';
+            }
+            if (optReopen) {
+                optReopen.style.borderColor = '#e2e8f0';
+                optReopen.style.backgroundColor = '#ffffff';
+            }
+            if (submitBtn) {
+                submitBtn.className = 'btn btn-warning text-dark fw-bold btn-sm rounded-pill px-4 shadow-xs';
+                submitBtn.innerHTML = '<i class="fa-solid fa-broom me-1.5"></i> <span>Confirm & Clear Month to Zero</span>';
+            }
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        const adminForm = document.getElementById('adminClearTaxForm');
+        if (adminForm) {
+            adminForm.addEventListener('submit', function (e) {
+                const actionType = adminForm.querySelector('input[name="action_type"]:checked')?.value || 'clear';
+                const monthSelect = document.getElementById('admin_clear_eth_month');
+                const yearSelect = document.getElementById('admin_clear_eth_year');
+                const monthName = monthSelect?.options[monthSelect.selectedIndex]?.text?.trim() || 'selected month';
+                const yearName = yearSelect?.options[yearSelect.selectedIndex]?.text?.trim() || '';
+
+                if (actionType === 'clear') {
+                    if (!confirm(`Are you sure you want to CLEAR all tax liabilities for ${monthName} ${yearName} to ZERO (0.00 ETB)?\n\nAll accrued deductions in this month will be stamped as settled.`)) {
+                        e.preventDefault();
+                    }
+                } else {
+                    if (!confirm(`Are you sure you want to RE-OPEN ${monthName} ${yearName}?\n\nPreviously settled records will be returned to active unsettled status.`)) {
+                        e.preventDefault();
+                    }
+                }
+            });
+        }
+    });
 </script>
 @endsection
