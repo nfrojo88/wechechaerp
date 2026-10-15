@@ -2254,6 +2254,8 @@ Route::middleware(['auth'])->group(function () {
 
     // ─── Phase 5 Finance ────────────────────────────────────────────────────
 
+    Route::get('finance/coa/initial-balances', [App\Http\Controllers\ChartOfAccountController::class, 'initialBalances'])->name('coa.initial-balances');
+    Route::post('finance/coa/initial-balances', [App\Http\Controllers\ChartOfAccountController::class, 'saveInitialBalances'])->name('coa.initial-balances.save');
     Route::resource('coa', App\Http\Controllers\ChartOfAccountController::class)->except(['show']);
     Route::resource('coa-transfers', App\Http\Controllers\CoaTransferController::class)->only(['index', 'create', 'store', 'show']);
     Route::resource('bank-accounts', App\Http\Controllers\BankAccountController::class)->except(['destroy']);

@@ -7,7 +7,10 @@
             <h1 class="h3 mb-0"><i class="fas fa-sitemap me-2 text-primary"></i>Chart of Accounts</h1>
             <p class="text-muted small mb-0">General ledger accounts, balances, and real-time fund transfers</p>
         </div>
-        <div class="d-flex gap-2">
+        <div class="d-flex flex-wrap gap-2">
+            <a href="{{ route('coa.initial-balances') }}" class="btn btn-warning btn-sm fw-bold shadow-sm text-dark">
+                <i class="fa-solid fa-sliders me-1"></i>One-Time Balance &amp; Ledger Setup
+            </a>
             <a href="{{ route('coa-transfers.index') }}" class="btn btn-outline-info btn-sm">
                 <i class="fa-solid fa-list-check me-1"></i>Transfer History
             </a>
@@ -17,7 +20,61 @@
             <a href="{{ route('coa.create') }}" class="btn btn-primary btn-sm"><i class="fas fa-plus me-1"></i>Add Account</a>
         </div>
     </div>
-    @if(session('success'))<div class="alert alert-success alert-dismissible fade show shadow-sm">{{ session('success') }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>@endif
+    @if(session('success'))<div class="alert alert-success alert-dismissible fade show shadow-sm"><i class="fa-solid fa-circle-check me-2"></i>{{ session('success') }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>@endif
+    @if(session('error'))<div class="alert alert-danger alert-dismissible fade show shadow-sm"><i class="fa-solid fa-triangle-exclamation me-2"></i>{{ session('error') }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>@endif
+
+    @if(isset($stats))
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-4 col-xl-2">
+            <div class="card border-0 shadow-sm rounded-3 h-100 border-start border-4 border-primary">
+                <div class="card-body p-3">
+                    <span class="text-muted small fw-semibold text-uppercase">Total Assets</span>
+                    <h6 class="fw-bold mb-0 text-primary mt-1">{{ number_format($stats['total_assets'], 2) }} <small style="font-size: 0.65rem;">ETB</small></h6>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-4 col-xl-2">
+            <div class="card border-0 shadow-sm rounded-3 h-100 border-start border-4 border-danger">
+                <div class="card-body p-3">
+                    <span class="text-muted small fw-semibold text-uppercase">Total Liabilities</span>
+                    <h6 class="fw-bold mb-0 text-danger mt-1">{{ number_format($stats['total_liabilities'], 2) }} <small style="font-size: 0.65rem;">ETB</small></h6>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-4 col-xl-2">
+            <div class="card border-0 shadow-sm rounded-3 h-100 border-start border-4 border-success">
+                <div class="card-body p-3">
+                    <span class="text-muted small fw-semibold text-uppercase">Total Equity</span>
+                    <h6 class="fw-bold mb-0 text-success mt-1">{{ number_format($stats['total_equity'], 2) }} <small style="font-size: 0.65rem;">ETB</small></h6>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-4 col-xl-2">
+            <div class="card border-0 shadow-sm rounded-3 h-100 border-start border-4 border-info">
+                <div class="card-body p-3">
+                    <span class="text-muted small fw-semibold text-uppercase">Total Revenue</span>
+                    <h6 class="fw-bold mb-0 text-info mt-1">{{ number_format($stats['total_revenue'], 2) }} <small style="font-size: 0.65rem;">ETB</small></h6>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-4 col-xl-2">
+            <div class="card border-0 shadow-sm rounded-3 h-100 border-start border-4 border-warning">
+                <div class="card-body p-3">
+                    <span class="text-muted small fw-semibold text-uppercase">Total Expenses</span>
+                    <h6 class="fw-bold mb-0 text-warning mt-1">{{ number_format($stats['total_expenses'], 2) }} <small style="font-size: 0.65rem;">ETB</small></h6>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-4 col-xl-2">
+            <div class="card border-0 shadow-sm rounded-3 h-100 border-start border-4 border-dark bg-light">
+                <div class="card-body p-3 d-flex flex-column justify-content-center">
+                    <span class="text-muted small fw-semibold text-uppercase">Active Accounts</span>
+                    <h6 class="fw-bold mb-0 text-dark mt-1">{{ $stats['total_accounts'] }} <small class="text-muted fw-normal">Accounts</small></h6>
+                </div>
+            </div>
+        </div>
+    </div>
+    @endif
     @php $typeColors = ['asset'=>'primary','liability'=>'danger','equity'=>'success','revenue'=>'info','expense'=>'warning']; @endphp
     <div class="card border-0 shadow-sm">
         <div class="card-body p-0">

@@ -70,6 +70,19 @@
                         @endforeach
                     </select>
                 </div>
+
+                <div class="row g-3 mb-4">
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold text-dark" style="font-size: 0.9rem;">Opening Balance (ETB)</label>
+                        <input type="number" step="0.01" name="opening_balance" class="form-control form-control-lg border-0 bg-light" value="{{ old('opening_balance', $coa->opening_balance) }}" style="border-radius: 12px; font-size: 0.95rem;">
+                        <small class="text-muted d-block mt-1">Starting baseline balance for this account.</small>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold text-dark" style="font-size: 0.9rem;">Current Balance (ETB)</label>
+                        <input type="number" step="0.01" name="current_balance" class="form-control form-control-lg border-0 bg-light fw-bold text-primary" value="{{ old('current_balance', $coa->current_balance) }}" style="border-radius: 12px; font-size: 0.95rem;">
+                        <small class="text-muted d-block mt-1">Active ledger balance available.</small>
+                    </div>
+                </div>
                 
                 <div class="row g-3 mb-4 d-none">
                     <!-- Hidden fields for other required parameters -->
