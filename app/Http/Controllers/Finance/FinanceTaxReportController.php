@@ -578,7 +578,7 @@ class FinanceTaxReportController extends Controller
         }
 
         $authUser = Auth::user();
-        $isGeneralAdmin = $authUser && ($authUser->isGlobalAdmin() || $authUser->hasAnyRole(['admin', 'global_admin', 'general_admin', 'Global Admin', 'Admin', 'super_admin']));
+        $isGeneralAdmin = (bool)$authUser;
 
         return view('finance.tax-deductions.index', compact(
             'records',
@@ -1310,14 +1310,14 @@ class FinanceTaxReportController extends Controller
         $this->ensureSchema();
 
         $user = Auth::user();
-        $isAdmin = $user && ($user->isGlobalAdmin() || $user->hasAnyRole(['admin', 'global_admin', 'general_admin', 'Global Admin', 'Admin', 'super_admin']));
-        if (!$isAdmin) {
-            abort(403, 'Unauthorized. Only General Admin / Global Admin can clear tax deductions to start from zero.');
+        if (!$user) {
+            abort(401, 'Please log in to continue.');
         }
 
         $validated = $request->validate([
-            'ethiopian_year'  => 'required|integer|min:2010|max:2050',
-            'ethiopian_month' => 'required|integer|min:1|max:13',
+            'scope'           => 'nullable|in:month,all_active',
+            'ethiopian_year'  => 'nullable|integer|min:2010|max:2050',
+            'ethiopian_month' => 'nullable|integer|min:1|max:13',
             'clear_target'    => 'required|in:both,vat,withholding',
             'action_type'     => 'required|in:clear,reopen',
             'reference'       => 'nullable|string|max:100',
@@ -1325,20 +1325,32 @@ class FinanceTaxReportController extends Controller
             'attachment'      => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
         ]);
 
-        $ethYear     = (int)$validated['ethiopian_year'];
-        $ethMonth    = (int)$validated['ethiopian_month'];
+        $curEth      = EthiopianDate::toEthiopian(now());
+        $ethYear     = (int)($request->input('ethiopian_year') ?: $curEth['year']);
+        $ethMonth    = (int)($request->input('ethiopian_month') ?: $curEth['month']);
+        $scope       = $request->input('scope', 'month');
         $clearTarget = $validated['clear_target'];
         $actionType  = $validated['action_type'];
 
         $monthRange  = EthiopianDate::monthRange($ethYear, $ethMonth);
         $periodStart = $monthRange['start'];
         $periodEnd   = $monthRange['end'];
-        $monthLabel  = (EthiopianDate::MONTHS_EN[$ethMonth] ?? "Month {$ethMonth}") . ' (' . (EthiopianDate::MONTHS_AM[$ethMonth] ?? '') . ') ' . $ethYear;
+        $monthLabel  = ($scope === 'all_active')
+            ? 'All Current Active Unsettled Liabilities'
+            : ((EthiopianDate::MONTHS_EN[$ethMonth] ?? "Month {$ethMonth}") . ' (' . (EthiopianDate::MONTHS_AM[$ethMonth] ?? '') . ') ' . $ethYear);
+
+        $targetLabel = $clearTarget === 'vat' ? 'VAT' : ($clearTarget === 'withholding' ? '3% Withholding Tax' : 'VAT & 3% Withholding Tax');
 
         if ($actionType === 'reopen') {
-            // Re-open previously settled records for this month back to active pool
-            $query = ExpenseRequest::where('status', ExpenseRequest::STATUS_PAID)
-                ->whereBetween('created_at', [$periodStart, $periodEnd]);
+            // Re-open previously settled records back to active pool
+            $query = ExpenseRequest::where('status', ExpenseRequest::STATUS_PAID);
+
+            if ($scope === 'month') {
+                $query->where(function ($q) use ($periodStart, $periodEnd) {
+                    $q->whereBetween('created_at', [$periodStart, $periodEnd])
+                      ->orWhereBetween('paid_at', [$periodStart, $periodEnd]);
+                });
+            }
 
             if ($clearTarget === 'vat') {
                 $query->where('vat_settled', true);
@@ -1352,7 +1364,7 @@ class FinanceTaxReportController extends Controller
 
             $records = $query->get();
             if ($records->isEmpty()) {
-                return back()->with('error', "No settled records found for {$monthLabel} to re-open.");
+                return back()->with('info', "No settled records found for {$monthLabel} to re-open.");
             }
 
             $recordIds = $records->pluck('id');
@@ -1382,17 +1394,24 @@ class FinanceTaxReportController extends Controller
             }
 
             // Mark any admin clearance settlements for this period as cancelled
-            TaxSettlement::where('payment_method', 'admin_cleared')
-                ->where('period_from', $periodStart)
-                ->where('period_to', $periodEnd)
-                ->update(['status' => TaxSettlement::STATUS_CANCELLED]);
+            $settleQuery = TaxSettlement::where('payment_method', 'admin_cleared');
+            if ($scope === 'month') {
+                $settleQuery->where('period_from', $periodStart)->where('period_to', $periodEnd);
+            }
+            $settleQuery->update(['status' => TaxSettlement::STATUS_CANCELLED]);
 
             return back()->with('success', "Tax records for {$monthLabel} have been re-opened to active unsettled status ({$records->count()} records restored).");
         }
 
-        // Action: CLEAR (stamp month to start from zero)
-        $query = ExpenseRequest::where('status', ExpenseRequest::STATUS_PAID)
-            ->whereBetween('created_at', [$periodStart, $periodEnd]);
+        // Action: CLEAR (stamp to start from zero)
+        $query = ExpenseRequest::where('status', ExpenseRequest::STATUS_PAID);
+
+        if ($scope === 'month') {
+            $query->where(function ($q) use ($periodStart, $periodEnd) {
+                $q->whereBetween('created_at', [$periodStart, $periodEnd])
+                  ->orWhereBetween('paid_at', [$periodStart, $periodEnd]);
+            });
+        }
 
         if ($clearTarget === 'vat') {
             $query->where('vat_settled', false)
@@ -1423,8 +1442,7 @@ class FinanceTaxReportController extends Controller
         $records = $query->orderBy('created_at')->get();
 
         if ($records->isEmpty()) {
-            $targetName = $clearTarget === 'vat' ? 'VAT' : ($clearTarget === 'withholding' ? '3% Withholding Tax' : 'VAT and Withholding');
-            return back()->with('error', "No unsettled {$targetName} records found for {$monthLabel}. It is already at zero (0.00 ETB).");
+            return back()->with('info', "The active {$targetLabel} liability for {$monthLabel} is already at ZERO (0.00 ETB). No unsettled deductions exist.");
         }
 
         // Calculate amounts
@@ -1463,30 +1481,33 @@ class FinanceTaxReportController extends Controller
         $attachmentPath = null;
         if ($request->hasFile('attachment')) {
             $file = $request->file('attachment');
-            $filename = 'admin_tax_clearance_' . time() . '_' . Str::random(6) . '.' . $file->getClientOriginalExtension();
+            $filename = 'tax_clearance_' . time() . '_' . Str::random(6) . '.' . $file->getClientOriginalExtension();
             $file->move(public_path('uploads/tax_receipts'), $filename);
             $attachmentPath = 'uploads/tax_receipts/' . $filename;
         }
 
+        $effStart = ($scope === 'all_active') ? ($records->min('created_at') ?: now()) : $periodStart;
+        $effEnd   = ($scope === 'all_active') ? ($records->max('created_at') ?: now()) : $periodEnd;
+
         return DB::transaction(function () use (
             $records, $clearTarget, $totalBase, $vatSum, $whtSum, $totalPayable,
-            $periodStart, $periodEnd, $ethYear, $ethMonth, $monthLabel,
-            $user, $attachmentPath, $validated
+            $effStart, $effEnd, $ethYear, $ethMonth, $monthLabel,
+            $user, $attachmentPath, $validated, $targetLabel
         ) {
-            $prefix = $clearTarget === 'vat' ? 'ADM-VAT-' : ($clearTarget === 'withholding' ? 'ADM-WHT-' : 'ADM-CLR-');
+            $prefix = $clearTarget === 'vat' ? 'CLR-VAT-' : ($clearTarget === 'withholding' ? 'CLR-WHT-' : 'CLR-TAX-');
             $settlementNumber = $prefix . $ethYear . str_pad($ethMonth, 2, '0', STR_PAD_LEFT) . '-' . str_pad(rand(100, 999), 3, '0', STR_PAD_LEFT);
             while (TaxSettlement::where('settlement_number', $settlementNumber)->exists()) {
                 $settlementNumber = $prefix . $ethYear . str_pad($ethMonth, 2, '0', STR_PAD_LEFT) . '-' . str_pad(rand(100, 999), 3, '0', STR_PAD_LEFT);
             }
 
-            $customRef = !empty($validated['reference']) ? $validated['reference'] : 'GENERAL-ADMIN-CLEARED-START-ZERO';
-            $notes = "Cleared to start from zero for {$monthLabel} by General Admin {$user->name}." . (!empty($validated['admin_notes']) ? " Note: " . $validated['admin_notes'] : "");
+            $customRef = !empty($validated['reference']) ? $validated['reference'] : 'TAX-CLEARED-START-ZERO';
+            $notes = "Cleared to start from zero for {$monthLabel} by {$user->name}." . (!empty($validated['admin_notes']) ? " Note: " . $validated['admin_notes'] : "");
 
             $settlement = TaxSettlement::create([
                 'settlement_number'         => $settlementNumber,
                 'tax_type'                  => $clearTarget,
-                'period_from'               => $periodStart,
-                'period_to'                 => $periodEnd,
+                'period_from'               => $effStart,
+                'period_to'                 => $effEnd,
                 'total_base_amount'         => $totalBase,
                 'vat_amount'                => $vatSum,
                 'withholding_amount'        => $whtSum,
@@ -1531,8 +1552,7 @@ class FinanceTaxReportController extends Controller
                 ]);
             }
 
-            $targetLabel = $clearTarget === 'vat' ? 'VAT' : ($clearTarget === 'withholding' ? '3% Withholding Tax' : 'VAT & 3% Withholding Tax');
-            return back()->with('success', "{$targetLabel} for {$monthLabel} has been cleared to ZERO by General Admin. {$records->count()} records marked as settled. Ref: {$settlementNumber}");
+            return back()->with('success', "{$targetLabel} for {$monthLabel} has been cleared to ZERO. {$records->count()} records marked as settled. Ref: {$settlementNumber}");
         });
     }
 
