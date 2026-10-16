@@ -336,5 +336,59 @@ class EthiopianCalendarTest extends TestCase
         $this->assertArrayHasKey('expenses', $data);
         $this->assertArrayHasKey('ocr_items', $data);
     }
+
+    /**
+     * Test FinanceTaxReportController exportExcel returns valid response for Sales format.
+     */
+    public function test_tax_report_export_excel_sales_format(): void
+    {
+        $controller = new \App\Http\Controllers\Finance\FinanceTaxReportController();
+        $request = new \Illuminate\Http\Request([
+            'type'            => 'sales',
+            'ethiopian_year'  => 2018,
+            'ethiopian_month' => 1,
+        ]);
+        $response = $controller->exportExcel($request);
+
+        $this->assertTrue(in_array($response->getStatusCode(), [200, 302]));
+        $disposition = (string)$response->headers->get('Content-Disposition');
+        $this->assertStringContainsString('Sales_Report_2018_M01', $disposition);
+    }
+
+    /**
+     * Test FinanceTaxReportController exportExcel returns valid response for Purchase TAS format.
+     */
+    public function test_tax_report_export_excel_purchase_tas_format(): void
+    {
+        $controller = new \App\Http\Controllers\Finance\FinanceTaxReportController();
+        $request = new \Illuminate\Http\Request([
+            'type'            => 'purchase_tas',
+            'ethiopian_year'  => 2018,
+            'ethiopian_month' => 1,
+        ]);
+        $response = $controller->exportExcel($request);
+
+        $this->assertTrue(in_array($response->getStatusCode(), [200, 302]));
+        $disposition = (string)$response->headers->get('Content-Disposition');
+        $this->assertStringContainsString('Purchase_TAS_2018_M01', $disposition);
+    }
+
+    /**
+     * Test FinanceTaxReportController exportExcel returns valid response for Purchase VAT format.
+     */
+    public function test_tax_report_export_excel_purchase_vat_format(): void
+    {
+        $controller = new \App\Http\Controllers\Finance\FinanceTaxReportController();
+        $request = new \Illuminate\Http\Request([
+            'type'            => 'purchase_vat',
+            'ethiopian_year'  => 2018,
+            'ethiopian_month' => 1,
+        ]);
+        $response = $controller->exportExcel($request);
+
+        $this->assertTrue(in_array($response->getStatusCode(), [200, 302]));
+        $disposition = (string)$response->headers->get('Content-Disposition');
+        $this->assertStringContainsString('Purchase_VAT_Report_2018_M01', $disposition);
+    }
 }
 

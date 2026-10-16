@@ -8,6 +8,8 @@ use App\Models\TaxSettlement;
 use App\Models\BankAccount;
 use App\Models\BankTransaction;
 use App\Models\ChartOfAccount;
+use App\Models\IncomeRecord;
+use App\Models\SystemSetting;
 use App\Models\Receipt;
 use App\Models\ReceiptItem;
 use App\Models\User;
@@ -23,6 +25,9 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use OpenSpout\Writer\XLSX\Writer as XlsxWriter;
+use OpenSpout\Common\Entity\Row;
+use OpenSpout\Common\Entity\Cell;
 
 class FinanceTaxReportController extends Controller
 {
@@ -2017,6 +2022,505 @@ class FinanceTaxReportController extends Controller
 
             return back()->with('success', "{$targetLabel} for {$monthLabel} has been cleared to ZERO. {$totalCount} records marked as settled. Ref: {$settlementNumber}");
         });
+    }
+
+    /**
+     * Export Financial Movements & Tax Audit to Excel (.xlsx) or CSV fallback.
+     * Supported Types:
+     * 1. 'sales': Exact 13 Columns e-Tax Sales Format
+     *    Seller TIN | Buyer TIN | Buyer Name | Transaction | Receipt Category | Receipt Used | MRC | Receipt No | Commodity Type | Quantity | Price | Receipt Date | Encoded By
+     * 2. 'purchase_tas': Exact 9 Columns e-Tax Purchase Declaration Format
+     *    Purchaser TIN | Seller TIN | Amount | Receipt No | Receipt Date | Encoding Date | MRC | PurcType | Encoded By
+     * 3. 'purchase_vat': ERCA 15 Columns Purchase VAT Report
+     */
+    public function exportExcel(Request $request)
+    {
+        $this->ensureSchema();
+
+        $type = strtolower((string)$request->input('type', 'sales'));
+        $curEth = EthiopianDate::toEthiopian(now());
+        $year  = (int)($request->input('ethiopian_year') ?: $curEth['year']);
+        $rawMonth = $request->input('ethiopian_month');
+        $month = ($rawMonth !== null && $rawMonth !== '' && $rawMonth !== 'all') ? (int)$rawMonth : null;
+
+        if ($month && $month >= 1 && $month <= 13) {
+            $mRange = EthiopianDate::monthRange($year, $month);
+            $startDate = $mRange['start_date'];
+            $endDate   = $mRange['end_date'];
+            $monthSuffix = '_' . $year . '_M' . str_pad($month, 2, '0', STR_PAD_LEFT);
+        } else {
+            $rStart = EthiopianDate::monthRange($year, 1);
+            $rEnd   = EthiopianDate::monthRange($year, 13);
+            $startDate = $rStart['start_date'];
+            $endDate   = $rEnd['end_date'];
+            $monthSuffix = '_' . $year . '_All';
+        }
+
+        // Explicit override if custom dates supplied
+        $df = $request->input('from_date') ?: ($request->input('date_from') ?: $request->input('start_date'));
+        $dt = $request->input('to_date') ?: ($request->input('date_to') ?: $request->input('end_date'));
+        if (!empty($df) && !empty($dt)) {
+            $startDate = $df;
+            $endDate   = $dt;
+        }
+
+        if ($type === 'sales') {
+            return $this->exportSalesExcel($request, $startDate, $endDate, $year, $month, $monthSuffix);
+        } elseif ($type === 'purchase_tas' || $type === 'purchases_tas' || $type === 'tas') {
+            return $this->exportPurchaseTasExcel($request, $startDate, $endDate, $year, $month, $monthSuffix);
+        } else {
+            return $this->exportPurchaseVatExcel($request, $startDate, $endDate, $year, $month, $monthSuffix);
+        }
+    }
+
+    /**
+     * Export Sales Excel (13 Columns e-Tax format).
+     */
+    protected function exportSalesExcel(Request $request, string $startDate, string $endDate, int $year, ?int $month, string $monthSuffix)
+    {
+        $filename = 'Sales_Report' . $monthSuffix . '_' . now()->format('Ymd_His') . '.xlsx';
+        $tempPath = storage_path('app/sales_export_' . uniqid() . '.xlsx');
+
+        $headers = [
+            'Seller TIN',
+            'Buyer TIN',
+            'Buyer Name',
+            'Transaction',
+            'Receipt Category',
+            'Receipt Used',
+            'MRC',
+            'Receipt No',
+            'Commodity Type',
+            'Quantity',
+            'Price',
+            'Receipt Date',
+            'Encoded By',
+        ];
+
+        $incomes = collect();
+        if (Schema::hasTable('income_records')) {
+            $incomes = IncomeRecord::with(['project', 'createdBy', 'bankAccount', 'chartOfAccount'])
+                ->where(function ($iq) use ($startDate, $endDate) {
+                    $iq->whereBetween('income_date', [$startDate, $endDate])
+                       ->orWhere(function ($sub) use ($startDate, $endDate) {
+                           $sub->whereNull('income_date')->whereBetween('receipt_date', [$startDate, $endDate]);
+                       });
+                })
+                ->orderBy('income_date', 'asc')
+                ->orderBy('id', 'asc')
+                ->get();
+        }
+
+        $defaultSellerTin = SystemSetting::get('company_tin', SystemSetting::get('purchaser_tin', '38480010'));
+        $defaultSellerDigits = (int)preg_replace('/^0+/', '', preg_replace('/[^0-9]/', '', (string)$defaultSellerTin));
+        if (!$defaultSellerDigits) $defaultSellerDigits = 38480010;
+
+        $rows = [];
+        foreach ($incomes as $inc) {
+            // Col A: Seller TIN
+            $rawSeller = $inc->seller_tin ?: $defaultSellerTin;
+            $sellerDigits = preg_replace('/^0+/', '', preg_replace('/[^0-9]/', '', (string)$rawSeller));
+            $sellerTinVal = ($sellerDigits !== '') ? (int)$sellerDigits : $defaultSellerDigits;
+
+            // Col B: Buyer TIN
+            $rawBuyer = (string)($inc->buyer_tin ?? '');
+            $buyerDigits = preg_replace('/^0+/', '', preg_replace('/[^0-9]/', '', $rawBuyer));
+            $buyerTinVal = ($buyerDigits !== '') ? (int)$buyerDigits : (trim($rawBuyer) ?: '');
+
+            // Col C: Buyer Name
+            $buyerName = trim((string)$inc->buyer_name);
+            if (empty($buyerName) && $inc->project) {
+                $buyerName = trim((string)($inc->project->client_name ?: $inc->project->name));
+            }
+            if (empty($buyerName)) {
+                $buyerName = trim((string)$inc->payer) ?: 'Walk-in Customer';
+            }
+
+            // Col D: Transaction
+            $transaction = trim((string)($inc->transaction_type ?: 'Cash Sales'));
+
+            // Col E: Receipt Category
+            $receiptCategory = trim((string)($inc->receipt_category ?: 'Cash Sales Fiscal Receipt'));
+
+            // Col F: Receipt Used
+            $receiptUsed = trim((string)($inc->receipt_used ?: 'Fiscal Cash Register'));
+
+            // Col G: MRC
+            $mrc = trim((string)($inc->mrc_no ?? ''));
+
+            // Col H: Receipt No
+            $receiptNo = $inc->formatted_receipt_no ?: trim((string)($inc->receipt_no ?: ($inc->income_no ?: ('INC-' . $inc->id))));
+
+            // Col I: Commodity Type
+            $commodityType = trim((string)($inc->commodity_type ?? ''));
+            if (empty($commodityType)) {
+                $cat = strtolower((string)$inc->category);
+                $commodityType = in_array($cat, ['construction', 'goods']) ? 'Goods' : 'Services';
+            }
+
+            // Col J: Quantity
+            $qtyVal = round((float)($inc->quantity > 0 ? $inc->quantity : 1.00), 2);
+
+            // Col K: Price
+            $priceVal = round((float)($inc->unit_price > 0 ? $inc->unit_price : $inc->amount), 2);
+
+            // Col L: Receipt Date (Format: DD/MM/YYYY EC)
+            $rDate = $inc->receipt_date ?: $inc->income_date;
+            $receiptDateFormatted = $rDate ? EthiopianDate::formatDateEc($rDate, 'DD/MM/YYYY EC') : EthiopianDate::formatDateEc(now(), 'DD/MM/YYYY EC');
+
+            // Col M: Encoded By
+            $encodedBy = trim((string)($inc->encoded_by ?: ($request->input('encoded_by') ?: (
+                SystemSetting::get('etax_encoded_by') ?: (
+                    $inc->createdBy && !in_array(strtolower($inc->createdBy->name), ['admin', 'global admin', 'system'])
+                        ? strtolower(preg_replace('/[^a-zA-Z0-9_]/', '', $inc->createdBy->name))
+                        : 'wechacha'
+                )
+            ))));
+            if (empty($encodedBy)) $encodedBy = 'wechacha';
+
+            $rows[] = [
+                $sellerTinVal,
+                $buyerTinVal,
+                $buyerName,
+                $transaction,
+                $receiptCategory,
+                $receiptUsed,
+                $mrc,
+                $receiptNo,
+                $commodityType,
+                $qtyVal,
+                $priceVal,
+                $receiptDateFormatted,
+                $encodedBy,
+            ];
+        }
+
+        return $this->writeExcelFile($headers, $rows, $tempPath, $filename);
+    }
+
+    /**
+     * Export Purchase TAS Excel (9 Columns e-Tax format).
+     * Purchaser TIN | Seller TIN | Amount | Receipt No | Receipt Date | Encoding Date | MRC | PurcType | Encoded By
+     */
+    protected function exportPurchaseTasExcel(Request $request, string $startDate, string $endDate, int $year, ?int $month, string $monthSuffix)
+    {
+        $filename = 'Purchase_TAS' . $monthSuffix . '_' . now()->format('Ymd_His') . '.xlsx';
+        $tempPath = storage_path('app/purch_tas_' . uniqid() . '.xlsx');
+
+        $headers = [
+            'Purchaser TIN',
+            'Seller TIN',
+            'Amount',
+            'Receipt No',
+            'Receipt Date',
+            'Encoding Date',
+            'MRC',
+            'PurcType',
+            'Encoded By',
+        ];
+
+        $ocrItems = collect();
+        if (Schema::hasTable('receipt_items')) {
+            $ocrItems = ReceiptItem::with(['receipt', 'receipt.project', 'receipt.uploader'])
+                ->whereHas('receipt', fn($rq) => $rq->whereBetween('receipt_date', [$startDate, $endDate]))
+                ->orderBy('id', 'asc')
+                ->get();
+        }
+
+        $standaloneReceipts = collect();
+        if (Schema::hasTable('receipts')) {
+            $standaloneReceipts = Receipt::with(['project', 'uploader'])
+                ->whereBetween('receipt_date', [$startDate, $endDate])
+                ->doesntHave('items')
+                ->orderBy('id', 'asc')
+                ->get();
+        }
+
+        $defaultPurchaserTin = SystemSetting::get('purchaser_tin', SystemSetting::get('company_tin', '38480010'));
+        $defaultPurchaserDigits = (int)preg_replace('/^0+/', '', preg_replace('/[^0-9]/', '', (string)$defaultPurchaserTin));
+        if (!$defaultPurchaserDigits) $defaultPurchaserDigits = 38480010;
+
+        $rows = [];
+        foreach ($ocrItems as $item) {
+            $r = $item->receipt;
+            $buyerTin = $r ? ($r->buyer_tin ?: $defaultPurchaserTin) : $defaultPurchaserTin;
+            $buyerDigits = preg_replace('/^0+/', '', preg_replace('/[^0-9]/', '', (string)$buyerTin));
+            $purchaserTinVal = ($buyerDigits !== '') ? (int)$buyerDigits : $defaultPurchaserDigits;
+
+            $rawTin = $r ? (string)$r->vendor_tin : '';
+            $sellerDigits = preg_replace('/^0+/', '', preg_replace('/[^0-9]/', '', $rawTin));
+            $sellerTinVal = ($sellerDigits !== '') ? (int)$sellerDigits : (trim($rawTin) ?: '');
+
+            $amountVal = (float)($item->value_after_vat > 0 ? $item->value_after_vat : ($item->total_value > 0 ? $item->total_value : ($r ? $r->total_amount : 0)));
+            $amountVal = round($amountVal, 2);
+
+            $receiptNo = '';
+            if ($r) {
+                if (!empty($r->fs_no_raw)) {
+                    $receiptNo = trim($r->fs_no_raw);
+                } elseif (!empty($r->fs_no)) {
+                    $cleanFs = trim($r->fs_no);
+                    if (preg_match('/^fs/i', $cleanFs)) {
+                        $receiptNo = strtoupper($cleanFs);
+                    } elseif (preg_match('/^\d+$/', $cleanFs)) {
+                        $receiptNo = 'FS' . str_pad($cleanFs, 8, '0', STR_PAD_LEFT);
+                    } else {
+                        $receiptNo = $cleanFs;
+                    }
+                } else {
+                    $receiptNo = trim((string)$r->receipt_number);
+                }
+            }
+
+            $receiptDate = $r && $r->receipt_date ? EthiopianDate::formatDateEc($r->receipt_date, 'DD/MM/YYYY EC') : EthiopianDate::formatDateEc(now(), 'DD/MM/YYYY EC');
+            $encodingDate = ($r && $r->created_at) ? EthiopianDate::formatDateEc($r->created_at, 'DD/MM/YYYY EC') : EthiopianDate::formatDateEc(now(), 'DD/MM/YYYY EC');
+            $mrc = $r && !empty($r->mrc_no) ? trim((string)$r->mrc_no) : '';
+
+            $purcNorm = QcService::normalizePurchaseType(
+                $item->purchase_type ?: ($item->vat_category ?: ($r->category ?? null)),
+                ($item->item_description ?? '') . ' ' . ($r ? $r->vendor_name : '')
+            );
+            $purcType = $purcNorm['type'];
+
+            $encodedBy = $request->input('encoded_by') ?: (
+                SystemSetting::get('etax_encoded_by') ?: (
+                    $r && $r->uploader && !in_array(strtolower($r->uploader->name), ['admin', 'global admin', 'system'])
+                        ? strtolower(preg_replace('/[^a-zA-Z0-9_]/', '', $r->uploader->name))
+                        : 'wechacha'
+                )
+            );
+            if (empty($encodedBy)) $encodedBy = 'wechacha';
+
+            $rows[] = [
+                $purchaserTinVal,
+                $sellerTinVal,
+                $amountVal,
+                $receiptNo,
+                $receiptDate,
+                $encodingDate,
+                $mrc,
+                $purcType,
+                $encodedBy,
+            ];
+        }
+
+        foreach ($standaloneReceipts as $r) {
+            $buyerTin = $r->buyer_tin ?: $defaultPurchaserTin;
+            $buyerDigits = preg_replace('/^0+/', '', preg_replace('/[^0-9]/', '', (string)$buyerTin));
+            $purchaserTinVal = ($buyerDigits !== '') ? (int)$buyerDigits : $defaultPurchaserDigits;
+
+            $rawTin = (string)$r->vendor_tin;
+            $sellerDigits = preg_replace('/^0+/', '', preg_replace('/[^0-9]/', '', $rawTin));
+            $sellerTinVal = ($sellerDigits !== '') ? (int)$sellerDigits : (trim($rawTin) ?: '');
+
+            $amountVal = round((float)$r->total_amount, 2);
+
+            $receiptNo = trim((string)($r->fs_no_raw ?: ($r->fs_no ?: $r->receipt_number)));
+            if (!empty($r->fs_no) && preg_match('/^\d+$/', $r->fs_no)) {
+                $receiptNo = 'FS' . str_pad($r->fs_no, 8, '0', STR_PAD_LEFT);
+            }
+
+            $receiptDate = $r->receipt_date ? EthiopianDate::formatDateEc($r->receipt_date, 'DD/MM/YYYY EC') : EthiopianDate::formatDateEc(now(), 'DD/MM/YYYY EC');
+            $encodingDate = $r->created_at ? EthiopianDate::formatDateEc($r->created_at, 'DD/MM/YYYY EC') : EthiopianDate::formatDateEc(now(), 'DD/MM/YYYY EC');
+            $mrc = trim((string)($r->mrc_no ?? ''));
+
+            $purcNorm = QcService::normalizePurchaseType($r->category, ($r->description ?? '') . ' ' . $r->vendor_name);
+            $purcType = $purcNorm['type'];
+
+            $encodedBy = $r->uploader && !in_array(strtolower($r->uploader->name), ['admin', 'global admin', 'system'])
+                ? strtolower(preg_replace('/[^a-zA-Z0-9_]/', '', $r->uploader->name))
+                : 'wechacha';
+
+            $rows[] = [
+                $purchaserTinVal,
+                $sellerTinVal,
+                $amountVal,
+                $receiptNo,
+                $receiptDate,
+                $encodingDate,
+                $mrc,
+                $purcType,
+                $encodedBy,
+            ];
+        }
+
+        // Fallback to paid expense requests if no receipts present
+        if (empty($rows) && Schema::hasTable('expense_requests')) {
+            $expenses = ExpenseRequest::with(['user', 'bankAccount', 'chartOfAccount', 'paidBy'])
+                ->where('status', ExpenseRequest::STATUS_PAID)
+                ->whereBetween('created_at', [Carbon::parse($startDate)->startOfDay(), Carbon::parse($endDate)->endOfDay()])
+                ->where('vat_type', '!=', 'vat_b')
+                ->orderBy('created_at', 'asc')
+                ->get();
+
+            foreach ($expenses as $exp) {
+                $gross = (float)($exp->gross_amount > 0 ? $exp->gross_amount : $exp->amount);
+                $rows[] = [
+                    $defaultPurchaserDigits,
+                    '',
+                    round($gross, 2),
+                    $exp->payment_reference ?: $exp->request_number,
+                    $exp->paid_at ? EthiopianDate::formatDateEc($exp->paid_at, 'DD/MM/YYYY EC') : EthiopianDate::formatDateEc($exp->created_at, 'DD/MM/YYYY EC'),
+                    EthiopianDate::formatDateEc($exp->created_at, 'DD/MM/YYYY EC'),
+                    '',
+                    'PUR_GD',
+                    'wechacha',
+                ];
+            }
+        }
+
+        return $this->writeExcelFile($headers, $rows, $tempPath, $filename);
+    }
+
+    /**
+     * Export Purchase VAT Report (ERCA 15 Columns).
+     */
+    protected function exportPurchaseVatExcel(Request $request, string $startDate, string $endDate, int $year, ?int $month, string $monthSuffix)
+    {
+        $filename = 'Purchase_VAT_Report' . $monthSuffix . '_' . now()->format('Ymd_His') . '.xlsx';
+        $tempPath = storage_path('app/purch_vat_' . uniqid() . '.xlsx');
+
+        $headers = [
+            "VAT CATEGORY\n(G=GOODS;S=SERVICES)",
+            "CALENDAR TYPE\n(E=ETHIOPIAN;G=GREGORIAN)",
+            "Types of purchase.\n1 = Taxable-local Purchase of Capital Assets (Line No. 65)\n2 = Taxable-imported Purchase of Capital Assets (Line No. 75)\n3 = Taxable-local Purchase of Inputs (Line No. 100)\n4 = Taxable-imported Purchase of Inputs (Line No. 110)\n5 = Taxable-general Expense Inputs Purchase (Line No. 120)\n6 = Tax Exempted-purchase with no vat or uncollectible inputs\n(Please type 1-6). Mandatory.",
+            "TIN\nMandatory for local VAT",
+            "Seller name\nRegistered Business Trade Name",
+            "Date of purchase\nDispatched Date (DD/MM/YYYY)",
+            "MRC Number\nMachine Registration Code",
+            "Vat receipt number / FS No\nFiscal Receipt Number",
+            "Description / Item\nExact purchased material",
+            "Unit of Measure\n(2 KG, 5 LIT, 7 PCS, 9 OTHER, 10 PC)",
+            "Quantity\nNumeric only",
+            "Unit Price\nNumeric only",
+            "Total value\nTaxable Subtotal",
+            "VAT (15%)\nValue Added Tax",
+            "Value after vat\nGrand Total",
+        ];
+
+        $ocrItems = collect();
+        if (Schema::hasTable('receipt_items')) {
+            $ocrItems = ReceiptItem::with(['receipt', 'receipt.project', 'receipt.uploader'])
+                ->whereHas('receipt', fn($rq) => $rq->whereBetween('receipt_date', [$startDate, $endDate]))
+                ->orderBy('id', 'asc')
+                ->get();
+        }
+
+        $rows = [];
+        foreach ($ocrItems as $item) {
+            $r = $item->receipt;
+            $dateFormatted = $r && $r->receipt_date ? EthiopianDate::formatDateEc($r->receipt_date, 'DD/MM/YYYY EC') : EthiopianDate::formatDateEc(now(), 'DD/MM/YYYY EC');
+            $rawTin = $r ? (string)$r->vendor_tin : '';
+            $rawFs  = $r ? (string)$r->fs_no : '';
+            $seller = $r ? (string)$r->vendor_name : '';
+            $mrc    = $r ? (string)$r->mrc_no : '';
+
+            $tinDigits = preg_replace('/[^0-9]/', '', $rawTin);
+            $tinText = (strlen($tinDigits) === 10) ? $tinDigits : $rawTin;
+
+            $fsDigits = preg_replace('/[^0-9]/', '', $rawFs);
+            $fsText = (strlen($fsDigits) === 8) ? $fsDigits : $rawFs;
+
+            $rows[] = [
+                (string)($item->vat_category ?: 'G'),
+                (string)($item->calendar_type ?: 'E'),
+                (int)($item->purchase_type ?: 3),
+                (string)$tinText,
+                $seller,
+                $dateFormatted,
+                $mrc,
+                (string)$fsText,
+                (string)($item->item_description ?: 'Material'),
+                (string)($item->uom ?: '9'),
+                (float)$item->qty,
+                (float)$item->unit_price,
+                (float)$item->total_value,
+                (float)$item->vat_amount,
+                (float)$item->value_after_vat,
+            ];
+        }
+
+        if (empty($rows) && Schema::hasTable('expense_requests')) {
+            $expenses = ExpenseRequest::with(['user', 'bankAccount', 'chartOfAccount', 'paidBy'])
+                ->where('status', ExpenseRequest::STATUS_PAID)
+                ->whereBetween('created_at', [Carbon::parse($startDate)->startOfDay(), Carbon::parse($endDate)->endOfDay()])
+                ->where('vat_type', '!=', 'vat_b')
+                ->where('vat_amount', '>', 0)
+                ->orderBy('created_at', 'asc')
+                ->get();
+
+            foreach ($expenses as $exp) {
+                $gross = (float)($exp->gross_amount > 0 ? $exp->gross_amount : $exp->amount);
+                $vatAmount = (float)$exp->vat_amount;
+                $base = round($gross - $vatAmount, 2);
+                $rows[] = [
+                    'G',
+                    'E',
+                    3,
+                    '',
+                    $exp->account_name ?: ($exp->user?->name ?: 'Vendor'),
+                    $exp->paid_at ? EthiopianDate::formatDateEc($exp->paid_at, 'DD/MM/YYYY EC') : EthiopianDate::formatDateEc($exp->created_at, 'DD/MM/YYYY EC'),
+                    '',
+                    $exp->payment_reference ?: $exp->request_number,
+                    $exp->description ?: 'Purchased Goods',
+                    '9',
+                    1.0,
+                    $base,
+                    $base,
+                    $vatAmount,
+                    $gross,
+                ];
+            }
+        }
+
+        return $this->writeExcelFile($headers, $rows, $tempPath, $filename);
+    }
+
+    /**
+     * Helper to write OpenSpout Excel (.xlsx) file or stream fallback CSV with BOM.
+     */
+    protected function writeExcelFile(array $headers, array $rows, string $tempPath, string $filename)
+    {
+        try {
+            $writer = new XlsxWriter();
+            $writer->openToFile($tempPath);
+
+            $headerCells = array_map(fn($h) => Cell::fromValue($h), $headers);
+            $writer->addRow(new Row($headerCells));
+
+            foreach ($rows as $row) {
+                $rowCells = array_map(fn($v) => Cell::fromValue($v), $row);
+                $writer->addRow(new Row($rowCells));
+            }
+
+            $writer->close();
+
+            return response()->download($tempPath, $filename, [
+                'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            ])->deleteFileAfterSend(true);
+
+        } catch (\Throwable $e) {
+            Log::error('FinanceTaxReportController Excel export error: ' . $e->getMessage());
+
+            // CSV Fallback with UTF-8 BOM
+            $csvHeaders = [
+                'Content-Type'        => 'text/csv; charset=UTF-8',
+                'Content-Disposition' => 'attachment; filename="' . str_replace('.xlsx', '.csv', $filename) . '"',
+                'Pragma'              => 'no-cache',
+                'Cache-Control'       => 'must-revalidate, post-check=0, pre-check=0',
+                'Expires'             => '0',
+            ];
+
+            return response()->stream(function () use ($headers, $rows) {
+                $handle = fopen('php://output', 'w');
+                fputs($handle, "\xEF\xBB\xBF");
+                fputcsv($handle, $headers);
+                foreach ($rows as $row) {
+                    fputcsv($handle, $row);
+                }
+                fclose($handle);
+            }, 200, $csvHeaders);
+        }
     }
 
     /**

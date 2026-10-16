@@ -153,6 +153,34 @@
                             <i class="fa-solid fa-cloud-arrow-up"></i>
                             <span>+ Add Receipt (OCR)</span>
                         </button>
+                        {{-- Excel Export Dropdown --}}
+                        <div class="dropdown">
+                            <button type="button" class="btn btn-success btn-sm rounded-pill px-3 py-2 shadow-xs fw-semibold dropdown-toggle d-inline-flex align-items-center gap-1.5" id="mainExcelDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fa-solid fa-file-excel"></i>
+                                <span class="d-none d-sm-inline">Export Excel</span>
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-4 p-2" aria-labelledby="mainExcelDropdown" style="min-width: 250px;">
+                                <li class="dropdown-header small text-uppercase text-muted fw-bold px-3 py-1">Tax Ledger Exports</li>
+                                <li>
+                                    <a class="dropdown-item rounded-3 py-2 px-3 d-flex align-items-center gap-2" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'sales', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
+                                        <i class="fa-solid fa-hand-holding-dollar text-success"></i>
+                                        <div class="fw-semibold small">1. Sales Excel (13 Cols)</div>
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item rounded-3 py-2 px-3 d-flex align-items-center gap-2" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_tas', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
+                                        <i class="fa-solid fa-file-invoice text-primary"></i>
+                                        <div class="fw-semibold small">2. Purchase TAS Excel (9 Cols)</div>
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item rounded-3 py-2 px-3 d-flex align-items-center gap-2" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_vat', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
+                                        <i class="fa-solid fa-percent text-danger"></i>
+                                        <div class="fw-semibold small">3. Purchase VAT Excel</div>
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
                         <button type="button" class="btn btn-outline-success btn-sm rounded-pill px-3 py-2 shadow-xs fw-semibold d-inline-flex align-items-center gap-1.5" onclick="openDateExportModal('{{ $tab }}', 'csv')" title="Select Date Range & Export">
                             <i class="fa-solid fa-file-csv"></i>
                             <span class="d-none d-sm-inline">Export CSV</span>
@@ -2722,6 +2750,43 @@
                     </div>
                 </div>
                 <div class="d-flex align-items-center gap-2">
+                    {{-- Excel Export Dropdown --}}
+                    <div class="dropdown">
+                        <button class="btn btn-sm btn-success text-white rounded-pill px-3 fw-semibold shadow-xs dropdown-toggle d-inline-flex align-items-center gap-1.5" type="button" id="mMovementsExcelDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fa-solid fa-file-excel"></i>
+                            <span>Export Excel</span>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end shadow-lg border-0 rounded-4 p-2" aria-labelledby="mMovementsExcelDropdown" style="min-width: 270px; z-index: 1060;">
+                            <li class="dropdown-header small text-uppercase text-muted fw-bold px-3 py-1">Tax Movements Exports</li>
+                            <li>
+                                <a class="dropdown-item rounded-3 py-2 px-3 d-flex align-items-center gap-2.5" href="#" onclick="exportMovementsExcel('sales'); return false;">
+                                    <div class="p-2 rounded-circle bg-success bg-opacity-10 text-success"><i class="fa-solid fa-hand-holding-dollar fs-6"></i></div>
+                                    <div>
+                                        <div class="fw-bold text-dark small">1. Sales Excel</div>
+                                        <small class="text-muted d-block" style="font-size: 0.7rem;">13 columns (TIN, MRC, Receipt #, Price)</small>
+                                    </div>
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item rounded-3 py-2 px-3 d-flex align-items-center gap-2.5" href="#" onclick="exportMovementsExcel('purchase_tas'); return false;">
+                                    <div class="p-2 rounded-circle bg-primary bg-opacity-10 text-primary"><i class="fa-solid fa-file-invoice fs-6"></i></div>
+                                    <div>
+                                        <div class="fw-bold text-dark small">2. Purchase TAS Excel</div>
+                                        <small class="text-muted d-block" style="font-size: 0.7rem;">9 columns e-Tax Purchase Declaration</small>
+                                    </div>
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item rounded-3 py-2 px-3 d-flex align-items-center gap-2.5" href="#" onclick="exportMovementsExcel('purchase_vat'); return false;">
+                                    <div class="p-2 rounded-circle bg-danger bg-opacity-10 text-danger"><i class="fa-solid fa-percent fs-6"></i></div>
+                                    <div>
+                                        <div class="fw-bold text-dark small">3. Purchase VAT Excel</div>
+                                        <small class="text-muted d-block" style="font-size: 0.7rem;">ERCA Purchase VAT Report</small>
+                                    </div>
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
                     <button type="button" class="btn btn-sm btn-light text-primary rounded-pill px-3 fw-semibold shadow-xs" onclick="printMonthMovements()">
                         <i class="fa-solid fa-print me-1"></i>Print Report
                     </button>
@@ -2880,8 +2945,14 @@
                                             <small class="text-muted">Sources of all company revenues, client payments, and 15% Output VAT</small>
                                         </div>
                                     </div>
-                                    <div style="min-width: 250px;">
-                                        <input type="text" class="form-control form-control-sm rounded-pill" placeholder="Search customer, invoice #, project..." onkeyup="filterMovementTable('mIncomeTable', this.value)">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <button type="button" class="btn btn-sm btn-outline-success rounded-pill px-3 fw-semibold shadow-xs text-nowrap d-inline-flex align-items-center gap-1.5" onclick="exportMovementsExcel('sales')">
+                                            <i class="fa-solid fa-file-excel"></i>
+                                            <span>Export Sales</span>
+                                        </button>
+                                        <div style="min-width: 250px;">
+                                            <input type="text" class="form-control form-control-sm rounded-pill" placeholder="Search customer, invoice #, project..." onkeyup="filterMovementTable('mIncomeTable', this.value)">
+                                        </div>
                                     </div>
                                 </div>
                                 <div class="table-responsive">
@@ -2930,8 +3001,20 @@
                                             <small class="text-muted">Creditable business expenditures, 15% Input VAT, and 3% Withholding Deductions</small>
                                         </div>
                                     </div>
-                                    <div style="min-width: 250px;">
-                                        <input type="text" class="form-control form-control-sm rounded-pill" placeholder="Search payee, voucher #, category..." onkeyup="filterMovementTable('mExpenseTable', this.value)">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <div class="btn-group shadow-xs rounded-pill overflow-hidden">
+                                            <button type="button" class="btn btn-sm btn-outline-primary fw-semibold px-3 text-nowrap d-inline-flex align-items-center gap-1" onclick="exportMovementsExcel('purchase_tas')">
+                                                <i class="fa-solid fa-file-excel"></i>
+                                                <span>Purchase TAS</span>
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-outline-danger fw-semibold px-3 text-nowrap d-inline-flex align-items-center gap-1" onclick="exportMovementsExcel('purchase_vat')">
+                                                <i class="fa-solid fa-file-excel"></i>
+                                                <span>Purchase VAT</span>
+                                            </button>
+                                        </div>
+                                        <div style="min-width: 250px;">
+                                            <input type="text" class="form-control form-control-sm rounded-pill" placeholder="Search payee, voucher #, category..." onkeyup="filterMovementTable('mExpenseTable', this.value)">
+                                        </div>
                                     </div>
                                 </div>
                                 <div class="table-responsive">
@@ -2978,8 +3061,20 @@
                                             <small class="text-muted">Itemized receipts with verified Vendor TIN, FS Numbers, and Machine MRC</small>
                                         </div>
                                     </div>
-                                    <div style="min-width: 250px;">
-                                        <input type="text" class="form-control form-control-sm rounded-pill" placeholder="Search vendor, FS #, item..." onkeyup="filterMovementTable('mOcrTable', this.value)">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <div class="btn-group shadow-xs rounded-pill overflow-hidden">
+                                            <button type="button" class="btn btn-sm btn-outline-primary fw-semibold px-3 text-nowrap d-inline-flex align-items-center gap-1" onclick="exportMovementsExcel('purchase_tas')">
+                                                <i class="fa-solid fa-file-excel"></i>
+                                                <span>Purchase TAS</span>
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-outline-danger fw-semibold px-3 text-nowrap d-inline-flex align-items-center gap-1" onclick="exportMovementsExcel('purchase_vat')">
+                                                <i class="fa-solid fa-file-excel"></i>
+                                                <span>Purchase VAT</span>
+                                            </button>
+                                        </div>
+                                        <div style="min-width: 250px;">
+                                            <input type="text" class="form-control form-control-sm rounded-pill" placeholder="Search vendor, FS #, item..." onkeyup="filterMovementTable('mOcrTable', this.value)">
+                                        </div>
                                     </div>
                                 </div>
                                 <div class="table-responsive">
@@ -3112,19 +3207,30 @@
                                                         <span><strong>Ethiopian Calendar Rule:</strong> Bounded strictly within the Ethiopian month. Last-day transactions cannot leak into next cycle.</span>
                                                     </div>
                                                     <div class="d-flex gap-2 mb-2">
-                                                        <i class="fa-solid fa-circle-check text-success mt-1"></i>
-                                                        <span><strong>Negative Balance:</strong> Output &gt; Input indicates a payment liability due to ERCA by the 30th day.</span>
+                                                        <i class="fa-solid fa-circle-check text-danger mt-1"></i>
+                                                        <span><strong>Positive Balance (+):</strong> Output &gt; Input indicates a payment liability due to ERCA by the 30th day.</span>
                                                     </div>
                                                     <div class="d-flex gap-2">
                                                         <i class="fa-solid fa-circle-check text-success mt-1"></i>
-                                                        <span><strong>Positive Balance:</strong> Input &gt; Output constitutes a refundable or carry-forward credit into the next month's opening balance.</span>
+                                                        <span><strong>Negative Balance (&minus;):</strong> Input &gt; Output constitutes a refundable or carry-forward credit into the next month's opening balance.</span>
                                                     </div>
                                                 </div>
                                             </div>
-                                            <div class="pt-3 border-top mt-3 d-flex gap-2">
-                                                <button type="button" class="btn btn-primary btn-sm rounded-pill px-3 w-100 fw-semibold" onclick="printMonthMovements()">
+                                            <div class="pt-3 border-top mt-3 d-flex flex-column flex-sm-row gap-2">
+                                                <button type="button" class="btn btn-outline-primary btn-sm rounded-pill px-3 flex-fill fw-semibold" onclick="printMonthMovements()">
                                                     <i class="fa-solid fa-print me-1"></i>Print ERCA Audit
                                                 </button>
+                                                <div class="dropdown flex-fill">
+                                                    <button type="button" class="btn btn-success btn-sm rounded-pill px-3 w-100 fw-semibold dropdown-toggle d-inline-flex align-items-center justify-content-center gap-1.5 shadow-xs" data-bs-toggle="dropdown">
+                                                        <i class="fa-solid fa-file-excel"></i>
+                                                        <span>Export Excel</span>
+                                                    </button>
+                                                    <ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-3 p-2">
+                                                        <li><a class="dropdown-item py-1.5 px-3 rounded-2" href="#" onclick="exportMovementsExcel('sales'); return false;"><i class="fa-solid fa-hand-holding-dollar text-success me-2"></i>1. Sales Excel</a></li>
+                                                        <li><a class="dropdown-item py-1.5 px-3 rounded-2" href="#" onclick="exportMovementsExcel('purchase_tas'); return false;"><i class="fa-solid fa-file-invoice text-primary me-2"></i>2. Purchase TAS Excel</a></li>
+                                                        <li><a class="dropdown-item py-1.5 px-3 rounded-2" href="#" onclick="exportMovementsExcel('purchase_vat'); return false;"><i class="fa-solid fa-percent text-danger me-2"></i>3. Purchase VAT Excel</a></li>
+                                                    </ul>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -4324,6 +4430,16 @@
                         </div>
                     </div>
                     <div class="d-flex align-items-center gap-2">
+                        <div class="dropdown">
+                            <button type="button" class="btn btn-sm btn-success rounded-pill px-3 py-1 fw-semibold shadow-xs dropdown-toggle" data-bs-toggle="dropdown">
+                                <i class="fa-solid fa-file-excel me-1"></i>Export Excel
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-3 p-2">
+                                <li><a class="dropdown-item py-1.5 px-3 rounded-2" href="${getExportExcelUrl('sales', m.year, m.month)}"><i class="fa-solid fa-hand-holding-dollar text-success me-2"></i>1. Sales Excel</a></li>
+                                <li><a class="dropdown-item py-1.5 px-3 rounded-2" href="${getExportExcelUrl('purchase_tas', m.year, m.month)}"><i class="fa-solid fa-file-invoice text-primary me-2"></i>2. Purchase TAS Excel</a></li>
+                                <li><a class="dropdown-item py-1.5 px-3 rounded-2" href="${getExportExcelUrl('purchase_vat', m.year, m.month)}"><i class="fa-solid fa-percent text-danger me-2"></i>3. Purchase VAT Excel</a></li>
+                            </ul>
+                        </div>
                         <button type="button" class="btn btn-sm btn-light text-dark rounded-pill px-3 py-1 fw-semibold shadow-xs" onclick="openMonthMovementsModal(${m.year}, ${m.month}, '${m.month_name}', '${m.month_am}')">
                             <i class="fa-solid fa-up-right-from-square me-1 text-primary"></i>Fullscreen Dialog
                         </button>
@@ -4939,6 +5055,22 @@
             const text = tr.innerText.toLowerCase();
             tr.style.display = text.includes(q) ? '' : 'none';
         });
+    }
+
+    function exportMovementsExcel(type) {
+        let year, month;
+        if (currentMovementsData && currentMovementsData.month) {
+            year = currentMovementsData.month.year;
+            month = currentMovementsData.month.month;
+        } else {
+            year = '{{ $selectedEthYear }}';
+            month = '{{ $selectedEthMonth }}';
+        }
+        window.location.href = getExportExcelUrl(type, year, month);
+    }
+
+    function getExportExcelUrl(type, year, month) {
+        return `{{ route('finance.tax-deductions.export-excel') }}?type=${encodeURIComponent(type)}&ethiopian_year=${encodeURIComponent(year)}&ethiopian_month=${encodeURIComponent(month)}`;
     }
 
     function printMonthMovements() {
