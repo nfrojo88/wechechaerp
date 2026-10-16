@@ -343,18 +343,30 @@
                                 {{ $inc->encoded_by ?: 'wechacha' }}
                             </td>
                             <td class="text-center pe-4">
-                                @if($inc->status == 'draft')
-                                    <form action="{{ route('income.confirm', $inc) }}" method="POST" class="d-inline" onsubmit="return confirm('Confirm this income record?');">
+                                <div class="d-inline-flex align-items-center gap-1.5">
+                                    <a href="{{ route('income.show', $inc) }}" class="btn btn-sm btn-outline-secondary rounded-circle shadow-2xs d-inline-flex align-items-center justify-content-center" style="width: 30px; height: 30px;" title="View Details">
+                                        <i class="fas fa-eye small"></i>
+                                    </a>
+                                    @if($inc->status == 'draft')
+                                        <form action="{{ route('income.confirm', $inc) }}" method="POST" class="d-inline" onsubmit="return confirm('Confirm this income record?');">
+                                            @csrf
+                                            <button type="submit" class="btn btn-sm btn-success rounded-circle shadow-2xs d-inline-flex align-items-center justify-content-center" style="width: 30px; height: 30px;" title="Confirm Income">
+                                                <i class="fas fa-check small"></i>
+                                            </button>
+                                        </form>
+                                    @else
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2 py-1 small" title="Confirmed & Deposited">
+                                            <i class="fas fa-check-circle me-1"></i>Confirmed
+                                        </span>
+                                    @endif
+                                    <form action="{{ route('income.destroy', $inc) }}" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to DELETE income record #{{ $inc->income_no }}?\n\nThis will permanently delete this income receipt, remove its 15% Output VAT, revert deposited balances, and delete all bank and ledger movements across all sections.');">
                                         @csrf
-                                        <button type="submit" class="btn btn-sm btn-success rounded-circle shadow-sm" style="width: 30px; height: 30px;" title="Confirm Income">
-                                            <i class="fas fa-check"></i>
+                                        @method('DELETE')
+                                        <button type="submit" class="btn btn-sm btn-outline-danger rounded-circle shadow-2xs d-inline-flex align-items-center justify-content-center" style="width: 30px; height: 30px;" title="Delete this income record and reverse all VAT & movements">
+                                            <i class="fas fa-trash-alt small"></i>
                                         </button>
                                     </form>
-                                @else
-                                    <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2 py-1 small">
-                                        <i class="fas fa-check-circle me-1"></i>Confirmed
-                                    </span>
-                                @endif
+                                </div>
                             </td>
                         </tr>
                         @empty

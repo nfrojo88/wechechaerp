@@ -9,7 +9,7 @@
             </h1>
             <p class="text-muted small mb-0">Recorded on {{ $income->income_date ? $income->income_date->format('d M Y') : '—' }} &bull; <span class="badge bg-light text-dark border font-monospace">{{ \App\Services\EthiopianDate::formatDateEc($income->income_date) }}</span></p>
         </div>
-        <div class="d-flex gap-2">
+        <div class="d-flex align-items-center gap-2">
             <a href="{{ route('income.index') }}" class="btn btn-outline-secondary rounded-pill px-3 shadow-sm">
                 <i class="fas fa-arrow-left me-1"></i>Back to List
             </a>
@@ -21,6 +21,13 @@
                     </button>
                 </form>
             @endif
+            <form action="{{ route('income.destroy', $income) }}" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to DELETE income record #{{ $income->income_no }}?\n\nThis will permanently delete this income receipt, remove its 15% Output VAT, revert deposited balances, and delete all bank and ledger movements across all sections.');">
+                @csrf
+                @method('DELETE')
+                <button type="submit" class="btn btn-danger rounded-pill px-3 shadow-sm fw-bold">
+                    <i class="fas fa-trash-alt me-1.5"></i>Delete Record
+                </button>
+            </form>
         </div>
     </div>
 

@@ -7,6 +7,8 @@ use App\Models\Project;
 use App\Models\BankAccount;
 use App\Models\ChartOfAccount;
 use App\Models\BankTransaction;
+use App\Models\JournalEntry;
+use App\Models\TaxSettlement;
 use App\Models\SystemSetting;
 use App\Services\ReceiptOcrService;
 use App\Services\QcService;
@@ -16,6 +18,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Database\Schema\Blueprint;
 use OpenSpout\Writer\XLSX\Writer as XlsxWriter;
 use OpenSpout\Common\Entity\Row;
@@ -929,5 +932,129 @@ class IncomeController extends Controller
         }, $filename, [
             'Content-Type' => 'text/csv; charset=UTF-8',
         ]);
+    }
+
+    /**
+     * Remove an income record and completely reverse/delete everything associated with it:
+     * - Reverse deposited amount on COA and BankAccount balances
+     * - Delete associated BankTransaction records (bank movements)
+     * - Delete associated JournalEntry and JournalEntryLines (accounting movements)
+     * - Adjust or delete associated TaxSettlement (VAT movements)
+     * - Delete physical receipt slip file from storage
+     * - Force-delete the IncomeRecord so it leaves no trace in VAT (15%), sales base, or reports
+     */
+    public function destroy(Request $request, $income)
+    {
+        $this->ensureSchema();
+        $record = ($income instanceof IncomeRecord) ? $income : IncomeRecord::withTrashed()->find($income);
+
+        if (!$record) {
+            if ($request->wantsJson() || $request->ajax()) {
+                return response()->json(['success' => false, 'message' => 'Income record not found.'], 404);
+            }
+            return redirect()->route('income.index')->with('error', 'Income record not found.');
+        }
+
+        $incomeNo = $record->income_no;
+        $amount   = (float)$record->amount;
+        $ethDate  = EthiopianDate::toEthiopian($record->income_date ?: $record->receipt_date ?: now());
+
+        try {
+            DB::transaction(function () use ($record, $amount) {
+                // 1. Reverse Account Balances (if was deposited or confirmed)
+                if ($record->is_deposited || $record->status === 'confirmed') {
+                    // Revert Chart of Account balance
+                    if ($record->chart_of_account_id) {
+                        $coa = ChartOfAccount::find($record->chart_of_account_id);
+                        if ($coa) {
+                            $coa->decrement('current_balance', $amount);
+                        }
+                    }
+
+                    // Revert Bank Account balance
+                    if ($record->bank_account_id) {
+                        $bankAccount = BankAccount::find($record->bank_account_id);
+                        if ($bankAccount) {
+                            $bankAccount->decrement('current_balance', $amount);
+                        }
+                    }
+                }
+
+                // 2. Delete Bank Transactions (Movements in bank statements)
+                BankTransaction::where(function ($q) use ($record) {
+                    $q->where('reference_type', 'IncomeRecord')->where('reference_id', $record->id);
+                })->orWhere('reference_no', $record->income_no)->delete();
+
+                // 3. Delete Journal Entries & Lines (Accounting / General Ledger Movements)
+                if ($record->journal_entry_id) {
+                    $je = JournalEntry::find($record->journal_entry_id);
+                    if ($je) {
+                        $je->lines()->delete();
+                        $je->delete();
+                    }
+                }
+                JournalEntry::where('reference_type', 'IncomeRecord')
+                    ->where('reference_id', $record->id)
+                    ->orWhere('reference_no', $record->income_no)
+                    ->each(function ($entry) {
+                        $entry->lines()->delete();
+                        $entry->delete();
+                    });
+
+                // 4. Adjust or clean up Tax Settlements (VAT movements)
+                if ($record->vat_settlement_id) {
+                    $settlement = TaxSettlement::find($record->vat_settlement_id);
+                    if ($settlement) {
+                        $gross = (float)($record->unit_price > 0 && $record->quantity > 0 ? ($record->unit_price * $record->quantity) : $record->amount);
+                        $base = round($gross / 1.15, 2);
+                        $vat = round($gross - $base, 2);
+
+                        $settlement->decrement('records_count', 1);
+                        if ($settlement->records_count <= 0) {
+                            $settlement->delete();
+                        } else {
+                            $settlement->decrement('total_base_amount', min((float)$settlement->total_base_amount, $base));
+                            $settlement->decrement('vat_amount', min((float)$settlement->vat_amount, $vat));
+                            $settlement->decrement('total_tax_paid', min((float)$settlement->total_tax_paid, $vat));
+                        }
+                    }
+                }
+
+                // 5. Delete physical receipt file from storage
+                if (!empty($record->receipt_file_path)) {
+                    try {
+                        Storage::disk('public')->delete($record->receipt_file_path);
+                    } catch (\Throwable $e) {
+                        // ignore file delete failure
+                    }
+                }
+
+                // 6. Permanently Delete the IncomeRecord
+                $record->forceDelete();
+            });
+
+            $successMsg = "Income record #{$incomeNo} has been deleted. Deposited amount (ETB " . number_format($amount, 2) . "), 15% Output VAT, bank movements, and all related records have been completely cleared across all sections.";
+
+            if ($request->wantsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => $successMsg,
+                ]);
+            }
+
+            return redirect()->route('income.index', [
+                'ethiopian_year'  => $ethDate['year'],
+                'ethiopian_month' => $ethDate['month'],
+            ])->with('success', $successMsg);
+        } catch (\Throwable $e) {
+            Log::error("IncomeController::destroy failed for #{$incomeNo}: " . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
+            if ($request->wantsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to delete income record: ' . $e->getMessage(),
+                ], 500);
+            }
+            return back()->with('error', 'Failed to delete income record: ' . $e->getMessage());
+        }
     }
 }

@@ -2267,7 +2267,8 @@ Route::middleware(['auth'])->group(function () {
     Route::get('income/export-excel', [App\Http\Controllers\IncomeController::class, 'exportExcel'])->name('income.export-excel');
     Route::get('income/export-csv', [App\Http\Controllers\IncomeController::class, 'exportCsv'])->name('income.export-csv');
     Route::post('income/scan-receipt', [App\Http\Controllers\IncomeController::class, 'scanReceipt'])->name('income.scan-receipt');
-    Route::resource('income', App\Http\Controllers\IncomeController::class)->except(['edit', 'update', 'destroy']);
+    Route::resource('income', App\Http\Controllers\IncomeController::class)->except(['edit', 'update']);
+    Route::match(['POST', 'DELETE'], 'income/{income}/delete', [App\Http\Controllers\IncomeController::class, 'destroy'])->name('income.destroy.post');
     Route::post('income/{income}/confirm', [App\Http\Controllers\IncomeController::class, 'confirm'])->name('income.confirm');
 
     Route::resource('journal-entries', App\Http\Controllers\JournalEntryController::class)->only(['index', 'create', 'store', 'show']);

@@ -285,10 +285,21 @@
                 <button type="submit" class="btn btn-sm btn-primary rounded-pill px-3 fw-semibold">
                     Apply
                 </button>
-                <button type="button" class="btn btn-sm btn-outline-warning text-dark rounded-pill px-3 fw-bold d-inline-flex align-items-center gap-1.5 shadow-2xs" onclick="openAdminClearModalForMonth({{ $selectedEthYear }}, {{ $selectedEthMonth }}, '{{ $monthRange['month_en'] ?? '' }}')" title="Clear {{ $monthRange['month_en'] ?? 'this month' }} to start from zero (0.00 ETB)">
-                    <i class="fa-solid fa-broom text-warning"></i>
-                    <span>Clear Month (0.00)</span>
-                </button>
+                @if(!empty($isMonthVatCleared))
+                    <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-3 py-1.5 fw-bold d-inline-flex align-items-center gap-1.5 shadow-2xs">
+                        <i class="fa-solid fa-check-double text-success"></i>
+                        <span>{{ $monthRange['month_en'] ?? 'Month' }} Cleared (0.00 ETB)</span>
+                    </span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-2.5 fw-semibold d-inline-flex align-items-center gap-1" onclick="openAdminClearModalForMonth({{ $selectedEthYear }}, {{ $selectedEthMonth }}, '{{ $monthRange['month_en'] ?? '' }}', true)" title="Manage or Re-open {{ $monthRange['month_en'] ?? 'this month' }}">
+                        <i class="fa-solid fa-gear"></i>
+                        <span class="small">Manage</span>
+                    </button>
+                @else
+                    <button type="button" class="btn btn-sm btn-outline-warning text-dark rounded-pill px-3 fw-bold d-inline-flex align-items-center gap-1.5 shadow-2xs" onclick="openAdminClearModalForMonth({{ $selectedEthYear }}, {{ $selectedEthMonth }}, '{{ $monthRange['month_en'] ?? '' }}', false)" title="Clear {{ $monthRange['month_en'] ?? 'this month' }} to start from zero (0.00 ETB)">
+                        <i class="fa-solid fa-broom text-warning"></i>
+                        <span>Clear Month (0.00)</span>
+                    </button>
+                @endif
             </form>
         </div>
 
@@ -340,7 +351,7 @@
 
                 {{-- 4. Signed Net VAT --}}
                 <div class="col-12 col-sm-6 col-xl-2">
-                    <div class="p-3 rounded-4 border h-100 d-flex flex-column justify-content-between {{ !empty($netVatDetails['is_payable']) ? 'bg-danger bg-opacity-10 border-danger' : (!empty($netVatDetails['is_credit']) ? 'bg-success bg-opacity-10 border-success' : 'bg-light') }}">
+                    <div class="p-3 rounded-4 border h-100 d-flex flex-column justify-content-between {{ !empty($isMonthVatCleared) ? 'bg-success bg-opacity-10 border-success' : (!empty($netVatDetails['is_payable']) ? 'bg-danger bg-opacity-10 border-danger' : (!empty($netVatDetails['is_credit']) ? 'bg-success bg-opacity-10 border-success' : 'bg-light')) }}">
                         <div>
                             <span class="text-muted small text-uppercase fw-bold d-block" style="font-size: 0.72rem;">Signed Net VAT</span>
                             <span class="text-muted d-block" style="font-size: 0.68rem;">የተጣራ ቫት (Input - Output)</span>
@@ -423,13 +434,18 @@
                 </thead>
                 <tbody class="divide-y">
                     @foreach($monthlyTrend as $mNum => $mTrend)
-                        <tr class="{{ $mTrend['is_current'] ? 'table-primary bg-primary bg-opacity-10 fw-semibold' : '' }}">
+                        <tr class="{{ $mTrend['is_current'] ? 'table-primary bg-primary bg-opacity-10 fw-semibold' : (!empty($mTrend['is_cleared']) ? 'bg-success bg-opacity-10' : '') }}">
                             <td class="ps-4">
                                 <span class="fw-bold font-monospace text-dark">{{ $mNum }}.</span>
                                 <span class="fw-bold {{ $mTrend['is_current'] ? 'text-primary' : 'text-dark' }}">{{ $mTrend['month_name'] }}</span>
                                 <small class="text-muted">({{ $mTrend['month_am'] }})</small>
                                 @if($mTrend['is_current'])
                                     <span class="badge bg-primary text-white rounded-pill px-2 py-0.5 ms-1 small" style="font-size: 0.65rem;">Selected</span>
+                                @endif
+                                @if(!empty($mTrend['is_cleared']))
+                                    <span class="badge bg-success text-white rounded-pill px-2 py-0.5 ms-1 small" style="font-size: 0.65rem;" title="Cleared to 0.00 ETB (Settled)">
+                                        <i class="fa-solid fa-check-double me-0.5"></i>Cleared
+                                    </span>
                                 @endif
                             </td>
                             <td class="small text-muted font-monospace">
@@ -481,12 +497,22 @@
                                        title="Filter whole page to this month">
                                         <i class="fa-solid fa-filter"></i>
                                     </a>
-                                    <button type="button" 
-                                            class="btn btn-sm btn-outline-warning text-dark rounded-pill px-2 py-1 small" 
-                                            onclick="openAdminClearModalForMonth({{ $selectedEthYear }}, {{ $mNum }}, '{{ $mTrend['month_name'] }}')"
-                                            title="Clear {{ $mTrend['month_name'] }} to start from zero">
-                                        <i class="fa-solid fa-broom"></i>
-                                    </button>
+                                    @if(!empty($mTrend['is_cleared']))
+                                        <button type="button" 
+                                                class="btn btn-sm btn-outline-success rounded-pill px-2.5 py-1 small fw-semibold d-inline-flex align-items-center gap-1" 
+                                                onclick="openAdminClearModalForMonth({{ $selectedEthYear }}, {{ $mNum }}, '{{ $mTrend['month_name'] }}', true)"
+                                                title="{{ $mTrend['month_name'] }} is Cleared (0.00 ETB) — Click to manage or Re-open">
+                                            <i class="fa-solid fa-check-double text-success"></i>
+                                            <span>Cleared</span>
+                                        </button>
+                                    @else
+                                        <button type="button" 
+                                                class="btn btn-sm btn-outline-warning text-dark rounded-pill px-2 py-1 small" 
+                                                onclick="openAdminClearModalForMonth({{ $selectedEthYear }}, {{ $mNum }}, '{{ $mTrend['month_name'] }}', false)"
+                                                title="Clear {{ $mTrend['month_name'] }} to start from zero">
+                                            <i class="fa-solid fa-broom"></i>
+                                        </button>
+                                    @endif
                                 </div>
                             </td>
                         </tr>
@@ -2840,7 +2866,8 @@
                                                 <th class="py-2.5">Receiving Account</th>
                                                 <th class="py-2.5 text-end">Sales Base</th>
                                                 <th class="py-2.5 text-end text-danger">Output VAT (15%)</th>
-                                                <th class="py-2.5 text-end text-success pe-3">Gross Received</th>
+                                                <th class="py-2.5 text-end text-success">Gross Received</th>
+                                                <th class="py-2.5 text-center pe-3">Action</th>
                                             </tr>
                                         </thead>
                                         <tbody id="mIncomeTableBody" class="divide-y">
@@ -2851,7 +2878,8 @@
                                                 <td colspan="6" class="ps-3 py-2 text-uppercase small text-muted">Total Sales &amp; Output VAT</td>
                                                 <td class="text-end py-2 font-monospace text-dark" id="mIncomeTotalBase">ETB 0.00</td>
                                                 <td class="text-end py-2 font-monospace text-danger" id="mIncomeTotalVat">ETB 0.00</td>
-                                                <td class="text-end py-2 font-monospace text-success pe-3" id="mIncomeTotalGross">ETB 0.00</td>
+                                                <td class="text-end py-2 font-monospace text-success" id="mIncomeTotalGross">ETB 0.00</td>
+                                                <td class="pe-3"></td>
                                             </tr>
                                         </tfoot>
                                     </table>
@@ -4196,12 +4224,17 @@
                         <td class="small text-muted"><i class="fa-solid fa-building-columns me-1 text-primary"></i>${inc.account_name}</td>
                         <td class="text-end font-monospace">ETB ${formatMoney(inc.sales_base)}</td>
                         <td class="text-end font-monospace text-danger fw-semibold">ETB ${formatMoney(inc.output_vat)}</td>
-                        <td class="text-end font-monospace text-success fw-bold pe-3">ETB ${formatMoney(inc.gross_amount)}</td>
+                        <td class="text-end font-monospace text-success fw-bold">ETB ${formatMoney(inc.gross_amount)}</td>
+                        <td class="text-center pe-3">
+                            <button type="button" class="btn btn-sm btn-outline-danger rounded-circle p-0 d-inline-flex align-items-center justify-content-center" style="width: 26px; height: 26px;" onclick="deleteIncomeRecordFromTaxReport(${inc.id}, '${inc.income_no}')" title="Delete this income record and reverse VAT & movements">
+                                <i class="fa-solid fa-trash-alt" style="font-size: 0.72rem;"></i>
+                            </button>
+                        </td>
                     </tr>
                 `;
             });
         } else {
-            incomeRows = `<tr><td colspan="9" class="text-center py-4 text-muted"><i class="fa-solid fa-folder-open me-2 text-secondary"></i>No company income receipts recorded for this month.</td></tr>`;
+            incomeRows = `<tr><td colspan="10" class="text-center py-4 text-muted"><i class="fa-solid fa-folder-open me-2 text-secondary"></i>No company income receipts recorded for this month.</td></tr>`;
         }
 
         let expenseRows = '';
@@ -4379,7 +4412,8 @@
                                             <th class="py-2">Account</th>
                                             <th class="py-2 text-end">Sales Base</th>
                                             <th class="py-2 text-end text-danger">Output VAT</th>
-                                            <th class="py-2 text-end pe-3">Gross Total</th>
+                                            <th class="py-2 text-end">Gross Total</th>
+                                            <th class="py-2 text-center pe-3">Action</th>
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y">${incomeRows}</tbody>
@@ -4388,7 +4422,8 @@
                                             <td colspan="6" class="ps-3 py-2 small text-uppercase text-muted">Total Sales &amp; Output VAT</td>
                                             <td class="text-end py-2 font-monospace">ETB ${formatMoney(s.sales_base)}</td>
                                             <td class="text-end py-2 font-monospace text-danger">ETB ${formatMoney(s.output_vat)}</td>
-                                            <td class="text-end py-2 font-monospace text-success pe-3">ETB ${formatMoney(s.gross_income)}</td>
+                                            <td class="text-end py-2 font-monospace text-success">ETB ${formatMoney(s.gross_income)}</td>
+                                            <td class="pe-3"></td>
                                         </tr>
                                     </tfoot>
                                 </table>
@@ -4672,14 +4707,19 @@
                     </td>
                     <td class="text-end font-monospace">ETB ${formatMoney(inc.sales_base)}</td>
                     <td class="text-end font-monospace text-danger fw-semibold">ETB ${formatMoney(inc.output_vat)}</td>
-                    <td class="text-end font-monospace text-success fw-bold pe-3">ETB ${formatMoney(inc.gross_amount)}</td>
+                    <td class="text-end font-monospace text-success fw-bold">ETB ${formatMoney(inc.gross_amount)}</td>
+                    <td class="text-center pe-3">
+                        <button type="button" class="btn btn-sm btn-outline-danger rounded-circle p-0 d-inline-flex align-items-center justify-content-center" style="width: 26px; height: 26px;" onclick="deleteIncomeRecordFromTaxReport(${inc.id}, '${inc.income_no}')" title="Delete this income record and reverse VAT & movements">
+                            <i class="fa-solid fa-trash-alt" style="font-size: 0.72rem;"></i>
+                        </button>
+                    </td>
                 `;
                 incomeTbody.appendChild(tr);
             });
         } else {
             incomeTbody.innerHTML = `
                 <tr>
-                    <td colspan="9" class="text-center py-4 text-muted">
+                    <td colspan="10" class="text-center py-4 text-muted">
                         <i class="fa-solid fa-folder-open me-2 text-secondary"></i>No income receipts recorded in this Ethiopian month.
                     </td>
                 </tr>
@@ -4998,7 +5038,7 @@
     }
 
     // ── Clear Tax (Start from Zero) Handlers ──────────────────────────────────
-    function openAdminClearModalForMonth(ethYear, ethMonth, monthLabel) {
+    function openAdminClearModalForMonth(ethYear, ethMonth, monthLabel, isCleared = false) {
         const modalEl = document.getElementById('adminClearTaxModal');
         if (!modalEl) return;
 
@@ -5022,11 +5062,12 @@
         // Update badge label
         updateClearModalMonthLabel(monthLabel);
 
-        // Reset to clear action mode
-        const clearRadio = modalEl.querySelector('input[name="action_type"][value="clear"]');
-        if (clearRadio) {
-            clearRadio.checked = true;
-            toggleAdminClearActionMode('clear');
+        // Auto-select mode: if already cleared, preset 'reopen' so user can manage or re-open; otherwise 'clear'
+        const targetMode = isCleared ? 'reopen' : 'clear';
+        const actionRadio = modalEl.querySelector(`input[name="action_type"][value="${targetMode}"]`);
+        if (actionRadio) {
+            actionRadio.checked = true;
+            toggleAdminClearActionMode(targetMode);
         }
 
         if (window.bootstrap && bootstrap.Modal) {
@@ -5154,5 +5195,32 @@
             });
         }
     });
+
+    function deleteIncomeRecordFromTaxReport(incomeId, incomeNo) {
+        if (!confirm(`Are you sure you want to DELETE income record #${incomeNo}?\n\nThis will completely remove this income record, reverse its deposited balance, eliminate its 15% Output VAT, and delete all related movements across all sections.`)) {
+            return;
+        }
+        const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+        fetch(`/income/${incomeId}`, {
+            method: 'DELETE',
+            headers: {
+                'X-CSRF-TOKEN': token,
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                alert(data.message || 'Income record deleted successfully.');
+                window.location.reload();
+            } else {
+                alert('Error deleting income record: ' + (data.message || 'Unknown error'));
+            }
+        })
+        .catch(err => {
+            alert('Failed to delete income record: ' + err.message);
+        });
+    }
 </script>
 @endsection

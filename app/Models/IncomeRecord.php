@@ -38,15 +38,20 @@ class IncomeRecord extends Model
         'receipt_date',
         'encoded_by',
         'receipt_file_path',
+        'vat_settled',
+        'vat_settlement_id',
+        'tax_settled_at',
     ];
 
     protected $casts = [
-        'income_date'  => 'date',
-        'receipt_date' => 'date',
-        'amount'       => 'decimal:2',
-        'unit_price'   => 'decimal:2',
-        'quantity'     => 'decimal:2',
-        'is_deposited' => 'boolean',
+        'income_date'    => 'date',
+        'receipt_date'   => 'date',
+        'amount'         => 'decimal:2',
+        'unit_price'     => 'decimal:2',
+        'quantity'       => 'decimal:2',
+        'is_deposited'   => 'boolean',
+        'vat_settled'    => 'boolean',
+        'tax_settled_at' => 'datetime',
     ];
 
     protected static function booted()
@@ -73,6 +78,7 @@ class IncomeRecord extends Model
     public function chartOfAccount() { return $this->belongsTo(ChartOfAccount::class, 'chart_of_account_id'); }
     public function createdBy()      { return $this->belongsTo(User::class, 'created_by'); }
     public function journalEntry()   { return $this->belongsTo(JournalEntry::class); }
+    public function vatSettlement()  { return $this->belongsTo(TaxSettlement::class, 'vat_settlement_id'); }
 
     /**
      * Get the accessible public URL for the attached receipt.
