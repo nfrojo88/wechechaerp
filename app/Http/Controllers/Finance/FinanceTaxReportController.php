@@ -673,6 +673,7 @@ class FinanceTaxReportController extends Controller
                 ->whereBetween('created_at', [$mRange['start'], $mRange['end']])
                 ->where('vat_type', '!=', 'vat_b')
                 ->get();
+            $mExpUnsettled = $mExpAll->filter(fn($i) => !(bool)$i->vat_settled);
 
             $calcVatFunc = function($items) {
                 return (float)$items->sum(function ($item) {
@@ -685,7 +686,7 @@ class FinanceTaxReportController extends Controller
             };
 
             $mExpInTotal  = $calcVatFunc($mExpAll);
-            $mExpInActive = $calcVatFunc($mExpAll->filter(fn($i) => !(bool)$i->vat_settled));
+            $mExpInActive = $calcVatFunc($mExpUnsettled);
 
             $mOcrIn = (float)\App\Models\ReceiptItem::whereHas('receipt', fn($rq) => 
                 $rq->whereBetween('receipt_date', [$mRange['start_date'], $mRange['end_date']])
@@ -696,7 +697,7 @@ class FinanceTaxReportController extends Controller
 
             $mHasUnsettled = $mIncomeUnsettled->isNotEmpty() || $mExpUnsettled->isNotEmpty();
             $mHasPriorSettlement = ($mSettlement !== null);
-            $mIsFullyCleared = ($mHasPriorSettlement || ($mIncomeAll->isNotEmpty() && $mIncomeUnsettled->isEmpty() && ($mExpAll->isEmpty() || $mExpAll->every(fn($e) => (bool)$e->vat_settled)))) && !$mHasUnsettled;
+            $mIsFullyCleared = ($mHasPriorSettlement || ($mIncomeAll->isNotEmpty() && $mIncomeUnsettled->isEmpty() && $mExpUnsettled->isEmpty())) && !$mHasUnsettled;
             $mIsFreshStart = $mHasPriorSettlement && $mHasUnsettled;
 
             if ($mIsFullyCleared) {
