@@ -279,6 +279,19 @@
                 let initialTotal = parseFloat(ext.total_amount) || (initialSubtotal + initialVat);
                 const hasInitialVat = initialVat > 0;
 
+                // Today's Date for Encoding Date
+                const todayObj = new Date();
+                const todayDateYmd = todayObj.toISOString().slice(0, 10);
+                const todayEc = gregorianToEthiopian(todayDateYmd);
+                const todayEcFormatted = todayEc ? todayEc.formatted : 'N/A';
+
+                // Initial Purchase Type (3 for VAT Included, 6 for Non-VAT/Exempt, or custom)
+                let initialPurcType = ext.purchase_type || (hasInitialVat ? 3 : 6);
+
+                // Purchaser TIN & Encoded By defaults
+                const defaultPurchaserTin = (config && config.purchaserTin) ? config.purchaserTin : (ext.purchaser_tin || ext.buyer_tin || '0038480010');
+                const defaultEncodedBy = (config && config.encodedBy) ? config.encodedBy : (ext.encoded_by || 'wechacha');
+
                 // Parse Ethiopian date
                 const ecInfo = gregorianToEthiopian(ext.receipt_date_ymd || ext.receipt_date);
                 let ecFormatted = ecInfo ? ecInfo.formatted : 'N/A';
@@ -312,7 +325,7 @@
                         <!-- Studio Header Bar -->
                         <div class="card-header bg-dark text-white py-2 px-3 d-flex flex-wrap align-items-center justify-content-between gap-2">
                             <div class="d-flex align-items-center gap-2 flex-wrap">
-                                <span class="badge bg-success text-white px-2 py-1 rounded-pill">
+                                <span class="badge bg-success text-white px-2.5 py-1 rounded-pill">
                                     <i class="fa-solid fa-receipt me-1"></i> Receipt OCR Studio
                                 </span>
                                 <span class="badge bg-primary text-white px-2 py-0.5 rounded-pill">
@@ -351,8 +364,8 @@
                             <div class="row g-3">
                                 <!-- Left Column: Receipt Visual Preview & Zoom / Rotation Controls -->
                                 <div class="col-12 col-md-5">
-                                    <div class="p-2 border rounded-3 bg-light text-center h-100 d-flex flex-column align-items-center justify-content-between" style="min-height: 260px;">
-                                        <div class="position-relative w-100 d-flex align-items-center justify-content-center overflow-hidden" style="max-height: 260px; min-height: 200px; background:#fff; border-radius:6px;">
+                                    <div class="p-2 border rounded-3 bg-light text-center h-100 d-flex flex-column align-items-center justify-content-between" style="min-height: 270px;">
+                                        <div class="position-relative w-100 d-flex align-items-center justify-content-center overflow-hidden" style="max-height: 270px; min-height: 210px; background:#fff; border-radius:6px;">
                                             ${isPdf ? `
                                                 <div class="py-4 text-center">
                                                     <i class="fa-solid fa-file-pdf fa-4x text-danger mb-2"></i>
@@ -360,7 +373,7 @@
                                                     <span class="badge bg-secondary text-white mt-1">PDF Receipt Document</span>
                                                 </div>
                                             ` : `
-                                                <img src="${currentObjectUrl || ''}" alt="Receipt Preview" id="${studioId}_preview_img" class="img-fluid rounded shadow-2xs" style="max-height: 250px; object-fit: contain; transform: rotate(${currentRotation}deg) scale(${currentZoom}); transition: transform 0.2s ease;">
+                                                <img src="${currentObjectUrl || ''}" alt="Receipt Preview" id="${studioId}_preview_img" class="img-fluid rounded shadow-2xs" style="max-height: 260px; object-fit: contain; transform: rotate(${currentRotation}deg) scale(${currentZoom}); transition: transform 0.2s ease;">
                                             `}
                                         </div>
 
@@ -392,73 +405,188 @@
                                     </div>
                                 </div>
 
-                                <!-- Right Column: Extracted Fiscal Fields Form (Editable) -->
+                                <!-- Right Column: 9-Column ERCA Purchase TAS Form (Editable) -->
                                 <div class="col-12 col-md-7">
-                                    <div class="row g-2">
-                                        <!-- Merchant / Supplier Name (Col E) -->
-                                        <div class="col-12">
-                                            <label class="form-label small fw-bold text-dark mb-0 d-flex align-items-center justify-content-between">
-                                                <span>Merchant / Supplier Name (Col E)</span>
-                                                <span class="badge bg-primary bg-opacity-10 text-primary border" style="font-size:0.65rem;">Col E</span>
-                                            </label>
-                                            <div class="input-group input-group-sm">
-                                                <span class="input-group-text bg-light"><i class="fa-solid fa-store text-muted"></i></span>
-                                                <input type="text" class="form-control fw-semibold" id="${studioId}_vendor_name" value="${escapeHtml(ext.vendor_name || '')}" placeholder="e.g. Supplier Business Name">
+                                    <div class="card border rounded-3 shadow-2xs bg-white mb-2 overflow-hidden">
+                                        <div class="card-header bg-dark text-white py-1.5 px-3 d-flex align-items-center justify-content-between flex-wrap gap-1">
+                                            <span class="small fw-bold" style="font-size:0.78rem;">
+                                                <i class="fa-solid fa-file-invoice me-1 text-success"></i> ERCA Purchase TAS Declaration (9 Columns)
+                                            </span>
+                                            <span class="badge bg-primary bg-opacity-25 text-white border border-primary border-opacity-50" style="font-size:0.65rem;">
+                                                <i class="fa-solid fa-pen-to-square me-1"></i> Editable Fields
+                                            </span>
+                                        </div>
+                                        <div class="card-body p-2.5">
+                                            <div class="row g-2">
+                                                <!-- Col 1: Purchaser TIN -->
+                                                <div class="col-12 col-sm-4">
+                                                    <label class="form-label small fw-bold text-dark mb-0 d-flex justify-content-between">
+                                                        <span>1. Purchaser TIN</span>
+                                                        <span class="badge bg-light text-muted border" style="font-size:0.65rem;">Buyer</span>
+                                                    </label>
+                                                    <div class="input-group input-group-sm">
+                                                        <span class="input-group-text bg-light"><i class="fa-solid fa-building text-secondary"></i></span>
+                                                        <input type="text" class="form-control font-monospace fw-bold" id="${studioId}_purchaser_tin" value="${escapeHtml(defaultPurchaserTin)}" placeholder="0038480010">
+                                                    </div>
+                                                    <small class="text-muted" style="font-size:0.65rem;">Buyer TIN</small>
+                                                </div>
+
+                                                <!-- Col 2: Seller TIN -->
+                                                <div class="col-12 col-sm-4">
+                                                    <label class="form-label small fw-bold text-dark mb-0 d-flex justify-content-between">
+                                                        <span>2. Seller TIN</span>
+                                                        <span class="badge bg-success bg-opacity-10 text-success border" style="font-size:0.65rem;">Supplier</span>
+                                                    </label>
+                                                    <div class="input-group input-group-sm">
+                                                        <span class="input-group-text bg-light"><i class="fa-solid fa-id-card text-muted"></i></span>
+                                                        <input type="text" class="form-control font-monospace fw-bold text-primary" id="${studioId}_seller_tin" value="${escapeHtml(ext.supplier_tin || '')}" placeholder="10 Digits" maxlength="15">
+                                                    </div>
+                                                    <div id="${studioId}_tin_badge" class="mt-0.5" style="font-size:0.68rem;"></div>
+                                                </div>
+
+                                                <!-- Col 3: Amount -->
+                                                <div class="col-12 col-sm-4">
+                                                    <label class="form-label small fw-bold text-dark mb-0 d-flex justify-content-between">
+                                                        <span>3. Amount (ETB)</span>
+                                                        <span class="badge bg-success bg-opacity-10 text-success border" style="font-size:0.65rem;">Total</span>
+                                                    </label>
+                                                    <div class="input-group input-group-sm">
+                                                        <span class="input-group-text bg-light font-monospace fw-bold text-success">ETB</span>
+                                                        <input type="number" step="0.01" min="0" class="form-control font-monospace fw-bold text-success text-end" id="${studioId}_amount" value="${Number(initialTotal).toFixed(2)}">
+                                                    </div>
+                                                    <small class="text-muted" style="font-size:0.65rem;">Total Purchase Value</small>
+                                                </div>
+
+                                                <!-- Col 4: Receipt No (FS #) -->
+                                                <div class="col-12 col-sm-4">
+                                                    <label class="form-label small fw-bold text-dark mb-0 d-flex justify-content-between">
+                                                        <span>4. Receipt No (FS #)</span>
+                                                        <span class="badge bg-primary bg-opacity-10 text-primary border" style="font-size:0.65rem;">FS No</span>
+                                                    </label>
+                                                    <div class="input-group input-group-sm">
+                                                        <span class="input-group-text bg-light"><i class="fa-solid fa-hashtag text-muted"></i></span>
+                                                        <input type="text" class="form-control font-monospace fw-bold text-dark" id="${studioId}_receipt_no" value="${escapeHtml(ext.fs_no || '')}" placeholder="8 Digits">
+                                                    </div>
+                                                    <div id="${studioId}_fs_badge" class="mt-0.5" style="font-size:0.68rem;"></div>
+                                                </div>
+
+                                                <!-- Col 5: Receipt Date -->
+                                                <div class="col-12 col-sm-4">
+                                                    <label class="form-label small fw-bold text-dark mb-0 d-flex justify-content-between">
+                                                        <span>5. Receipt Date</span>
+                                                        <span class="badge bg-primary bg-opacity-10 text-primary border" style="font-size:0.65rem;">Purchase Date</span>
+                                                    </label>
+                                                    <input type="date" class="form-control form-control-sm font-monospace" id="${studioId}_receipt_date" value="${ext.receipt_date_ymd || ext.receipt_date || ''}">
+                                                    <div class="text-muted font-monospace mt-0.5" id="${studioId}_ec_display" style="font-size:0.68rem;">
+                                                        <i class="fa-solid fa-calendar-days text-primary me-1"></i>${ecFormatted}
+                                                    </div>
+                                                </div>
+
+                                                <!-- Col 6: Encoding Date -->
+                                                <div class="col-12 col-sm-4">
+                                                    <label class="form-label small fw-bold text-dark mb-0 d-flex justify-content-between">
+                                                        <span>6. Encoding Date</span>
+                                                        <span class="badge bg-secondary bg-opacity-10 text-secondary border" style="font-size:0.65rem;">Entry Date</span>
+                                                    </label>
+                                                    <input type="date" class="form-control form-control-sm font-monospace" id="${studioId}_encoding_date" value="${todayDateYmd}">
+                                                    <div class="text-muted font-monospace mt-0.5" id="${studioId}_encoding_ec_display" style="font-size:0.68rem;">
+                                                        <i class="fa-solid fa-clock text-secondary me-1"></i>${todayEcFormatted}
+                                                    </div>
+                                                </div>
+
+                                                <!-- Col 7: MRC -->
+                                                <div class="col-12 col-sm-4">
+                                                    <label class="form-label small fw-bold text-dark mb-0 d-flex justify-content-between">
+                                                        <span>7. MRC (Machine No)</span>
+                                                        <span class="badge bg-light text-muted border" style="font-size:0.65rem;">MRC</span>
+                                                    </label>
+                                                    <div class="input-group input-group-sm">
+                                                        <span class="input-group-text bg-light"><i class="fa-solid fa-cash-register text-muted"></i></span>
+                                                        <input type="text" class="form-control font-monospace" id="${studioId}_mrc" value="${escapeHtml(ext.mrc_no || '')}" placeholder="e.g. DDB0000032">
+                                                    </div>
+                                                    <small class="text-muted" style="font-size:0.65rem;">Machine Reg Code</small>
+                                                </div>
+
+                                                <!-- Col 8: PurcType -->
+                                                <div class="col-12 col-sm-4">
+                                                    <label class="form-label small fw-bold text-dark mb-0 d-flex justify-content-between">
+                                                        <span>8. PurcType</span>
+                                                        <span class="badge bg-warning bg-opacity-10 text-dark border" style="font-size:0.65rem;">Category</span>
+                                                    </label>
+                                                    <select class="form-select form-select-sm fw-semibold" id="${studioId}_purc_type">
+                                                        <option value="3" ${initialPurcType == 3 ? 'selected' : ''}>3 - Goods (15% VAT - Line 100)</option>
+                                                        <option value="6" ${initialPurcType == 6 ? 'selected' : ''}>6 - Non-VAT / Exempt (TAS Excel)</option>
+                                                        <option value="1" ${initialPurcType == 1 ? 'selected' : ''}>1 - Raw Materials</option>
+                                                        <option value="2" ${initialPurcType == 2 ? 'selected' : ''}>2 - Direct Operating Expenses</option>
+                                                        <option value="4" ${initialPurcType == 4 ? 'selected' : ''}>4 - Capital Assets</option>
+                                                        <option value="5" ${initialPurcType == 5 ? 'selected' : ''}>5 - Administrative Expenses</option>
+                                                    </select>
+                                                    <small class="text-muted" style="font-size:0.65rem;">ERCA Purchase Type Code</small>
+                                                </div>
+
+                                                <!-- Col 9: Encoded By -->
+                                                <div class="col-12 col-sm-4">
+                                                    <label class="form-label small fw-bold text-dark mb-0 d-flex justify-content-between">
+                                                        <span>9. Encoded By</span>
+                                                        <span class="badge bg-info bg-opacity-10 text-info border" style="font-size:0.65rem;">Encoder</span>
+                                                    </label>
+                                                    <div class="input-group input-group-sm">
+                                                        <span class="input-group-text bg-light"><i class="fa-solid fa-user-pen text-muted"></i></span>
+                                                        <input type="text" class="form-control font-monospace" id="${studioId}_encoded_by" value="${escapeHtml(defaultEncodedBy)}" placeholder="e.g. wechacha">
+                                                    </div>
+                                                    <small class="text-muted" style="font-size:0.65rem;">User / Operator Name</small>
+                                                </div>
+
+                                                <!-- Extra Merchant Name & Item Description -->
+                                                <div class="col-12 col-sm-6">
+                                                    <label class="form-label small fw-bold text-dark mb-0">Merchant / Supplier Name</label>
+                                                    <input type="text" class="form-control form-control-sm fw-semibold" id="${studioId}_vendor_name" value="${escapeHtml(ext.vendor_name || '')}" placeholder="Supplier registered name">
+                                                </div>
+                                                <div class="col-12 col-sm-6">
+                                                    <label class="form-label small fw-bold text-dark mb-0">Item / Commodity Description</label>
+                                                    <input type="text" class="form-control form-control-sm" id="${studioId}_description" value="${escapeHtml(ext.description || '')}" placeholder="Purchased goods description">
+                                                </div>
                                             </div>
                                         </div>
+                                    </div>
 
-                                        <!-- Supplier TIN with 10-digit validation badge (Col D) -->
-                                        <div class="col-6">
-                                            <label class="form-label small fw-bold text-dark mb-0 d-flex align-items-center justify-content-between">
-                                                <span>Supplier TIN (Col D)</span>
-                                                <span class="badge bg-success bg-opacity-10 text-success border" style="font-size:0.65rem;">Col D</span>
-                                            </label>
-                                            <div class="input-group input-group-sm">
-                                                <span class="input-group-text bg-light"><i class="fa-solid fa-id-card text-muted"></i></span>
-                                                <input type="text" class="form-control font-monospace fw-bold text-primary" id="${studioId}_supplier_tin" value="${escapeHtml(ext.supplier_tin || '')}" placeholder="10 Digits" maxlength="15">
-                                            </div>
-                                            <div id="${studioId}_tin_badge" class="mt-1" style="font-size:0.7rem;"></div>
+                                    <!-- Live 9-Column ERCA Purchase TAS Output Format Preview -->
+                                    <div class="card border rounded-2 shadow-2xs overflow-hidden mb-2">
+                                        <div class="card-header bg-dark text-white py-1 px-3 d-flex align-items-center justify-content-between">
+                                            <span class="small fw-bold" style="font-size:0.75rem;">
+                                                <i class="fa-solid fa-table-list me-1 text-success"></i> ERCA Purchase TAS Output Format Preview (9 Columns)
+                                            </span>
+                                            <span class="badge bg-success bg-opacity-25 text-white border border-success" style="font-size:0.65rem;">e-Tax Compliant</span>
                                         </div>
-
-                                        <!-- FS / Receipt No with 8-digit validation badge (Col H) -->
-                                        <div class="col-6">
-                                            <label class="form-label small fw-bold text-dark mb-0 d-flex align-items-center justify-content-between">
-                                                <span>FS / Receipt # (Col H)</span>
-                                                <span class="badge bg-primary bg-opacity-10 text-primary border" style="font-size:0.65rem;">Col H</span>
-                                            </label>
-                                            <div class="input-group input-group-sm">
-                                                <span class="input-group-text bg-light"><i class="fa-solid fa-hashtag text-muted"></i></span>
-                                                <input type="text" class="form-control font-monospace fw-bold text-dark" id="${studioId}_fs_no" value="${escapeHtml(ext.fs_no || '')}" placeholder="8 Digits" maxlength="15">
-                                            </div>
-                                            <div id="${studioId}_fs_badge" class="mt-1" style="font-size:0.7rem;"></div>
-                                        </div>
-
-                                        <!-- Machine / MRC No & Receipt Date -->
-                                        <div class="col-6">
-                                            <label class="form-label small fw-bold text-dark mb-0 d-flex align-items-center justify-content-between">
-                                                <span>Machine / MRC # (Col G)</span>
-                                                <span class="badge bg-light text-muted border" style="font-size:0.65rem;">Col G</span>
-                                            </label>
-                                            <input type="text" class="form-control form-control-sm font-monospace" id="${studioId}_mrc_no" value="${escapeHtml(ext.mrc_no || '')}" placeholder="e.g. DDB0000032">
-                                        </div>
-                                        <div class="col-6">
-                                            <label class="form-label small fw-bold text-dark mb-0 d-flex align-items-center justify-content-between">
-                                                <span>Receipt Date (Col F)</span>
-                                                <span class="badge bg-primary bg-opacity-10 text-primary border" style="font-size:0.65rem;">Col F</span>
-                                            </label>
-                                            <input type="date" class="form-control form-control-sm font-monospace" id="${studioId}_receipt_date" value="${ext.receipt_date_ymd || ext.receipt_date || ''}">
-                                            <div class="text-muted mt-1 font-monospace" id="${studioId}_ec_display" style="font-size:0.7rem;">
-                                                <i class="fa-solid fa-calendar-days text-primary me-1"></i>${ecFormatted}
-                                            </div>
-                                        </div>
-
-                                        <!-- Description (Col I) -->
-                                        <div class="col-12">
-                                            <label class="form-label small fw-bold text-dark mb-0 d-flex align-items-center justify-content-between">
-                                                <span>Purchased Materials / Description (Col I)</span>
-                                                <span class="badge bg-primary bg-opacity-10 text-primary border" style="font-size:0.65rem;">Col I</span>
-                                            </label>
-                                            <input type="text" class="form-control form-control-sm" id="${studioId}_description" value="${escapeHtml(ext.description || '')}" placeholder="Description of materials or service">
+                                        <div class="table-responsive">
+                                            <table class="table table-bordered table-sm text-center mb-0" style="font-size:0.7rem;">
+                                                <thead class="bg-light text-dark small fw-bold text-uppercase">
+                                                    <tr>
+                                                        <th class="py-1">Purchaser TIN</th>
+                                                        <th class="py-1">Seller TIN</th>
+                                                        <th class="py-1">Amount</th>
+                                                        <th class="py-1">Receipt No</th>
+                                                        <th class="py-1">Receipt Date</th>
+                                                        <th class="py-1">Encoding Date</th>
+                                                        <th class="py-1">MRC</th>
+                                                        <th class="py-1">PurcType</th>
+                                                        <th class="py-1">Encoded By</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <tr class="font-monospace fw-bold align-middle bg-white">
+                                                        <td id="${studioId}_tbl_purchaser_tin" class="text-secondary">${escapeHtml(defaultPurchaserTin)}</td>
+                                                        <td id="${studioId}_tbl_seller_tin" class="text-primary">${escapeHtml(ext.supplier_tin || '-')}</td>
+                                                        <td id="${studioId}_tbl_amount" class="text-success text-end pe-2">${Number(initialTotal).toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+                                                        <td id="${studioId}_tbl_receipt_no" class="text-dark">${escapeHtml(ext.fs_no || '-')}</td>
+                                                        <td id="${studioId}_tbl_receipt_date" class="text-muted small">${ecFormatted}</td>
+                                                        <td id="${studioId}_tbl_encoding_date" class="text-muted small">${todayEcFormatted}</td>
+                                                        <td id="${studioId}_tbl_mrc" class="text-muted">${escapeHtml(ext.mrc_no || '-')}</td>
+                                                        <td id="${studioId}_tbl_purctype"><span class="badge bg-primary" id="${studioId}_tbl_purctype_badge">${initialPurcType}</span></td>
+                                                        <td id="${studioId}_tbl_encoded_by" class="text-dark">${escapeHtml(defaultEncodedBy)}</td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
                                         </div>
                                     </div>
                                 </div>
@@ -519,7 +647,7 @@
                                                     <input type="radio" name="${studioId}_vat_choice" value="included" class="form-check-input mt-1" ${hasInitialVat ? 'checked' : ''}>
                                                     <div>
                                                         <strong class="d-block text-success small"><i class="fa-solid fa-percent me-1"></i>VAT Included (15% Input VAT)</strong>
-                                                        <small class="text-muted d-block" style="font-size:0.68rem; line-height: 1.25;">15% creditable input VAT &rarr; Saved into Monthly ERCA Line 100 VAT Section</small>
+                                                        <small class="text-muted d-block" style="font-size:0.68rem; line-height: 1.25;">15% creditable input VAT &rarr; Saved into Monthly ERCA Line 100 VAT Section (PurcType 3)</small>
                                                     </div>
                                                 </label>
                                             </div>
@@ -528,7 +656,7 @@
                                                     <input type="radio" name="${studioId}_vat_choice" value="none" class="form-check-input mt-1" ${!hasInitialVat ? 'checked' : ''}>
                                                     <div>
                                                         <strong class="d-block text-dark small"><i class="fa-solid fa-file-excel text-success me-1"></i>No VAT (Purchase TAS Excel)</strong>
-                                                        <small class="text-muted d-block" style="font-size:0.68rem; line-height: 1.25;">Zero VAT &rarr; Declared in 9-Column Purchase TAS Excel report</small>
+                                                        <small class="text-muted d-block" style="font-size:0.68rem; line-height: 1.25;">Zero VAT &rarr; Declared in 9-Column Purchase TAS Excel report (PurcType 6)</small>
                                                     </div>
                                                 </label>
                                             </div>
@@ -536,7 +664,7 @@
                                     </div>
                                 </div>
 
-                                <!-- Editable Financial Totals Bar -->
+                                <!-- Financial Totals Breakdown Bar -->
                                 <div class="col-12">
                                     <div class="p-2.5 rounded-3 bg-light border">
                                         <div class="row g-2 align-items-center">
@@ -594,25 +722,45 @@
                 const btnRescan = document.getElementById(`${studioId}_btn_rescan`);
                 const btnClear = document.getElementById(`${studioId}_btn_clear`);
 
-                const inputVendor = document.getElementById(`${studioId}_vendor_name`);
-                const inputTin = document.getElementById(`${studioId}_supplier_tin`);
-                const inputFs = document.getElementById(`${studioId}_fs_no`);
-                const inputMrc = document.getElementById(`${studioId}_mrc_no`);
-                const inputDate = document.getElementById(`${studioId}_receipt_date`);
-                const inputDesc = document.getElementById(`${studioId}_description`);
+                // 9 TAS Column inputs
+                const inputPurchaserTin = document.getElementById(`${studioId}_purchaser_tin`);
+                const inputSellerTin = document.getElementById(`${studioId}_seller_tin`);
+                const inputAmount = document.getElementById(`${studioId}_amount`);
+                const inputReceiptNo = document.getElementById(`${studioId}_receipt_no`);
+                const inputReceiptDate = document.getElementById(`${studioId}_receipt_date`);
+                const inputEncodingDate = document.getElementById(`${studioId}_encoding_date`);
+                const inputMrc = document.getElementById(`${studioId}_mrc`);
+                const selectPurcType = document.getElementById(`${studioId}_purc_type`);
+                const inputEncodedBy = document.getElementById(`${studioId}_encoded_by`);
 
+                // Extra inputs
+                const inputVendor = document.getElementById(`${studioId}_vendor_name`);
+                const inputDesc = document.getElementById(`${studioId}_description`);
                 const inputSubtotal = document.getElementById(`${studioId}_subtotal_input`);
                 const inputVat = document.getElementById(`${studioId}_vat_input`);
                 const inputTotal = document.getElementById(`${studioId}_total_input`);
 
+                // Badges & displays
                 const tinBadge = document.getElementById(`${studioId}_tin_badge`);
                 const fsBadge = document.getElementById(`${studioId}_fs_badge`);
                 const ecDisplay = document.getElementById(`${studioId}_ec_display`);
+                const encodingEcDisplay = document.getElementById(`${studioId}_encoding_ec_display`);
                 const vatBadge = document.getElementById(`${studioId}_vat_badge`);
                 const validationBox = document.getElementById(`${studioId}_validation_box`);
                 const verificationStatusBadge = document.getElementById(`${studioId}_verification_status_badge`);
                 const btnVerifyConfirm = document.getElementById(`${studioId}_btn_verify_confirm`);
                 const confidenceBadge = document.getElementById(`${studioId}_confidence_badge`);
+
+                // Live TAS table preview elements
+                const tblPurchaserTin = document.getElementById(`${studioId}_tbl_purchaser_tin`);
+                const tblSellerTin = document.getElementById(`${studioId}_tbl_seller_tin`);
+                const tblAmount = document.getElementById(`${studioId}_tbl_amount`);
+                const tblReceiptNo = document.getElementById(`${studioId}_tbl_receipt_no`);
+                const tblReceiptDate = document.getElementById(`${studioId}_tbl_receipt_date`);
+                const tblEncodingDate = document.getElementById(`${studioId}_tbl_encoding_date`);
+                const tblMrc = document.getElementById(`${studioId}_tbl_mrc`);
+                const tblPurcTypeBadge = document.getElementById(`${studioId}_tbl_purctype_badge`);
+                const tblEncodedBy = document.getElementById(`${studioId}_tbl_encoded_by`);
 
                 const optIncluded = document.querySelector(`input[name="${studioId}_vat_choice"][value="included"]`);
                 const optNone = document.querySelector(`input[name="${studioId}_vat_choice"][value="none"]`);
@@ -787,6 +935,7 @@
                     if (inputSubtotal) inputSubtotal.value = sumSubtotal.toFixed(2);
                     if (inputVat) inputVat.value = sumVat.toFixed(2);
                     if (inputTotal) inputTotal.value = sumTotal.toFixed(2);
+                    if (inputAmount) inputAmount.value = sumTotal.toFixed(2);
 
                     syncCalculations();
                 }
@@ -809,7 +958,7 @@
                 }
 
                 function updateValidationBadges() {
-                    const rawTin = (inputTin.value || '').replace(/\D/g, '');
+                    const rawTin = (inputSellerTin ? inputSellerTin.value : '').replace(/\D/g, '');
                     const isTinValid = rawTin.length === 10;
                     if (tinBadge) {
                         tinBadge.innerHTML = isTinValid
@@ -817,7 +966,7 @@
                             : `<span class="badge bg-danger-subtle text-danger border border-danger"><i class="fa-solid fa-triangle-exclamation me-1"></i>Expected 10 digits (${rawTin.length}/10)</span>`;
                     }
 
-                    const rawFs = (inputFs.value || '').replace(/\D/g, '');
+                    const rawFs = (inputReceiptNo ? inputReceiptNo.value : '').replace(/\D/g, '');
                     const isFsValid = rawFs.length === 8;
                     if (fsBadge) {
                         fsBadge.innerHTML = isFsValid
@@ -826,26 +975,68 @@
                     }
                 }
 
+                function updateTasTablePreview() {
+                    const pTin = inputPurchaserTin ? inputPurchaserTin.value : defaultPurchaserTin;
+                    const sTin = inputSellerTin ? inputSellerTin.value : '';
+                    const amt = parseFloat(inputAmount ? inputAmount.value : (inputTotal ? inputTotal.value : 0)) || 0;
+                    const rNo = inputReceiptNo ? inputReceiptNo.value : '';
+                    const rDate = inputReceiptDate ? inputReceiptDate.value : '';
+                    const eDate = inputEncodingDate ? inputEncodingDate.value : todayDateYmd;
+                    const mrcVal = inputMrc ? inputMrc.value : '';
+                    const pType = selectPurcType ? selectPurcType.value : (optIncluded && optIncluded.checked ? '3' : '6');
+                    const encBy = inputEncodedBy ? inputEncodedBy.value : defaultEncodedBy;
+
+                    const rDateEc = gregorianToEthiopian(rDate);
+                    const eDateEc = gregorianToEthiopian(eDate);
+
+                    if (tblPurchaserTin) tblPurchaserTin.innerText = pTin || '-';
+                    if (tblSellerTin) tblSellerTin.innerText = sTin || '-';
+                    if (tblAmount) tblAmount.innerText = amt.toLocaleString(undefined, {minimumFractionDigits: 2});
+                    if (tblReceiptNo) tblReceiptNo.innerText = rNo || '-';
+                    if (tblReceiptDate) tblReceiptDate.innerText = rDateEc ? rDateEc.formatted : (rDate || '-');
+                    if (tblEncodingDate) tblEncodingDate.innerText = eDateEc ? eDateEc.formatted : (eDate || '-');
+                    if (tblMrc) tblMrc.innerText = mrcVal || '-';
+                    if (tblPurcTypeBadge) {
+                        tblPurcTypeBadge.innerText = pType;
+                        tblPurcTypeBadge.className = (pType === '3') ? 'badge bg-success' : 'badge bg-primary';
+                    }
+                    if (tblEncodedBy) tblEncodedBy.innerText = encBy || '-';
+                }
+
                 function runVerificationChecks() {
                     updateValidationBadges();
+                    updateTasTablePreview();
 
                     const isVatIncluded = optIncluded && optIncluded.checked;
-                    const rawTin = (inputTin.value || '').replace(/\D/g, '');
-                    const rawFs = (inputFs.value || '').replace(/\D/g, '');
+                    const rawTin = (inputSellerTin ? inputSellerTin.value : '').replace(/\D/g, '');
+                    const rawFs = (inputReceiptNo ? inputReceiptNo.value : '').replace(/\D/g, '');
                     const subVal = parseFloat(inputSubtotal ? inputSubtotal.value : 0) || 0;
                     const vatVal = parseFloat(inputVat ? inputVat.value : 0) || 0;
                     const totVal = parseFloat(inputTotal ? inputTotal.value : 0) || 0;
+                    const amtVal = parseFloat(inputAmount ? inputAmount.value : 0) || 0;
 
                     const warnings = [];
 
+                    if (!inputPurchaserTin || !inputPurchaserTin.value.trim()) {
+                        warnings.push(`Purchaser TIN (Col 1) is required.`);
+                    }
                     if (rawTin.length !== 10) {
-                        warnings.push(`Supplier TIN is invalid: Expected 10 digits (currently ${rawTin.length}).`);
+                        warnings.push(`Seller TIN (Col 2) is invalid: Expected 10 digits (currently ${rawTin.length}).`);
+                    }
+                    if (amtVal <= 0) {
+                        warnings.push(`Amount (Col 3) must be greater than zero.`);
                     }
                     if (rawFs.length !== 8) {
-                        warnings.push(`FS Receipt # is invalid: Expected 8 digits (currently ${rawFs.length}).`);
+                        warnings.push(`Receipt / FS No (Col 4) is invalid: Expected 8 digits (currently ${rawFs.length}).`);
                     }
-                    if (!inputDate || !inputDate.value) {
-                        warnings.push(`Receipt Date is missing.`);
+                    if (!inputReceiptDate || !inputReceiptDate.value) {
+                        warnings.push(`Receipt Date (Col 5) is missing.`);
+                    }
+                    if (!inputEncodingDate || !inputEncodingDate.value) {
+                        warnings.push(`Encoding Date (Col 6) is missing.`);
+                    }
+                    if (!selectPurcType || !selectPurcType.value) {
+                        warnings.push(`PurcType (Col 8) is required.`);
                     }
 
                     // Arithmetic consistency checks
@@ -867,13 +1058,17 @@
                         warnings.push(`Total check: Subtotal (ETB ${subVal.toFixed(2)}) + VAT (ETB ${vatVal.toFixed(2)}) != Grand Total (ETB ${totVal.toFixed(2)}).`);
                     }
 
+                    if (Math.abs(totVal - amtVal) > 0.05) {
+                        warnings.push(`Amount discrepancy: Amount input (ETB ${amtVal.toFixed(2)}) != Grand Total (ETB ${totVal.toFixed(2)}).`);
+                    }
+
                     if (validationBox) {
                         if (warnings.length > 0) {
                             validationBox.className = 'p-3 rounded-3 border border-warning bg-warning bg-opacity-10 text-dark';
                             validationBox.innerHTML = `
                                 <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
                                     <div class="fw-bold text-danger">
-                                        <i class="fa-solid fa-triangle-exclamation me-1"></i> ${warnings.length} Discrepancy / Warning(s) Detected:
+                                        <i class="fa-solid fa-triangle-exclamation me-1"></i> ${warnings.length} TAS Discrepancy / Warning(s) Detected:
                                     </div>
                                     <button type="button" class="btn btn-xs btn-warning text-dark fw-bold px-2.5 py-1 shadow-2xs" id="${studioId}_btn_autofix">
                                         <i class="fa-solid fa-wand-magic-sparkles me-1"></i> Auto-Fix Math &amp; Balance
@@ -891,10 +1086,10 @@
                             validationBox.innerHTML = `
                                 <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
                                     <div class="fw-bold">
-                                        <i class="fa-solid fa-circle-check me-1"></i> All Checks Passed: Fiscal identifiers and line arithmetic verified for ERCA declaration!
+                                        <i class="fa-solid fa-circle-check me-1"></i> All Checks Passed: 9-Column TAS fields and arithmetic verified for ERCA declaration!
                                     </div>
                                     <span class="badge bg-success text-white px-2 py-1">
-                                        <i class="fa-solid fa-shield-check me-1"></i> 100% Tax Compliant
+                                        <i class="fa-solid fa-shield-check me-1"></i> 100% ERCA Compliant
                                     </span>
                                 </div>
                             `;
@@ -906,13 +1101,13 @@
                         if (isVerified && warnings.length === 0) {
                             verificationStatusBadge.innerHTML = `
                                 <span class="badge bg-success text-white px-2.5 py-1">
-                                    <i class="fa-solid fa-circle-check me-1"></i> Verified &amp; Ready for VAT Section
+                                    <i class="fa-solid fa-circle-check me-1"></i> Verified &amp; Ready for VAT / TAS
                                 </span>
                             `;
                         } else if (isVerified) {
                             verificationStatusBadge.innerHTML = `
                                 <span class="badge bg-warning text-dark px-2.5 py-1">
-                                    <i class="fa-solid fa-user-check me-1"></i> User Verified (With Discrepancy Note)
+                                    <i class="fa-solid fa-user-check me-1"></i> User Verified (With Notes)
                                 </span>
                             `;
                         } else {
@@ -944,6 +1139,16 @@
                     let base = parseFloat(inputSubtotal ? inputSubtotal.value : 0) || 0;
                     let vat = isVatIncluded ? (parseFloat(inputVat ? inputVat.value : 0) || 0) : 0.00;
                     let tot = parseFloat(inputTotal ? inputTotal.value : 0) || round2(base + vat);
+                    let amt = parseFloat(inputAmount ? inputAmount.value : 0) || tot;
+
+                    // Sync PurcType dropdown with VAT toggle if needed
+                    if (selectPurcType) {
+                        if (isVatIncluded && selectPurcType.value === '6') {
+                            selectPurcType.value = '3';
+                        } else if (!isVatIncluded && selectPurcType.value === '3') {
+                            selectPurcType.value = '6';
+                        }
+                    }
 
                     if (vatBadge) {
                         if (isVatIncluded) {
@@ -955,15 +1160,27 @@
                         }
                     }
 
-                    // Update hidden inputs in form
-                    setHidden('vendor_name', inputVendor ? inputVendor.value : ext.vendor_name);
-                    setHidden('supplier_tin', inputTin ? inputTin.value : ext.supplier_tin);
-                    setHidden('fs_no', inputFs ? inputFs.value : ext.fs_no);
-                    setHidden('mrc_no', inputMrc ? inputMrc.value : ext.mrc_no);
-                    setHidden('receipt_date', inputDate ? inputDate.value : (ext.receipt_date_ymd || ext.receipt_date));
+                    // Update all 9 TAS columns + metadata in form hidden inputs
+                    setHidden('purchaser_tin', inputPurchaserTin ? inputPurchaserTin.value : defaultPurchaserTin);
+                    setHidden('buyer_tin', inputPurchaserTin ? inputPurchaserTin.value : defaultPurchaserTin);
+                    setHidden('seller_tin', inputSellerTin ? inputSellerTin.value : ext.supplier_tin);
+                    setHidden('supplier_tin', inputSellerTin ? inputSellerTin.value : ext.supplier_tin);
+                    setHidden('vendor_tin', inputSellerTin ? inputSellerTin.value : ext.supplier_tin);
+                    setHidden('amount', amt.toFixed(2));
+                    setHidden('total_amount', tot.toFixed(2));
                     setHidden('subtotal', base.toFixed(2));
                     setHidden('vat_amount', vat.toFixed(2));
-                    setHidden('total_amount', tot.toFixed(2));
+                    setHidden('receipt_no', inputReceiptNo ? inputReceiptNo.value : ext.fs_no);
+                    setHidden('fs_no', inputReceiptNo ? inputReceiptNo.value : ext.fs_no);
+                    setHidden('receipt_date', inputReceiptDate ? inputReceiptDate.value : (ext.receipt_date_ymd || ext.receipt_date));
+                    setHidden('encoding_date', inputEncodingDate ? inputEncodingDate.value : todayDateYmd);
+                    setHidden('mrc', inputMrc ? inputMrc.value : ext.mrc_no);
+                    setHidden('mrc_no', inputMrc ? inputMrc.value : ext.mrc_no);
+                    setHidden('purc_type', selectPurcType ? selectPurcType.value : (isVatIncluded ? '3' : '6'));
+                    setHidden('purchase_type', selectPurcType ? selectPurcType.value : (isVatIncluded ? '3' : '6'));
+                    setHidden('encoded_by', inputEncodedBy ? inputEncodedBy.value : defaultEncodedBy);
+                    setHidden('vendor_name', inputVendor ? inputVendor.value : ext.vendor_name);
+                    setHidden('description', inputDesc ? inputDesc.value : ext.description);
                     setHidden('vat_included', isVatIncluded ? '1' : '0');
                     setHidden('is_verified', isVerified ? '1' : '0');
                     setHidden('ocr_items_json', JSON.stringify(items));
@@ -1044,11 +1261,19 @@
                         if (form) form.dataset.ocrDuplicate = 'false';
                         setHidden('vendor_name', '');
                         setHidden('supplier_tin', '');
+                        setHidden('seller_tin', '');
+                        setHidden('purchaser_tin', '');
                         setHidden('fs_no', '');
+                        setHidden('receipt_no', '');
                         setHidden('mrc_no', '');
+                        setHidden('mrc', '');
+                        setHidden('amount', '');
                         setHidden('subtotal', '');
                         setHidden('vat_amount', '');
                         setHidden('total_amount', '');
+                        setHidden('purc_type', '');
+                        setHidden('purchase_type', '');
+                        setHidden('encoded_by', '');
                         setHidden('vat_included', '0');
                         setHidden('is_verified', '0');
                         setHidden('ocr_items_json', '');
@@ -1105,6 +1330,8 @@
                         const newVat = round2(sub * 0.15);
                         if (inputVat) inputVat.value = newVat.toFixed(2);
                         if (inputTotal) inputTotal.value = round2(sub + newVat).toFixed(2);
+                        if (inputAmount) inputAmount.value = round2(sub + newVat).toFixed(2);
+                        if (selectPurcType) selectPurcType.value = '3';
                         items.forEach(it => {
                             it.vat = round2(it.total_value * 0.15);
                             it.value_after_vat = round2(it.total_value + it.vat);
@@ -1119,6 +1346,8 @@
                         const sub = parseFloat(inputSubtotal ? inputSubtotal.value : 0) || 0;
                         if (inputVat) inputVat.value = '0.00';
                         if (inputTotal) inputTotal.value = sub.toFixed(2);
+                        if (inputAmount) inputAmount.value = sub.toFixed(2);
+                        if (selectPurcType) selectPurcType.value = '6';
                         items.forEach(it => {
                             it.vat = 0.00;
                             it.value_after_vat = it.total_value;
@@ -1128,20 +1357,54 @@
                     });
                 }
 
-                // Field input event listeners for instant live validation & sync
-                if (inputTin) inputTin.addEventListener('input', syncCalculations);
-                if (inputFs) inputFs.addEventListener('input', syncCalculations);
-                if (inputVendor) inputVendor.addEventListener('input', syncCalculations);
+                // PurcType selector listener
+                if (selectPurcType) {
+                    selectPurcType.addEventListener('change', () => {
+                        if (selectPurcType.value === '3' && optIncluded) {
+                            optIncluded.checked = true;
+                        } else if (selectPurcType.value === '6' && optNone) {
+                            optNone.checked = true;
+                        }
+                        syncCalculations();
+                    });
+                }
+
+                // 9 TAS Column field listeners for instant live editing & preview sync
+                if (inputPurchaserTin) inputPurchaserTin.addEventListener('input', syncCalculations);
+                if (inputSellerTin) inputSellerTin.addEventListener('input', syncCalculations);
+                if (inputReceiptNo) inputReceiptNo.addEventListener('input', syncCalculations);
                 if (inputMrc) inputMrc.addEventListener('input', syncCalculations);
+                if (inputEncodedBy) inputEncodedBy.addEventListener('input', syncCalculations);
+                if (inputVendor) inputVendor.addEventListener('input', syncCalculations);
                 if (inputDesc) inputDesc.addEventListener('input', syncCalculations);
+
+                if (inputAmount) {
+                    inputAmount.addEventListener('input', () => {
+                        const amt = parseFloat(inputAmount.value) || 0;
+                        const isVatIncluded = optIncluded && optIncluded.checked;
+                        if (isVatIncluded) {
+                            const sub = round2(amt / 1.15);
+                            const vat = round2(amt - sub);
+                            if (inputSubtotal) inputSubtotal.value = sub.toFixed(2);
+                            if (inputVat) inputVat.value = vat.toFixed(2);
+                        } else {
+                            if (inputSubtotal) inputSubtotal.value = amt.toFixed(2);
+                            if (inputVat) inputVat.value = '0.00';
+                        }
+                        if (inputTotal) inputTotal.value = amt.toFixed(2);
+                        syncCalculations();
+                    });
+                }
 
                 if (inputSubtotal) {
                     inputSubtotal.addEventListener('input', () => {
                         const isVatIncluded = optIncluded && optIncluded.checked;
                         const sub = parseFloat(inputSubtotal.value) || 0;
                         const vat = isVatIncluded ? round2(sub * 0.15) : 0.00;
+                        const tot = round2(sub + vat);
                         if (inputVat) inputVat.value = vat.toFixed(2);
-                        if (inputTotal) inputTotal.value = round2(sub + vat).toFixed(2);
+                        if (inputTotal) inputTotal.value = tot.toFixed(2);
+                        if (inputAmount) inputAmount.value = tot.toFixed(2);
                         syncCalculations();
                     });
                 }
@@ -1150,20 +1413,35 @@
                     inputVat.addEventListener('input', () => {
                         const sub = parseFloat(inputSubtotal ? inputSubtotal.value : 0) || 0;
                         const vat = parseFloat(inputVat.value) || 0;
-                        if (inputTotal) inputTotal.value = round2(sub + vat).toFixed(2);
+                        const tot = round2(sub + vat);
+                        if (inputTotal) inputTotal.value = tot.toFixed(2);
+                        if (inputAmount) inputAmount.value = tot.toFixed(2);
                         syncCalculations();
                     });
                 }
 
                 if (inputTotal) {
-                    inputTotal.addEventListener('input', syncCalculations);
+                    inputTotal.addEventListener('input', () => {
+                        if (inputAmount) inputAmount.value = inputTotal.value;
+                        syncCalculations();
+                    });
                 }
 
-                if (inputDate) {
-                    inputDate.addEventListener('change', () => {
-                        const newEc = gregorianToEthiopian(inputDate.value);
+                if (inputReceiptDate) {
+                    inputReceiptDate.addEventListener('change', () => {
+                        const newEc = gregorianToEthiopian(inputReceiptDate.value);
                         if (ecDisplay) {
                             ecDisplay.innerHTML = `<i class="fa-solid fa-calendar-days text-primary me-1"></i>${newEc ? newEc.formatted : 'N/A'}`;
+                        }
+                        syncCalculations();
+                    });
+                }
+
+                if (inputEncodingDate) {
+                    inputEncodingDate.addEventListener('change', () => {
+                        const newEc = gregorianToEthiopian(inputEncodingDate.value);
+                        if (encodingEcDisplay) {
+                            encodingEcDisplay.innerHTML = `<i class="fa-solid fa-clock text-secondary me-1"></i>${newEc ? newEc.formatted : 'N/A'}`;
                         }
                         syncCalculations();
                     });

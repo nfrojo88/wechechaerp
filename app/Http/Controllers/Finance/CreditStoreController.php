@@ -292,11 +292,22 @@ class CreditStoreController extends Controller
             'no_receipt'                 => 'nullable|boolean',
             'no_receipt_reason'          => 'nullable|string|max:255',
             'reference_no'               => 'nullable|string|max:150',
-            'supplier_tin'               => 'nullable|string|max:20',
-            'fs_no'                      => 'nullable|string|max:20',
+            'purchaser_tin'              => 'nullable|string|max:30',
+            'seller_tin'                 => 'nullable|string|max:30',
+            'supplier_tin'               => 'nullable|string|max:30',
+            'receipt_no'                 => 'nullable|string|max:50',
+            'fs_no'                      => 'nullable|string|max:50',
             'vendor_name'                => 'nullable|string|max:255',
+            'mrc'                        => 'nullable|string|max:100',
             'mrc_no'                     => 'nullable|string|max:100',
             'receipt_date'               => 'nullable|string|max:50',
+            'encoding_date'              => 'nullable|string|max:50',
+            'purc_type'                  => 'nullable|string|max:10',
+            'purchase_type'              => 'nullable|string|max:10',
+            'encoded_by'                 => 'nullable|string|max:100',
+            'subtotal'                   => 'nullable|numeric',
+            'total_amount'               => 'nullable|numeric',
+            'is_verified'                => 'nullable|boolean',
             'vat_included'               => 'nullable',
             'ocr_items_json'             => 'nullable|string',
             'ocr_engine'                 => 'nullable|string|max:100',
@@ -446,11 +457,15 @@ class CreditStoreController extends Controller
             if ($filePath) {
                 try {
                     $ocrService = app(\App\Services\ReceiptOcrService::class);
-                    $fsNo = $request->input('fs_no') ?: (preg_match('/(?:FS-?|fs-?)([0-9]{8})/i', $request->reference_no ?? '', $m) ? $m[1] : null);
-                    $supplierTin = trim((string)($request->input('supplier_tin') ?: ($request->input('vendor_tin') ?: '')));
+                    $fsNo = $request->input('receipt_no') ?: ($request->input('fs_no') ?: (preg_match('/(?:FS-?|fs-?)([0-9]{8})/i', $request->reference_no ?? '', $m) ? $m[1] : null));
+                    $purchaserTin = trim((string)($request->input('purchaser_tin') ?: ($request->input('buyer_tin') ?: '0038480010')));
+                    $supplierTin = trim((string)($request->input('seller_tin') ?: ($request->input('supplier_tin') ?: ($request->input('vendor_tin') ?: ''))));
                     $vendorName = trim((string)($request->input('vendor_name') ?: ($ledger->vendor_name ?: ($ledger->supplier_name ?: 'Credit Vendor'))));
-                    $mrcNo = trim((string)($request->input('mrc_no') ?: ($request->input('machine_no') ?: '')));
+                    $mrcNo = trim((string)($request->input('mrc') ?: ($request->input('mrc_no') ?: ($request->input('machine_no') ?: ''))));
                     $receiptDate = $request->input('receipt_date') ?: ($request->payment_date ?: now()->toDateString());
+                    $encodingDate = $request->input('encoding_date') ?: now()->toDateString();
+                    $encodedBy = trim((string)($request->input('encoded_by') ?: (Auth::user()?->name ?: 'wechacha')));
+                    $purchaseType = (int)($request->input('purc_type') ?: ($request->input('purchase_type') ?: ($vatIncluded ? 3 : 6)));
                     $effectiveVat = $vatIncluded ? (float)$vatAmount : 0.00;
 
                     // Parse itemized materials from OCR studio if submitted
@@ -472,7 +487,7 @@ class CreditStoreController extends Controller
                                     'total_value'      => $itTotal,
                                     'vat'              => $itVat,
                                     'value_after_vat'  => $itAfter,
-                                    'purchase_type'    => $vatIncluded ? 3 : 6,
+                                    'purchase_type'    => $purchaseType,
                                     'vat_category'     => $vatIncluded ? 'G' : 'E',
                                 ];
                             }
@@ -488,7 +503,7 @@ class CreditStoreController extends Controller
                             'total_value'      => (float)$settledCreditAmount,
                             'vat'              => $effectiveVat,
                             'value_after_vat'  => (float)($settledCreditAmount + $effectiveVat),
-                            'purchase_type'    => $vatIncluded ? 3 : 6,
+                            'purchase_type'    => $purchaseType,
                             'vat_category'     => $vatIncluded ? 'G' : 'E',
                         ];
                     }
@@ -498,16 +513,28 @@ class CreditStoreController extends Controller
                     $receiptVat = $vatIncluded ? ($request->filled('vat_amount') ? (float)$request->input('vat_amount') : $effectiveVat) : 0.00;
                     $receiptTotal = $request->filled('total_amount') ? (float)$request->input('total_amount') : round($receiptSubtotal + $receiptVat, 2);
 
+                    $cleanTin = preg_replace('/[^0-9]/', '', $supplierTin);
+                    $cleanFs = preg_replace('/[^0-9]/', '', (string)$fsNo);
+
                     $scanData = [
                         'vendor_name'       => $vendorName,
                         'supplier_tin'      => $supplierTin,
-                        'tin_valid'         => !empty($supplierTin) && strlen($supplierTin) === 10,
-                        'buyer_tin'         => '0038480010',
+                        'seller_tin'        => $supplierTin,
+                        'tin_valid'         => !empty($cleanTin) && strlen($cleanTin) === 10,
+                        'buyer_tin'         => $purchaserTin,
+                        'purchaser_tin'     => $purchaserTin,
                         'fs_no'             => $fsNo ?: ($request->reference_no ?: 'CR-PAY'),
                         'fs_no_raw'         => $fsNo ?: ($request->reference_no ?: 'CR-PAY'),
-                        'fs_no_valid'       => !empty($fsNo) && strlen($fsNo) === 8,
+                        'receipt_no'        => $fsNo ?: ($request->reference_no ?: 'CR-PAY'),
+                        'fs_no_valid'       => !empty($cleanFs) && strlen($cleanFs) === 8,
                         'mrc_no'            => $mrcNo,
+                        'mrc'               => $mrcNo,
                         'receipt_date_ymd'  => $receiptDate,
+                        'receipt_date'      => $receiptDate,
+                        'encoding_date'     => $encodingDate,
+                        'purchase_type'     => $purchaseType,
+                        'purc_type'         => $purchaseType,
+                        'encoded_by'        => $encodedBy,
                         'subtotal'          => round($receiptSubtotal, 2),
                         'vat_amount'        => round($receiptVat, 2),
                         'total_amount'      => round($receiptTotal, 2),
@@ -518,7 +545,7 @@ class CreditStoreController extends Controller
                         'confidence'        => $isVerified ? 'high' : ($request->input('ocr_confidence') ?: 'high'),
                         'confidence_score'  => $isVerified ? 100 : (int)($request->input('ocr_confidence_score') ?: 95),
                         'is_verified'       => $isVerified,
-                        'qc_notes'          => "Credit store payment receipt #{$payment->id}" . ($vatIncluded ? " [15% VAT Included - Sent to ERCA VAT Section]" : " [No VAT - Sent to TAS Excel]") . ($isVerified ? " [Verified by User]" : ""),
+                        'qc_notes'          => "Credit store payment receipt #{$payment->id}" . ($vatIncluded ? " [15% VAT Included - Sent to ERCA Line 100 VAT Section]" : " [No VAT - Sent to Purchase TAS Excel (Type {$purchaseType})]") . ($isVerified ? " [Verified by User]" : ""),
                         'vat_included'      => $vatIncluded,
                         'has_vat'           => $vatIncluded,
                         'vat_type'          => $vatType,
@@ -718,8 +745,28 @@ class CreditStoreController extends Controller
             'no_receipt'          => 'nullable|boolean',
             'no_receipt_reason'   => 'nullable|string|max:255',
             'reference_no'        => 'nullable|string|max:150',
-            'supplier_tin'        => 'nullable|string|max:20',
-            'fs_no'               => 'nullable|string|max:20',
+            'purchaser_tin'       => 'nullable|string|max:30',
+            'seller_tin'          => 'nullable|string|max:30',
+            'supplier_tin'        => 'nullable|string|max:30',
+            'receipt_no'          => 'nullable|string|max:50',
+            'fs_no'               => 'nullable|string|max:50',
+            'vendor_name'         => 'nullable|string|max:255',
+            'mrc'                 => 'nullable|string|max:100',
+            'mrc_no'              => 'nullable|string|max:100',
+            'receipt_date'        => 'nullable|string|max:50',
+            'encoding_date'       => 'nullable|string|max:50',
+            'purc_type'           => 'nullable|string|max:10',
+            'purchase_type'       => 'nullable|string|max:10',
+            'encoded_by'          => 'nullable|string|max:100',
+            'subtotal'            => 'nullable|numeric',
+            'vat_amount'          => 'nullable|numeric',
+            'total_amount'        => 'nullable|numeric',
+            'vat_included'        => 'nullable',
+            'ocr_items_json'      => 'nullable|string',
+            'ocr_engine'          => 'nullable|string|max:100',
+            'ocr_confidence'      => 'nullable|string|max:50',
+            'ocr_confidence_score'=> 'nullable|numeric',
+            'is_verified'         => 'nullable|boolean',
             'receipt_file'        => 'nullable|file|mimes:pdf,jpg,jpeg,png,webp|max:10240',
             'notes'               => 'nullable|string',
         ]);
@@ -891,12 +938,16 @@ class CreditStoreController extends Controller
         if ($filePath && $firstPayment) {
             try {
                 $ocrService = app(\App\Services\ReceiptOcrService::class);
-                $fsNo = $request->input('fs_no') ?: (preg_match('/(?:FS-?|fs-?)([0-9]{8})/i', $request->reference_no ?? '', $m) ? $m[1] : null);
-                $supplierTin = trim((string)($request->input('supplier_tin') ?: ($request->input('vendor_tin') ?: '')));
+                $fsNo = $request->input('receipt_no') ?: ($request->input('fs_no') ?: (preg_match('/(?:FS-?|fs-?)([0-9]{8})/i', $request->reference_no ?? '', $m) ? $m[1] : null));
+                $purchaserTin = trim((string)($request->input('purchaser_tin') ?: ($request->input('buyer_tin') ?: '0038480010')));
+                $supplierTin = trim((string)($request->input('seller_tin') ?: ($request->input('supplier_tin') ?: ($request->input('vendor_tin') ?: ''))));
                 $vendorName = trim((string)($request->input('vendor_name') ?: 'Batch Credit Settlement'));
-                $mrcNo = trim((string)($request->input('mrc_no') ?: ($request->input('machine_no') ?: '')));
+                $mrcNo = trim((string)($request->input('mrc') ?: ($request->input('mrc_no') ?: ($request->input('machine_no') ?: ''))));
                 $receiptDate = $request->input('receipt_date') ?: ($request->payment_date ?: now()->toDateString());
+                $encodingDate = $request->input('encoding_date') ?: now()->toDateString();
+                $encodedBy = trim((string)($request->input('encoded_by') ?: (Auth::user()?->name ?: 'wechacha')));
                 $vatIncluded = $request->boolean('vat_included', false);
+                $purchaseType = (int)($request->input('purc_type') ?: ($request->input('purchase_type') ?: ($vatIncluded ? 3 : 6)));
                 $vatAmount = $vatIncluded ? (float)$request->input('vat_amount', round($totalPaidSum * 0.15, 2)) : 0.00;
 
                 $items = [];
@@ -917,7 +968,7 @@ class CreditStoreController extends Controller
                                 'total_value'      => $itTotal,
                                 'vat'              => $itVat,
                                 'value_after_vat'  => $itAfter,
-                                'purchase_type'    => $vatIncluded ? 3 : 6,
+                                'purchase_type'    => $purchaseType,
                                 'vat_category'     => $vatIncluded ? 'G' : 'E',
                             ];
                         }
@@ -933,7 +984,7 @@ class CreditStoreController extends Controller
                         'total_value'      => (float)$totalPaidSum,
                         'vat'              => $vatAmount,
                         'value_after_vat'  => (float)($totalPaidSum + $vatAmount),
-                        'purchase_type'    => $vatIncluded ? 3 : 6,
+                        'purchase_type'    => $purchaseType,
                         'vat_category'     => $vatIncluded ? 'G' : 'E',
                     ];
                 }
@@ -943,16 +994,28 @@ class CreditStoreController extends Controller
                 $receiptVat = $vatIncluded ? ($request->filled('vat_amount') ? (float)$request->input('vat_amount') : $vatAmount) : 0.00;
                 $receiptTotal = $request->filled('total_amount') ? (float)$request->input('total_amount') : round($receiptSubtotal + $receiptVat, 2);
 
+                $cleanTin = preg_replace('/[^0-9]/', '', $supplierTin);
+                $cleanFs = preg_replace('/[^0-9]/', '', (string)$fsNo);
+
                 $scanData = [
                     'vendor_name'       => $vendorName,
                     'supplier_tin'      => $supplierTin,
-                    'tin_valid'         => !empty($supplierTin) && strlen($supplierTin) === 10,
-                    'buyer_tin'         => '0038480010',
+                    'seller_tin'        => $supplierTin,
+                    'tin_valid'         => !empty($cleanTin) && strlen($cleanTin) === 10,
+                    'buyer_tin'         => $purchaserTin,
+                    'purchaser_tin'     => $purchaserTin,
                     'fs_no'             => $fsNo ?: ($request->reference_no ?: 'BATCH-CR'),
                     'fs_no_raw'         => $fsNo ?: ($request->reference_no ?: 'BATCH-CR'),
-                    'fs_no_valid'       => !empty($fsNo) && strlen($fsNo) === 8,
+                    'receipt_no'        => $fsNo ?: ($request->reference_no ?: 'BATCH-CR'),
+                    'fs_no_valid'       => !empty($cleanFs) && strlen($cleanFs) === 8,
                     'mrc_no'            => $mrcNo,
+                    'mrc'               => $mrcNo,
                     'receipt_date_ymd'  => $receiptDate,
+                    'receipt_date'      => $receiptDate,
+                    'encoding_date'     => $encodingDate,
+                    'purchase_type'     => $purchaseType,
+                    'purc_type'         => $purchaseType,
+                    'encoded_by'        => $encodedBy,
                     'subtotal'          => round($receiptSubtotal, 2),
                     'vat_amount'        => round($receiptVat, 2),
                     'total_amount'      => round($receiptTotal, 2),
@@ -963,7 +1026,7 @@ class CreditStoreController extends Controller
                     'confidence'        => $isVerified ? 'high' : ($request->input('ocr_confidence') ?: 'high'),
                     'confidence_score'  => $isVerified ? 100 : (int)($request->input('ocr_confidence_score') ?: 95),
                     'is_verified'       => $isVerified,
-                    'qc_notes'          => "Batch settlement shared receipt ({$processedCount} purchases)" . ($vatIncluded ? " [15% VAT Included - Sent to ERCA VAT Section]" : " [No VAT - Sent to TAS Excel]") . ($isVerified ? " [Verified by User]" : ""),
+                    'qc_notes'          => "Batch settlement shared receipt ({$processedCount} purchases)" . ($vatIncluded ? " [15% VAT Included - Sent to ERCA Line 100 VAT Section]" : " [No VAT - Sent to Purchase TAS Excel (Type {$purchaseType})]") . ($isVerified ? " [Verified by User]" : ""),
                     'vat_included'      => $vatIncluded,
                     'has_vat'           => $vatIncluded,
                     'items'             => $items,
@@ -996,7 +1059,30 @@ class CreditStoreController extends Controller
         $ledger = $creditStore;
 
         $request->validate([
-            'receipt_file' => 'required|file|mimes:pdf,jpg,jpeg,png,webp|max:10240',
+            'receipt_file'        => 'required|file|mimes:pdf,jpg,jpeg,png,webp|max:10240',
+            'purchaser_tin'       => 'nullable|string|max:30',
+            'seller_tin'          => 'nullable|string|max:30',
+            'supplier_tin'        => 'nullable|string|max:30',
+            'vendor_tin'          => 'nullable|string|max:30',
+            'receipt_no'          => 'nullable|string|max:50',
+            'fs_no'               => 'nullable|string|max:50',
+            'vendor_name'         => 'nullable|string|max:255',
+            'mrc'                 => 'nullable|string|max:100',
+            'mrc_no'              => 'nullable|string|max:100',
+            'receipt_date'        => 'nullable|string|max:50',
+            'encoding_date'       => 'nullable|string|max:50',
+            'purc_type'           => 'nullable|string|max:10',
+            'purchase_type'       => 'nullable|string|max:10',
+            'encoded_by'          => 'nullable|string|max:100',
+            'subtotal'            => 'nullable|numeric',
+            'vat_amount'          => 'nullable|numeric',
+            'total_amount'        => 'nullable|numeric',
+            'vat_included'        => 'nullable',
+            'ocr_items_json'      => 'nullable|string',
+            'ocr_engine'          => 'nullable|string|max:100',
+            'ocr_confidence'      => 'nullable|string|max:50',
+            'ocr_confidence_score'=> 'nullable|numeric',
+            'is_verified'         => 'nullable|boolean',
         ]);
 
         $file = $request->file('receipt_file');
@@ -1010,12 +1096,16 @@ class CreditStoreController extends Controller
 
         try {
             $ocrService = app(\App\Services\ReceiptOcrService::class);
-            $fsNo = $request->input('fs_no') ?: ($payment->reference_no ?: 'CR-PAY');
-            $supplierTin = trim((string)($request->input('supplier_tin') ?: ($request->input('vendor_tin') ?: '')));
+            $fsNo = $request->input('receipt_no') ?: ($request->input('fs_no') ?: ($payment->reference_no ?: 'CR-PAY'));
+            $purchaserTin = trim((string)($request->input('purchaser_tin') ?: ($request->input('buyer_tin') ?: '0038480010')));
+            $supplierTin = trim((string)($request->input('seller_tin') ?: ($request->input('supplier_tin') ?: ($request->input('vendor_tin') ?: ''))));
             $vendorName = trim((string)($request->input('vendor_name') ?: ($ledger->vendor_name ?: ($ledger->supplier_name ?: 'Credit Vendor'))));
-            $mrcNo = trim((string)($request->input('mrc_no') ?: ''));
+            $mrcNo = trim((string)($request->input('mrc') ?: ($request->input('mrc_no') ?: '')));
             $receiptDate = $request->input('receipt_date') ?: ($payment->payment_date ?: now()->toDateString());
+            $encodingDate = $request->input('encoding_date') ?: now()->toDateString();
+            $encodedBy = trim((string)($request->input('encoded_by') ?: (Auth::user()?->name ?: 'wechacha')));
             $vatIncluded = $request->boolean('vat_included', ((float)($payment->vat_amount ?? 0) > 0));
+            $purchaseType = (int)($request->input('purc_type') ?: ($request->input('purchase_type') ?: ($vatIncluded ? 3 : 6)));
             $isVerified = $request->boolean('is_verified', true);
             $receiptSubtotal = $request->filled('subtotal') ? (float)$request->input('subtotal') : (float)$payment->amount;
             $vatAmount = $vatIncluded ? (float)$request->input('vat_amount', $payment->vat_amount ?? round($receiptSubtotal * 0.15, 2)) : 0.00;
@@ -1040,7 +1130,7 @@ class CreditStoreController extends Controller
                             'total_value'      => $itTotal,
                             'vat'              => $itVat,
                             'value_after_vat'  => $itAfter,
-                            'purchase_type'    => $vatIncluded ? 3 : 6,
+                            'purchase_type'    => $purchaseType,
                             'vat_category'     => $vatIncluded ? 'G' : 'E',
                         ];
                     }
@@ -1056,21 +1146,33 @@ class CreditStoreController extends Controller
                     'total_value'      => (float)$receiptSubtotal,
                     'vat'              => $vatAmount,
                     'value_after_vat'  => (float)($receiptSubtotal + $vatAmount),
-                    'purchase_type'    => $vatIncluded ? 3 : 6,
+                    'purchase_type'    => $purchaseType,
                     'vat_category'     => $vatIncluded ? 'G' : 'E',
                 ];
             }
 
+            $cleanTin = preg_replace('/[^0-9]/', '', $supplierTin);
+            $cleanFs = preg_replace('/[^0-9]/', '', (string)$fsNo);
+
             $scanData = [
                 'vendor_name'       => $vendorName,
                 'supplier_tin'      => $supplierTin,
-                'tin_valid'         => !empty($supplierTin) && strlen($supplierTin) === 10,
-                'buyer_tin'         => '0038480010',
+                'seller_tin'        => $supplierTin,
+                'tin_valid'         => !empty($cleanTin) && strlen($cleanTin) === 10,
+                'buyer_tin'         => $purchaserTin,
+                'purchaser_tin'     => $purchaserTin,
                 'fs_no'             => $fsNo,
                 'fs_no_raw'         => $fsNo,
-                'fs_no_valid'       => !empty($fsNo) && strlen($fsNo) === 8,
+                'receipt_no'        => $fsNo,
+                'fs_no_valid'       => !empty($cleanFs) && strlen($cleanFs) === 8,
                 'mrc_no'            => $mrcNo,
+                'mrc'               => $mrcNo,
                 'receipt_date_ymd'  => $receiptDate,
+                'receipt_date'      => $receiptDate,
+                'encoding_date'     => $encodingDate,
+                'purchase_type'     => $purchaseType,
+                'purc_type'         => $purchaseType,
+                'encoded_by'        => $encodedBy,
                 'subtotal'          => round($receiptSubtotal, 2),
                 'vat_amount'        => round($vatAmount, 2),
                 'total_amount'      => round($receiptTotal, 2),
@@ -1078,10 +1180,10 @@ class CreditStoreController extends Controller
                 'description'       => "Receipt attached for {$vendorName} (#{$payment->id})",
                 'engine'            => $request->input('ocr_engine') ?: 'Receipt OCR Studio',
                 'engine_slug'       => 'credit_payment',
-                'confidence'        => $isVerified ? 'high' : 'medium',
-                'confidence_score'  => $isVerified ? 100 : 95,
+                'confidence'        => $isVerified ? 'high' : ($request->input('ocr_confidence') ?: 'high'),
+                'confidence_score'  => $isVerified ? 100 : (int)($request->input('ocr_confidence_score') ?: 95),
                 'is_verified'       => $isVerified,
-                'qc_notes'          => "Receipt attached to payment #{$payment->id}" . ($vatIncluded ? " [15% VAT Included - Sent to ERCA VAT Section]" : " [No VAT - Sent to TAS Excel]") . ($isVerified ? " [Verified by User]" : ""),
+                'qc_notes'          => "Receipt attached to payment #{$payment->id}" . ($vatIncluded ? " [15% VAT Included - Sent to ERCA Line 100 VAT Section]" : " [No VAT - Sent to Purchase TAS Excel (Type {$purchaseType})]") . ($isVerified ? " [Verified by User]" : ""),
                 'vat_included'      => $vatIncluded,
                 'has_vat'           => $vatIncluded,
                 'items'             => $items,

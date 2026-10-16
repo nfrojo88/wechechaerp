@@ -350,13 +350,13 @@ class ReceiptOcrService
                 'uploaded_by'      => $userId,
                 'project_id'       => $projectId,
                 'vendor_name'      => $scanData['vendor_name'] ?: 'General Merchant',
-                'vendor_tin'       => $supplierTin,
+                'vendor_tin'       => $supplierTin ?: ($scanData['seller_tin'] ?? ''),
                 'tin_valid'        => $tinValid,
-                'buyer_tin'        => $scanData['buyer_tin'] ?? '0038480010',
-                'fs_no'            => $fsNo,
-                'fs_no_raw'        => $fsNoRaw,
+                'buyer_tin'        => $scanData['buyer_tin'] ?? ($scanData['purchaser_tin'] ?? '0038480010'),
+                'fs_no'            => $fsNo ?: ($scanData['receipt_no'] ?? ''),
+                'fs_no_raw'        => $fsNoRaw ?: ($scanData['receipt_no'] ?? $fsNo),
                 'fs_no_valid'      => $fsNoValid,
-                'mrc_no'           => $scanData['mrc_no'] ?? null,
+                'mrc_no'           => $scanData['mrc_no'] ?? ($scanData['mrc'] ?? null),
                 'receipt_date'     => $receiptDate,
                 'subtotal'         => QcService::parseMoney($scanData['subtotal'] ?? 0),
                 'vat_amount'       => QcService::parseMoney($scanData['vat_amount'] ?? 0),
@@ -371,7 +371,19 @@ class ReceiptOcrService
                 'confidence'       => $isVerified ? 'high' : ($scanData['confidence'] ?? 'high'),
                 'confidence_score' => $isVerified ? 100 : (int)($scanData['confidence_score'] ?? 90),
                 'needs_review'     => $needsReview,
-                'parsed_data'      => $scanData['extracted'] ?? $scanData,
+                'parsed_data'      => array_merge(
+                    is_array($scanData['extracted'] ?? null) ? $scanData['extracted'] : [],
+                    $scanData,
+                    [
+                        'purchaser_tin' => $scanData['buyer_tin'] ?? ($scanData['purchaser_tin'] ?? '0038480010'),
+                        'seller_tin'    => $supplierTin ?: ($scanData['seller_tin'] ?? ''),
+                        'receipt_no'    => $fsNo ?: ($scanData['receipt_no'] ?? ''),
+                        'encoding_date' => $scanData['encoding_date'] ?? now()->toDateString(),
+                        'encoded_by'    => $scanData['encoded_by'] ?? 'wechacha',
+                        'purc_type'     => $scanData['purc_type'] ?? ($scanData['purchase_type'] ?? ($isNonVatReceipt ? 6 : 3)),
+                        'mrc'           => $scanData['mrc_no'] ?? ($scanData['mrc'] ?? ''),
+                    ]
+                ),
                 'parse_status'     => 'parsed',
                 'status'           => 'approved',
                 'approved_by'      => $userId,
@@ -406,7 +418,7 @@ class ReceiptOcrService
                 }
 
                 $itemPurcNorm = QcService::normalizePurchaseType(
-                    $item['purchase_type'] ?? ($isNonVatReceipt ? 6 : ($scanData['purchase_type'] ?? ($scanData['extracted']['purchase_type'] ?? null))),
+                    $item['purchase_type'] ?? ($scanData['purc_type'] ?? ($scanData['purchase_type'] ?? ($isNonVatReceipt ? 6 : ($scanData['extracted']['purchase_type'] ?? null)))),
                     ($item['item_description'] ?? '') . ' ' . ($scanData['vendor_name'] ?? '')
                 );
 
@@ -415,7 +427,7 @@ class ReceiptOcrService
                     'item_description' => $item['item_description'] ?? 'Material',
                     'vat_category'     => $isNonVatReceipt ? 'E' : $itemPurcNorm['vat_category'],
                     'calendar_type'    => $scanData['extracted']['calendar_type'] ?? ($scanData['calendar_type'] ?? 'E'),
-                    'purchase_type'    => $isNonVatReceipt ? 6 : $itemPurcNorm['code'],
+                    'purchase_type'    => isset($item['purchase_type']) ? (int)$item['purchase_type'] : ($scanData['purc_type'] ?? ($scanData['purchase_type'] ?? ($isNonVatReceipt ? 6 : $itemPurcNorm['code']))),
                     'uom'              => (string)($item['uom'] ?? ($scanData['extracted']['uom_id'] ?? ($scanData['uom_id'] ?? '9'))),
                     'qty'              => $qty,
                     'unit_price'       => $unitPrice,

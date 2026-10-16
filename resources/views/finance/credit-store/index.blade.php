@@ -539,11 +539,19 @@
                                                 </div>
 
                                                 <div id="creditBatchOcrFeedbackArea"></div>
+                                                <input type="hidden" name="purchaser_tin" id="creditBatchPurchaserTin" value="0038480010">
+                                                <input type="hidden" name="seller_tin" id="creditBatchSellerTin">
                                                 <input type="hidden" name="supplier_tin" id="creditBatchSupplierTin">
+                                                <input type="hidden" name="receipt_no" id="creditBatchReceiptNo">
                                                 <input type="hidden" name="fs_no" id="creditBatchFsNo">
                                                 <input type="hidden" name="vendor_name" id="creditBatchVendorName">
+                                                <input type="hidden" name="mrc" id="creditBatchMrc">
                                                 <input type="hidden" name="mrc_no" id="creditBatchMrcNo">
                                                 <input type="hidden" name="receipt_date" id="creditBatchReceiptDate">
+                                                <input type="hidden" name="encoding_date" id="creditBatchEncodingDate" value="{{ date('Y-m-d') }}">
+                                                <input type="hidden" name="purc_type" id="creditBatchPurcType" value="6">
+                                                <input type="hidden" name="purchase_type" id="creditBatchPurchaseType" value="6">
+                                                <input type="hidden" name="encoded_by" id="creditBatchEncodedBy" value="{{ strtolower(preg_replace('/[^a-zA-Z0-9_]/', '', Auth::user()->name ?? 'wechacha')) }}">
                                                 <input type="hidden" name="subtotal" id="creditBatchSubtotal">
                                                 <input type="hidden" name="vat_amount" id="creditBatchVatAmount">
                                                 <input type="hidden" name="total_amount" id="creditBatchTotalAmount">
@@ -905,10 +913,20 @@
                 form: '#batchPaymentModal form',
                 submitBtn: '#submitBatchPaymentBtn',
                 statusContainer: '#creditBatchOcrFeedbackArea',
+                studioMode: true,
+                purchaserTin: '0038480010',
+                encodedBy: '{{ strtolower(preg_replace("/[^a-zA-Z0-9_]/", "", Auth::user()->name ?? "wechacha")) }}',
                 fields: {
+                    purchaser_tin: '#creditBatchPurchaserTin',
+                    seller_tin: '#creditBatchSellerTin',
                     supplier_tin: '#creditBatchSupplierTin',
+                    receipt_no: '#creditBatchReceiptNo',
                     fs_no: '#creditBatchFsNo',
                     receipt_date: 'input[name="payment_date"]',
+                    encoding_date: '#creditBatchEncodingDate',
+                    mrc: '#creditBatchMrc',
+                    purc_type: '#creditBatchPurcType',
+                    encoded_by: '#creditBatchEncodedBy',
                     notes: 'input[name="notes"]'
                 },
                 onScanComplete: function(scanData) {

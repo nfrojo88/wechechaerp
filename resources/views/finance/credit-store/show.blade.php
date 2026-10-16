@@ -702,11 +702,19 @@
                                                     </div>
 
                                                     <div id="creditSingleOcrFeedbackArea"></div>
+                                                    <input type="hidden" name="purchaser_tin" id="creditSinglePurchaserTin" value="0038480010">
+                                                    <input type="hidden" name="seller_tin" id="creditSingleSellerTin">
                                                     <input type="hidden" name="supplier_tin" id="creditSingleSupplierTin">
+                                                    <input type="hidden" name="receipt_no" id="creditSingleReceiptNo">
                                                     <input type="hidden" name="fs_no" id="creditSingleFsNo">
                                                     <input type="hidden" name="vendor_name" id="creditSingleVendorName">
+                                                    <input type="hidden" name="mrc" id="creditSingleMrc">
                                                     <input type="hidden" name="mrc_no" id="creditSingleMrcNo">
                                                     <input type="hidden" name="receipt_date" id="creditSingleReceiptDate">
+                                                    <input type="hidden" name="encoding_date" id="creditSingleEncodingDate" value="{{ date('Y-m-d') }}">
+                                                    <input type="hidden" name="purc_type" id="creditSinglePurcType" value="3">
+                                                    <input type="hidden" name="purchase_type" id="creditSinglePurchaseType" value="3">
+                                                    <input type="hidden" name="encoded_by" id="creditSingleEncodedBy" value="{{ strtolower(preg_replace('/[^a-zA-Z0-9_]/', '', Auth::user()->name ?? 'wechacha')) }}">
                                                     <input type="hidden" name="subtotal" id="creditSingleSubtotal">
                                                     <input type="hidden" name="vat_amount" id="creditSingleVatAmount">
                                                     <input type="hidden" name="total_amount" id="creditSingleTotalAmount">
@@ -902,10 +910,20 @@
                                             form: 'form[action*="record-payment"]',
                                             submitBtn: '#singleSubmitBtn',
                                             statusContainer: '#creditSingleOcrFeedbackArea',
+                                            studioMode: true,
+                                            purchaserTin: '0038480010',
+                                            encodedBy: '{{ strtolower(preg_replace("/[^a-zA-Z0-9_]/", "", Auth::user()->name ?? "wechacha")) }}',
                                             fields: {
+                                                purchaser_tin: '#creditSinglePurchaserTin',
+                                                seller_tin: '#creditSingleSellerTin',
                                                 supplier_tin: '#creditSingleSupplierTin',
+                                                receipt_no: '#creditSingleReceiptNo',
                                                 fs_no: '#creditSingleFsNo',
                                                 receipt_date: 'input[name="payment_date"]',
+                                                encoding_date: '#creditSingleEncodingDate',
+                                                mrc: '#creditSingleMrc',
+                                                purc_type: '#creditSinglePurcType',
+                                                encoded_by: '#creditSingleEncodedBy',
                                                 notes: 'textarea[name="notes"]'
                                             },
                                             onScanComplete: function(scanData) {
@@ -1015,7 +1033,9 @@
                         form: '#attachReceiptModal_{{ $pmt->id }} form',
                         submitBtn: '#attachSubmitBtn_{{ $pmt->id }}',
                         statusContainer: '#attachReceiptFeedback_{{ $pmt->id }}',
-                        studioMode: true
+                        studioMode: true,
+                        purchaserTin: '0038480010',
+                        encodedBy: '{{ strtolower(preg_replace("/[^a-zA-Z0-9_]/", "", Auth::user()->name ?? "wechacha")) }}'
                     });
                 }
             });

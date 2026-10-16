@@ -2272,21 +2272,28 @@ class FinanceTaxReportController extends Controller
                 }
             }
 
-            $receiptDate = $r && $r->receipt_date ? EthiopianDate::formatDateEc($r->receipt_date, 'DD/MM/YYYY EC') : EthiopianDate::formatDateEc(now(), 'DD/MM/YYYY EC');
-            $encodingDate = ($r && $r->created_at) ? EthiopianDate::formatDateEc($r->created_at, 'DD/MM/YYYY EC') : EthiopianDate::formatDateEc(now(), 'DD/MM/YYYY EC');
-            $mrc = $r && !empty($r->mrc_no) ? trim((string)$r->mrc_no) : '';
+            $parsed = is_string($r->parsed_data ?? null) ? (json_decode($r->parsed_data, true) ?: []) : (array)($r->parsed_data ?? []);
+            $receiptDate = !empty($parsed['receipt_date'])
+                ? EthiopianDate::formatDateEc($parsed['receipt_date'], 'DD/MM/YYYY EC')
+                : ($r && $r->receipt_date ? EthiopianDate::formatDateEc($r->receipt_date, 'DD/MM/YYYY EC') : EthiopianDate::formatDateEc(now(), 'DD/MM/YYYY EC'));
+            $encodingDate = !empty($parsed['encoding_date'])
+                ? EthiopianDate::formatDateEc($parsed['encoding_date'], 'DD/MM/YYYY EC')
+                : (($r && $r->created_at) ? EthiopianDate::formatDateEc($r->created_at, 'DD/MM/YYYY EC') : EthiopianDate::formatDateEc(now(), 'DD/MM/YYYY EC'));
+            $mrc = $r && !empty($r->mrc_no) ? trim((string)$r->mrc_no) : (!empty($parsed['mrc']) ? trim((string)$parsed['mrc']) : '');
 
             $purcNorm = QcService::normalizePurchaseType(
-                $item->purchase_type ?: ($item->vat_category ?: ($r->category ?? null)),
+                $item->purchase_type ?: ($item->vat_category ?: (!empty($parsed['purc_type']) ? $parsed['purc_type'] : ($r->category ?? null))),
                 ($item->item_description ?? '') . ' ' . ($r ? $r->vendor_name : '')
             );
             $purcType = $purcNorm['type'];
 
             $encodedBy = $request->input('encoded_by') ?: (
-                SystemSetting::get('etax_encoded_by') ?: (
-                    $r && $r->uploader && !in_array(strtolower($r->uploader->name), ['admin', 'global admin', 'system'])
-                        ? strtolower(preg_replace('/[^a-zA-Z0-9_]/', '', $r->uploader->name))
-                        : 'wechacha'
+                !empty($parsed['encoded_by']) ? strtolower(preg_replace('/[^a-zA-Z0-9_]/', '', $parsed['encoded_by'])) : (
+                    SystemSetting::get('etax_encoded_by') ?: (
+                        $r && $r->uploader && !in_array(strtolower($r->uploader->name), ['admin', 'global admin', 'system'])
+                            ? strtolower(preg_replace('/[^a-zA-Z0-9_]/', '', $r->uploader->name))
+                            : 'wechacha'
+                    )
                 )
             );
             if (empty($encodedBy)) $encodedBy = 'wechacha';
@@ -2305,31 +2312,39 @@ class FinanceTaxReportController extends Controller
         }
 
         foreach ($standaloneReceipts as $r) {
-            $buyerTin = $r->buyer_tin ?: $defaultPurchaserTin;
+            $parsed = is_string($r->parsed_data ?? null) ? (json_decode($r->parsed_data, true) ?: []) : (array)($r->parsed_data ?? []);
+            $buyerTin = $r->buyer_tin ?: (!empty($parsed['purchaser_tin']) ? $parsed['purchaser_tin'] : $defaultPurchaserTin);
             $buyerDigits = preg_replace('/^0+/', '', preg_replace('/[^0-9]/', '', (string)$buyerTin));
             $purchaserTinVal = ($buyerDigits !== '') ? (int)$buyerDigits : $defaultPurchaserDigits;
 
-            $rawTin = (string)$r->vendor_tin;
+            $rawTin = (string)($r->vendor_tin ?: (!empty($parsed['seller_tin']) ? $parsed['seller_tin'] : ''));
             $sellerDigits = preg_replace('/^0+/', '', preg_replace('/[^0-9]/', '', $rawTin));
             $sellerTinVal = ($sellerDigits !== '') ? (int)$sellerDigits : (trim($rawTin) ?: '');
 
             $amountVal = round((float)$r->total_amount, 2);
 
-            $receiptNo = trim((string)($r->fs_no_raw ?: ($r->fs_no ?: $r->receipt_number)));
+            $receiptNo = trim((string)($r->fs_no_raw ?: ($r->fs_no ?: ($parsed['receipt_no'] ?? $r->receipt_number))));
             if (!empty($r->fs_no) && preg_match('/^\d+$/', $r->fs_no)) {
                 $receiptNo = 'FS' . str_pad($r->fs_no, 8, '0', STR_PAD_LEFT);
             }
 
-            $receiptDate = $r->receipt_date ? EthiopianDate::formatDateEc($r->receipt_date, 'DD/MM/YYYY EC') : EthiopianDate::formatDateEc(now(), 'DD/MM/YYYY EC');
-            $encodingDate = $r->created_at ? EthiopianDate::formatDateEc($r->created_at, 'DD/MM/YYYY EC') : EthiopianDate::formatDateEc(now(), 'DD/MM/YYYY EC');
-            $mrc = trim((string)($r->mrc_no ?? ''));
+            $receiptDate = !empty($parsed['receipt_date'])
+                ? EthiopianDate::formatDateEc($parsed['receipt_date'], 'DD/MM/YYYY EC')
+                : ($r->receipt_date ? EthiopianDate::formatDateEc($r->receipt_date, 'DD/MM/YYYY EC') : EthiopianDate::formatDateEc(now(), 'DD/MM/YYYY EC'));
+            $encodingDate = !empty($parsed['encoding_date'])
+                ? EthiopianDate::formatDateEc($parsed['encoding_date'], 'DD/MM/YYYY EC')
+                : ($r->created_at ? EthiopianDate::formatDateEc($r->created_at, 'DD/MM/YYYY EC') : EthiopianDate::formatDateEc(now(), 'DD/MM/YYYY EC'));
+            $mrc = trim((string)($r->mrc_no ?: (!empty($parsed['mrc']) ? $parsed['mrc'] : '')));
 
-            $purcNorm = QcService::normalizePurchaseType($r->category, ($r->description ?? '') . ' ' . $r->vendor_name);
+            $purcNorm = QcService::normalizePurchaseType(!empty($parsed['purc_type']) ? $parsed['purc_type'] : $r->category, ($r->description ?? '') . ' ' . $r->vendor_name);
             $purcType = $purcNorm['type'];
 
-            $encodedBy = $r->uploader && !in_array(strtolower($r->uploader->name), ['admin', 'global admin', 'system'])
-                ? strtolower(preg_replace('/[^a-zA-Z0-9_]/', '', $r->uploader->name))
-                : 'wechacha';
+            $encodedBy = !empty($parsed['encoded_by']) ? strtolower(preg_replace('/[^a-zA-Z0-9_]/', '', $parsed['encoded_by'])) : (
+                $r->uploader && !in_array(strtolower($r->uploader->name), ['admin', 'global admin', 'system'])
+                    ? strtolower(preg_replace('/[^a-zA-Z0-9_]/', '', $r->uploader->name))
+                    : 'wechacha'
+            );
+            if (empty($encodedBy)) $encodedBy = 'wechacha';
 
             $rows[] = [
                 $purchaserTinVal,
