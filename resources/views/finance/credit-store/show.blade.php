@@ -1135,30 +1135,29 @@
         @endphp
 
         <!-- Edit Payment VAT Modal for Payment #{{ $pmt->id }} (Global Admin Only) -->
-        <div class="modal fade" id="editPaymentVatModal_{{ $pmt->id }}" tabindex="-1" aria-labelledby="editPaymentVatModalLabel_{{ $pmt->id }}" aria-hidden="true">
-            <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
-                <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
-                    <form action="{{ route('finance.credit-store.correct-vat', [$ledger, $pmt]) }}" method="POST" enctype="multipart/form-data">
-                        @csrf
-                        <div class="modal-header bg-dark text-white py-3 px-4">
-                            <div class="d-flex align-items-center gap-2">
-                                <span class="badge bg-warning text-dark p-2 rounded-circle">
-                                    <i class="fa-solid fa-user-shield fs-6"></i>
-                                </span>
-                                <div>
-                                    <div class="d-flex align-items-center gap-2">
-                                        <h6 class="modal-title fw-bold mb-0">Global Admin: Correct VAT &amp; Tax Declaration</h6>
-                                        <span class="badge bg-warning text-dark" style="font-size:0.68rem;">Privileged Mode</span>
-                                    </div>
-                                    <small class="text-white-50">
-                                        Payment #{{ $pmt->id }} &bull; Amount: {{ number_format($pmt->amount, 2) }} ETB &bull; PR #{{ $ledger->pr_no }} &bull; {{ $ledger->supplier_name ?: 'Supplier' }}
-                                    </small>
+        <div class="modal fade" id="editPaymentVatModal_{{ $pmt->id }}" tabindex="-1" aria-labelledby="editPaymentVatModalLabel_{{ $pmt->id }}" aria-hidden="true" data-bs-backdrop="static">
+            <div class="modal-dialog modal-lg modal-dialog-scrollable my-3">
+                <form action="{{ route('finance.credit-store.correct-vat', [$ledger, $pmt]) }}" method="POST" enctype="multipart/form-data" class="modal-content border-0 shadow-lg rounded-4 overflow-hidden" style="max-height: calc(100vh - 3.5rem); display: flex; flex-direction: column;">
+                    @csrf
+                    <div class="modal-header bg-dark text-white py-3 px-4 flex-shrink-0">
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="badge bg-warning text-dark p-2 rounded-circle">
+                                <i class="fa-solid fa-user-shield fs-6"></i>
+                            </span>
+                            <div>
+                                <div class="d-flex align-items-center gap-2">
+                                    <h6 class="modal-title fw-bold mb-0">Global Admin: Correct VAT &amp; Tax Declaration</h6>
+                                    <span class="badge bg-warning text-dark" style="font-size:0.68rem;">Privileged Mode</span>
                                 </div>
+                                <small class="text-white-50">
+                                    Payment #{{ $pmt->id }} &bull; Amount: {{ number_format($pmt->amount, 2) }} ETB &bull; PR #{{ $ledger->pr_no }} &bull; {{ $ledger->supplier_name ?: 'Supplier' }}
+                                </small>
                             </div>
-                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                         </div>
-                        
-                        <div class="modal-body p-4" style="background-color: #fbfbfb;">
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    
+                    <div class="modal-body p-4 flex-grow-1" id="editPaymentVatModalBody_{{ $pmt->id }}" style="overflow-y: auto; overscroll-behavior: contain; background-color: #fbfbfb;">
                             <!-- Informational alert -->
                             <div class="alert alert-warning border border-warning-subtle bg-white rounded-3 p-3 mb-3 shadow-2xs">
                                 <div class="d-flex align-items-start gap-2">
@@ -1383,14 +1382,13 @@
                             </div>
                         </div>
 
-                        <div class="modal-footer bg-light py-2.5 px-4 d-flex justify-content-between">
-                            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-                            <button type="submit" class="btn btn-warning text-dark fw-bold btn-sm px-3 shadow-sm">
-                                <i class="fa-solid fa-check-double me-1"></i> Save Correction &amp; Resync Records
-                            </button>
-                        </div>
-                    </form>
-                </div>
+                    <div class="modal-footer bg-light py-2.5 px-4 d-flex justify-content-between flex-shrink-0">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-warning text-dark fw-bold btn-sm px-3 shadow-sm">
+                            <i class="fa-solid fa-check-double me-1"></i> Save Correction &amp; Resync Records
+                        </button>
+                    </div>
+                </form>
             </div>
         </div>
     @endforeach
@@ -1487,6 +1485,17 @@
                 }
             }
         }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            document.querySelectorAll('[id^="editPaymentVatModal_"]').forEach(modalEl => {
+                modalEl.addEventListener('shown.bs.modal', function () {
+                    const bodyEl = this.querySelector('.modal-body');
+                    if (bodyEl) {
+                        bodyEl.scrollTop = 0;
+                    }
+                });
+            });
+        });
     </script>
 @endif
 
