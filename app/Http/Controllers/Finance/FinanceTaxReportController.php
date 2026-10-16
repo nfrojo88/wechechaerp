@@ -542,7 +542,7 @@ class FinanceTaxReportController extends Controller
             $rq->whereBetween('receipt_date', [$periodStartDate, $periodEndDate])
         )->get();
 
-        $ocrPurchasesBase = (float)$ocrItemsInMonth->sum('total_value');
+        $ocrPurchasesBase = (float)$ocrItemsInMonth->where('vat_amount', '>', 0)->sum('total_value');
         $ocrInputVat      = (float)$ocrItemsInMonth->sum('vat_amount');
 
         $expensePurchasesBase = (float)$allTaxItems->filter(fn($i) => ($i->vat_type ?? '') !== 'vat_b')->sum(function ($i) use ($cycle) {

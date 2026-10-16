@@ -518,17 +518,35 @@
                                         <div class="card-body p-3">
                                             <!-- With Receipt View (Default) -->
                                             <div id="withReceiptSection">
-                                                <label class="form-label small fw-semibold text-muted mb-1">
-                                                    Upload Payment Receipt / Slip <span class="text-muted small">(Optional / Recommended)</span>
-                                                </label>
-                                                <div class="input-group input-group-sm">
-                                                    <span class="input-group-text bg-white"><i class="fas fa-file-upload text-success"></i></span>
-                                                    <input type="file" name="receipt_file" id="receiptFileInput" class="form-control form-control-sm bg-white" accept=".pdf,.jpg,.jpeg,.png,.webp">
+                                                <!-- Receipt OCR Studio Interactive Dropzone -->
+                                                <div id="batchReceiptDropZone" class="border border-2 border-dashed rounded-3 p-3 text-center bg-white shadow-2xs mb-2 transition-all cursor-pointer"
+                                                     style="border-color:#10b981 !important; min-height: 110px; display:flex; flex-direction:column; justify-content:center; align-items:center;"
+                                                     onclick="if(event.target.tagName !== 'BUTTON' && event.target.tagName !== 'INPUT') document.getElementById('receiptFileInput').click()">
+                                                    <input type="file" name="receipt_file" id="receiptFileInput" class="d-none" accept=".pdf,.jpg,.jpeg,.png,.webp">
+                                                    <div class="rounded-circle bg-success bg-opacity-10 text-success p-2 d-inline-flex mb-1">
+                                                        <i class="fa-solid fa-cloud-arrow-up fa-lg"></i>
+                                                    </div>
+                                                    <div class="fw-bold text-dark small mb-0">Drag &amp; Drop Batch Payment Receipt or Click to Browse</div>
+                                                    <div class="text-muted" style="font-size:0.72rem;">Accepts JPG, PNG, WEBP, PDF up to 10MB (Single shared receipt applied to all selected credits)</div>
+                                                    <div class="mt-2 d-flex gap-2">
+                                                        <button type="button" class="btn btn-xs btn-success fw-semibold px-2.5 py-1 shadow-2xs" style="font-size:0.72rem;" onclick="event.stopPropagation(); document.getElementById('receiptFileInput').click()">
+                                                            <i class="fa-solid fa-folder-open me-1"></i> Browse Receipt
+                                                        </button>
+                                                        <span class="badge bg-primary bg-opacity-10 text-primary border d-flex align-items-center" style="font-size:0.68rem;">
+                                                            <i class="fa-solid fa-wand-magic-sparkles me-1"></i> AI OCR Studio
+                                                        </span>
+                                                    </div>
                                                 </div>
+
                                                 <div id="creditBatchOcrFeedbackArea"></div>
                                                 <input type="hidden" name="supplier_tin" id="creditBatchSupplierTin">
                                                 <input type="hidden" name="fs_no" id="creditBatchFsNo">
-                                                <div class="form-text small text-muted">Attach bank slip, cheque scan, or signed vendor voucher (PDF, JPG, PNG up to 10MB). Applied to all selected items.</div>
+                                                <input type="hidden" name="vendor_name" id="creditBatchVendorName">
+                                                <input type="hidden" name="mrc_no" id="creditBatchMrcNo">
+                                                <input type="hidden" name="receipt_date" id="creditBatchReceiptDate">
+                                                <input type="hidden" name="vat_included" id="creditBatchVatIncluded" value="0">
+                                                <input type="hidden" name="ocr_items_json" id="creditBatchOcrItemsJson">
+                                                <div class="form-text small text-muted" style="font-size:0.72rem;">Attach bank slip, cheque scan, or signed vendor voucher. The Multi-Engine OCR Studio verifies ERCA fiscal rules and automatically routes VAT vs TAS declaration.</div>
                                             </div>
 
                                             <!-- Without Receipt View -->

@@ -339,6 +339,9 @@
                                             </a>
                                         @else
                                             <span class="text-muted small font-italic d-block mb-1">No receipt</span>
+                                            <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2 shadow-2xs d-inline-block" style="font-size:0.7rem;" data-bs-toggle="modal" data-bs-target="#attachReceiptModal_{{ ->id }}" title="Attach Receipt Proof">
+                                                <i class="fa-solid fa-cloud-arrow-up me-1"></i> Add Receipt
+                                            </button>
                                         @endif
                                         @if($pmt->withholding_receipt)
                                             <a href="{{ asset($pmt->withholding_receipt) }}" target="_blank" class="btn btn-sm btn-outline-danger py-0 px-2 shadow-xs d-inline-block" style="font-size:0.7rem;" title="View Withholding Slip">
@@ -665,7 +668,7 @@
                                         <div class="card border rounded-3 bg-light shadow-xs">
                                             <div class="card-header bg-white py-2 px-3 d-flex align-items-center justify-content-between border-bottom">
                                                 <span class="small fw-bold text-dark text-uppercase">
-                                                    <i class="fa-solid fa-receipt text-primary me-1"></i> Receipt Proof
+                                                    <i class="fa-solid fa-receipt text-success me-1"></i> Receipt OCR Studio &amp; Proof
                                                 </span>
                                                 <div class="form-check form-switch mb-0">
                                                     <input class="form-check-input" type="checkbox" role="switch" id="singleNoReceiptToggle" name="no_receipt" value="1" onchange="toggleSingleReceiptMode(this.checked)">
@@ -678,11 +681,35 @@
                                             </div>
                                             <div class="card-body p-2.5">
                                                 <div id="singleWithReceiptDiv">
-                                                    <input type="file" name="receipt_file" id="creditSingleReceiptInput" class="form-control form-control-sm bg-white" accept=".pdf,.jpg,.jpeg,.png,.webp">
+                                                    <!-- OCR Studio Interactive Dropzone -->
+                                                    <div id="creditSingleDropZone" class="border border-2 border-dashed rounded-3 p-3 text-center bg-white shadow-2xs mb-2 transition-all cursor-pointer"
+                                                         style="border-color:#10b981 !important; min-height: 110px; display:flex; flex-direction:column; justify-content:center; align-items:center;"
+                                                         onclick="if(event.target.tagName !== 'BUTTON' && event.target.tagName !== 'INPUT') document.getElementById('creditSingleReceiptInput').click()">
+                                                        <input type="file" name="receipt_file" id="creditSingleReceiptInput" class="d-none" accept=".pdf,.jpg,.jpeg,.png,.webp">
+                                                        <div class="rounded-circle bg-success bg-opacity-10 text-success p-2 d-inline-flex mb-1">
+                                                            <i class="fa-solid fa-cloud-arrow-up fa-lg"></i>
+                                                        </div>
+                                                        <div class="fw-bold text-dark small mb-0">Drag &amp; Drop Receipt or Click to Browse</div>
+                                                        <div class="text-muted" style="font-size:0.72rem;">Accepts JPG, PNG, WEBP, PDF up to 10MB</div>
+                                                        <div class="mt-2 d-flex gap-2">
+                                                            <button type="button" class="btn btn-xs btn-success fw-semibold px-2.5 py-1 shadow-2xs" style="font-size:0.72rem;" onclick="event.stopPropagation(); document.getElementById('creditSingleReceiptInput').click()">
+                                                                <i class="fa-solid fa-folder-open me-1"></i> Browse Receipt
+                                                            </button>
+                                                            <span class="badge bg-primary bg-opacity-10 text-primary border d-flex align-items-center" style="font-size:0.68rem;">
+                                                                <i class="fa-solid fa-wand-magic-sparkles me-1"></i> AI OCR Studio
+                                                            </span>
+                                                        </div>
+                                                    </div>
+
                                                     <div id="creditSingleOcrFeedbackArea"></div>
                                                     <input type="hidden" name="supplier_tin" id="creditSingleSupplierTin">
                                                     <input type="hidden" name="fs_no" id="creditSingleFsNo">
-                                                    <div class="form-text small text-muted" style="font-size:0.72rem;">Attach bank slip, cheque scan, or signed voucher.</div>
+                                                    <input type="hidden" name="vendor_name" id="creditSingleVendorName">
+                                                    <input type="hidden" name="mrc_no" id="creditSingleMrcNo">
+                                                    <input type="hidden" name="receipt_date" id="creditSingleReceiptDate">
+                                                    <input type="hidden" name="vat_included" id="creditSingleVatIncluded" value="1">
+                                                    <input type="hidden" name="ocr_items_json" id="creditSingleOcrItemsJson">
+                                                    <div class="form-text small text-muted" style="font-size:0.72rem;">Attach vendor fiscal receipt, invoice, bank slip, or cheque scan. Live ERCA validation applies automatically.</div>
                                                 </div>
                                                 <div id="singleWithoutReceiptDiv" class="p-2 rounded-2 border border-warning bg-warning bg-opacity-10 d-none">
                                                     <small class="text-dark d-block mb-1"><i class="fa-solid fa-circle-check text-warning me-1"></i> Paying without receipt selected.</small>
@@ -857,6 +884,7 @@
                             }
 
                                 document.addEventListener('DOMContentLoaded', () => {
+                                    window.recalculateQuickPayTax = recalculateQuickPayTax;
                                     const selSingle = document.getElementById('singlePaymentAccountSelect');
                                     if (selSingle) onSingleAccountChange(selSingle);
                                     const selAssign = document.getElementById('assignAccountSelect');
@@ -928,4 +956,67 @@
         </div>
     </div>
 </div>
+
+@foreach(->payments as )
+    @if(!->receipt_path)
+        <div class="modal fade" id="attachReceiptModal_{{ ->id }}" tabindex="-1" aria-labelledby="attachReceiptModalLabel_{{ ->id }}" aria-hidden="true">
+            <div class="modal-dialog modal-lg modal-dialog-centered">
+                <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+                    <form action="{{ route('finance.credit-store.attach-receipt', [, ]) }}" method="POST" enctype="multipart/form-data">
+                        @csrf
+                        <div class="modal-header bg-dark text-white py-3 px-4">
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="badge bg-success text-white p-2 rounded-circle">
+                                    <i class="fa-solid fa-receipt fs-6"></i>
+                                </span>
+                                <div>
+                                    <h6 class="modal-title fw-bold mb-0">Attach Receipt Proof via OCR Studio</h6>
+                                    <small class="text-white-50">Payment #{{ ->id }} &bull; {{ number_format(->amount, 2) }} ETB &bull; {{ ->payment_date }}</small>
+                                </div>
+                            </div>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body p-4">
+                            <div class="alert alert-light border small text-muted mb-3">
+                                <i class="fa-solid fa-wand-magic-sparkles text-success me-1"></i>
+                                Upload vendor receipt or bank slip. The Multi-Engine AI will extract fiscal fields and let you route to the <strong>ERCA Line 100 VAT Section</strong> (if VAT included) or declare in <strong>Purchase TAS Excel</strong> (if no VAT).
+                            </div>
+                            <div class="mb-3">
+                                <div class="border border-2 border-dashed rounded-3 p-3 text-center bg-light cursor-pointer"
+                                     style="border-color:#10b981 !important;"
+                                     onclick="document.getElementById('attachReceiptInput_{{ ->id }}').click()">
+                                    <input type="file" name="receipt_file" id="attachReceiptInput_{{ ->id }}" class="d-none" accept=".pdf,.jpg,.jpeg,.png,.webp" required>
+                                    <i class="fa-solid fa-cloud-arrow-up fa-2x text-success mb-2"></i>
+                                    <div class="fw-bold small text-dark">Click to Browse or Drag &amp; Drop Receipt</div>
+                                    <div class="text-muted" style="font-size:0.72rem;">JPG, PNG, WEBP, PDF up to 10MB</div>
+                                </div>
+                                <div id="attachReceiptFeedback_{{ ->id }}" class="mt-2"></div>
+                            </div>
+                        </div>
+                        <div class="modal-footer bg-light py-2.5 px-4 d-flex justify-content-between">
+                            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-success btn-sm fw-bold px-3" id="attachSubmitBtn_{{ ->id }}">
+                                <i class="fa-solid fa-check-circle me-1"></i> Save &amp; Attach Receipt
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <script>
+            document.addEventListener('DOMContentLoaded', () => {
+                if (window.ReceiptOcrScanner) {
+                    ReceiptOcrScanner.init({
+                        fileInput: '#attachReceiptInput_{{ ->id }}',
+                        form: '#attachReceiptModal_{{ ->id }} form',
+                        submitBtn: '#attachSubmitBtn_{{ ->id }}',
+                        statusContainer: '#attachReceiptFeedback_{{ ->id }}',
+                        studioMode: true
+                    });
+                }
+            });
+        </script>
+    @endif
+@endforeach
+
 @endsection

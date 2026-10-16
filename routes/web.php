@@ -1872,6 +1872,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('finance/credit-store/batch-payment', [App\Http\Controllers\Finance\CreditStoreController::class, 'batchPayment'])->name('finance.credit-store.batch-payment');
     Route::get('finance/credit-store/{creditStore}', [App\Http\Controllers\Finance\CreditStoreController::class, 'show'])->name('finance.credit-store.show');
     Route::post('finance/credit-store/{creditStore}/record-payment', [App\Http\Controllers\Finance\CreditStoreController::class, 'recordPayment'])->name('finance.credit-store.record-payment');
+    Route::post('finance/credit-store/{creditStore}/payment/{payment}/attach-receipt', [App\Http\Controllers\Finance\CreditStoreController::class, 'attachReceipt'])->name('finance.credit-store.attach-receipt');
     Route::post('finance/credit-store/{creditStore}/assign-expense', [App\Http\Controllers\Finance\CreditStoreController::class, 'assignExpense'])->name('finance.credit-store.assign-expense');
 
     // Global Slip Sequence Resource & API

@@ -82,18 +82,26 @@ class ReceiptOcrService
         $calcTotal    = 0.0;
         $warnings     = [];
 
+        $hasVatExplicit = isset($extracted['has_vat']) ? (bool)$extracted['has_vat'] : (isset($extracted['vat_included']) ? (bool)$extracted['vat_included'] : null);
+        $isNonVatReceipt = ($hasVatExplicit === false) || (($extracted['vat_type'] ?? '') === 'none') || (($extracted['vat_category'] ?? '') === 'TOT') || (($extracted['vat_category'] ?? '') === 'E') || (($extracted['vat_category'] ?? '') === 'N');
+
         foreach ($itemsData as &$it) {
             $qty       = (float)($it['qty'] ?? 1);
             $unitPrice = QcService::parseMoney($it['unit_price'] ?? 0);
             $totalVal  = QcService::parseMoney($it['total_value'] ?? round($qty * $unitPrice, 2));
-            $vatAmt    = QcService::parseMoney($it['vat'] ?? round($totalVal * 0.15, 2));
-            $valAfter  = QcService::parseMoney($it['value_after_vat'] ?? round($totalVal + $vatAmt, 2));
+            if ($isNonVatReceipt) {
+                $vatAmt   = 0.00;
+                $valAfter = $totalVal;
+            } else {
+                $vatAmt   = isset($it['vat']) ? QcService::parseMoney($it['vat']) : round($totalVal * 0.15, 2);
+                $valAfter = isset($it['value_after_vat']) ? QcService::parseMoney($it['value_after_vat']) : round($totalVal + $vatAmt, 2);
+            }
 
             // Arithmetic sanity check for each item
             if ($qty > 0 && $unitPrice > 0 && abs(round($qty * $unitPrice, 2) - $totalVal) > 0.05) {
                 $warnings[] = "Item '{$it['item_description']}': Qty x Unit Price (" . round($qty * $unitPrice, 2) . ") != Total Value ($totalVal)";
             }
-            if ($totalVal > 0 && abs(round($totalVal * 0.15, 2) - $vatAmt) > 0.05) {
+            if (!$isNonVatReceipt && $totalVal > 0 && abs(round($totalVal * 0.15, 2) - $vatAmt) > 0.05) {
                 $warnings[] = "Item '{$it['item_description']}': Total Value x 15% (" . round($totalVal * 0.15, 2) . ") != VAT ($vatAmt)";
             }
 
@@ -114,7 +122,11 @@ class ReceiptOcrService
         $slipSubtotal = QcService::parseMoney($extracted['subtotal'] ?? 0);
         $slipVat      = QcService::parseMoney($extracted['vat_amount'] ?? 0);
 
-        if ($slipTotal > 0) {
+        if ($isNonVatReceipt) {
+            $calcTotal    = $slipTotal > 0 ? $slipTotal : ($calcTotal > 0 ? $calcTotal : $slipSubtotal);
+            $calcSubtotal = $calcTotal;
+            $calcVat      = 0.00;
+        } elseif ($slipTotal > 0) {
             $calcTotal = $slipTotal;
             if ($slipSubtotal > 0) {
                 $calcSubtotal = $slipSubtotal;
@@ -377,24 +389,32 @@ class ReceiptOcrService
             $receipt->save();
 
             $hasFlaggedItem = false;
+            $hasVatExplicit = isset($scanData['has_vat']) ? (bool)$scanData['has_vat'] : (isset($scanData['vat_included']) ? (bool)$scanData['vat_included'] : null);
+            $isNonVatReceipt = ($hasVatExplicit === false) || (($scanData['vat_type'] ?? '') === 'none') || ((float)($scanData['vat_amount'] ?? 0) == 0.0 && $hasVatExplicit !== true);
+
             foreach ($itemsData as $item) {
                 $qty       = (float)($item['qty'] ?? 1);
                 $unitPrice = QcService::parseMoney($item['unit_price'] ?? 0);
                 $totalVal  = QcService::parseMoney($item['total_value'] ?? round($qty * $unitPrice, 2));
-                $vatAmt    = QcService::parseMoney($item['vat'] ?? round($totalVal * 0.15, 2));
-                $valAfter  = QcService::parseMoney($item['value_after_vat'] ?? round($totalVal + $vatAmt, 2));
+                if ($isNonVatReceipt) {
+                    $vatAmt   = 0.00;
+                    $valAfter = $totalVal;
+                } else {
+                    $vatAmt   = isset($item['vat']) ? QcService::parseMoney($item['vat']) : round($totalVal * 0.15, 2);
+                    $valAfter = isset($item['value_after_vat']) ? QcService::parseMoney($item['value_after_vat']) : round($totalVal + $vatAmt, 2);
+                }
 
                 $itemPurcNorm = QcService::normalizePurchaseType(
-                    $item['purchase_type'] ?? ($scanData['purchase_type'] ?? ($scanData['extracted']['purchase_type'] ?? null)),
+                    $item['purchase_type'] ?? ($isNonVatReceipt ? 6 : ($scanData['purchase_type'] ?? ($scanData['extracted']['purchase_type'] ?? null))),
                     ($item['item_description'] ?? '') . ' ' . ($scanData['vendor_name'] ?? '')
                 );
 
                 $rItem = new ReceiptItem([
                     'receipt_id'       => $receipt->id,
                     'item_description' => $item['item_description'] ?? 'Material',
-                    'vat_category'     => $itemPurcNorm['vat_category'],
+                    'vat_category'     => $isNonVatReceipt ? 'E' : $itemPurcNorm['vat_category'],
                     'calendar_type'    => $scanData['extracted']['calendar_type'] ?? ($scanData['calendar_type'] ?? 'E'),
-                    'purchase_type'    => $itemPurcNorm['code'],
+                    'purchase_type'    => $isNonVatReceipt ? 6 : $itemPurcNorm['code'],
                     'uom'              => (string)($item['uom'] ?? ($scanData['extracted']['uom_id'] ?? ($scanData['uom_id'] ?? '9'))),
                     'qty'              => $qty,
                     'unit_price'       => $unitPrice,
@@ -410,7 +430,7 @@ class ReceiptOcrService
                 if ($qty > 0 && $unitPrice > 0 && abs(round($qty * $unitPrice, 2) - $totalVal) > 0.05) {
                     $errors[] = "Qty x Unit Price (" . round($qty * $unitPrice, 2) . ") != Total Value ($totalVal)";
                 }
-                if ($totalVal > 0 && abs(round($totalVal * 0.15, 2) - $vatAmt) > 0.05) {
+                if (!$isNonVatReceipt && $totalVal > 0 && abs(round($totalVal * 0.15, 2) - $vatAmt) > 0.05) {
                     $errors[] = "Total Value x 15% (" . round($totalVal * 0.15, 2) . ") != VAT ($vatAmt)";
                 }
                 if (($totalVal > 0 || $vatAmt > 0) && abs(round($totalVal + $vatAmt, 2) - $valAfter) > 0.05) {
