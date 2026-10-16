@@ -524,14 +524,12 @@ class FinanceTaxReportController extends Controller
 
         $salesBase = (float)$monthIncomeItems->sum(function ($inc) use ($cycle) {
             if ($cycle === 'active' && $inc->vat_settled) return 0.0;
-            $gross = (float)($inc->unit_price > 0 && $inc->quantity > 0 ? ($inc->unit_price * $inc->quantity) : $inc->amount);
-            return round($gross / 1.15, 2);
+            return (float)($inc->unit_price > 0 && $inc->quantity > 0 ? ($inc->unit_price * $inc->quantity) : $inc->amount);
         });
         $outputVat = (float)$monthIncomeItems->sum(function ($inc) use ($cycle) {
             if ($cycle === 'active' && $inc->vat_settled) return 0.0;
             $gross = (float)($inc->unit_price > 0 && $inc->quantity > 0 ? ($inc->unit_price * $inc->quantity) : $inc->amount);
-            $base = round($gross / 1.15, 2);
-            return round($gross - $base, 2);
+            return round($gross * 0.15, 2);
         });
 
         // 2. Creditable Purchases & Input VAT (Exclude "VAT B")
@@ -576,7 +574,7 @@ class FinanceTaxReportController extends Controller
                    $sub->whereNull('income_date')->whereBetween('receipt_date', [$prevMonthRange['start_date'], $prevMonthRange['end_date']]);
                });
         })->sum('amount');
-        $prevOutputVat = round($prevIncomeSum - ($prevIncomeSum / 1.15), 2);
+        $prevOutputVat = round($prevIncomeSum * 0.15, 2);
 
         $prevExpenseItems = ExpenseRequest::where('status', ExpenseRequest::STATUS_PAID)
             ->whereBetween('created_at', [$prevMonthRange['start'], $prevMonthRange['end']])
@@ -633,8 +631,19 @@ class FinanceTaxReportController extends Controller
         }
 
         // 5. Withholding tax (3%) & Net Disbursed for the month (stays separate line, not part of Net)
-        $monthWithholding = $totalWithholdingAmount;
+        $incomeWithholding = (float)$monthIncomeItems->sum(function ($inc) use ($cycle) {
+            if ($cycle === 'active' && $inc->vat_settled) return 0.0;
+            $gross = (float)($inc->unit_price > 0 && $inc->quantity > 0 ? ($inc->unit_price * $inc->quantity) : $inc->amount);
+            return round($gross * 0.03, 2);
+        });
+        $monthWithholding = round($totalWithholdingAmount + $incomeWithholding, 2);
         $monthNetDisbursed = $totalNetDisbursed;
+
+        if ($cycle === 'active' && $isMonthVatCleared) {
+            $monthWithholding  = 0.0;
+            $incomeWithholding = 0.0;
+            $monthNetDisbursed = 0.0;
+        }
 
         // 6. 12-Month Trend Table (Meskerem to Pagume, months 1 to 13 of selected Ethiopian Year)
         $monthlyTrend = [];
@@ -662,12 +671,16 @@ class FinanceTaxReportController extends Controller
                    });
             })->get();
 
-            $mIncTotal = (float)$mIncomeAll->sum('amount');
-            $mOutTotal = round($mIncTotal - ($mIncTotal / 1.15), 2);
+            $mIncTotal = (float)$mIncomeAll->sum(function ($inc) {
+                return (float)($inc->unit_price > 0 && $inc->quantity > 0 ? ($inc->unit_price * $inc->quantity) : $inc->amount);
+            });
+            $mOutTotal = round($mIncTotal * 0.15, 2);
 
             $mIncomeUnsettled = $mIncomeAll->filter(fn($inc) => !(bool)$inc->vat_settled);
-            $mIncActive = (float)$mIncomeUnsettled->sum('amount');
-            $mOutActive = round($mIncActive - ($mIncActive / 1.15), 2);
+            $mIncActive = (float)$mIncomeUnsettled->sum(function ($inc) {
+                return (float)($inc->unit_price > 0 && $inc->quantity > 0 ? ($inc->unit_price * $inc->quantity) : $inc->amount);
+            });
+            $mOutActive = round($mIncActive * 0.15, 2);
 
             $mExpAll = ExpenseRequest::where('status', ExpenseRequest::STATUS_PAID)
                 ->whereBetween('created_at', [$mRange['start'], $mRange['end']])
@@ -866,6 +879,7 @@ class FinanceTaxReportController extends Controller
             'signedNetVat',
             'netVatDetails',
             'monthWithholding',
+            'incomeWithholding',
             'monthNetDisbursed',
             'monthlyTrend',
             'isGeneralAdmin',
@@ -913,8 +927,9 @@ class FinanceTaxReportController extends Controller
         $formattedIncomes = $incomes->map(function ($inc) {
             $date = $inc->income_date ?: $inc->receipt_date;
             $gross = (float)($inc->unit_price > 0 && $inc->quantity > 0 ? ($inc->unit_price * $inc->quantity) : $inc->amount);
-            $base = round($gross / 1.15, 2);
-            $vat = round($gross - $base, 2);
+            $vat = round($gross * 0.15, 2);
+            $wht = round($gross * 0.03, 2);
+            $net = round($gross + $vat - $wht, 2);
 
             $accountName = '-';
             if ($inc->bankAccount) {
@@ -926,22 +941,24 @@ class FinanceTaxReportController extends Controller
             }
 
             return [
-                'id'           => $inc->id,
-                'income_no'    => $inc->income_no ?: ('INC-' . $inc->id),
-                'receipt_no'   => $inc->receipt_no ?: ($inc->mrc_no ?: '-'),
-                'date_ec'      => EthiopianDate::formatDateEc($date, 'DD/MM/YYYY EC'),
-                'date_gc'      => $date ? Carbon::parse($date)->format('M d, Y') : '-',
-                'buyer_name'   => $inc->buyer_name ?: ($inc->payer ?: 'Client / Customer'),
-                'buyer_tin'    => $inc->buyer_tin ?: '-',
-                'project_name' => $inc->project?->name ?: 'General / Head Office',
-                'account_name' => $accountName,
-                'category'     => ucfirst($inc->category ?: 'General'),
-                'sales_base'   => $base,
-                'output_vat'   => $vat,
-                'gross_amount' => $gross,
-                'description'  => $inc->description ?: ($inc->notes ?: '-'),
-                'receipt_url'  => $inc->receipt_file_path ? asset('storage/' . $inc->receipt_file_path) : null,
-                'is_settled'   => (bool)$inc->vat_settled,
+                'id'                 => $inc->id,
+                'income_no'          => $inc->income_no ?: ('INC-' . $inc->id),
+                'receipt_no'         => $inc->receipt_no ?: ($inc->mrc_no ?: '-'),
+                'date_ec'            => EthiopianDate::formatDateEc($date, 'DD/MM/YYYY EC'),
+                'date_gc'            => $date ? Carbon::parse($date)->format('M d, Y') : '-',
+                'buyer_name'         => $inc->buyer_name ?: ($inc->payer ?: 'Client / Customer'),
+                'buyer_tin'          => $inc->buyer_tin ?: '-',
+                'project_name'       => $inc->project?->name ?: 'General / Head Office',
+                'account_name'       => $accountName,
+                'category'           => ucfirst($inc->category ?: 'General'),
+                'sales_base'         => $gross,
+                'output_vat'         => $vat,
+                'withholding_amount' => $wht,
+                'net_total'          => $net,
+                'gross_amount'       => $gross,
+                'description'        => $inc->description ?: ($inc->notes ?: '-'),
+                'receipt_url'        => $inc->receipt_file_path ? asset('storage/' . $inc->receipt_file_path) : null,
+                'is_settled'         => (bool)$inc->vat_settled,
             ];
         });
 
@@ -1054,7 +1071,7 @@ class FinanceTaxReportController extends Controller
 
         $effectivePurchasesBase = max($expPurchasesBase, $ocrPurchasesBase);
         $effectiveInputVat      = max($expInputVat, $ocrInputVat);
-        $totalWithholding       = (float)$formattedExpenses->sum('withholding_amount');
+        $totalWithholding       = round((float)$formattedExpenses->sum('withholding_amount') + (float)$formattedIncomes->sum('withholding_amount'), 2);
         $totalNetDisbursed      = (float)$formattedExpenses->sum('net_disbursed');
 
         // 4. Calculate Opening Credit from previous month
@@ -1073,7 +1090,7 @@ class FinanceTaxReportController extends Controller
                        });
                 })->sum('amount');
             }
-            $prevOutputVat = round($prevIncomeSum - ($prevIncomeSum / 1.15), 2);
+            $prevOutputVat = round($prevIncomeSum * 0.15, 2);
 
             $prevExpIn = 0.0;
             if (Schema::hasTable('expense_requests')) {
@@ -1154,7 +1171,7 @@ class FinanceTaxReportController extends Controller
             $dispPurchasesBase = (float)$activeExpenses->sum('base_amount');
             $dispInputVat      = (float)$activeExpenses->sum('vat_amount');
             $dispOpeningCredit = 0.0;
-            $dispWithholding   = (float)$activeExpenses->sum('withholding_amount');
+            $dispWithholding   = round((float)$activeExpenses->sum('withholding_amount') + (float)$activeIncomes->sum('withholding_amount'), 2);
 
             $summaryNet = EthiopianDate::calculateNetVat($dispInputVat, $dispOutputVat, 0.0);
         } else {
@@ -1203,6 +1220,8 @@ class FinanceTaxReportController extends Controller
                 'is_fresh_start'         => $isFreshStart,
                 'settlement_number'      => $mSettlement?->settlement_number,
                 'withholding_tax'        => $dispWithholding,
+                'income_wht'             => (float)$formattedIncomes->sum('withholding_amount'),
+                'income_net'             => (float)$formattedIncomes->sum('net_total'),
                 'net_disbursed'          => $totalNetDisbursed,
                 'income_count'           => $formattedIncomes->count(),
                 'expense_count'          => $formattedExpenses->count(),
@@ -1714,7 +1733,7 @@ class FinanceTaxReportController extends Controller
 
             // Re-open income records
             $incRecords = collect();
-            if (Schema::hasTable('income_records') && in_array($clearTarget, ['vat', 'both'])) {
+            if (Schema::hasTable('income_records') && in_array($clearTarget, ['vat', 'both', 'withholding'])) {
                 $incQuery = \App\Models\IncomeRecord::where('vat_settled', true);
                 if ($scope === 'month') {
                     $incQuery->where(function ($iq) use ($periodStartDate, $periodEndDate) {
@@ -1829,7 +1848,7 @@ class FinanceTaxReportController extends Controller
 
         // Income Records for VAT / Both
         $incRecords = collect();
-        if (Schema::hasTable('income_records') && in_array($clearTarget, ['vat', 'both'])) {
+        if (Schema::hasTable('income_records') && in_array($clearTarget, ['vat', 'both', 'withholding'])) {
             $incQuery = \App\Models\IncomeRecord::where('vat_settled', false);
             if ($scope === 'month') {
                 $incQuery->where(function ($iq) use ($periodStartDate, $periodEndDate) {
@@ -1849,8 +1868,7 @@ class FinanceTaxReportController extends Controller
         // Calculate amounts
         $expBase = $records->sum(fn($i) => (float)($i->gross_amount > 0 ? $i->gross_amount : $i->amount));
         $incBase = $incRecords->sum(function ($inc) {
-            $gross = (float)($inc->unit_price > 0 && $inc->quantity > 0 ? ($inc->unit_price * $inc->quantity) : $inc->amount);
-            return round($gross / 1.15, 2);
+            return (float)($inc->unit_price > 0 && $inc->quantity > 0 ? ($inc->unit_price * $inc->quantity) : $inc->amount);
         });
         $totalBase = round($expBase + $incBase, 2);
 
@@ -1871,8 +1889,7 @@ class FinanceTaxReportController extends Controller
 
         $outputVatSum = $incRecords->sum(function ($inc) {
             $gross = (float)($inc->unit_price > 0 && $inc->quantity > 0 ? ($inc->unit_price * $inc->quantity) : $inc->amount);
-            $base = round($gross / 1.15, 2);
-            return round($gross - $base, 2);
+            return round($gross * 0.15, 2);
         });
 
         $vatSum = 0.0;
@@ -1880,10 +1897,16 @@ class FinanceTaxReportController extends Controller
             $vatSum = $outputVatSum > 0 ? $outputVatSum : $inputVatSum;
         }
 
-        $whtSum = $records->sum(function ($item) {
+        $expWht = $records->sum(function ($item) {
             if ($item->withholding_settled) return 0.0;
             return (float)$item->calculated_withholding_amount;
         });
+        $incWht = $incRecords->sum(function ($inc) {
+            if ($inc->vat_settled) return 0.0;
+            $gross = (float)($inc->unit_price > 0 && $inc->quantity > 0 ? ($inc->unit_price * $inc->quantity) : $inc->amount);
+            return round($gross * 0.03, 2);
+        });
+        $whtSum = round($expWht + $incWht, 2);
 
         $totalPayable = 0.0;
         if ($clearTarget === 'vat') {
@@ -1981,7 +2004,7 @@ class FinanceTaxReportController extends Controller
                 }
             }
 
-            if ($incRecords->isNotEmpty() && in_array($clearTarget, ['vat', 'both'])) {
+            if ($incRecords->isNotEmpty() && in_array($clearTarget, ['vat', 'both', 'withholding'])) {
                 \App\Models\IncomeRecord::whereIn('id', $incRecords->pluck('id'))->update([
                     'vat_settled'       => true,
                     'vat_settlement_id' => $settlement->id,

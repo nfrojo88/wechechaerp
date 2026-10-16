@@ -390,7 +390,7 @@
                         </div>
                         <div class="mt-3 pt-2 border-top border-secondary-subtle">
                             <span class="badge {{ $monthWithholding > 0 ? 'bg-warning-subtle text-dark border border-warning-subtle' : 'bg-secondary-subtle text-secondary border border-secondary-subtle' }} rounded-pill small px-2 py-0.5" style="font-size: 0.68rem;">
-                                {{ $monthWithholding > 0 ? 'Separate Line (Not Net)' : '0.00 ETB (Settled)' }}
+                                {{ $monthWithholding > 0 ? (!empty($incomeWithholding) && $incomeWithholding > 0 ? '3% WHT Deducted at Source' : 'Separate Line (Not Net)') : '0.00 ETB (Settled)' }}
                             </span>
                         </div>
                     </div>
@@ -2895,8 +2895,9 @@
                                                 <th class="py-2.5">Project</th>
                                                 <th class="py-2.5">Receiving Account</th>
                                                 <th class="py-2.5 text-end">Sales Base</th>
-                                                <th class="py-2.5 text-end text-danger">Output VAT (15%)</th>
-                                                <th class="py-2.5 text-end text-success">Gross Received</th>
+                                                <th class="py-2.5 text-end text-danger">Output VAT (+15%)</th>
+                                                <th class="py-2.5 text-end text-warning">WHT (-3%)</th>
+                                                <th class="py-2.5 text-end text-success">Net Total</th>
                                                 <th class="py-2.5 text-center pe-3">Action</th>
                                             </tr>
                                         </thead>
@@ -2908,7 +2909,8 @@
                                                 <td colspan="6" class="ps-3 py-2 text-uppercase small text-muted">Total Sales &amp; Output VAT</td>
                                                 <td class="text-end py-2 font-monospace text-dark" id="mIncomeTotalBase">ETB 0.00</td>
                                                 <td class="text-end py-2 font-monospace text-danger" id="mIncomeTotalVat">ETB 0.00</td>
-                                                <td class="text-end py-2 font-monospace text-success" id="mIncomeTotalGross">ETB 0.00</td>
+                                                <td class="text-end py-2 font-monospace text-warning" id="mIncomeTotalWht">-ETB 0.00</td>
+                                                <td class="text-end py-2 font-monospace text-success" id="mIncomeTotalNet">ETB 0.00</td>
                                                 <td class="pe-3"></td>
                                             </tr>
                                         </tfoot>
@@ -4736,8 +4738,9 @@
                         <i class="fa-solid fa-building-columns me-1 text-primary"></i>${inc.account_name}
                     </td>
                     <td class="text-end font-monospace">ETB ${formatMoney(inc.sales_base)}</td>
-                    <td class="text-end font-monospace text-danger fw-semibold">ETB ${formatMoney(inc.output_vat)}</td>
-                    <td class="text-end font-monospace text-success fw-bold">ETB ${formatMoney(inc.gross_amount)}</td>
+                    <td class="text-end font-monospace text-danger fw-semibold">+ETB ${formatMoney(inc.output_vat)}</td>
+                    <td class="text-end font-monospace text-warning fw-semibold">-ETB ${formatMoney(inc.withholding_amount || 0)}</td>
+                    <td class="text-end font-monospace text-success fw-bold">ETB ${formatMoney(inc.net_total || inc.gross_amount)}</td>
                     <td class="text-center pe-3">
                         <button type="button" class="btn btn-sm btn-outline-danger rounded-circle p-0 d-inline-flex align-items-center justify-content-center" style="width: 26px; height: 26px;" onclick="deleteIncomeRecordFromTaxReport(${inc.id}, '${inc.income_no}')" title="Delete this income record and reverse VAT & movements">
                             <i class="fa-solid fa-trash-alt" style="font-size: 0.72rem;"></i>
@@ -4749,15 +4752,20 @@
         } else {
             incomeTbody.innerHTML = `
                 <tr>
-                    <td colspan="10" class="text-center py-4 text-muted">
+                    <td colspan="11" class="text-center py-4 text-muted">
                         <i class="fa-solid fa-folder-open me-2 text-secondary"></i>No income receipts recorded in this Ethiopian month.
                     </td>
                 </tr>
             `;
         }
         document.getElementById('mIncomeTotalBase').innerText = 'ETB ' + formatMoney(s.sales_base);
-        document.getElementById('mIncomeTotalVat').innerText = 'ETB ' + formatMoney(s.output_vat);
-        document.getElementById('mIncomeTotalGross').innerText = 'ETB ' + formatMoney(s.gross_income);
+        document.getElementById('mIncomeTotalVat').innerText = '+ETB ' + formatMoney(s.output_vat);
+        if (document.getElementById('mIncomeTotalWht')) {
+            document.getElementById('mIncomeTotalWht').innerText = '-ETB ' + formatMoney(s.income_wht || 0);
+        }
+        if (document.getElementById('mIncomeTotalNet')) {
+            document.getElementById('mIncomeTotalNet').innerText = 'ETB ' + formatMoney(s.income_net || s.gross_income);
+        }
 
         // 2. Render Expenses Table (Purchases & Expenditures)
         const expenseTbody = document.getElementById('mExpenseTableBody');
