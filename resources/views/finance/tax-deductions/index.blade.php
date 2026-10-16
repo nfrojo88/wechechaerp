@@ -294,6 +294,19 @@
                         <i class="fa-solid fa-gear"></i>
                         <span class="small">Manage</span>
                     </button>
+                @elseif(!empty($isFreshStart))
+                    <span class="badge bg-info-subtle text-info border border-info-subtle rounded-pill px-2.5 py-1.5 fw-bold d-inline-flex align-items-center gap-1.5 shadow-2xs" title="Month previously cleared; new active transactions are now accruing fresh from 0.00 ETB">
+                        <i class="fa-solid fa-seedling text-info"></i>
+                        <span>Fresh Start (Accruing)</span>
+                    </span>
+                    <button type="button" class="btn btn-sm btn-outline-warning text-dark rounded-pill px-3 fw-bold d-inline-flex align-items-center gap-1.5 shadow-2xs" onclick="openAdminClearModalForMonth({{ $selectedEthYear }}, {{ $selectedEthMonth }}, '{{ $monthRange['month_en'] ?? '' }}', false)" title="Clear new active transactions in {{ $monthRange['month_en'] ?? 'this month' }} to 0.00 ETB">
+                        <i class="fa-solid fa-broom text-warning"></i>
+                        <span>Clear Month</span>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-2.5 fw-semibold d-inline-flex align-items-center gap-1" onclick="openAdminClearModalForMonth({{ $selectedEthYear }}, {{ $selectedEthMonth }}, '{{ $monthRange['month_en'] ?? '' }}', true)" title="Manage or Re-open {{ $monthRange['month_en'] ?? 'this month' }}">
+                        <i class="fa-solid fa-gear"></i>
+                        <span class="small">Manage</span>
+                    </button>
                 @else
                     <button type="button" class="btn btn-sm btn-outline-warning text-dark rounded-pill px-3 fw-bold d-inline-flex align-items-center gap-1.5 shadow-2xs" onclick="openAdminClearModalForMonth({{ $selectedEthYear }}, {{ $selectedEthMonth }}, '{{ $monthRange['month_en'] ?? '' }}', false)" title="Clear {{ $monthRange['month_en'] ?? 'this month' }} to start from zero (0.00 ETB)">
                         <i class="fa-solid fa-broom text-warning"></i>
@@ -373,11 +386,11 @@
                         <div>
                             <span class="text-muted small text-uppercase fw-bold d-block" style="font-size: 0.72rem;">Withholding Tax (3%)</span>
                             <span class="text-muted d-block" style="font-size: 0.68rem;">የተቀነሰ ቅድመ ግብር</span>
-                            <div class="fs-5 fw-bold text-danger font-monospace mt-1">- ETB {{ number_format($monthWithholding, 2) }}</div>
+                            <div class="fs-5 fw-bold text-danger font-monospace mt-1">{{ $monthWithholding > 0 ? '- ETB ' . number_format($monthWithholding, 2) : 'ETB 0.00' }}</div>
                         </div>
                         <div class="mt-3 pt-2 border-top border-secondary-subtle">
-                            <span class="badge bg-warning-subtle text-dark border border-warning-subtle rounded-pill small px-2 py-0.5" style="font-size: 0.68rem;">
-                                Separate Line (Not Net)
+                            <span class="badge {{ $monthWithholding > 0 ? 'bg-warning-subtle text-dark border border-warning-subtle' : 'bg-secondary-subtle text-secondary border border-secondary-subtle' }} rounded-pill small px-2 py-0.5" style="font-size: 0.68rem;">
+                                {{ $monthWithholding > 0 ? 'Separate Line (Not Net)' : '0.00 ETB (Settled)' }}
                             </span>
                         </div>
                     </div>
@@ -446,6 +459,10 @@
                                     <span class="badge bg-success text-white rounded-pill px-2 py-0.5 ms-1 small" style="font-size: 0.65rem;" title="Cleared to 0.00 ETB (Settled)">
                                         <i class="fa-solid fa-check-double me-0.5"></i>Cleared
                                     </span>
+                                @elseif(!empty($mTrend['is_fresh_start']))
+                                    <span class="badge bg-info text-dark rounded-pill px-2 py-0.5 ms-1 small" style="font-size: 0.65rem;" title="Month previously cleared; new transactions accruing fresh from 0.00 ETB">
+                                        <i class="fa-solid fa-seedling me-0.5"></i>Fresh Start
+                                    </span>
                                 @endif
                             </td>
                             <td class="small text-muted font-monospace">
@@ -505,10 +522,23 @@
                                             <i class="fa-solid fa-check-double text-success"></i>
                                             <span>Cleared</span>
                                         </button>
+                                    @elseif(!empty($mTrend['is_fresh_start']))
+                                        <button type="button" 
+                                                class="btn btn-sm btn-outline-warning text-dark rounded-pill px-2 py-1 small" 
+                                                onclick="openAdminClearModalForMonth({{ $selectedEthYear }}, {{ $mNum }}, '{{ $mTrend['month_name'] }}', false)" 
+                                                title="Clear new active transactions in {{ $mTrend['month_name'] }} to 0.00 ETB">
+                                            <i class="fa-solid fa-broom"></i>
+                                        </button>
+                                        <button type="button" 
+                                                class="btn btn-sm btn-outline-secondary rounded-pill px-2 py-1 small" 
+                                                onclick="openAdminClearModalForMonth({{ $selectedEthYear }}, {{ $mNum }}, '{{ $mTrend['month_name'] }}', true)" 
+                                                title="Manage or Re-open {{ $mTrend['month_name'] }}">
+                                            <i class="fa-solid fa-gear"></i>
+                                        </button>
                                     @else
                                         <button type="button" 
                                                 class="btn btn-sm btn-outline-warning text-dark rounded-pill px-2 py-1 small" 
-                                                onclick="openAdminClearModalForMonth({{ $selectedEthYear }}, {{ $mNum }}, '{{ $mTrend['month_name'] }}', false)"
+                                                onclick="openAdminClearModalForMonth({{ $selectedEthYear }}, {{ $mNum }}, '{{ $mTrend['month_name'] }}', false)" 
                                                 title="Clear {{ $mTrend['month_name'] }} to start from zero">
                                             <i class="fa-solid fa-broom"></i>
                                         </button>
