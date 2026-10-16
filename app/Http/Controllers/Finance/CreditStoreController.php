@@ -13,6 +13,8 @@ use App\Models\User;
 use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
 use App\Models\Project;
+use App\Models\Receipt;
+use App\Models\ReceiptItem;
 use App\Services\FileUploadService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -1223,5 +1225,228 @@ class CreditStoreController extends Controller
 
         return redirect()->route('finance.credit-store.show', $ledger)
             ->with('success', 'Receipt attached and verified via Receipt OCR Studio successfully!');
+    }
+
+    /**
+     * Global Admin Only: Correct VAT, taxes, and receipt fields on a Credit Store Payment (even when Fully Paid).
+     */
+    public function correctVat(Request $request, CreditStoreLedger $creditStore, CreditStorePayment $payment)
+    {
+        $user = Auth::user();
+        if (!$user || !$user->isGlobalAdmin()) {
+            abort(403, 'Unauthorized. Only Global Admins can edit or correct VAT on credit store payments.');
+        }
+
+        $ledger = $creditStore;
+
+        $request->validate([
+            'amount'                     => 'required|numeric|min:0.01',
+            'vat_type'                   => 'required|string|in:none,exclusive,vat_b,inclusive',
+            'vat_rate'                   => 'nullable|numeric|min:0',
+            'vat_amount'                 => 'nullable|numeric|min:0',
+            'has_withholding'            => 'nullable|boolean',
+            'withholding_rate'           => 'nullable|numeric|min:0',
+            'withholding_amount'         => 'nullable|numeric|min:0',
+            'withholding_receipt'        => 'nullable|file|mimes:pdf,jpg,jpeg,png,webp|max:10240',
+            'withholding_receipt_number' => 'nullable|string|max:100',
+            'supplier_tin'               => 'nullable|string|max:30',
+            'seller_tin'                 => 'nullable|string|max:30',
+            'fs_no'                      => 'nullable|string|max:50',
+            'receipt_no'                 => 'nullable|string|max:50',
+            'mrc_no'                     => 'nullable|string|max:100',
+            'receipt_date'               => 'nullable|string|max:50',
+            'purc_type'                  => 'nullable|string|max:10',
+            'correction_reason'          => 'required|string|max:500',
+        ]);
+
+        $gross = (float)$request->amount;
+        $vatType = $request->vat_type;
+        $vatRate = (float)$request->input('vat_rate', 15.00);
+        $hasWithholding = $request->boolean('has_withholding');
+        $withholdingRate = (float)$request->input('withholding_rate', 3.00);
+
+        $vatAmount = 0.0;
+        $baseAmount = $gross;
+        $withholdingAmount = 0.0;
+        $netAmount = $gross;
+
+        if ($vatType === 'exclusive') {
+            $vatAmount = $request->filled('vat_amount') 
+                ? round((float)$request->vat_amount, 2) 
+                : round($gross * ($vatRate / 100), 2);
+            $baseAmount = $gross;
+            $totalGrossWithVat = $gross + $vatAmount;
+            if ($hasWithholding) {
+                $withholdingAmount = $request->filled('withholding_amount') 
+                    ? round((float)$request->withholding_amount, 2) 
+                    : round($baseAmount * ($withholdingRate / 100), 2);
+            }
+            $netAmount = round($totalGrossWithVat - $withholdingAmount, 2);
+        } elseif ($vatType === 'inclusive' || $vatType === 'vat_b') {
+            $baseAmount = round($gross / (1 + ($vatRate / 100)), 2);
+            $vatAmount = $request->filled('vat_amount') 
+                ? round((float)$request->vat_amount, 2) 
+                : round($gross - $baseAmount, 2);
+            if ($hasWithholding) {
+                $withholdingAmount = $request->filled('withholding_amount') 
+                    ? round((float)$request->withholding_amount, 2) 
+                    : round($baseAmount * ($withholdingRate / 100), 2);
+            }
+            $netAmount = round($gross - $withholdingAmount, 2);
+        } else {
+            $vatType = 'none';
+            $baseAmount = $gross;
+            $vatAmount = 0.0;
+            if ($hasWithholding) {
+                $withholdingAmount = $request->filled('withholding_amount') 
+                    ? round((float)$request->withholding_amount, 2) 
+                    : round($baseAmount * ($withholdingRate / 100), 2);
+            }
+            $netAmount = round($gross - $withholdingAmount, 2);
+        }
+
+        $withholdingReceiptPath = $payment->withholding_receipt;
+        if ($request->hasFile('withholding_receipt')) {
+            $wFile = $request->file('withholding_receipt');
+            $withholdingReceiptPath = FileUploadService::upload($wFile, 'withholding_receipts');
+        }
+
+        $vatIncluded = ($vatType !== 'none' && $vatAmount > 0);
+        $purchaseType = (int)($request->input('purc_type') ?: ($vatIncluded ? 3 : 6));
+        $totalReceiptVal = ($vatType === 'exclusive') ? round($gross + $vatAmount, 2) : $gross;
+
+        $adminName = $user->name ?: 'Global Admin';
+        $reason = trim($request->correction_reason);
+        $auditLog = "[VAT Corrected by {$adminName} on " . now()->format('Y-m-d H:i') . ": {$reason} | Mode: {$vatType}, VAT: ETB " . number_format($vatAmount, 2) . ", WHT: ETB " . number_format($withholdingAmount, 2) . ", Net: ETB " . number_format($netAmount, 2) . "]";
+        $updatedNotes = trim(($payment->notes ? $payment->notes . "\n" : "") . $auditLog);
+
+        $fsNo = $request->input('receipt_no') ?: ($request->input('fs_no') ?: $payment->reference_no);
+        $supplierTin = trim((string)($request->input('seller_tin') ?: ($request->input('supplier_tin') ?: '')));
+        $mrcNo = trim((string)($request->input('mrc_no') ?: ''));
+        $receiptDate = $request->input('receipt_date') ?: ($payment->payment_date ? $payment->payment_date->toDateString() : now()->toDateString());
+
+        DB::transaction(function () use (
+            $payment, $ledger, $gross, $vatType, $vatRate, $vatAmount, $hasWithholding,
+            $withholdingRate, $withholdingAmount, $withholdingReceiptPath, $request,
+            $netAmount, $fsNo, $updatedNotes, $baseAmount, $vatIncluded, $purchaseType,
+            $totalReceiptVal, $supplierTin, $mrcNo, $receiptDate
+        ) {
+            // 1. Update Payment Record
+            $paymentData = [
+                'amount'       => $gross,
+                'reference_no' => $fsNo ?: $payment->reference_no,
+                'notes'        => $updatedNotes,
+            ];
+
+            if (\Illuminate\Support\Facades\Schema::hasColumn('credit_store_payments', 'gross_amount')) {
+                $paymentData['gross_amount']               = $baseAmount;
+                $paymentData['vat_type']                   = $vatType;
+                $paymentData['vat_rate']                   = $vatRate;
+                $paymentData['vat_amount']                 = $vatAmount;
+                $paymentData['has_withholding']            = $hasWithholding;
+                $paymentData['withholding_rate']           = $withholdingRate;
+                $paymentData['withholding_amount']         = $withholdingAmount;
+                $paymentData['withholding_receipt']        = $withholdingReceiptPath;
+                $paymentData['withholding_receipt_number'] = $request->input('withholding_receipt_number', $payment->withholding_receipt_number);
+                $paymentData['net_amount']                 = $netAmount;
+            }
+
+            $payment->update($paymentData);
+
+            // 2. Synchronize linked central Receipt and ReceiptItems
+            $receipts = Receipt::where(function($q) use ($payment) {
+                $q->where('purchasable_type', CreditStorePayment::class)
+                  ->where('purchasable_id', $payment->id);
+            });
+            if ($payment->receipt_path) {
+                $receipts = $receipts->orWhere('file_path', $payment->receipt_path);
+            }
+            $receiptRecords = $receipts->get();
+
+            foreach ($receiptRecords as $receipt) {
+                $cleanTin = $supplierTin ? preg_replace('/[^0-9]/', '', $supplierTin) : preg_replace('/[^0-9]/', '', (string)$receipt->vendor_tin);
+                $cleanFs = $fsNo ? preg_replace('/[^0-9]/', '', (string)$fsNo) : preg_replace('/[^0-9]/', '', (string)$receipt->fs_no);
+
+                $receiptUpdate = [
+                    'subtotal'     => $baseAmount,
+                    'vat_amount'   => $vatAmount,
+                    'total_amount' => $totalReceiptVal,
+                    'qc_notes'     => "Credit payment receipt #{$payment->id} [VAT Corrected by Global Admin to {$vatType}: ETB " . number_format($vatAmount, 2) . " - " . ($vatIncluded ? "Sent to ERCA Line 100 VAT Section (PurcType 3)" : "Sent to Purchase TAS Excel (PurcType {$purchaseType})") . "]",
+                ];
+
+                if (!empty($supplierTin)) {
+                    $receiptUpdate['vendor_tin'] = $supplierTin;
+                    $receiptUpdate['tin_valid']  = (strlen($cleanTin) === 10);
+                }
+                if (!empty($fsNo)) {
+                    $receiptUpdate['fs_no']       = $fsNo;
+                    $receiptUpdate['fs_no_raw']   = $fsNo;
+                    $receiptUpdate['fs_no_valid'] = (strlen($cleanFs) === 8);
+                }
+                if (!empty($mrcNo)) {
+                    $receiptUpdate['mrc_no'] = $mrcNo;
+                }
+                if (!empty($receiptDate)) {
+                    $receiptUpdate['receipt_date'] = $receiptDate;
+                }
+
+                $parsed = is_string($receipt->parsed_data) ? (json_decode($receipt->parsed_data, true) ?: []) : (array)($receipt->parsed_data ?? []);
+                $parsed['vat_type']      = $vatType;
+                $parsed['vat_amount']    = $vatAmount;
+                $parsed['subtotal']      = $baseAmount;
+                $parsed['total_amount']  = $totalReceiptVal;
+                $parsed['purc_type']     = $purchaseType;
+                $parsed['purchase_type'] = $purchaseType;
+                $parsed['vat_included']  = $vatIncluded;
+                if (!empty($supplierTin)) $parsed['seller_tin'] = $supplierTin;
+                if (!empty($fsNo)) $parsed['receipt_no'] = $fsNo;
+                if (!empty($mrcNo)) $parsed['mrc'] = $mrcNo;
+                if (!empty($receiptDate)) $parsed['receipt_date'] = $receiptDate;
+                $receiptUpdate['parsed_data'] = $parsed;
+
+                $receipt->update($receiptUpdate);
+
+                // Update items in receipt_items
+                foreach ($receipt->items as $it) {
+                    $it->update([
+                        'vat_category'    => $vatIncluded ? 'G' : 'E',
+                        'purchase_type'   => $purchaseType,
+                        'vat_amount'      => $vatAmount,
+                        'value_after_vat' => $totalReceiptVal,
+                    ]);
+                }
+            }
+
+            // 3. Update linked ExpenseRequest if present
+            if ($payment->expense_request_id) {
+                try {
+                    ExpenseRequest::where('id', $payment->expense_request_id)->update([
+                        'vat_type'           => $vatType,
+                        'vat_rate'           => $vatRate,
+                        'vat_amount'         => $vatAmount,
+                        'has_withholding'    => $hasWithholding,
+                        'withholding_rate'   => $withholdingRate,
+                        'withholding_amount' => $withholdingAmount,
+                        'gross_amount'       => $baseAmount,
+                        'amount'             => $gross,
+                    ]);
+                } catch (\Throwable $ex) {}
+            }
+
+            // 4. Recalculate Ledger paid amount & status
+            $totalPaid = (float)$ledger->payments()->sum('amount');
+            $newStatus = ($totalPaid >= (float)$ledger->credit_amount) ? 'fully_paid' : ($totalPaid > 0 ? 'partially_paid' : 'unpaid');
+            $ledger->update([
+                'paid_amount' => $totalPaid,
+                'status'      => $newStatus,
+            ]);
+        });
+
+        $routeMsg = $vatIncluded 
+            ? "Saved into ERCA Line 100 VAT Section (+ETB " . number_format($vatAmount, 2) . ")" 
+            : "Declared in Purchase TAS Excel (Zero VAT / PurcType {$purchaseType})";
+
+        return redirect()->route('finance.credit-store.show', $ledger)
+            ->with('success', "✅ Global Admin VAT correction applied for Payment #{$payment->id}! VAT updated to " . strtoupper(str_replace('_', ' ', $vatType)) . " (ETB " . number_format($vatAmount, 2) . "). {$routeMsg}.");
     }
 }

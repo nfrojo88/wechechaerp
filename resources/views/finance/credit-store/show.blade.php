@@ -3,6 +3,14 @@
 @section('title', 'Credit Purchase Details - #' . ($ledger->pr_no ?? $ledger->id))
 
 @section('content')
+@php
+    $authUser = Auth::user();
+    $rawUserRoles = $authUser ? $authUser->roles->pluck('name')->map(function($r) { return strtolower(trim($r)); })->toArray() : [];
+    $isGlobalAdmin = ($authUser && (method_exists($authUser, 'isGlobalAdmin') ? $authUser->isGlobalAdmin() : false))
+        || in_array('global_admin', $rawUserRoles)
+        || in_array('global admin', $rawUserRoles)
+        || in_array('admin', $rawUserRoles);
+@endphp
 <div class="container-fluid py-3">
     <!-- Breadcrumb & Header -->
     <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
@@ -33,7 +41,7 @@
                     </span>
                 @endif
             </div>
-            <p class="text-muted small mb-0">Project: <strong>{{ $ledger->project?->name ?? '—' }}</strong> | Supplier: <strong>{{ $ledger->supplier_name ?: 'Credit Supplier' }}</strong></p>
+            <p class="text-muted small mb-0">Project: <strong>{{ optional($ledger->project)->name ?? '—' }}</strong> | Supplier: <strong>{{ $ledger->supplier_name ?: 'Credit Supplier' }}</strong></p>
         </div>
 
         <div class="d-flex gap-2">
@@ -111,7 +119,7 @@
             <div class="card border-0 shadow-sm rounded-3 mb-4">
                 <div class="card-header bg-white py-3 px-3 border-bottom d-flex align-items-center justify-content-between">
                     <h6 class="mb-0 fw-bold text-dark"><i class="fas fa-boxes-stacked me-2 text-primary"></i> Procured Material Items</h6>
-                    <span class="badge bg-light text-muted border">COA: {{ $ledger->coaAccount?->code ?? '5110' }} - {{ $ledger->coaAccount?->name ?? 'Cost Of Material By Credit' }}</span>
+                    <span class="badge bg-light text-muted border">COA: {{ optional($ledger->coaAccount)->code ?? '5110' }} - {{ optional($ledger->coaAccount)->name ?? 'Cost Of Material By Credit' }}</span>
                 </div>
                 <div class="table-responsive">
                     <table class="table table-hover align-middle mb-0" style="font-size: 0.875rem;">
@@ -134,12 +142,12 @@
                                     <tr>
                                         <td class="ps-3 text-muted">{{ $idx + 1 }}</td>
                                         <td>
-                                            <div class="fw-bold text-dark">{{ $item->product?->name ?? $item->item_name ?? 'Material Item' }}</div>
-                                            @if($item->product?->item_code)
-                                                <small class="text-muted font-monospace">{{ $item->product->item_code }}</small>
+                                            <div class="fw-bold text-dark">{{ optional($item->product)->name ?? ($item->item_name ?? 'Material Item') }}</div>
+                                            @if(optional($item->product)->item_code)
+                                                <small class="text-muted font-monospace">{{ optional($item->product)->item_code }}</small>
                                             @endif
                                         </td>
-                                        <td class="text-center fw-semibold">{{ number_format($item->quantity, 2) }} {{ $item->unit ?? $item->product?->unit }}</td>
+                                        <td class="text-center fw-semibold">{{ number_format($item->quantity, 2) }} {{ $item->unit ?? optional($item->product)->unit }}</td>
                                         <td class="text-end font-monospace">{{ number_format($uPrice, 2) }} ETB</td>
                                         <td class="text-end pe-3 fw-bold font-monospace">{{ number_format($lTotal, 2) }} ETB</td>
                                     </tr>
@@ -200,12 +208,16 @@
                                     </td>
                                     <td>
                                         <div class="d-flex align-items-center gap-2">
+                                            @php
+                                                $staffName = optional($exp->assignedFinanceStaff)->name ?? (optional($exp->financeStaff)->name ?? 'Finance Staff');
+                                                $staffEmail = optional($exp->assignedFinanceStaff)->email ?? '';
+                                            @endphp
                                             <div class="avatar-circle-sm bg-info-subtle text-info fw-bold rounded-circle d-flex align-items-center justify-content-center" style="width: 28px; height: 28px; font-size: 0.75rem;">
-                                                {{ substr($exp->assignedFinanceStaff?->name ?? $exp->financeStaff?->name ?? 'F', 0, 1) }}
+                                                {{ substr($staffName, 0, 1) }}
                                             </div>
                                             <div>
-                                                <div class="fw-semibold text-dark">{{ $exp->assignedFinanceStaff?->name ?? $exp->financeStaff?->name ?? 'Finance Staff' }}</div>
-                                                <small class="text-muted" style="font-size: 0.72rem;">{{ $exp->assignedFinanceStaff?->email ?? '' }}</small>
+                                                <div class="fw-semibold text-dark">{{ $staffName }}</div>
+                                                <small class="text-muted" style="font-size: 0.72rem;">{{ $staffEmail }}</small>
                                             </div>
                                         </div>
                                     </td>
@@ -287,6 +299,9 @@
                                 <th>Funding Account</th>
                                 <th class="text-center">Receipt</th>
                                 <th>Recorded By</th>
+                                @if($isGlobalAdmin)
+                                    <th class="text-center pe-3">Admin Action</th>
+                                @endif
                             </tr>
                         </thead>
                         <tbody>
@@ -350,13 +365,21 @@
                                         @endif
                                     </td>
                                     <td class="small text-muted">
-                                        {{ $pmt->recordedByUser?->name ?? 'Finance Head' }}
+                                        {{ optional($pmt->recordedByUser)->name ?? 'Finance Head' }}
                                         <div class="text-muted font-monospace" style="font-size: 0.7rem;">{{ $pmt->created_at->format('h:i A') }}</div>
                                     </td>
+                                    @if($isGlobalAdmin)
+                                        <td class="text-center pe-3">
+                                            <button type="button" class="btn btn-sm btn-outline-warning text-dark py-1 px-2.5 fw-semibold shadow-2xs rounded-2 d-inline-flex align-items-center gap-1" data-bs-toggle="modal" data-bs-target="#editPaymentVatModal_{{ $pmt->id }}" title="Correct VAT / Tax Breakdown (Global Admin)">
+                                                <i class="fa-solid fa-pen-to-square text-warning"></i>
+                                                <span style="font-size: 0.75rem;">Edit VAT</span>
+                                            </button>
+                                        </td>
+                                    @endif
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="6" class="text-center py-4 text-muted">
+                                    <td colspan="{{ $isGlobalAdmin ? 7 : 6 }}" class="text-center py-4 text-muted">
                                         <i class="fas fa-receipt fa-2x text-secondary opacity-25 mb-2"></i>
                                         <p class="mb-0 small">No payments recorded yet. Use the settlement form on the right to record a payment or assign to finance.</p>
                                     </td>
@@ -429,8 +452,8 @@
                                                 <optgroup label="🏦 Company Bank Accounts">
                                                     @foreach($bankAccounts as $bk)
                                                         @php
-                                                            $bkStaffId = $bk->assigned_to ?? $bk->coa?->assigned_to ?? '';
-                                                            $bkStaffName = $bk->assignedStaff?->name ?? $bk->coa?->manager?->name ?? '';
+                                                            $bkStaffId = $bk->assigned_to ?? (optional($bk->coa)->assigned_to ?? '');
+                                                            $bkStaffName = optional($bk->assignedStaff)->name ?? (optional(optional($bk->coa)->manager)->name ?? '');
                                                         @endphp
                                                         <option value="bank:{{ $bk->id }}" 
                                                                 data-balance="{{ (float)($bk->current_balance ?? 0) }}"
@@ -448,7 +471,7 @@
                                                         <option value="coa:{{ $ca->id }}" 
                                                                 data-balance="{{ (float)$ca->current_balance }}"
                                                                 data-staff-id="{{ $ca->assigned_to ?? '' }}"
-                                                                data-staff-name="{{ $ca->manager?->name ?? '' }}">
+                                                                data-staff-name="{{ optional($ca->manager)->name ?? '' }}">
                                                             [{{ $ca->code }}] {{ $ca->name }} (Bal: ETB {{ number_format($ca->current_balance, 2) }})
                                                         </option>
                                                     @endforeach
@@ -460,7 +483,7 @@
                                                         <option value="coa:{{ $ca->id }}" 
                                                                 data-balance="{{ (float)$ca->current_balance }}"
                                                                 data-staff-id="{{ $ca->assigned_to ?? '' }}"
-                                                                data-staff-name="{{ $ca->manager?->name ?? '' }}">
+                                                                data-staff-name="{{ optional($ca->manager)->name ?? '' }}">
                                                             [{{ $ca->code }}] {{ $ca->name }} (Bal: ETB {{ number_format($ca->current_balance, 2) }})
                                                         </option>
                                                     @endforeach
@@ -954,6 +977,41 @@
                             <h6 class="fw-bold text-dark">This Credit Purchase is 100% Paid</h6>
                             <p class="text-muted small mb-0">Total of <strong>{{ number_format($ledger->paid_amount, 2) }} ETB</strong> has been fully paid, recorded in double-entry journals, and posted into Company Expenses.</p>
                         </div>
+
+                        @if($isGlobalAdmin && $ledger->payments->count() > 0)
+                            <div class="card border border-warning-subtle bg-warning bg-opacity-10 rounded-3 mt-3 shadow-none">
+                                <div class="card-body p-3">
+                                    <div class="d-flex align-items-center justify-content-between mb-2">
+                                        <span class="badge bg-warning text-dark fw-bold px-2 py-1">
+                                            <i class="fa-solid fa-user-shield me-1"></i> Global Admin Only
+                                        </span>
+                                        <span class="text-muted small font-monospace" style="font-size:0.72rem;">VAT Correction</span>
+                                    </div>
+                                    <h6 class="fw-bold text-dark mb-1 small">
+                                        <i class="fa-solid fa-sliders text-warning me-1"></i> Post-Settlement Tax Audit &amp; VAT Correction
+                                    </h6>
+                                    <p class="text-muted small mb-3" style="font-size:0.76rem; line-height: 1.45;">
+                                        If tax recording errors occurred during settlement (e.g. wrong VAT rate, omitted 15% VAT, or missing 3% withholding), correct the payment tax breakdown below. It will automatically update the payment, linked fiscal receipt, and ERCA declaration route (Line 100 vs Purchase TAS Excel).
+                                    </p>
+                                    <div class="d-grid gap-2">
+                                        @foreach($ledger->payments as $adminPmt)
+                                            <button type="button" class="btn btn-sm btn-white bg-white border border-secondary border-opacity-25 text-start d-flex justify-content-between align-items-center py-2 px-2.5 shadow-2xs rounded-2 hover-shadow" data-bs-toggle="modal" data-bs-target="#editPaymentVatModal_{{ $adminPmt->id }}">
+                                                <div>
+                                                    <span class="fw-bold text-dark" style="font-size: 0.8rem;">Payment #{{ $adminPmt->id }}</span>
+                                                    <span class="text-muted font-monospace ms-1" style="font-size: 0.75rem;">({{ number_format($adminPmt->amount, 2) }} ETB)</span>
+                                                    <div class="small text-muted" style="font-size: 0.7rem;">
+                                                        VAT: <strong>{{ strtoupper($adminPmt->vat_type ?? 'none') }}</strong> ({{ number_format($adminPmt->vat_amount ?? 0, 2) }} ETB) &bull; WHT: {{ number_format($adminPmt->withholding_amount ?? 0, 2) }} ETB
+                                                    </div>
+                                                </div>
+                                                <span class="badge bg-warning text-dark fw-bold" style="font-size:0.7rem;">
+                                                    <i class="fa-solid fa-pen-to-square me-1"></i> Edit VAT
+                                                </span>
+                                            </button>
+                                        @endforeach
+                                    </div>
+                                </div>
+                            </div>
+                        @endif
                     @endif
                 </div>
             </div>
@@ -1042,5 +1100,394 @@
         </script>
     @endif
 @endforeach
+
+@if($isGlobalAdmin)
+    @foreach($ledger->payments as $pmt)
+        @php
+            $linkedReceipt = \App\Models\Receipt::where(function($q) use ($pmt) {
+                $q->where('purchasable_type', \App\Models\CreditStorePayment::class)
+                  ->where('purchasable_id', $pmt->id);
+            })->orWhere(function($q) use ($pmt) {
+                if ($pmt->receipt_path) {
+                    $q->where('file_path', $pmt->receipt_path);
+                }
+            })->first();
+
+            $curVatType = $pmt->vat_type ?: 'none';
+            $curVatRate = (float)($pmt->vat_rate ?: 15.00);
+            $curVatAmount = (float)($pmt->vat_amount ?: 0.00);
+            $curHasWht = (bool)($pmt->has_withholding || ($pmt->withholding_amount ?? 0) > 0);
+            $curWhtRate = (float)($pmt->withholding_rate ?: 3.00);
+            $curWhtAmount = (float)($pmt->withholding_amount ?: 0.00);
+            $curNet = (float)($pmt->net_amount ?: $pmt->amount);
+            $curBase = (float)($pmt->gross_amount ?: $pmt->amount);
+            if ($curVatType === 'inclusive' || $curVatType === 'vat_b') {
+                $curBase = round($pmt->amount / 1.15, 2);
+            }
+
+            $sellerTin = optional($linkedReceipt)->vendor_tin ?? (optional($ledger->supplier)->tin ?? '');
+            $fsNo = optional($linkedReceipt)->fs_no ?? ($pmt->reference_no ?? '');
+            $mrcNo = optional($linkedReceipt)->mrc_no ?? '';
+            $rcptDate = ($linkedReceipt && $linkedReceipt->receipt_date) 
+                ? \Carbon\Carbon::parse($linkedReceipt->receipt_date)->format('Y-m-d') 
+                : ($pmt->payment_date ? $pmt->payment_date->format('Y-m-d') : now()->format('Y-m-d'));
+            $purcType = ($curVatType !== 'none' && $curVatAmount > 0) ? '3' : '6';
+        @endphp
+
+        <!-- Edit Payment VAT Modal for Payment #{{ $pmt->id }} (Global Admin Only) -->
+        <div class="modal fade" id="editPaymentVatModal_{{ $pmt->id }}" tabindex="-1" aria-labelledby="editPaymentVatModalLabel_{{ $pmt->id }}" aria-hidden="true">
+            <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+                <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+                    <form action="{{ route('finance.credit-store.correct-vat', [$ledger, $pmt]) }}" method="POST" enctype="multipart/form-data">
+                        @csrf
+                        <div class="modal-header bg-dark text-white py-3 px-4">
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="badge bg-warning text-dark p-2 rounded-circle">
+                                    <i class="fa-solid fa-user-shield fs-6"></i>
+                                </span>
+                                <div>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <h6 class="modal-title fw-bold mb-0">Global Admin: Correct VAT &amp; Tax Declaration</h6>
+                                        <span class="badge bg-warning text-dark" style="font-size:0.68rem;">Privileged Mode</span>
+                                    </div>
+                                    <small class="text-white-50">
+                                        Payment #{{ $pmt->id }} &bull; Amount: {{ number_format($pmt->amount, 2) }} ETB &bull; PR #{{ $ledger->pr_no }} &bull; {{ $ledger->supplier_name ?: 'Supplier' }}
+                                    </small>
+                                </div>
+                            </div>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        
+                        <div class="modal-body p-4" style="background-color: #fbfbfb;">
+                            <!-- Informational alert -->
+                            <div class="alert alert-warning border border-warning-subtle bg-white rounded-3 p-3 mb-3 shadow-2xs">
+                                <div class="d-flex align-items-start gap-2">
+                                    <i class="fa-solid fa-triangle-exclamation text-warning fs-5 mt-0.5"></i>
+                                    <div class="small">
+                                        <strong class="text-dark">Post-Payment Tax Adjustment Console:</strong>
+                                        <div class="text-muted" style="line-height:1.45;">
+                                            This tool allows <strong>Global Admin ONLY</strong> to correct recorded VAT, Withholding Tax, and ERCA Declaration routes even when this Credit Ledger is <strong>100% Fully Paid</strong>. Correcting VAT will synchronize the payment record, recalculate gross/net amounts, update the linked central Receipt and items, and route to either <strong>ERCA Line 100 VAT Section</strong> or <strong>Purchase TAS Excel</strong>.
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row g-3">
+                                <!-- Payment Amount -->
+                                <div class="col-12 col-md-6">
+                                    <label class="form-label small fw-bold text-dark text-uppercase">
+                                        Settlement Amount (Gross) <span class="text-danger">*</span>
+                                    </label>
+                                    <div class="input-group input-group-sm">
+                                        <input type="number" step="0.01" min="0.01" name="amount" id="editVatAmount_{{ $pmt->id }}" 
+                                               class="form-control fw-bold font-monospace fs-6" 
+                                               value="{{ number_format($pmt->amount, 2, '.', '') }}" 
+                                               required oninput="recalculateEditVatTax({{ $pmt->id }})">
+                                        <span class="input-group-text bg-white fw-bold text-muted">ETB</span>
+                                    </div>
+                                    <span class="form-text text-muted small" style="font-size:0.7rem;">Ledger balance liquidated by this payment.</span>
+                                </div>
+
+                                <!-- VAT Treatment -->
+                                <div class="col-12 col-md-6">
+                                    <label class="form-label small fw-bold text-dark text-uppercase">
+                                        VAT Treatment Mode <span class="text-danger">*</span>
+                                    </label>
+                                    <select name="vat_type" id="editVatType_{{ $pmt->id }}" class="form-select form-select-sm fw-semibold" required onchange="recalculateEditVatTax({{ $pmt->id }})">
+                                        <option value="none" {{ $curVatType === 'none' ? 'selected' : '' }}>No VAT (0% / Exempt / Non-VAT) &rarr; TAS Excel</option>
+                                        <option value="exclusive" {{ $curVatType === 'exclusive' ? 'selected' : '' }}>15% VAT Exclusive (+15% on Base) &rarr; Line 100</option>
+                                        <option value="vat_b" {{ in_array($curVatType, ['vat_b', 'inclusive']) ? 'selected' : '' }}>15% VAT Inclusive (Extract 15% from Gross) &rarr; Line 100</option>
+                                    </select>
+                                    <span class="form-text text-muted small" style="font-size:0.7rem;">Determines whether tax is included in receipt total or added on top.</span>
+                                </div>
+
+                                <!-- VAT Rate & VAT Amount Override -->
+                                <div class="col-12 col-md-6">
+                                    <div class="row g-2">
+                                        <div class="col-6">
+                                            <label class="form-label small fw-semibold text-muted">VAT Rate (%)</label>
+                                            <div class="input-group input-group-sm">
+                                                <input type="number" step="0.01" min="0" name="vat_rate" id="editVatRate_{{ $pmt->id }}" 
+                                                       class="form-control font-monospace" 
+                                                       value="{{ number_format($curVatRate, 2, '.', '') }}" 
+                                                       oninput="recalculateEditVatTax({{ $pmt->id }})">
+                                                <span class="input-group-text bg-light text-muted small">%</span>
+                                            </div>
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="form-label small fw-semibold text-muted">VAT Amount (ETB)</label>
+                                            <div class="input-group input-group-sm">
+                                                <input type="number" step="0.01" min="0" name="vat_amount" id="editVatAmountVal_{{ $pmt->id }}" 
+                                                       class="form-control font-monospace fw-bold text-success" 
+                                                       value="{{ number_format($curVatAmount, 2, '.', '') }}">
+                                                <span class="input-group-text bg-light text-success small">ETB</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- ERCA Purchase Type Route -->
+                                <div class="col-12 col-md-6">
+                                    <label class="form-label small fw-bold text-dark text-uppercase">
+                                        ERCA Declaration Route <span class="text-danger">*</span>
+                                    </label>
+                                    <select name="purc_type" id="editPurcType_{{ $pmt->id }}" class="form-select form-select-sm fw-semibold">
+                                        <option value="3" {{ $purcType === '3' ? 'selected' : '' }}>Type 3 - Goods (ERCA Line 100 VAT Section)</option>
+                                        <option value="6" {{ $purcType === '6' ? 'selected' : '' }}>Type 6 - Exempt / Non-VAT (Purchase TAS Excel)</option>
+                                        <option value="1" {{ $purcType === '1' ? 'selected' : '' }}>Type 1 - Capital Assets</option>
+                                        <option value="2" {{ $purcType === '2' ? 'selected' : '' }}>Type 2 - Raw Materials</option>
+                                        <option value="4" {{ $purcType === '4' ? 'selected' : '' }}>Type 4 - Services</option>
+                                    </select>
+                                    <span class="form-text text-muted small" style="font-size:0.7rem;">Controls which ERCA export tab this receipt populates.</span>
+                                </div>
+
+                                <!-- Withholding Tax Checkbox -->
+                                <div class="col-12">
+                                    <div class="card border rounded-3 p-3 bg-white shadow-2xs">
+                                        <div class="form-check form-switch mb-2">
+                                            <input class="form-check-input" type="checkbox" name="has_withholding" value="1" 
+                                                   id="editHasWithholding_{{ $pmt->id }}" 
+                                                   {{ $curHasWht ? 'checked' : '' }} 
+                                                   onchange="recalculateEditVatTax({{ $pmt->id }})">
+                                            <label class="form-check-label fw-bold small text-dark" for="editHasWithholding_{{ $pmt->id }}">
+                                                <i class="fa-solid fa-file-invoice-dollar text-danger me-1"></i> Apply 3% Withholding Tax (WHT) Deduction
+                                            </label>
+                                        </div>
+
+                                        <div id="editWhtSection_{{ $pmt->id }}" style="display: {{ $curHasWht ? 'block' : 'none' }};">
+                                            <div class="row g-2 pt-2 border-top">
+                                                <div class="col-12 col-md-3">
+                                                    <label class="form-label small text-muted mb-1">WHT Rate (%)</label>
+                                                    <div class="input-group input-group-sm">
+                                                        <input type="number" step="0.01" min="0" name="withholding_rate" id="editWhtRate_{{ $pmt->id }}" 
+                                                               class="form-control font-monospace" 
+                                                               value="{{ number_format($curWhtRate, 2, '.', '') }}" 
+                                                               oninput="recalculateEditVatTax({{ $pmt->id }})">
+                                                        <span class="input-group-text bg-light text-muted small">%</span>
+                                                    </div>
+                                                </div>
+                                                <div class="col-12 col-md-3">
+                                                    <label class="form-label small text-muted mb-1">WHT Deducted (ETB)</label>
+                                                    <div class="input-group input-group-sm">
+                                                        <input type="number" step="0.01" min="0" name="withholding_amount" id="editWhtAmountVal_{{ $pmt->id }}" 
+                                                               class="form-control font-monospace fw-bold text-danger" 
+                                                               value="{{ number_format($curWhtAmount, 2, '.', '') }}">
+                                                        <span class="input-group-text bg-light text-danger small">ETB</span>
+                                                    </div>
+                                                </div>
+                                                <div class="col-12 col-md-6">
+                                                    <label class="form-label small text-muted mb-1">Withholding Receipt #</label>
+                                                    <input type="text" name="withholding_receipt_number" class="form-control form-control-sm font-monospace" 
+                                                           value="{{ $pmt->withholding_receipt_number }}" placeholder="e.g. WHT-2026-0045">
+                                                </div>
+                                                <div class="col-12">
+                                                    <label class="form-label small text-muted mb-1">Replace / Upload Withholding Slip File</label>
+                                                    <input type="file" name="withholding_receipt" class="form-control form-control-sm" accept=".pdf,.jpg,.jpeg,.png,.webp">
+                                                    @if($pmt->withholding_receipt)
+                                                        <div class="mt-1 small">
+                                                            <a href="{{ asset($pmt->withholding_receipt) }}" target="_blank" class="text-primary text-decoration-none">
+                                                                <i class="fa-solid fa-paperclip me-1"></i> Current WHT Slip Attached
+                                                            </a>
+                                                        </div>
+                                                    @endif
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Fiscal Metadata for Central Receipt & ERCA Export -->
+                                <div class="col-12">
+                                    <div class="card border rounded-3 p-3 bg-white shadow-2xs">
+                                        <h6 class="fw-bold small text-dark mb-2 text-uppercase">
+                                            <i class="fa-solid fa-receipt text-primary me-1"></i> Fiscal Document &amp; Supplier Metadata
+                                        </h6>
+                                        <div class="row g-2">
+                                            <div class="col-12 col-md-4">
+                                                <label class="form-label small text-muted mb-1">Supplier TIN</label>
+                                                <input type="text" name="supplier_tin" maxlength="30" class="form-control form-control-sm font-monospace" 
+                                                       value="{{ $sellerTin }}" placeholder="10 digits (e.g. 0001234567)">
+                                            </div>
+                                            <div class="col-12 col-md-4">
+                                                <label class="form-label small text-muted mb-1">FS # / Receipt No</label>
+                                                <input type="text" name="fs_no" maxlength="50" class="form-control form-control-sm font-monospace" 
+                                                       value="{{ $fsNo }}" placeholder="8 digits (e.g. 12345678)">
+                                            </div>
+                                            <div class="col-12 col-md-4">
+                                                <label class="form-label small text-muted mb-1">MRC Machine No</label>
+                                                <input type="text" name="mrc_no" maxlength="100" class="form-control form-control-sm font-monospace" 
+                                                       value="{{ $mrcNo }}" placeholder="e.g. MOR-12345">
+                                            </div>
+                                            <div class="col-12 col-md-4">
+                                                <label class="form-label small text-muted mb-1">Receipt Date</label>
+                                                <input type="date" name="receipt_date" class="form-control form-control-sm font-monospace" 
+                                                       value="{{ $rcptDate }}">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Live Recalculated Summary Card -->
+                                <div class="col-12">
+                                    <div class="card border-0 bg-dark text-white rounded-3 p-3 shadow-sm">
+                                        <div class="d-flex align-items-center justify-content-between mb-2">
+                                            <span class="small text-white-50 text-uppercase fw-semibold">Live Recalculated Breakdown</span>
+                                            <span id="editRouteBadge_{{ $pmt->id }}" class="badge {{ ($curVatType !== 'none' && $curVatAmount > 0) ? 'bg-success-subtle text-success border border-success' : 'bg-secondary-subtle text-secondary border border-secondary' }} px-2 py-1">
+                                                @if($curVatType !== 'none' && $curVatAmount > 0)
+                                                    <i class="fa-solid fa-file-invoice-dollar me-1"></i> Sent to ERCA Line 100 VAT Section
+                                                @else
+                                                    <i class="fa-solid fa-file-excel me-1"></i> Sent to Purchase TAS Excel (Zero VAT / PurcType 6)
+                                                @endif
+                                            </span>
+                                        </div>
+                                        <div class="row g-2 text-center font-monospace">
+                                            <div class="col-3 border-end border-secondary border-opacity-50">
+                                                <div class="small text-white-50" style="font-size: 0.7rem;">Base Value</div>
+                                                <div class="fw-bold text-white fs-6" id="editDisplayBase_{{ $pmt->id }}">
+                                                    ETB {{ number_format($curBase, 2) }}
+                                                </div>
+                                            </div>
+                                            <div class="col-3 border-end border-secondary border-opacity-50">
+                                                <div class="small text-white-50" style="font-size: 0.7rem;">15% VAT</div>
+                                                <div class="fw-bold text-success fs-6" id="editDisplayVat_{{ $pmt->id }}">
+                                                    {{ $curVatAmount > 0 ? '+ ' : '' }}ETB {{ number_format($curVatAmount, 2) }}
+                                                </div>
+                                            </div>
+                                            <div class="col-3 border-end border-secondary border-opacity-50">
+                                                <div class="small text-white-50" style="font-size: 0.7rem;">3% WHT</div>
+                                                <div class="fw-bold text-danger fs-6" id="editDisplayWht_{{ $pmt->id }}">
+                                                    {{ $curWhtAmount > 0 ? '- ' : '' }}ETB {{ number_format($curWhtAmount, 2) }}
+                                                </div>
+                                            </div>
+                                            <div class="col-3">
+                                                <div class="small text-white-50" style="font-size: 0.7rem;">Net Disbursed</div>
+                                                <div class="fw-bold text-warning fs-6" id="editDisplayNet_{{ $pmt->id }}">
+                                                    ETB {{ number_format($curNet, 2) }}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Mandatory Correction Reason -->
+                                <div class="col-12">
+                                    <label class="form-label small fw-bold text-dark text-uppercase">
+                                        Reason for VAT Correction <span class="text-danger">*</span>
+                                    </label>
+                                    <textarea name="correction_reason" class="form-control form-control-sm rounded-2" rows="2" 
+                                              placeholder="Provide specific justification (e.g., Supplier provided fiscal invoice with 15% VAT FS-12345678 that was mistakenly recorded as No VAT during settlement; withholding slip verified)." required></textarea>
+                                    <span class="form-text text-muted small" style="font-size:0.7rem;">
+                                        <i class="fa-solid fa-clock-rotate-left me-1"></i> A permanent audit entry with your admin name ({{ Auth::user()->name }}) and timestamp will be logged.
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="modal-footer bg-light py-2.5 px-4 d-flex justify-content-between">
+                            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-warning text-dark fw-bold btn-sm px-3 shadow-sm">
+                                <i class="fa-solid fa-check-double me-1"></i> Save Correction &amp; Resync Records
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    @endforeach
+
+    <!-- JavaScript for recalculating VAT in Edit Modal -->
+    <script>
+        function recalculateEditVatTax(pmtId) {
+            const grossInput = document.getElementById('editVatAmount_' + pmtId);
+            const vatTypeSelect = document.getElementById('editVatType_' + pmtId);
+            const vatRateInput = document.getElementById('editVatRate_' + pmtId);
+            const vatAmountInput = document.getElementById('editVatAmountVal_' + pmtId);
+            const whtToggle = document.getElementById('editHasWithholding_' + pmtId);
+            const whtRateInput = document.getElementById('editWhtRate_' + pmtId);
+            const whtAmountInput = document.getElementById('editWhtAmountVal_' + pmtId);
+            const purcTypeSelect = document.getElementById('editPurcType_' + pmtId);
+
+            if (!grossInput) return;
+            const gross = parseFloat(grossInput.value) || 0;
+            const vatType = vatTypeSelect ? vatTypeSelect.value : 'none';
+            const vatRate = vatRateInput ? (parseFloat(vatRateInput.value) || 15.0) : 15.0;
+            const hasWht = whtToggle ? whtToggle.checked : false;
+            const whtRate = whtRateInput ? (parseFloat(whtRateInput.value) || 3.0) : 3.0;
+
+            const whtSection = document.getElementById('editWhtSection_' + pmtId);
+            if (whtSection) {
+                whtSection.style.display = hasWht ? 'block' : 'none';
+            }
+
+            let vatAmount = 0.0;
+            let baseAmount = gross;
+            let whtAmount = 0.0;
+            let netAmount = gross;
+
+            if (vatType === 'exclusive') {
+                vatAmount = Math.round(gross * (vatRate / 100) * 100) / 100;
+                baseAmount = gross;
+                const totalGrossWithVat = gross + vatAmount;
+                if (hasWht) {
+                    whtAmount = Math.round(baseAmount * (whtRate / 100) * 100) / 100;
+                }
+                netAmount = Math.round((totalGrossWithVat - whtAmount) * 100) / 100;
+                if (purcTypeSelect && purcTypeSelect.value === '6') {
+                    purcTypeSelect.value = '3';
+                }
+            } else if (vatType === 'inclusive' || vatType === 'vat_b') {
+                baseAmount = Math.round((gross / (1 + (vatRate / 100))) * 100) / 100;
+                vatAmount = Math.round((gross - baseAmount) * 100) / 100;
+                if (hasWht) {
+                    whtAmount = Math.round(baseAmount * (whtRate / 100) * 100) / 100;
+                }
+                netAmount = Math.round((gross - whtAmount) * 100) / 100;
+                if (purcTypeSelect && purcTypeSelect.value === '6') {
+                    purcTypeSelect.value = '3';
+                }
+            } else {
+                baseAmount = gross;
+                vatAmount = 0.0;
+                if (hasWht) {
+                    whtAmount = Math.round(baseAmount * (whtRate / 100) * 100) / 100;
+                }
+                netAmount = Math.round((gross - whtAmount) * 100) / 100;
+                if (purcTypeSelect && purcTypeSelect.value === '3') {
+                    purcTypeSelect.value = '6';
+                }
+            }
+
+            if (vatAmountInput) {
+                vatAmountInput.value = vatAmount.toFixed(2);
+            }
+            if (whtAmountInput) {
+                whtAmountInput.value = whtAmount.toFixed(2);
+            }
+
+            const fmt = num => 'ETB ' + num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+            const dispBase = document.getElementById('editDisplayBase_' + pmtId);
+            const dispVat = document.getElementById('editDisplayVat_' + pmtId);
+            const dispWht = document.getElementById('editDisplayWht_' + pmtId);
+            const dispNet = document.getElementById('editDisplayNet_' + pmtId);
+            const routeBadge = document.getElementById('editRouteBadge_' + pmtId);
+
+            if (dispBase) dispBase.innerText = fmt(baseAmount);
+            if (dispVat) dispVat.innerText = (vatAmount > 0 ? '+ ' : '') + fmt(vatAmount);
+            if (dispWht) dispWht.innerText = (whtAmount > 0 ? '- ' : '') + fmt(whtAmount);
+            if (dispNet) dispNet.innerText = fmt(netAmount);
+
+            if (routeBadge) {
+                if (vatType !== 'none' && vatAmount > 0) {
+                    routeBadge.className = 'badge bg-success-subtle text-success border border-success px-2 py-1';
+                    routeBadge.innerHTML = '<i class="fa-solid fa-file-invoice-dollar me-1"></i> Sent to ERCA Line 100 VAT Section (Input VAT Claimable)';
+                } else {
+                    routeBadge.className = 'badge bg-secondary-subtle text-secondary border border-secondary px-2 py-1';
+                    routeBadge.innerHTML = '<i class="fa-solid fa-file-excel me-1"></i> Sent to Purchase TAS Excel (Zero VAT / PurcType 6)';
+                }
+            }
+        }
+    </script>
+@endif
 
 @endsection
