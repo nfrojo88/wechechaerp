@@ -544,7 +544,11 @@
                                                 <input type="hidden" name="vendor_name" id="creditBatchVendorName">
                                                 <input type="hidden" name="mrc_no" id="creditBatchMrcNo">
                                                 <input type="hidden" name="receipt_date" id="creditBatchReceiptDate">
+                                                <input type="hidden" name="subtotal" id="creditBatchSubtotal">
+                                                <input type="hidden" name="vat_amount" id="creditBatchVatAmount">
+                                                <input type="hidden" name="total_amount" id="creditBatchTotalAmount">
                                                 <input type="hidden" name="vat_included" id="creditBatchVatIncluded" value="0">
+                                                <input type="hidden" name="is_verified" id="creditBatchIsVerified" value="1">
                                                 <input type="hidden" name="ocr_items_json" id="creditBatchOcrItemsJson">
                                                 <div class="form-text small text-muted" style="font-size:0.72rem;">Attach bank slip, cheque scan, or signed vendor voucher. The Multi-Engine OCR Studio verifies ERCA fiscal rules and automatically routes VAT vs TAS declaration.</div>
                                             </div>

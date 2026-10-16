@@ -244,8 +244,9 @@
             function renderStudio(container, scanData, file, btn) {
                 const ext = scanData.data || {};
                 const isDup = Boolean(scanData.is_duplicate);
-                const score = scanData.confidence_score || 95;
-                const scoreBadge = score >= 85 ? 'bg-success' : (score >= 70 ? 'bg-warning text-dark' : 'bg-secondary');
+                let score = scanData.confidence_score || 95;
+                let isVerified = !isDup; // Auto-verified if valid
+                let currentZoom = 1.0;
 
                 if (form) form.dataset.ocrDuplicate = isDup ? 'true' : 'false';
                 if (btn) {
@@ -259,18 +260,49 @@
                     }
                 }
 
+                function round2(num) {
+                    return Math.round((Number(num) || 0) * 100) / 100;
+                }
+
+                function escapeHtml(str) {
+                    return (str || '').toString()
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;')
+                        .replace(/"/g, '&quot;')
+                        .replace(/'/g, '&#039;');
+                }
+
                 // Initial VAT calculation
-                const extractedVat = parseFloat(ext.vat_amount) || 0;
-                const extractedSubtotal = parseFloat(ext.subtotal) || 0;
-                const extractedTotal = parseFloat(ext.total_amount) || (extractedSubtotal + extractedVat);
-                const hasInitialVat = extractedVat > 0;
+                let initialVat = parseFloat(ext.vat_amount) || 0;
+                let initialSubtotal = parseFloat(ext.subtotal) || 0;
+                let initialTotal = parseFloat(ext.total_amount) || (initialSubtotal + initialVat);
+                const hasInitialVat = initialVat > 0;
 
                 // Parse Ethiopian date
                 const ecInfo = gregorianToEthiopian(ext.receipt_date_ymd || ext.receipt_date);
-                const ecFormatted = ecInfo ? ecInfo.formatted : 'N/A';
+                let ecFormatted = ecInfo ? ecInfo.formatted : 'N/A';
 
-                // Items list
-                const items = Array.isArray(ext.items) ? ext.items : [];
+                // Initial item list with defensive fallback
+                let items = Array.isArray(ext.items) && ext.items.length > 0
+                    ? ext.items.map(it => ({
+                        item_description: it.item_description || ext.description || 'Material Item',
+                        qty: Number(it.qty) || 1,
+                        unit_price: Number(it.unit_price) || (Number(it.total_value) || initialSubtotal || 0),
+                        total_value: Number(it.total_value) || round2((Number(it.qty) || 1) * (Number(it.unit_price) || 0)),
+                        vat: Number(it.vat) || (hasInitialVat ? round2((Number(it.total_value) || 0) * 0.15) : 0),
+                        value_after_vat: Number(it.value_after_vat) || round2((Number(it.total_value) || 0) + (Number(it.vat) || 0)),
+                        uom: it.uom || '9'
+                    }))
+                    : [{
+                        item_description: ext.description || ext.vendor_name || 'Material Item',
+                        qty: 1,
+                        unit_price: initialSubtotal || initialTotal || 0,
+                        total_value: initialSubtotal || initialTotal || 0,
+                        vat: initialVat || (hasInitialVat ? round2((initialSubtotal || initialTotal || 0) * 0.15) : 0),
+                        value_after_vat: initialTotal || (initialSubtotal + initialVat),
+                        uom: '9'
+                    }];
 
                 const studioId = 'studio_' + Math.random().toString(36).substring(2, 9);
                 const isPdf = file.name.toLowerCase().endsWith('.pdf');
@@ -279,27 +311,28 @@
                     <div class="card border rounded-3 p-0 mb-3 shadow-sm bg-white overflow-hidden ocr-studio-container" id="${studioId}">
                         <!-- Studio Header Bar -->
                         <div class="card-header bg-dark text-white py-2 px-3 d-flex flex-wrap align-items-center justify-content-between gap-2">
-                            <div class="d-flex align-items-center gap-2">
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
                                 <span class="badge bg-success text-white px-2 py-1 rounded-pill">
                                     <i class="fa-solid fa-receipt me-1"></i> Receipt OCR Studio
                                 </span>
                                 <span class="badge bg-primary text-white px-2 py-0.5 rounded-pill">
                                     <i class="fa-solid fa-microchip me-1"></i> ${scanData.engine || 'Multi-Engine AI'}
                                 </span>
-                                <span class="badge ${scoreBadge} text-white px-2 py-0.5 rounded-pill">
-                                    ${score}% Verified
+                                <span class="badge bg-info text-white px-2 py-0.5 rounded-pill" id="${studioId}_confidence_badge">
+                                    ${score}% Confidence
                                 </span>
                             </div>
                             <div class="d-flex align-items-center gap-2">
+                                <div id="${studioId}_verification_status_badge">
+                                    <span class="badge bg-success text-white px-2.5 py-1">
+                                        <i class="fa-solid fa-circle-check me-1"></i> Verified &amp; Ready for VAT Section
+                                    </span>
+                                </div>
                                 ${isDup ? `
                                     <span class="badge bg-danger text-white px-2.5 py-1">
                                         <i class="fa-solid fa-ban me-1"></i> DUPLICATE RECEIPT
                                     </span>
-                                ` : `
-                                    <span class="badge bg-success-subtle text-success border border-success px-2 py-0.5">
-                                        <i class="fa-solid fa-circle-check me-1"></i> Verified Unique
-                                    </span>
-                                `}
+                                ` : ''}
                             </div>
                         </div>
 
@@ -316,75 +349,86 @@
 
                         <div class="card-body p-3">
                             <div class="row g-3">
-                                <!-- Left Column: Receipt Visual Preview & Controls -->
+                                <!-- Left Column: Receipt Visual Preview & Zoom / Rotation Controls -->
                                 <div class="col-12 col-md-5">
-                                    <div class="p-2 border rounded-3 bg-light text-center h-100 d-flex flex-column align-items-center justify-content-center" style="min-height: 220px;">
-                                        <div class="position-relative w-100 d-flex align-items-center justify-content-center overflow-hidden" style="max-height: 240px; min-height: 180px; background:#fff; border-radius:6px;">
+                                    <div class="p-2 border rounded-3 bg-light text-center h-100 d-flex flex-column align-items-center justify-content-between" style="min-height: 260px;">
+                                        <div class="position-relative w-100 d-flex align-items-center justify-content-center overflow-hidden" style="max-height: 260px; min-height: 200px; background:#fff; border-radius:6px;">
                                             ${isPdf ? `
                                                 <div class="py-4 text-center">
                                                     <i class="fa-solid fa-file-pdf fa-4x text-danger mb-2"></i>
-                                                    <div class="fw-bold text-dark small">${file.name}</div>
+                                                    <div class="fw-bold text-dark small">${escapeHtml(file.name)}</div>
                                                     <span class="badge bg-secondary text-white mt-1">PDF Receipt Document</span>
                                                 </div>
                                             ` : `
-                                                <img src="${currentObjectUrl || ''}" alt="Receipt Preview" id="${studioId}_preview_img" class="img-fluid rounded shadow-2xs" style="max-height: 230px; object-fit: contain; transform: rotate(${currentRotation}deg); transition: transform 0.25s ease;">
+                                                <img src="${currentObjectUrl || ''}" alt="Receipt Preview" id="${studioId}_preview_img" class="img-fluid rounded shadow-2xs" style="max-height: 250px; object-fit: contain; transform: rotate(${currentRotation}deg) scale(${currentZoom}); transition: transform 0.2s ease;">
                                             `}
                                         </div>
 
-                                        <!-- Image Action Buttons -->
-                                        <div class="d-flex justify-content-center gap-1 mt-2 w-100">
+                                        <!-- Image Controls (Rotate, Zoom, Re-scan, Clear) -->
+                                        <div class="d-flex flex-wrap justify-content-center gap-1 mt-2 w-100">
                                             ${!isPdf ? `
-                                                <button type="button" class="btn btn-outline-secondary btn-sm py-1 px-2" style="font-size:0.75rem;" id="${studioId}_btn_rotate" title="Rotate 90°">
+                                                <div class="btn-group btn-group-sm me-1 shadow-2xs">
+                                                    <button type="button" class="btn btn-outline-secondary btn-xs py-1 px-2" id="${studioId}_btn_zoom_in" title="Zoom In">
+                                                        <i class="fa-solid fa-magnifying-glass-plus"></i>
+                                                    </button>
+                                                    <button type="button" class="btn btn-outline-secondary btn-xs py-1 px-2" id="${studioId}_btn_zoom_out" title="Zoom Out">
+                                                        <i class="fa-solid fa-magnifying-glass-minus"></i>
+                                                    </button>
+                                                    <button type="button" class="btn btn-outline-secondary btn-xs py-1 px-2" id="${studioId}_btn_zoom_reset" title="Reset Zoom">
+                                                        <i class="fa-solid fa-arrows-rotate"></i>
+                                                    </button>
+                                                </div>
+                                                <button type="button" class="btn btn-outline-secondary btn-xs py-1 px-2" id="${studioId}_btn_rotate" title="Rotate 90°">
                                                     <i class="fa-solid fa-rotate-right me-1"></i> Rotate
                                                 </button>
                                             ` : ''}
-                                            <button type="button" class="btn btn-outline-primary btn-sm py-1 px-2" style="font-size:0.75rem;" id="${studioId}_btn_rescan" title="Re-scan OCR">
+                                            <button type="button" class="btn btn-outline-primary btn-xs py-1 px-2" id="${studioId}_btn_rescan" title="Re-scan OCR">
                                                 <i class="fa-solid fa-bolt me-1"></i> Re-Scan
                                             </button>
-                                            <button type="button" class="btn btn-outline-danger btn-sm py-1 px-2" style="font-size:0.75rem;" id="${studioId}_btn_clear" title="Clear Receipt">
+                                            <button type="button" class="btn btn-outline-danger btn-xs py-1 px-2" id="${studioId}_btn_clear" title="Clear Receipt">
                                                 <i class="fa-solid fa-trash me-1"></i> Clear
                                             </button>
                                         </div>
                                     </div>
                                 </div>
 
-                                <!-- Right Column: Extracted Fields Form & Validation Badges -->
+                                <!-- Right Column: Extracted Fiscal Fields Form (Editable) -->
                                 <div class="col-12 col-md-7">
                                     <div class="row g-2">
-                                        <!-- Merchant / Vendor Name -->
+                                        <!-- Merchant / Supplier Name (Col E) -->
                                         <div class="col-12">
                                             <label class="form-label small fw-bold text-dark mb-0 d-flex align-items-center justify-content-between">
-                                                <span>Merchant / Supplier Name</span>
+                                                <span>Merchant / Supplier Name (Col E)</span>
                                                 <span class="badge bg-primary bg-opacity-10 text-primary border" style="font-size:0.65rem;">Col E</span>
                                             </label>
                                             <div class="input-group input-group-sm">
                                                 <span class="input-group-text bg-light"><i class="fa-solid fa-store text-muted"></i></span>
-                                                <input type="text" class="form-control fw-semibold" id="${studioId}_vendor_name" value="${ext.vendor_name || ''}" placeholder="e.g. Supplier Name">
+                                                <input type="text" class="form-control fw-semibold" id="${studioId}_vendor_name" value="${escapeHtml(ext.vendor_name || '')}" placeholder="e.g. Supplier Business Name">
                                             </div>
                                         </div>
 
-                                        <!-- Supplier TIN with 10-digit validation badge -->
+                                        <!-- Supplier TIN with 10-digit validation badge (Col D) -->
                                         <div class="col-6">
                                             <label class="form-label small fw-bold text-dark mb-0 d-flex align-items-center justify-content-between">
-                                                <span>Supplier TIN</span>
+                                                <span>Supplier TIN (Col D)</span>
                                                 <span class="badge bg-success bg-opacity-10 text-success border" style="font-size:0.65rem;">Col D</span>
                                             </label>
                                             <div class="input-group input-group-sm">
                                                 <span class="input-group-text bg-light"><i class="fa-solid fa-id-card text-muted"></i></span>
-                                                <input type="text" class="form-control font-monospace fw-bold text-primary" id="${studioId}_supplier_tin" value="${ext.supplier_tin || ''}" placeholder="10 Digits">
+                                                <input type="text" class="form-control font-monospace fw-bold text-primary" id="${studioId}_supplier_tin" value="${escapeHtml(ext.supplier_tin || '')}" placeholder="10 Digits" maxlength="15">
                                             </div>
                                             <div id="${studioId}_tin_badge" class="mt-1" style="font-size:0.7rem;"></div>
                                         </div>
 
-                                        <!-- FS / Receipt No with 8-digit validation badge -->
+                                        <!-- FS / Receipt No with 8-digit validation badge (Col H) -->
                                         <div class="col-6">
                                             <label class="form-label small fw-bold text-dark mb-0 d-flex align-items-center justify-content-between">
-                                                <span>FS / Receipt #</span>
+                                                <span>FS / Receipt # (Col H)</span>
                                                 <span class="badge bg-primary bg-opacity-10 text-primary border" style="font-size:0.65rem;">Col H</span>
                                             </label>
                                             <div class="input-group input-group-sm">
                                                 <span class="input-group-text bg-light"><i class="fa-solid fa-hashtag text-muted"></i></span>
-                                                <input type="text" class="form-control font-monospace fw-bold text-dark" id="${studioId}_fs_no" value="${ext.fs_no || ''}" placeholder="8 Digits">
+                                                <input type="text" class="form-control font-monospace fw-bold text-dark" id="${studioId}_fs_no" value="${escapeHtml(ext.fs_no || '')}" placeholder="8 Digits" maxlength="15">
                                             </div>
                                             <div id="${studioId}_fs_badge" class="mt-1" style="font-size:0.7rem;"></div>
                                         </div>
@@ -392,70 +436,71 @@
                                         <!-- Machine / MRC No & Receipt Date -->
                                         <div class="col-6">
                                             <label class="form-label small fw-bold text-dark mb-0 d-flex align-items-center justify-content-between">
-                                                <span>Machine / MRC #</span>
+                                                <span>Machine / MRC # (Col G)</span>
                                                 <span class="badge bg-light text-muted border" style="font-size:0.65rem;">Col G</span>
                                             </label>
-                                            <input type="text" class="form-control form-control-sm font-monospace" id="${studioId}_mrc_no" value="${ext.mrc_no || ''}" placeholder="e.g. DDB0000032">
+                                            <input type="text" class="form-control form-control-sm font-monospace" id="${studioId}_mrc_no" value="${escapeHtml(ext.mrc_no || '')}" placeholder="e.g. DDB0000032">
                                         </div>
                                         <div class="col-6">
                                             <label class="form-label small fw-bold text-dark mb-0 d-flex align-items-center justify-content-between">
-                                                <span>Receipt Date</span>
+                                                <span>Receipt Date (Col F)</span>
                                                 <span class="badge bg-primary bg-opacity-10 text-primary border" style="font-size:0.65rem;">Col F</span>
                                             </label>
-                                            <input type="date" class="form-control form-control-sm font-monospace" id="${studioId}_receipt_date" value="${ext.receipt_date_ymd || ''}">
+                                            <input type="date" class="form-control form-control-sm font-monospace" id="${studioId}_receipt_date" value="${ext.receipt_date_ymd || ext.receipt_date || ''}">
                                             <div class="text-muted mt-1 font-monospace" id="${studioId}_ec_display" style="font-size:0.7rem;">
                                                 <i class="fa-solid fa-calendar-days text-primary me-1"></i>${ecFormatted}
                                             </div>
                                         </div>
 
-                                        <!-- Item Description -->
+                                        <!-- Description (Col I) -->
                                         <div class="col-12">
                                             <label class="form-label small fw-bold text-dark mb-0 d-flex align-items-center justify-content-between">
-                                                <span>Purchased Materials / Description</span>
+                                                <span>Purchased Materials / Description (Col I)</span>
                                                 <span class="badge bg-primary bg-opacity-10 text-primary border" style="font-size:0.65rem;">Col I</span>
                                             </label>
-                                            <input type="text" class="form-control form-control-sm" id="${studioId}_description" value="${ext.description || ''}" placeholder="Purchased Items description">
+                                            <input type="text" class="form-control form-control-sm" id="${studioId}_description" value="${escapeHtml(ext.description || '')}" placeholder="Description of materials or service">
                                         </div>
                                     </div>
                                 </div>
 
-                                <!-- Multi-Item Materials Table (If extracted from receipt) -->
-                                ${items.length > 0 ? `
-                                    <div class="col-12">
-                                        <div class="card border rounded-2 bg-light shadow-2xs overflow-hidden">
-                                            <div class="card-header bg-white py-1.5 px-3 d-flex align-items-center justify-content-between">
-                                                <span class="small fw-bold text-dark" style="font-size:0.75rem;">
-                                                    <i class="fa-solid fa-list-check text-success me-1"></i> Bought Materials Itemized List (${items.length} items)
+                                <!-- Multi-Item Materials Table with Full Row-by-Row Editing -->
+                                <div class="col-12">
+                                    <div class="card border rounded-2 bg-light shadow-2xs overflow-hidden">
+                                        <div class="card-header bg-white py-1.5 px-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                            <div class="d-flex align-items-center gap-2">
+                                                <span class="small fw-bold text-dark" style="font-size:0.78rem;">
+                                                    <i class="fa-solid fa-list-check text-success me-1"></i> Itemized Purchased Materials (<span id="${studioId}_item_count">${items.length}</span> item(s))
                                                 </span>
-                                                <span class="badge bg-success bg-opacity-10 text-success border border-success" style="font-size:0.68rem;">Verified Items</span>
+                                                <span class="badge bg-primary bg-opacity-10 text-primary border" style="font-size:0.68rem;">Editable Rows</span>
                                             </div>
-                                            <div class="table-responsive" style="max-height: 140px; overflow-y: auto;">
-                                                <table class="table table-sm table-hover mb-0" style="font-size:0.78rem;">
-                                                    <thead class="bg-light text-muted">
-                                                        <tr>
-                                                            <th class="ps-2">Description</th>
-                                                            <th class="text-center">Qty</th>
-                                                            <th class="text-end">Unit Price</th>
-                                                            <th class="text-end">Total</th>
-                                                            <th class="text-end pe-2">VAT</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        ${items.map(it => `
-                                                            <tr>
-                                                                <td class="ps-2 fw-semibold text-dark">${it.item_description || 'Item'}</td>
-                                                                <td class="text-center font-monospace">${Number(it.qty || 1).toFixed(2)}</td>
-                                                                <td class="text-end font-monospace">${Number(it.unit_price || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
-                                                                <td class="text-end font-monospace fw-bold">${Number(it.total_value || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
-                                                                <td class="text-end pe-2 font-monospace text-muted">${Number(it.vat || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
-                                                            </tr>
-                                                        `).join('')}
-                                                    </tbody>
-                                                </table>
+                                            <div class="d-flex align-items-center gap-1.5">
+                                                <button type="button" class="btn btn-xs btn-outline-secondary py-0.5 px-2" style="font-size:0.7rem;" id="${studioId}_btn_recalc_items" title="Recalculate Row Totals">
+                                                    <i class="fa-solid fa-calculator me-1"></i> Recalculate Rows
+                                                </button>
+                                                <button type="button" class="btn btn-xs btn-outline-primary py-0.5 px-2 fw-semibold" style="font-size:0.7rem;" id="${studioId}_btn_add_item">
+                                                    <i class="fa-solid fa-plus me-1"></i> Add Item Row
+                                                </button>
                                             </div>
                                         </div>
+                                        <div class="table-responsive" style="max-height: 180px; overflow-y: auto;">
+                                            <table class="table table-sm table-hover align-middle mb-0" id="${studioId}_items_table" style="font-size:0.78rem;">
+                                                <thead class="bg-light text-muted small text-uppercase">
+                                                    <tr>
+                                                        <th class="ps-2" style="width: 38%;">Item Description (Col I)</th>
+                                                        <th class="text-center" style="width: 12%;">Qty (Col K)</th>
+                                                        <th class="text-end" style="width: 18%;">Unit Price (Col L)</th>
+                                                        <th class="text-end" style="width: 18%;">Total (Col M)</th>
+                                                        <th class="text-end" style="width: 14%;">VAT 15% (Col N)</th>
+                                                        <th class="text-center pe-2" style="width: 5%;"></th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody id="${studioId}_items_tbody">
+                                                    <!-- Injected dynamically via renderItemsTable -->
+                                                </tbody>
+                                            </table>
+                                        </div>
                                     </div>
-                                ` : ''}
+                                </div>
 
                                 <!-- ERCA TAX TREATMENT TOGGLE: VAT INCLUDED VS NO VAT (TAS EXCEL) -->
                                 <div class="col-12">
@@ -473,8 +518,8 @@
                                                 <label class="p-2 border rounded-2 bg-white d-flex align-items-start gap-2 cursor-pointer w-100 mb-0 shadow-2xs" id="${studioId}_opt_vat_included_label">
                                                     <input type="radio" name="${studioId}_vat_choice" value="included" class="form-check-input mt-1" ${hasInitialVat ? 'checked' : ''}>
                                                     <div>
-                                                        <strong class="d-block text-success small"><i class="fa-solid fa-percent me-1"></i>VAT Included (15%)</strong>
-                                                        <small class="text-muted d-block" style="font-size:0.68rem; line-height: 1.25;">15% creditable input VAT &rarr; Sent to Monthly ERCA Line 100 VAT Section</small>
+                                                        <strong class="d-block text-success small"><i class="fa-solid fa-percent me-1"></i>VAT Included (15% Input VAT)</strong>
+                                                        <small class="text-muted d-block" style="font-size:0.68rem; line-height: 1.25;">15% creditable input VAT &rarr; Saved into Monthly ERCA Line 100 VAT Section</small>
                                                     </div>
                                                 </label>
                                             </div>
@@ -482,8 +527,8 @@
                                                 <label class="p-2 border rounded-2 bg-white d-flex align-items-start gap-2 cursor-pointer w-100 mb-0 shadow-2xs" id="${studioId}_opt_vat_none_label">
                                                     <input type="radio" name="${studioId}_vat_choice" value="none" class="form-check-input mt-1" ${!hasInitialVat ? 'checked' : ''}>
                                                     <div>
-                                                        <strong class="d-block text-dark small"><i class="fa-solid fa-file-excel text-success me-1"></i>No VAT (TAS Declaration)</strong>
-                                                        <small class="text-muted d-block" style="font-size:0.68rem; line-height: 1.25;">Zero VAT &rarr; Declared in Purchase TAS Excel for this month</small>
+                                                        <strong class="d-block text-dark small"><i class="fa-solid fa-file-excel text-success me-1"></i>No VAT (Purchase TAS Excel)</strong>
+                                                        <small class="text-muted d-block" style="font-size:0.68rem; line-height: 1.25;">Zero VAT &rarr; Declared in 9-Column Purchase TAS Excel report</small>
                                                     </div>
                                                 </label>
                                             </div>
@@ -491,24 +536,47 @@
                                     </div>
                                 </div>
 
-                                <!-- Financial Totals Summary Row -->
+                                <!-- Editable Financial Totals Bar -->
                                 <div class="col-12">
-                                    <div class="p-2 rounded-2 bg-light border">
-                                        <div class="row text-center g-1 small">
-                                            <div class="col-4 border-end">
-                                                <span class="text-muted d-block" style="font-size:0.7rem;">Subtotal (Col M)</span>
-                                                <strong class="text-dark font-monospace" id="${studioId}_subtotal_display">ETB ${Number(extractedSubtotal).toLocaleString(undefined, {minimumFractionDigits: 2})}</strong>
+                                    <div class="p-2.5 rounded-3 bg-light border">
+                                        <div class="row g-2 align-items-center">
+                                            <div class="col-12 col-md-4">
+                                                <label class="form-label small fw-bold text-muted mb-1 d-flex justify-content-between">
+                                                    <span>Subtotal / Taxable (Col M)</span>
+                                                    <span class="badge bg-light text-muted border">ETB</span>
+                                                </label>
+                                                <input type="number" step="0.01" class="form-control form-control-sm font-monospace fw-bold text-dark text-end" id="${studioId}_subtotal_input" value="${Number(initialSubtotal).toFixed(2)}">
                                             </div>
-                                            <div class="col-4 border-end">
-                                                <span class="text-muted d-block" style="font-size:0.7rem;">VAT 15% (Col N)</span>
-                                                <strong class="text-info font-monospace" id="${studioId}_vat_display">+ ETB ${Number(extractedVat).toLocaleString(undefined, {minimumFractionDigits: 2})}</strong>
+                                            <div class="col-12 col-md-4">
+                                                <label class="form-label small fw-bold text-info mb-1 d-flex justify-content-between">
+                                                    <span>15% Input VAT (Col N)</span>
+                                                    <span class="badge bg-info-subtle text-info border border-info">15%</span>
+                                                </label>
+                                                <input type="number" step="0.01" class="form-control form-control-sm font-monospace fw-bold text-info text-end" id="${studioId}_vat_input" value="${Number(initialVat).toFixed(2)}">
                                             </div>
-                                            <div class="col-4">
-                                                <span class="text-muted d-block" style="font-size:0.7rem;">Total (Col O)</span>
-                                                <strong class="text-success font-monospace" id="${studioId}_total_display">ETB ${Number(extractedTotal).toLocaleString(undefined, {minimumFractionDigits: 2})}</strong>
+                                            <div class="col-12 col-md-4">
+                                                <label class="form-label small fw-bold text-success mb-1 d-flex justify-content-between">
+                                                    <span>Total Receipt Amount (Col O)</span>
+                                                    <span class="badge bg-success-subtle text-success border border-success">Total</span>
+                                                </label>
+                                                <input type="number" step="0.01" class="form-control form-control-sm font-monospace fw-bold text-success text-end" id="${studioId}_total_input" value="${Number(initialTotal).toFixed(2)}">
                                             </div>
                                         </div>
                                     </div>
+                                </div>
+
+                                <!-- Live Verification & Math Discrepancy Box with Auto-Fix -->
+                                <div class="col-12">
+                                    <div id="${studioId}_validation_box" class="p-3 rounded-3 border bg-light">
+                                        <!-- Rendered dynamically by runVerificationChecks -->
+                                    </div>
+                                </div>
+
+                                <!-- Verify & Confirm Action Button -->
+                                <div class="col-12 text-end">
+                                    <button type="button" class="btn btn-sm btn-outline-success fw-bold px-3 shadow-2xs" id="${studioId}_btn_verify_confirm">
+                                        <i class="fa-solid fa-shield-check me-1"></i> Confirm &amp; Mark as Verified
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -520,6 +588,9 @@
                 // Elements inside studio
                 const previewImg = document.getElementById(`${studioId}_preview_img`);
                 const btnRotate = document.getElementById(`${studioId}_btn_rotate`);
+                const btnZoomIn = document.getElementById(`${studioId}_btn_zoom_in`);
+                const btnZoomOut = document.getElementById(`${studioId}_btn_zoom_out`);
+                const btnZoomReset = document.getElementById(`${studioId}_btn_zoom_reset`);
                 const btnRescan = document.getElementById(`${studioId}_btn_rescan`);
                 const btnClear = document.getElementById(`${studioId}_btn_clear`);
 
@@ -530,23 +601,218 @@
                 const inputDate = document.getElementById(`${studioId}_receipt_date`);
                 const inputDesc = document.getElementById(`${studioId}_description`);
 
+                const inputSubtotal = document.getElementById(`${studioId}_subtotal_input`);
+                const inputVat = document.getElementById(`${studioId}_vat_input`);
+                const inputTotal = document.getElementById(`${studioId}_total_input`);
+
                 const tinBadge = document.getElementById(`${studioId}_tin_badge`);
                 const fsBadge = document.getElementById(`${studioId}_fs_badge`);
                 const ecDisplay = document.getElementById(`${studioId}_ec_display`);
                 const vatBadge = document.getElementById(`${studioId}_vat_badge`);
+                const validationBox = document.getElementById(`${studioId}_validation_box`);
+                const verificationStatusBadge = document.getElementById(`${studioId}_verification_status_badge`);
+                const btnVerifyConfirm = document.getElementById(`${studioId}_btn_verify_confirm`);
+                const confidenceBadge = document.getElementById(`${studioId}_confidence_badge`);
 
                 const optIncluded = document.querySelector(`input[name="${studioId}_vat_choice"][value="included"]`);
                 const optNone = document.querySelector(`input[name="${studioId}_vat_choice"][value="none"]`);
+                const itemsTbody = document.getElementById(`${studioId}_items_tbody`);
+                const itemCountSpan = document.getElementById(`${studioId}_item_count`);
+                const btnAddItem = document.getElementById(`${studioId}_btn_add_item`);
+                const btnRecalcItems = document.getElementById(`${studioId}_btn_recalc_items`);
 
-                const dispSubtotal = document.getElementById(`${studioId}_subtotal_display`);
-                const dispVat = document.getElementById(`${studioId}_vat_display`);
-                const dispTotal = document.getElementById(`${studioId}_total_display`);
+                function updateImageTransform() {
+                    if (previewImg) {
+                        previewImg.style.transform = `rotate(${currentRotation}deg) scale(${currentZoom})`;
+                    }
+                }
+
+                // Render Itemized Rows
+                function renderItemsTable() {
+                    if (!itemsTbody) return;
+                    if (itemCountSpan) itemCountSpan.innerText = items.length;
+
+                    if (items.length === 0) {
+                        itemsTbody.innerHTML = `
+                            <tr>
+                                <td colspan="6" class="text-center text-muted py-2 small">
+                                    No material items added. Click "Add Item Row" above to itemize bought goods.
+                                </td>
+                            </tr>
+                        `;
+                        return;
+                    }
+
+                    const isVatIncluded = optIncluded && optIncluded.checked;
+
+                    itemsTbody.innerHTML = items.map((it, idx) => `
+                        <tr class="align-middle">
+                            <td class="ps-2">
+                                <input type="text" class="form-control form-control-xs py-1 px-2 ocr-item-desc" data-idx="${idx}" value="${escapeHtml(it.item_description || '')}" placeholder="Material description">
+                            </td>
+                            <td>
+                                <input type="number" step="0.01" min="0" class="form-control form-control-xs py-1 px-1 text-center font-monospace ocr-item-qty" data-idx="${idx}" value="${it.qty !== undefined ? it.qty : 1}">
+                            </td>
+                            <td>
+                                <input type="number" step="0.01" min="0" class="form-control form-control-xs py-1 px-1 text-end font-monospace ocr-item-price" data-idx="${idx}" value="${it.unit_price !== undefined ? it.unit_price : 0}">
+                            </td>
+                            <td>
+                                <input type="number" step="0.01" min="0" class="form-control form-control-xs py-1 px-1 text-end font-monospace fw-bold ocr-item-total" data-idx="${idx}" value="${it.total_value !== undefined ? it.total_value : 0}">
+                            </td>
+                            <td>
+                                <input type="number" step="0.01" min="0" class="form-control form-control-xs py-1 px-1 text-end font-monospace text-info ocr-item-vat" data-idx="${idx}" value="${it.vat !== undefined ? it.vat : 0}" ${!isVatIncluded ? 'readonly style="background:#f8f9fa;"' : ''}>
+                            </td>
+                            <td class="text-center pe-2">
+                                <button type="button" class="btn btn-xs btn-outline-danger py-0.5 px-1.5 ocr-item-del-btn" data-idx="${idx}" title="Remove Item">
+                                    <i class="fa-solid fa-trash" style="font-size:0.7rem;"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `).join('');
+
+                    // Bind row input events
+                    itemsTbody.querySelectorAll('.ocr-item-desc').forEach(el => {
+                        el.addEventListener('input', (e) => {
+                            const i = parseInt(e.target.dataset.idx);
+                            if (items[i]) items[i].item_description = e.target.value;
+                            syncCalculations();
+                        });
+                    });
+
+                    itemsTbody.querySelectorAll('.ocr-item-qty').forEach(el => {
+                        el.addEventListener('input', (e) => {
+                            const i = parseInt(e.target.dataset.idx);
+                            if (items[i]) {
+                                items[i].qty = parseFloat(e.target.value) || 0;
+                                items[i].total_value = round2(items[i].qty * (items[i].unit_price || 0));
+                                if (optIncluded && optIncluded.checked) {
+                                    items[i].vat = round2(items[i].total_value * 0.15);
+                                } else {
+                                    items[i].vat = 0.00;
+                                }
+                                items[i].value_after_vat = round2(items[i].total_value + items[i].vat);
+
+                                const row = e.target.closest('tr');
+                                if (row) {
+                                    const totInput = row.querySelector('.ocr-item-total');
+                                    const vatInput = row.querySelector('.ocr-item-vat');
+                                    if (totInput) totInput.value = items[i].total_value;
+                                    if (vatInput) vatInput.value = items[i].vat;
+                                }
+                                recalculateTotalsFromItems();
+                            }
+                        });
+                    });
+
+                    itemsTbody.querySelectorAll('.ocr-item-price').forEach(el => {
+                        el.addEventListener('input', (e) => {
+                            const i = parseInt(e.target.dataset.idx);
+                            if (items[i]) {
+                                items[i].unit_price = parseFloat(e.target.value) || 0;
+                                items[i].total_value = round2((items[i].qty || 1) * items[i].unit_price);
+                                if (optIncluded && optIncluded.checked) {
+                                    items[i].vat = round2(items[i].total_value * 0.15);
+                                } else {
+                                    items[i].vat = 0.00;
+                                }
+                                items[i].value_after_vat = round2(items[i].total_value + items[i].vat);
+
+                                const row = e.target.closest('tr');
+                                if (row) {
+                                    const totInput = row.querySelector('.ocr-item-total');
+                                    const vatInput = row.querySelector('.ocr-item-vat');
+                                    if (totInput) totInput.value = items[i].total_value;
+                                    if (vatInput) vatInput.value = items[i].vat;
+                                }
+                                recalculateTotalsFromItems();
+                            }
+                        });
+                    });
+
+                    itemsTbody.querySelectorAll('.ocr-item-total').forEach(el => {
+                        el.addEventListener('input', (e) => {
+                            const i = parseInt(e.target.dataset.idx);
+                            if (items[i]) {
+                                items[i].total_value = parseFloat(e.target.value) || 0;
+                                if (optIncluded && optIncluded.checked) {
+                                    items[i].vat = round2(items[i].total_value * 0.15);
+                                } else {
+                                    items[i].vat = 0.00;
+                                }
+                                items[i].value_after_vat = round2(items[i].total_value + items[i].vat);
+
+                                const row = e.target.closest('tr');
+                                if (row) {
+                                    const vatInput = row.querySelector('.ocr-item-vat');
+                                    if (vatInput) vatInput.value = items[i].vat;
+                                }
+                                recalculateTotalsFromItems();
+                            }
+                        });
+                    });
+
+                    itemsTbody.querySelectorAll('.ocr-item-vat').forEach(el => {
+                        el.addEventListener('input', (e) => {
+                            const i = parseInt(e.target.dataset.idx);
+                            if (items[i]) {
+                                items[i].vat = parseFloat(e.target.value) || 0;
+                                items[i].value_after_vat = round2(items[i].total_value + items[i].vat);
+                                recalculateTotalsFromItems();
+                            }
+                        });
+                    });
+
+                    itemsTbody.querySelectorAll('.ocr-item-del-btn').forEach(el => {
+                        el.addEventListener('click', (e) => {
+                            const btn = e.target.closest('button');
+                            const i = parseInt(btn.dataset.idx);
+                            if (!isNaN(i) && items[i]) {
+                                items.splice(i, 1);
+                                renderItemsTable();
+                                recalculateTotalsFromItems();
+                            }
+                        });
+                    });
+                }
+
+                function recalculateTotalsFromItems() {
+                    const isVatIncluded = optIncluded && optIncluded.checked;
+                    let sumSubtotal = round2(items.reduce((s, it) => s + (parseFloat(it.total_value) || 0), 0));
+                    let sumVat = isVatIncluded ? round2(items.reduce((s, it) => s + (parseFloat(it.vat) || 0), 0)) : 0.00;
+                    if (isVatIncluded && sumVat === 0.0 && sumSubtotal > 0) {
+                        sumVat = round2(sumSubtotal * 0.15);
+                    }
+                    let sumTotal = round2(sumSubtotal + sumVat);
+
+                    if (inputSubtotal) inputSubtotal.value = sumSubtotal.toFixed(2);
+                    if (inputVat) inputVat.value = sumVat.toFixed(2);
+                    if (inputTotal) inputTotal.value = sumTotal.toFixed(2);
+
+                    syncCalculations();
+                }
+
+                function autoFixMath() {
+                    const isVatIncluded = optIncluded && optIncluded.checked;
+                    items.forEach(it => {
+                        it.qty = parseFloat(it.qty) || 1;
+                        it.unit_price = parseFloat(it.unit_price) || 0;
+                        it.total_value = round2(it.qty * it.unit_price);
+                        it.vat = isVatIncluded ? round2(it.total_value * 0.15) : 0.00;
+                        it.value_after_vat = round2(it.total_value + it.vat);
+                    });
+
+                    renderItemsTable();
+                    recalculateTotalsFromItems();
+
+                    isVerified = true;
+                    runVerificationChecks();
+                }
 
                 function updateValidationBadges() {
                     const rawTin = (inputTin.value || '').replace(/\D/g, '');
                     const isTinValid = rawTin.length === 10;
                     if (tinBadge) {
-                        tinBadge.innerHTML = isTinValid 
+                        tinBadge.innerHTML = isTinValid
                             ? `<span class="badge bg-success-subtle text-success border border-success"><i class="fa-solid fa-check me-1"></i>10 Digits Valid</span>`
                             : `<span class="badge bg-danger-subtle text-danger border border-danger"><i class="fa-solid fa-triangle-exclamation me-1"></i>Expected 10 digits (${rawTin.length}/10)</span>`;
                     }
@@ -560,24 +826,124 @@
                     }
                 }
 
-                function syncCalculations() {
-                    const isVatIncluded = optIncluded && optIncluded.checked;
-                    let base = parseFloat(extractedSubtotal) || (parseFloat(ext.total_amount) ? parseFloat(ext.total_amount) / 1.15 : 0);
-                    let vat = 0.0;
-                    let tot = base;
+                function runVerificationChecks() {
+                    updateValidationBadges();
 
-                    if (isVatIncluded) {
-                        vat = extractedVat > 0 ? extractedVat : round2(base * 0.15);
-                        tot = round2(base + vat);
-                    } else {
-                        base = extractedTotal > 0 ? extractedTotal : base;
-                        vat = 0.00;
-                        tot = base;
+                    const isVatIncluded = optIncluded && optIncluded.checked;
+                    const rawTin = (inputTin.value || '').replace(/\D/g, '');
+                    const rawFs = (inputFs.value || '').replace(/\D/g, '');
+                    const subVal = parseFloat(inputSubtotal ? inputSubtotal.value : 0) || 0;
+                    const vatVal = parseFloat(inputVat ? inputVat.value : 0) || 0;
+                    const totVal = parseFloat(inputTotal ? inputTotal.value : 0) || 0;
+
+                    const warnings = [];
+
+                    if (rawTin.length !== 10) {
+                        warnings.push(`Supplier TIN is invalid: Expected 10 digits (currently ${rawTin.length}).`);
+                    }
+                    if (rawFs.length !== 8) {
+                        warnings.push(`FS Receipt # is invalid: Expected 8 digits (currently ${rawFs.length}).`);
+                    }
+                    if (!inputDate || !inputDate.value) {
+                        warnings.push(`Receipt Date is missing.`);
                     }
 
-                    if (dispSubtotal) dispSubtotal.innerText = 'ETB ' + base.toLocaleString(undefined, {minimumFractionDigits: 2});
-                    if (dispVat) dispVat.innerText = (isVatIncluded ? '+ ' : '') + 'ETB ' + vat.toLocaleString(undefined, {minimumFractionDigits: 2});
-                    if (dispTotal) dispTotal.innerText = 'ETB ' + tot.toLocaleString(undefined, {minimumFractionDigits: 2});
+                    // Arithmetic consistency checks
+                    if (items.length > 0) {
+                        const itemsSum = round2(items.reduce((s, it) => s + (parseFloat(it.total_value) || 0), 0));
+                        if (Math.abs(itemsSum - subVal) > 0.05) {
+                            warnings.push(`Items total sum (ETB ${itemsSum.toFixed(2)}) does not match Subtotal (ETB ${subVal.toFixed(2)}).`);
+                        }
+                    }
+
+                    if (isVatIncluded) {
+                        const expectedVat = round2(subVal * 0.15);
+                        if (subVal > 0 && Math.abs(expectedVat - vatVal) > 0.10) {
+                            warnings.push(`15% VAT check: Subtotal x 15% (ETB ${expectedVat.toFixed(2)}) != VAT Amount (ETB ${vatVal.toFixed(2)}).`);
+                        }
+                    }
+
+                    if (Math.abs(round2(subVal + vatVal) - totVal) > 0.05) {
+                        warnings.push(`Total check: Subtotal (ETB ${subVal.toFixed(2)}) + VAT (ETB ${vatVal.toFixed(2)}) != Grand Total (ETB ${totVal.toFixed(2)}).`);
+                    }
+
+                    if (validationBox) {
+                        if (warnings.length > 0) {
+                            validationBox.className = 'p-3 rounded-3 border border-warning bg-warning bg-opacity-10 text-dark';
+                            validationBox.innerHTML = `
+                                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+                                    <div class="fw-bold text-danger">
+                                        <i class="fa-solid fa-triangle-exclamation me-1"></i> ${warnings.length} Discrepancy / Warning(s) Detected:
+                                    </div>
+                                    <button type="button" class="btn btn-xs btn-warning text-dark fw-bold px-2.5 py-1 shadow-2xs" id="${studioId}_btn_autofix">
+                                        <i class="fa-solid fa-wand-magic-sparkles me-1"></i> Auto-Fix Math &amp; Balance
+                                    </button>
+                                </div>
+                                <ul class="mb-0 small ps-3">
+                                    ${warnings.map(w => `<li class="mb-0.5">${w}</li>`).join('')}
+                                </ul>
+                            `;
+
+                            const btnFix = document.getElementById(`${studioId}_btn_autofix`);
+                            if (btnFix) btnFix.addEventListener('click', autoFixMath);
+                        } else {
+                            validationBox.className = 'p-3 rounded-3 border border-success bg-success bg-opacity-10 text-success';
+                            validationBox.innerHTML = `
+                                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                    <div class="fw-bold">
+                                        <i class="fa-solid fa-circle-check me-1"></i> All Checks Passed: Fiscal identifiers and line arithmetic verified for ERCA declaration!
+                                    </div>
+                                    <span class="badge bg-success text-white px-2 py-1">
+                                        <i class="fa-solid fa-shield-check me-1"></i> 100% Tax Compliant
+                                    </span>
+                                </div>
+                            `;
+                        }
+                    }
+
+                    // Update Verification Button & Header Status
+                    if (verificationStatusBadge) {
+                        if (isVerified && warnings.length === 0) {
+                            verificationStatusBadge.innerHTML = `
+                                <span class="badge bg-success text-white px-2.5 py-1">
+                                    <i class="fa-solid fa-circle-check me-1"></i> Verified &amp; Ready for VAT Section
+                                </span>
+                            `;
+                        } else if (isVerified) {
+                            verificationStatusBadge.innerHTML = `
+                                <span class="badge bg-warning text-dark px-2.5 py-1">
+                                    <i class="fa-solid fa-user-check me-1"></i> User Verified (With Discrepancy Note)
+                                </span>
+                            `;
+                        } else {
+                            verificationStatusBadge.innerHTML = `
+                                <span class="badge bg-secondary text-white px-2.5 py-1">
+                                    <i class="fa-solid fa-hourglass-half me-1"></i> Verification Pending
+                                </span>
+                            `;
+                        }
+                    }
+
+                    if (btnVerifyConfirm) {
+                        if (isVerified) {
+                            btnVerifyConfirm.className = 'btn btn-sm btn-success fw-bold px-3 shadow-2xs';
+                            btnVerifyConfirm.innerHTML = '<i class="fa-solid fa-shield-check me-1"></i> Verified by User (Click to Un-verify)';
+                        } else {
+                            btnVerifyConfirm.className = 'btn btn-sm btn-outline-success fw-bold px-3 shadow-2xs';
+                            btnVerifyConfirm.innerHTML = '<i class="fa-solid fa-check me-1"></i> Confirm &amp; Mark as Verified';
+                        }
+                    }
+
+                    if (confidenceBadge) {
+                        confidenceBadge.innerText = (isVerified ? '100% Verified' : `${score}% Confidence`);
+                    }
+                }
+
+                function syncCalculations() {
+                    const isVatIncluded = optIncluded && optIncluded.checked;
+                    let base = parseFloat(inputSubtotal ? inputSubtotal.value : 0) || 0;
+                    let vat = isVatIncluded ? (parseFloat(inputVat ? inputVat.value : 0) || 0) : 0.00;
+                    let tot = parseFloat(inputTotal ? inputTotal.value : 0) || round2(base + vat);
 
                     if (vatBadge) {
                         if (isVatIncluded) {
@@ -599,10 +965,11 @@
                     setHidden('vat_amount', vat.toFixed(2));
                     setHidden('total_amount', tot.toFixed(2));
                     setHidden('vat_included', isVatIncluded ? '1' : '0');
+                    setHidden('is_verified', isVerified ? '1' : '0');
                     setHidden('ocr_items_json', JSON.stringify(items));
                     setHidden('ocr_engine', scanData.engine || 'Receipt OCR Studio');
-                    setHidden('ocr_confidence', scanData.confidence || 'high');
-                    setHidden('ocr_confidence_score', scanData.confidence_score || 95);
+                    setHidden('ocr_confidence', isVerified ? 'high' : (scanData.confidence || 'high'));
+                    setHidden('ocr_confidence_score', isVerified ? 100 : (scanData.confidence_score || 95));
 
                     // Sync with Quick Pay form if present
                     const quickVatTypeSelect = document.getElementById('quickPayVatType');
@@ -618,17 +985,40 @@
                             window.recalculateQuickPayTax();
                         }
                     }
+
+                    runVerificationChecks();
                 }
 
-                function round2(num) {
-                    return Math.round(num * 100) / 100;
-                }
+                // Initial Table Render
+                renderItemsTable();
 
-                // Event Listeners
-                if (btnRotate && previewImg) {
+                // Image Control Event Listeners
+                if (btnRotate) {
                     btnRotate.addEventListener('click', function () {
                         currentRotation = (currentRotation + 90) % 360;
-                        previewImg.style.transform = `rotate(${currentRotation}deg)`;
+                        updateImageTransform();
+                    });
+                }
+
+                if (btnZoomIn) {
+                    btnZoomIn.addEventListener('click', function () {
+                        currentZoom = Math.min(2.5, currentZoom + 0.2);
+                        updateImageTransform();
+                    });
+                }
+
+                if (btnZoomOut) {
+                    btnZoomOut.addEventListener('click', function () {
+                        currentZoom = Math.max(0.5, currentZoom - 0.2);
+                        updateImageTransform();
+                    });
+                }
+
+                if (btnZoomReset) {
+                    btnZoomReset.addEventListener('click', function () {
+                        currentZoom = 1.0;
+                        currentRotation = 0;
+                        updateImageTransform();
                     });
                 }
 
@@ -656,7 +1046,11 @@
                         setHidden('supplier_tin', '');
                         setHidden('fs_no', '');
                         setHidden('mrc_no', '');
+                        setHidden('subtotal', '');
+                        setHidden('vat_amount', '');
+                        setHidden('total_amount', '');
                         setHidden('vat_included', '0');
+                        setHidden('is_verified', '0');
                         setHidden('ocr_items_json', '');
 
                         if (typeof window.recalculateQuickPayTax === 'function') {
@@ -665,13 +1059,106 @@
                     });
                 }
 
-                if (optIncluded) optIncluded.addEventListener('change', syncCalculations);
-                if (optNone) optNone.addEventListener('change', syncCalculations);
+                // Add Item Row
+                if (btnAddItem) {
+                    btnAddItem.addEventListener('click', function () {
+                        items.push({
+                            item_description: '',
+                            qty: 1,
+                            unit_price: 0,
+                            total_value: 0,
+                            vat: 0,
+                            value_after_vat: 0,
+                            uom: '9'
+                        });
+                        renderItemsTable();
+                        syncCalculations();
+                    });
+                }
 
-                if (inputTin) inputTin.addEventListener('input', () => { updateValidationBadges(); syncCalculations(); });
-                if (inputFs) inputFs.addEventListener('input', () => { updateValidationBadges(); syncCalculations(); });
+                // Recalculate Row Totals Button
+                if (btnRecalcItems) {
+                    btnRecalcItems.addEventListener('click', function () {
+                        const isVatIncluded = optIncluded && optIncluded.checked;
+                        items.forEach(it => {
+                            it.total_value = round2((it.qty || 1) * (it.unit_price || 0));
+                            it.vat = isVatIncluded ? round2(it.total_value * 0.15) : 0.00;
+                            it.value_after_vat = round2(it.total_value + it.vat);
+                        });
+                        renderItemsTable();
+                        recalculateTotalsFromItems();
+                    });
+                }
+
+                // Verify Confirm Button
+                if (btnVerifyConfirm) {
+                    btnVerifyConfirm.addEventListener('click', function () {
+                        isVerified = !isVerified;
+                        syncCalculations();
+                    });
+                }
+
+                // Tax Choice Listeners
+                if (optIncluded) {
+                    optIncluded.addEventListener('change', () => {
+                        const sub = parseFloat(inputSubtotal ? inputSubtotal.value : 0) || 0;
+                        const newVat = round2(sub * 0.15);
+                        if (inputVat) inputVat.value = newVat.toFixed(2);
+                        if (inputTotal) inputTotal.value = round2(sub + newVat).toFixed(2);
+                        items.forEach(it => {
+                            it.vat = round2(it.total_value * 0.15);
+                            it.value_after_vat = round2(it.total_value + it.vat);
+                        });
+                        renderItemsTable();
+                        syncCalculations();
+                    });
+                }
+
+                if (optNone) {
+                    optNone.addEventListener('change', () => {
+                        const sub = parseFloat(inputSubtotal ? inputSubtotal.value : 0) || 0;
+                        if (inputVat) inputVat.value = '0.00';
+                        if (inputTotal) inputTotal.value = sub.toFixed(2);
+                        items.forEach(it => {
+                            it.vat = 0.00;
+                            it.value_after_vat = it.total_value;
+                        });
+                        renderItemsTable();
+                        syncCalculations();
+                    });
+                }
+
+                // Field input event listeners for instant live validation & sync
+                if (inputTin) inputTin.addEventListener('input', syncCalculations);
+                if (inputFs) inputFs.addEventListener('input', syncCalculations);
                 if (inputVendor) inputVendor.addEventListener('input', syncCalculations);
                 if (inputMrc) inputMrc.addEventListener('input', syncCalculations);
+                if (inputDesc) inputDesc.addEventListener('input', syncCalculations);
+
+                if (inputSubtotal) {
+                    inputSubtotal.addEventListener('input', () => {
+                        const isVatIncluded = optIncluded && optIncluded.checked;
+                        const sub = parseFloat(inputSubtotal.value) || 0;
+                        const vat = isVatIncluded ? round2(sub * 0.15) : 0.00;
+                        if (inputVat) inputVat.value = vat.toFixed(2);
+                        if (inputTotal) inputTotal.value = round2(sub + vat).toFixed(2);
+                        syncCalculations();
+                    });
+                }
+
+                if (inputVat) {
+                    inputVat.addEventListener('input', () => {
+                        const sub = parseFloat(inputSubtotal ? inputSubtotal.value : 0) || 0;
+                        const vat = parseFloat(inputVat.value) || 0;
+                        if (inputTotal) inputTotal.value = round2(sub + vat).toFixed(2);
+                        syncCalculations();
+                    });
+                }
+
+                if (inputTotal) {
+                    inputTotal.addEventListener('input', syncCalculations);
+                }
+
                 if (inputDate) {
                     inputDate.addEventListener('change', () => {
                         const newEc = gregorianToEthiopian(inputDate.value);
@@ -682,7 +1169,7 @@
                     });
                 }
 
-                updateValidationBadges();
+                // Initial validation & sync
                 syncCalculations();
             }
 

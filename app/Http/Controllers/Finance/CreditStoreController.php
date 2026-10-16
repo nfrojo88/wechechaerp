@@ -493,6 +493,11 @@ class CreditStoreController extends Controller
                         ];
                     }
 
+                    $isVerified = $request->boolean('is_verified', true);
+                    $receiptSubtotal = $request->filled('subtotal') ? (float)$request->input('subtotal') : (float)($gross ?: $settledCreditAmount);
+                    $receiptVat = $vatIncluded ? ($request->filled('vat_amount') ? (float)$request->input('vat_amount') : $effectiveVat) : 0.00;
+                    $receiptTotal = $request->filled('total_amount') ? (float)$request->input('total_amount') : round($receiptSubtotal + $receiptVat, 2);
+
                     $scanData = [
                         'vendor_name'       => $vendorName,
                         'supplier_tin'      => $supplierTin,
@@ -503,16 +508,17 @@ class CreditStoreController extends Controller
                         'fs_no_valid'       => !empty($fsNo) && strlen($fsNo) === 8,
                         'mrc_no'            => $mrcNo,
                         'receipt_date_ymd'  => $receiptDate,
-                        'subtotal'          => round((float)($gross ?: $settledCreditAmount), 2),
-                        'vat_amount'        => round($effectiveVat, 2),
-                        'total_amount'      => round((float)($gross + $effectiveVat), 2),
+                        'subtotal'          => round($receiptSubtotal, 2),
+                        'vat_amount'        => round($receiptVat, 2),
+                        'total_amount'      => round($receiptTotal, 2),
                         'currency'          => 'ETB',
                         'description'       => "Credit Payment for {$vendorName} (" . ($ledger->item_description ?: 'Ledger #' . $ledger->id) . ")",
                         'engine'            => $request->input('ocr_engine') ?: 'Receipt OCR Studio',
                         'engine_slug'       => 'credit_payment',
-                        'confidence'        => $request->input('ocr_confidence') ?: 'high',
-                        'confidence_score'  => (int)($request->input('ocr_confidence_score') ?: 95),
-                        'qc_notes'          => "Credit store payment receipt #{$payment->id}" . ($vatIncluded ? " [15% VAT Included - Sent to ERCA VAT Section]" : " [No VAT - Sent to TAS Excel]"),
+                        'confidence'        => $isVerified ? 'high' : ($request->input('ocr_confidence') ?: 'high'),
+                        'confidence_score'  => $isVerified ? 100 : (int)($request->input('ocr_confidence_score') ?: 95),
+                        'is_verified'       => $isVerified,
+                        'qc_notes'          => "Credit store payment receipt #{$payment->id}" . ($vatIncluded ? " [15% VAT Included - Sent to ERCA VAT Section]" : " [No VAT - Sent to TAS Excel]") . ($isVerified ? " [Verified by User]" : ""),
                         'vat_included'      => $vatIncluded,
                         'has_vat'           => $vatIncluded,
                         'vat_type'          => $vatType,
@@ -528,6 +534,14 @@ class CreditStoreController extends Controller
                         'credit_settlement',
                         $receiptDate
                     );
+
+                    if (\Illuminate\Support\Facades\Schema::hasColumn('credit_store_payments', 'vat_amount')) {
+                        $payment->update([
+                            'gross_amount' => $receiptSubtotal,
+                            'vat_amount'   => $receiptVat,
+                            'vat_type'     => $vatType,
+                        ]);
+                    }
                 } catch (\Throwable $e) {
                     Log::warning("Could not persist linked Receipt for Credit Payment #{$payment->id}: " . $e->getMessage());
                 }
@@ -924,6 +938,11 @@ class CreditStoreController extends Controller
                     ];
                 }
 
+                $isVerified = $request->boolean('is_verified', true);
+                $receiptSubtotal = $request->filled('subtotal') ? (float)$request->input('subtotal') : (float)$totalPaidSum;
+                $receiptVat = $vatIncluded ? ($request->filled('vat_amount') ? (float)$request->input('vat_amount') : $vatAmount) : 0.00;
+                $receiptTotal = $request->filled('total_amount') ? (float)$request->input('total_amount') : round($receiptSubtotal + $receiptVat, 2);
+
                 $scanData = [
                     'vendor_name'       => $vendorName,
                     'supplier_tin'      => $supplierTin,
@@ -934,16 +953,17 @@ class CreditStoreController extends Controller
                     'fs_no_valid'       => !empty($fsNo) && strlen($fsNo) === 8,
                     'mrc_no'            => $mrcNo,
                     'receipt_date_ymd'  => $receiptDate,
-                    'subtotal'          => round((float)$totalPaidSum, 2),
-                    'vat_amount'        => round($vatAmount, 2),
-                    'total_amount'      => round((float)($totalPaidSum + $vatAmount), 2),
+                    'subtotal'          => round($receiptSubtotal, 2),
+                    'vat_amount'        => round($receiptVat, 2),
+                    'total_amount'      => round($receiptTotal, 2),
                     'currency'          => 'ETB',
                     'description'       => "Batch credit settlement for {$processedCount} purchases",
                     'engine'            => $request->input('ocr_engine') ?: 'Batch Receipt OCR Studio',
                     'engine_slug'       => 'credit_batch',
-                    'confidence'        => $request->input('ocr_confidence') ?: 'high',
-                    'confidence_score'  => (int)($request->input('ocr_confidence_score') ?: 95),
-                    'qc_notes'          => "Batch settlement shared receipt ({$processedCount} purchases)" . ($vatIncluded ? " [15% VAT Included - Sent to ERCA VAT Section]" : " [No VAT - Sent to TAS Excel]"),
+                    'confidence'        => $isVerified ? 'high' : ($request->input('ocr_confidence') ?: 'high'),
+                    'confidence_score'  => $isVerified ? 100 : (int)($request->input('ocr_confidence_score') ?: 95),
+                    'is_verified'       => $isVerified,
+                    'qc_notes'          => "Batch settlement shared receipt ({$processedCount} purchases)" . ($vatIncluded ? " [15% VAT Included - Sent to ERCA VAT Section]" : " [No VAT - Sent to TAS Excel]") . ($isVerified ? " [Verified by User]" : ""),
                     'vat_included'      => $vatIncluded,
                     'has_vat'           => $vatIncluded,
                     'items'             => $items,
@@ -996,7 +1016,50 @@ class CreditStoreController extends Controller
             $mrcNo = trim((string)($request->input('mrc_no') ?: ''));
             $receiptDate = $request->input('receipt_date') ?: ($payment->payment_date ?: now()->toDateString());
             $vatIncluded = $request->boolean('vat_included', ((float)($payment->vat_amount ?? 0) > 0));
-            $vatAmount = $vatIncluded ? (float)$request->input('vat_amount', $payment->vat_amount ?? 0) : 0.00;
+            $isVerified = $request->boolean('is_verified', true);
+            $receiptSubtotal = $request->filled('subtotal') ? (float)$request->input('subtotal') : (float)$payment->amount;
+            $vatAmount = $vatIncluded ? (float)$request->input('vat_amount', $payment->vat_amount ?? round($receiptSubtotal * 0.15, 2)) : 0.00;
+            $receiptTotal = $request->filled('total_amount') ? (float)$request->input('total_amount') : round($receiptSubtotal + $vatAmount, 2);
+
+            // Parse itemized materials from OCR studio if submitted
+            $items = [];
+            if ($request->filled('ocr_items_json')) {
+                $decoded = json_decode($request->input('ocr_items_json'), true);
+                if (is_array($decoded) && !empty($decoded)) {
+                    foreach ($decoded as $it) {
+                        $itQty = (float)($it['qty'] ?? 1);
+                        $itUnit = (float)($it['unit_price'] ?? 0);
+                        $itTotal = (float)($it['total_value'] ?? round($itQty * $itUnit, 2));
+                        $itVat = $vatIncluded ? (float)($it['vat'] ?? round($itTotal * 0.15, 2)) : 0.00;
+                        $itAfter = $vatIncluded ? (float)($it['value_after_vat'] ?? round($itTotal + $itVat, 2)) : $itTotal;
+                        $items[] = [
+                            'item_description' => $it['item_description'] ?? ($ledger->item_description ?: 'Material item'),
+                            'uom'              => (string)($it['uom'] ?? '9'),
+                            'qty'              => $itQty,
+                            'unit_price'       => $itUnit,
+                            'total_value'      => $itTotal,
+                            'vat'              => $itVat,
+                            'value_after_vat'  => $itAfter,
+                            'purchase_type'    => $vatIncluded ? 3 : 6,
+                            'vat_category'     => $vatIncluded ? 'G' : 'E',
+                        ];
+                    }
+                }
+            }
+
+            if (empty($items)) {
+                $items[] = [
+                    'item_description' => $ledger->item_description ?: 'Credit settlement',
+                    'uom'              => '9',
+                    'qty'              => 1.0,
+                    'unit_price'       => (float)$receiptSubtotal,
+                    'total_value'      => (float)$receiptSubtotal,
+                    'vat'              => $vatAmount,
+                    'value_after_vat'  => (float)($receiptSubtotal + $vatAmount),
+                    'purchase_type'    => $vatIncluded ? 3 : 6,
+                    'vat_category'     => $vatIncluded ? 'G' : 'E',
+                ];
+            }
 
             $scanData = [
                 'vendor_name'       => $vendorName,
@@ -1008,31 +1071,20 @@ class CreditStoreController extends Controller
                 'fs_no_valid'       => !empty($fsNo) && strlen($fsNo) === 8,
                 'mrc_no'            => $mrcNo,
                 'receipt_date_ymd'  => $receiptDate,
-                'subtotal'          => round((float)$payment->amount, 2),
+                'subtotal'          => round($receiptSubtotal, 2),
                 'vat_amount'        => round($vatAmount, 2),
-                'total_amount'      => round((float)($payment->amount + $vatAmount), 2),
+                'total_amount'      => round($receiptTotal, 2),
                 'currency'          => 'ETB',
                 'description'       => "Receipt attached for {$vendorName} (#{$payment->id})",
                 'engine'            => $request->input('ocr_engine') ?: 'Receipt OCR Studio',
                 'engine_slug'       => 'credit_payment',
-                'confidence'        => 'high',
-                'confidence_score'  => 95,
-                'qc_notes'          => "Receipt attached to payment #{$payment->id}" . ($vatIncluded ? " [15% VAT Included - Sent to ERCA VAT Section]" : " [No VAT - Sent to TAS Excel]"),
+                'confidence'        => $isVerified ? 'high' : 'medium',
+                'confidence_score'  => $isVerified ? 100 : 95,
+                'is_verified'       => $isVerified,
+                'qc_notes'          => "Receipt attached to payment #{$payment->id}" . ($vatIncluded ? " [15% VAT Included - Sent to ERCA VAT Section]" : " [No VAT - Sent to TAS Excel]") . ($isVerified ? " [Verified by User]" : ""),
                 'vat_included'      => $vatIncluded,
                 'has_vat'           => $vatIncluded,
-                'items'             => [
-                    [
-                        'item_description' => $ledger->item_description ?: 'Credit settlement',
-                        'uom'              => '9',
-                        'qty'              => 1.0,
-                        'unit_price'       => (float)$payment->amount,
-                        'total_value'      => (float)$payment->amount,
-                        'vat'              => $vatAmount,
-                        'value_after_vat'  => (float)($payment->amount + $vatAmount),
-                        'purchase_type'    => $vatIncluded ? 3 : 6,
-                        'vat_category'     => $vatIncluded ? 'G' : 'E',
-                    ]
-                ],
+                'items'             => $items,
             ];
 
             $ocrService->saveReceipt(
@@ -1045,11 +1097,22 @@ class CreditStoreController extends Controller
                 $receiptDate
             );
 
+            $paymentUpdate = [
+                'vat_type'   => $vatIncluded ? 'exclusive' : 'none',
+                'vat_amount' => $vatAmount,
+            ];
+            if ($fsNo) $paymentUpdate['reference_no'] = $fsNo;
+            if (\Illuminate\Support\Facades\Schema::hasColumn('credit_store_payments', 'gross_amount')) {
+                $paymentUpdate['gross_amount'] = $receiptSubtotal;
+            }
+            $payment->update($paymentUpdate);
+
             if ($payment->expense_request_id) {
                 ExpenseRequest::where('id', $payment->expense_request_id)->update([
-                    'attachment' => $filePath,
-                    'vat_amount' => $vatAmount,
-                    'vat_type'   => $vatIncluded ? 'exclusive' : 'none',
+                    'attachment'   => $filePath,
+                    'gross_amount' => $receiptSubtotal,
+                    'vat_amount'   => $vatAmount,
+                    'vat_type'     => $vatIncluded ? 'exclusive' : 'none',
                 ]);
             }
         } catch (\Throwable $e) {

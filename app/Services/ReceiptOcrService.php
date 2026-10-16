@@ -335,7 +335,8 @@ class ReceiptOcrService
             $supplierTin = $scanData['supplier_tin'] ?? '';
             $tinValid    = $scanData['tin_valid'] ?? (strlen($supplierTin) === 10);
 
-            $needsReview = (!$tinValid || !$fsNoValid || ($scanData['confidence'] ?? '') === 'review' || ($scanData['confidence'] ?? '') === 'low' || ($scanData['confidence_score'] ?? 90) < 75);
+            $isVerified  = !empty($scanData['is_verified']);
+            $needsReview = !$isVerified && (!$tinValid || !$fsNoValid || ($scanData['confidence'] ?? '') === 'review' || ($scanData['confidence'] ?? '') === 'low' || ($scanData['confidence_score'] ?? 90) < 75);
 
             $parsedCustomDate = $customReceiptDate ? $this->parseDateToYmd($customReceiptDate) : null;
             $receiptDate = $parsedCustomDate ?: ($scanData['receipt_date_ymd'] ?? now()->toDateString());
@@ -367,8 +368,8 @@ class ReceiptOcrService
                 'file_type'        => $isPdf ? 'pdf' : 'image',
                 'ocr_raw_text'     => $scanData['raw_text'] ?? null,
                 'ocr_engine'       => $scanData['engine_slug'] ?? 'gemini',
-                'confidence'       => $scanData['confidence'] ?? 'high',
-                'confidence_score' => (int)($scanData['confidence_score'] ?? 90),
+                'confidence'       => $isVerified ? 'high' : ($scanData['confidence'] ?? 'high'),
+                'confidence_score' => $isVerified ? 100 : (int)($scanData['confidence_score'] ?? 90),
                 'needs_review'     => $needsReview,
                 'parsed_data'      => $scanData['extracted'] ?? $scanData,
                 'parse_status'     => 'parsed',
@@ -377,7 +378,7 @@ class ReceiptOcrService
                 'approved_at'      => $recordTimestamp,
                 'created_at'       => $recordTimestamp,
                 'updated_at'       => $recordTimestamp,
-                'notes'            => "Scanned via " . ($scanData['engine'] ?? 'OCR') . " (" . ($scanData['confidence_score'] ?? 90) . "% confidence). FS: {$fsNo}",
+                'notes'            => "Scanned via " . ($scanData['engine'] ?? 'OCR') . " (" . ($isVerified ? 100 : ($scanData['confidence_score'] ?? 90)) . "% confidence). FS: {$fsNo}" . ($isVerified ? ' [User Verified]' : ''),
                 'qc_notes'         => $scanData['qc_notes'] ?? null,
             ]);
 
@@ -444,16 +445,28 @@ class ReceiptOcrService
                 }
 
                 if (!empty($errors)) {
-                    $rItem->is_flagged   = true;
-                    $rItem->flag_reasons = $errors;
-                    $hasFlaggedItem      = true;
+                    if ($isVerified) {
+                        $rItem->is_flagged   = false;
+                        $rItem->flag_reasons = null;
+                    } else {
+                        $rItem->is_flagged   = true;
+                        $rItem->flag_reasons = $errors;
+                        $hasFlaggedItem      = true;
+                    }
                 }
 
                 $rItem->save();
             }
 
-            if ($hasFlaggedItem) {
+            if ($hasFlaggedItem && !$isVerified) {
                 $receipt->update(['needs_review' => true]);
+            } elseif ($isVerified) {
+                $receipt->update([
+                    'needs_review'     => false,
+                    'confidence'       => 'high',
+                    'confidence_score' => 100,
+                    'status'           => 'approved',
+                ]);
             }
 
             return $receipt;

@@ -707,7 +707,11 @@
                                                     <input type="hidden" name="vendor_name" id="creditSingleVendorName">
                                                     <input type="hidden" name="mrc_no" id="creditSingleMrcNo">
                                                     <input type="hidden" name="receipt_date" id="creditSingleReceiptDate">
+                                                    <input type="hidden" name="subtotal" id="creditSingleSubtotal">
+                                                    <input type="hidden" name="vat_amount" id="creditSingleVatAmount">
+                                                    <input type="hidden" name="total_amount" id="creditSingleTotalAmount">
                                                     <input type="hidden" name="vat_included" id="creditSingleVatIncluded" value="1">
+                                                    <input type="hidden" name="is_verified" id="creditSingleIsVerified" value="1">
                                                     <input type="hidden" name="ocr_items_json" id="creditSingleOcrItemsJson">
                                                     <div class="form-text small text-muted" style="font-size:0.72rem;">Attach vendor fiscal receipt, invoice, bank slip, or cheque scan. Live ERCA validation applies automatically.</div>
                                                 </div>
