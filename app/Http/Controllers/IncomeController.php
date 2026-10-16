@@ -103,6 +103,24 @@ class IncomeController extends Controller
                     if (!Schema::hasColumn('income_records', 'receipt_file_path')) {
                         $table->string('receipt_file_path', 255)->nullable()->after('encoded_by');
                     }
+                    if (!Schema::hasColumn('income_records', 'has_withholding')) {
+                        $table->boolean('has_withholding')->default(false)->after('receipt_file_path');
+                    }
+                    if (!Schema::hasColumn('income_records', 'withholding_rate')) {
+                        $table->decimal('withholding_rate', 8, 2)->default(3.00)->after('has_withholding');
+                    }
+                    if (!Schema::hasColumn('income_records', 'withholding_amount')) {
+                        $table->decimal('withholding_amount', 18, 2)->default(0.00)->after('withholding_rate');
+                    }
+                    if (!Schema::hasColumn('income_records', 'withholding_receipt')) {
+                        $table->string('withholding_receipt', 500)->nullable()->after('withholding_amount');
+                    }
+                    if (!Schema::hasColumn('income_records', 'withholding_receipt_number')) {
+                        $table->string('withholding_receipt_number', 100)->nullable()->after('withholding_receipt');
+                    }
+                    if (!Schema::hasColumn('income_records', 'net_amount')) {
+                        $table->decimal('net_amount', 18, 2)->nullable()->after('withholding_receipt_number');
+                    }
                 });
             }
         } catch (\Throwable $e) {
@@ -393,8 +411,15 @@ class IncomeController extends Controller
             'unit_price'          => 'nullable|numeric|min:0',
             'receipt_date'        => 'nullable|date',
             'encoded_by'          => 'nullable|string|max:100',
-            'receipt_file'        => 'nullable|file|mimes:jpeg,jpg,png,webp,pdf|max:25600',
-            'receipt_file_path'   => 'nullable|string|max:255',
+            'receipt_file'               => 'nullable|file|mimes:jpeg,jpg,png,webp,pdf|max:25600',
+            'receipt_file_path'          => 'nullable|string|max:255',
+            'has_withholding'            => 'nullable',
+            'withholding_rate'           => 'nullable|numeric|min:0|max:100',
+            'withholding_amount'         => 'nullable|numeric|min:0',
+            'withholding_receipt'        => 'nullable|file|mimes:jpeg,jpg,png,webp,pdf|max:25600',
+            'withholding_receipt_file'   => 'nullable|file|mimes:jpeg,jpg,png,webp,pdf|max:25600',
+            'withholding_receipt_number' => 'nullable|string|max:100',
+            'net_amount'                 => 'nullable|numeric|min:0',
         ]);
 
         // If chart_of_account_id was passed in bank_account_id slot or vice-versa, resolve COA
@@ -462,6 +487,30 @@ class IncomeController extends Controller
             $path = $file->storeAs('income_receipts', $filename, 'public');
             $data['receipt_file_path'] = $path;
         }
+
+        // Handle withholding receipt file upload if present
+        $whtFile = $request->file('withholding_receipt') ?: $request->file('withholding_receipt_file');
+        if ($whtFile) {
+            $whtExt  = strtolower($whtFile->getClientOriginalExtension());
+            $whtFilename = 'income_wht_' . now()->format('Ymd_His') . '_' . uniqid() . '.' . $whtExt;
+            $whtPath = $whtFile->storeAs('income_receipts', $whtFilename, 'public');
+            $data['withholding_receipt'] = $whtPath;
+        }
+
+        // Process Withholding Tax (WHT)
+        $hasWithholding = $request->boolean('has_withholding') || !empty($data['withholding_receipt']) || !empty($request->input('withholding_receipt_number'));
+        $data['has_withholding'] = $hasWithholding;
+        $data['withholding_rate'] = (float)($request->input('withholding_rate') ?: 3.00);
+        $data['withholding_receipt_number'] = $request->input('withholding_receipt_number') ?: null;
+
+        $gross = (float)$data['amount'];
+        $vat = round($gross * 0.15, 2);
+        if ($hasWithholding) {
+            $data['withholding_amount'] = (float)($request->input('withholding_amount') ?: round($gross * ($data['withholding_rate'] / 100), 2));
+        } else {
+            $data['withholding_amount'] = 0.00;
+        }
+        $data['net_amount'] = round($gross + $vat - $data['withholding_amount'], 2);
 
         // Generate income tracking code safely without unique key collisions
         $baseNo = 'INC-' . date('Ymd') . '-';
@@ -1033,10 +1082,17 @@ class IncomeController extends Controller
                     }
                 }
 
-                // 5. Delete physical receipt file from storage
+                // 5. Delete physical receipt files from storage
                 if (!empty($record->receipt_file_path)) {
                     try {
                         Storage::disk('public')->delete($record->receipt_file_path);
+                    } catch (\Throwable $e) {
+                        // ignore file delete failure
+                    }
+                }
+                if (!empty($record->withholding_receipt)) {
+                    try {
+                        Storage::disk('public')->delete($record->withholding_receipt);
                     } catch (\Throwable $e) {
                         // ignore file delete failure
                     }

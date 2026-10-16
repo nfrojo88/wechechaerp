@@ -61,7 +61,7 @@
 
                     <div class="col-md-6">
                         <label class="form-label fw-semibold">Gross Amount (ETB) <span class="text-danger">*</span></label>
-                        <input type="number" step="0.01" name="amount" class="form-control fw-bold" required placeholder="0.00">
+                        <input type="number" step="0.01" name="amount" id="createAmount" class="form-control fw-bold" required placeholder="0.00">
                     </div>
 
                     <div class="col-md-6">
@@ -71,6 +71,86 @@
                             <option value="cash">Cash</option>
                             <option value="cheque">Cheque</option>
                         </select>
+                    </div>
+
+                    <!-- Real-Time Computed Tax Box -->
+                    <div class="col-12">
+                        <div class="p-3 bg-light border rounded-3">
+                            <div class="row g-2 text-center">
+                                <div class="col-3 border-end">
+                                    <small class="text-muted d-block" style="font-size: 0.72rem;">GROSS</small>
+                                    <strong class="text-dark small" id="lblCreateGross">0.00</strong>
+                                </div>
+                                <div class="col-3 border-end">
+                                    <small class="text-muted d-block" style="font-size: 0.72rem;">VAT (+15%)</small>
+                                    <strong class="text-success small" id="lblCreateVat">+0.00</strong>
+                                </div>
+                                <div class="col-3 border-end">
+                                    <small class="text-muted d-block" style="font-size: 0.72rem;" id="lblCreateWhtTitle">WHT (0%)</small>
+                                    <strong class="text-danger small" id="lblCreateWht">0.00</strong>
+                                </div>
+                                <div class="col-3">
+                                    <small class="text-muted d-block" style="font-size: 0.72rem;">NET TOTAL</small>
+                                    <strong class="text-primary small" id="lblCreateNet">0.00</strong>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ── WITHHOLDING TAX & RECEIPT UNLOCK SECTION ── -->
+                    <div class="col-12">
+                        <div class="card border border-warning border-opacity-50 bg-warning bg-opacity-10 rounded-3 p-3 shadow-2xs">
+                            <div class="d-flex align-items-center justify-content-between">
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="badge bg-warning text-dark p-2 rounded-circle">
+                                        <i class="fa-solid fa-file-invoice-dollar fs-6"></i>
+                                    </span>
+                                    <div>
+                                        <label class="form-check-label fw-bold text-dark small mb-0 cursor-pointer" for="createWithholdingToggle">
+                                            Withholding Tax Receipt (የቅድመ ግብር 3% ደረሰኝ)
+                                        </label>
+                                        <div class="text-muted small" style="font-size: 0.72rem;">
+                                            Unlock to attach client's withholding tax receipt &amp; upload both receipts
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="form-check form-switch m-0">
+                                    <input class="form-check-input fs-5 cursor-pointer" type="checkbox" role="switch" name="has_withholding" id="createWithholdingToggle" value="1" onchange="toggleCreateWithholding()">
+                                </div>
+                            </div>
+
+                            <!-- Unlocked Withholding Receipt & Details Section -->
+                            <div id="createWithholdingSection" class="mt-3 pt-3 border-top border-warning border-opacity-25" style="display: none;">
+                                <div class="row g-3">
+                                    <div class="col-md-7">
+                                        <label class="form-label small fw-semibold text-dark mb-1">
+                                            <i class="fa-solid fa-paperclip text-danger me-1"></i>Attach Withholding Receipt Slip <span class="text-danger">*</span>
+                                        </label>
+                                        <input type="file" name="withholding_receipt" id="createWithholdingReceipt" class="form-control bg-white border" accept="image/jpeg,image/png,image/webp,application/pdf" onchange="if(this.files.length){ document.getElementById('createWithholdingToggle').checked = true; updateCreateCalculations(); }">
+                                        <small class="text-muted" style="font-size: 0.70rem;">Official WHT receipt slip or voucher (JPG, PNG, PDF up to 25MB)</small>
+                                    </div>
+                                    <div class="col-md-5">
+                                        <label class="form-label small fw-semibold text-dark mb-1">Withholding Receipt # / Voucher</label>
+                                        <input type="text" name="withholding_receipt_number" id="createWithholdingReceiptNo" class="form-control bg-white border font-monospace" placeholder="e.g. WHT-00984">
+                                        <small class="text-muted" style="font-size: 0.70rem;">Serial # on client's withholding slip</small>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label small fw-semibold text-dark mb-1">Withholding Rate (%)</label>
+                                        <div class="input-group">
+                                            <input type="number" step="0.01" name="withholding_rate" id="createWithholdingRate" class="form-control bg-white border font-monospace fw-bold" value="3.00" oninput="updateCreateCalculations()">
+                                            <span class="input-group-text">%</span>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label small fw-semibold text-dark mb-1">Deducted WHT Amount</label>
+                                        <div class="input-group">
+                                            <span class="input-group-text">ETB</span>
+                                            <input type="number" step="0.01" name="withholding_amount" id="createWithholdingAmount" class="form-control bg-white border font-monospace fw-bold text-danger" placeholder="0.00" readonly>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="col-md-6">
@@ -216,4 +296,66 @@
         </div>
     </div>
 </div>
+
+<script>
+function toggleCreateWithholding() {
+    const toggle = document.getElementById('createWithholdingToggle');
+    const sec = document.getElementById('createWithholdingSection');
+    if (!toggle || !sec) return;
+    if (toggle.checked) {
+        sec.style.display = 'block';
+    } else {
+        sec.style.display = 'none';
+        const fileInput = document.getElementById('createWithholdingReceipt');
+        if (fileInput) fileInput.value = '';
+        const noInput = document.getElementById('createWithholdingReceiptNo');
+        if (noInput) noInput.value = '';
+    }
+    updateCreateCalculations();
+}
+
+function updateCreateCalculations() {
+    const amountInput = document.getElementById('createAmount');
+    const lblGross = document.getElementById('lblCreateGross');
+    const lblVat = document.getElementById('lblCreateVat');
+    const lblWht = document.getElementById('lblCreateWht');
+    const lblWhtTitle = document.getElementById('lblCreateWhtTitle');
+    const lblNet = document.getElementById('lblCreateNet');
+    const toggle = document.getElementById('createWithholdingToggle');
+    const rateInput = document.getElementById('createWithholdingRate');
+    const amtInput = document.getElementById('createWithholdingAmount');
+
+    const gross = parseFloat(amountInput ? amountInput.value : 0) || 0;
+    const vat = gross * 0.15;
+    const hasWht = toggle ? toggle.checked : false;
+    const rate = parseFloat(rateInput ? rateInput.value : 3) || 3;
+    const wht = hasWht ? (gross * (rate / 100)) : 0;
+    const net = gross + vat - wht;
+
+    if (amtInput) {
+        amtInput.value = wht.toFixed(2);
+    }
+
+    if (lblWhtTitle) {
+        lblWhtTitle.textContent = hasWht ? `WHT (-${rate}%)` : 'WHT (0%)';
+    }
+    if (lblGross) lblGross.textContent = gross.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    if (lblVat) lblVat.textContent = '+' + vat.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    if (lblWht) {
+        lblWht.textContent = hasWht ? ('-' + wht.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})) : '0.00';
+    }
+    if (lblNet) lblNet.textContent = net.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const amountInput = document.getElementById('createAmount');
+    if (amountInput) {
+        amountInput.addEventListener('input', updateCreateCalculations);
+    }
+    const rateInput = document.getElementById('createWithholdingRate');
+    if (rateInput) {
+        rateInput.addEventListener('input', updateCreateCalculations);
+    }
+});
+</script>
 @endsection

@@ -252,7 +252,7 @@
                             <th class="text-end">GROSS AMOUNT</th>
                             <th class="text-end">VAT (15%)</th>
                             <th class="text-end">NET AMOUNT</th>
-                            <th class="text-center">RECEIPT SLIP</th>
+                            <th class="text-center">RECEIPT SLIPS</th>
                             <th class="text-center">ENCODED BY</th>
                             <th class="text-center pe-4">ACTION</th>
                         </tr>
@@ -261,9 +261,10 @@
                         @forelse($incomes as $inc)
                         @php
                             $gross = (float)$inc->amount;
-                            $vat = $gross * 0.15;
-                            $wht = $gross * 0.03;
-                            $net = $gross + $vat - $wht;
+                            $vat = round($gross * 0.15, 2);
+                            $hasWht = $inc->has_withholding || !empty($inc->withholding_receipt);
+                            $wht = $hasWht ? (float)($inc->withholding_amount > 0 ? $inc->withholding_amount : round($gross * 0.03, 2)) : 0.0;
+                            $net = round($gross + $vat - $wht, 2);
                             
                             $badgeColor = 'bg-secondary';
                             $icon = 'fa-tag';
@@ -328,16 +329,29 @@
                                 +{{ number_format($vat, 2) }}
                             </td>
                             <td class="text-end fw-bold text-primary">
-                                ETB {{ number_format($net, 2) }}
-                            </td>
-                            <td class="text-center">
-                                @if(!empty($inc->receipt_url))
-                                    <a href="{{ $inc->receipt_url }}" target="_blank" class="btn btn-sm btn-outline-primary rounded-pill px-2.5 py-1 shadow-xs" title="View Uploaded Receipt Slip">
-                                        <i class="fa-solid fa-receipt me-1"></i>Slip
-                                    </a>
-                                @else
-                                    <span class="text-muted small">—</span>
+                                <div>ETB {{ number_format($net, 2) }}</div>
+                                @if($hasWht && $wht > 0)
+                                    <small class="text-danger font-monospace d-block" style="font-size: 0.70rem;" title="Withholding Deducted">
+                                        -{{ number_format($wht, 2) }} WHT
+                                    </small>
                                 @endif
+                            </td>
+                            <td class="text-center text-nowrap">
+                                <div class="d-inline-flex flex-column gap-1 align-items-center">
+                                    @if(!empty($inc->receipt_url))
+                                        <a href="{{ $inc->receipt_url }}" target="_blank" class="btn btn-sm btn-outline-primary rounded-pill px-2.5 py-0.5 shadow-xs" style="font-size: 0.76rem;" title="View Sales Receipt Slip">
+                                            <i class="fa-solid fa-receipt me-1"></i>Sales Slip
+                                        </a>
+                                    @endif
+                                    @if(!empty($inc->withholding_receipt_url))
+                                        <a href="{{ $inc->withholding_receipt_url }}" target="_blank" class="btn btn-sm btn-outline-danger rounded-pill px-2.5 py-0.5 shadow-xs" style="font-size: 0.76rem;" title="View Withholding Tax Slip @if($inc->withholding_receipt_number) (Ref: {{ $inc->withholding_receipt_number }}) @endif">
+                                            <i class="fa-solid fa-file-invoice-dollar me-1"></i>WHT Slip
+                                        </a>
+                                    @endif
+                                    @if(empty($inc->receipt_url) && empty($inc->withholding_receipt_url))
+                                        <span class="text-muted small">—</span>
+                                    @endif
+                                </div>
                             </td>
                             <td class="text-center font-monospace small text-muted">
                                 {{ $inc->encoded_by ?: 'wechacha' }}
@@ -518,12 +532,66 @@
                                         <strong class="text-success small" id="lblVat">0.00</strong>
                                     </div>
                                     <div class="col-3 border-end">
-                                        <small class="text-muted d-block" style="font-size: 0.72rem;">WHT (-3%)</small>
+                                        <small class="text-muted d-block" style="font-size: 0.72rem;" id="lblWhtTitle">WHT (-3%)</small>
                                         <strong class="text-danger small" id="lblWht">0.00</strong>
                                     </div>
                                     <div class="col-3">
                                         <small class="text-muted d-block" style="font-size: 0.72rem;">NET TOTAL</small>
                                         <strong class="text-primary small" id="lblNet">0.00</strong>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- ── WITHHOLDING TAX & RECEIPT UNLOCK SECTION ── -->
+                            <div class="card border border-warning border-opacity-50 bg-warning bg-opacity-10 rounded-3 mb-3 p-3 shadow-2xs">
+                                <div class="d-flex align-items-center justify-content-between">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span class="badge bg-warning text-dark p-2 rounded-circle">
+                                            <i class="fa-solid fa-file-invoice-dollar fs-6"></i>
+                                        </span>
+                                        <div>
+                                            <label class="form-check-label fw-bold text-dark small mb-0 cursor-pointer" for="modalWithholdingToggle">
+                                                Withholding Tax Receipt (የቅድመ ግብር 3% ደረሰኝ)
+                                            </label>
+                                            <div class="text-muted small" style="font-size: 0.72rem;">
+                                                Unlock to attach client's withholding tax receipt &amp; upload both receipts
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="form-check form-switch m-0">
+                                        <input class="form-check-input fs-5 cursor-pointer" type="checkbox" role="switch" name="has_withholding" id="modalWithholdingToggle" value="1" onchange="toggleWithholdingSection()">
+                                    </div>
+                                </div>
+
+                                <!-- Unlocked Withholding Receipt & Details Section -->
+                                <div id="modalWithholdingSection" class="mt-3 pt-3 border-top border-warning border-opacity-25" style="display: none;">
+                                    <div class="row g-2">
+                                        <div class="col-md-7">
+                                            <label class="form-label small fw-semibold text-dark mb-1">
+                                                <i class="fa-solid fa-paperclip text-danger me-1"></i>Attach Withholding Receipt Slip <span class="text-danger">*</span>
+                                            </label>
+                                            <input type="file" name="withholding_receipt" id="modalWithholdingReceipt" class="form-control form-control-sm bg-white border" accept="image/jpeg,image/png,image/webp,application/pdf" onchange="if(this.files.length){ document.getElementById('modalWithholdingToggle').checked = true; updateCalculations(); }">
+                                            <small class="text-muted" style="font-size: 0.70rem;">Official WHT receipt or voucher (JPG, PNG, PDF up to 25MB)</small>
+                                        </div>
+                                        <div class="col-md-5">
+                                            <label class="form-label small fw-semibold text-dark mb-1">Withholding Receipt # / Voucher</label>
+                                            <input type="text" name="withholding_receipt_number" id="modalWithholdingReceiptNo" class="form-control form-control-sm bg-white border font-monospace" placeholder="e.g. WHT-00984">
+                                            <small class="text-muted" style="font-size: 0.70rem;">Serial # on client's withholding slip</small>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label small fw-semibold text-dark mb-1">Withholding Rate (%)</label>
+                                            <div class="input-group input-group-sm">
+                                                <input type="number" step="0.01" name="withholding_rate" id="modalWithholdingRate" class="form-control bg-white border font-monospace fw-bold" value="3.00" oninput="updateCalculations()">
+                                                <span class="input-group-text">%</span>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label small fw-semibold text-dark mb-1">Deducted WHT Amount</label>
+                                            <div class="input-group input-group-sm">
+                                                <span class="input-group-text">ETB</span>
+                                                <input type="number" step="0.01" name="withholding_amount" id="modalWithholdingAmount" class="form-control bg-white border font-monospace fw-bold text-danger" placeholder="0.00" readonly>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -766,27 +834,63 @@
 </div>
 
 <script>
-document.addEventListener('DOMContentLoaded', function() {
+function toggleWithholdingSection() {
+    const toggle = document.getElementById('modalWithholdingToggle');
+    const sec = document.getElementById('modalWithholdingSection');
+    if (!toggle || !sec) return;
+    if (toggle.checked) {
+        sec.style.display = 'block';
+    } else {
+        sec.style.display = 'none';
+        const fileInput = document.getElementById('modalWithholdingReceipt');
+        if (fileInput) fileInput.value = '';
+        const noInput = document.getElementById('modalWithholdingReceiptNo');
+        if (noInput) noInput.value = '';
+    }
+    updateCalculations();
+}
+
+function updateCalculations() {
     const amountInput = document.getElementById('modalAmount');
     const lblGross = document.getElementById('lblGross');
     const lblVat = document.getElementById('lblVat');
     const lblWht = document.getElementById('lblWht');
+    const lblWhtTitle = document.getElementById('lblWhtTitle');
     const lblNet = document.getElementById('lblNet');
+    const toggle = document.getElementById('modalWithholdingToggle');
+    const rateInput = document.getElementById('modalWithholdingRate');
+    const amtInput = document.getElementById('modalWithholdingAmount');
 
-    function updateCalculations() {
-        const gross = parseFloat(amountInput.value) || 0;
-        const vat = gross * 0.15;
-        const wht = gross * 0.03;
-        const net = gross + vat - wht;
+    const gross = parseFloat(amountInput ? amountInput.value : 0) || 0;
+    const vat = gross * 0.15;
+    const hasWht = toggle ? toggle.checked : false;
+    const rate = parseFloat(rateInput ? rateInput.value : 3) || 3;
+    const wht = hasWht ? (gross * (rate / 100)) : 0;
+    const net = gross + vat - wht;
 
-        lblGross.textContent = gross.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-        lblVat.textContent = vat.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-        lblWht.textContent = wht.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-        lblNet.textContent = net.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    if (amtInput) {
+        amtInput.value = wht.toFixed(2);
     }
 
+    if (lblWhtTitle) {
+        lblWhtTitle.textContent = hasWht ? `WHT (-${rate}%)` : 'WHT (0%)';
+    }
+    if (lblGross) lblGross.textContent = gross.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    if (lblVat) lblVat.textContent = '+' + vat.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    if (lblWht) {
+        lblWht.textContent = hasWht ? ('-' + wht.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})) : '0.00';
+    }
+    if (lblNet) lblNet.textContent = net.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const amountInput = document.getElementById('modalAmount');
     if (amountInput) {
         amountInput.addEventListener('input', updateCalculations);
+    }
+    const rateInput = document.getElementById('modalWithholdingRate');
+    if (rateInput) {
+        rateInput.addEventListener('input', updateCalculations);
     }
 });
 

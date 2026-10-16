@@ -147,9 +147,10 @@
             <!-- Tax Breakdown -->
             @php
                 $gross = (float)$income->amount;
-                $vat = $gross * 0.15;
-                $wht = $gross * 0.03;
-                $net = $gross + $vat - $wht;
+                $vat = round($gross * 0.15, 2);
+                $hasWht = $income->has_withholding || !empty($income->withholding_receipt);
+                $wht = $hasWht ? (float)($income->withholding_amount > 0 ? $income->withholding_amount : round($gross * 0.03, 2)) : 0.0;
+                $net = round($gross + $vat - $wht, 2);
             @endphp
             <div class="card shadow-sm border-0 rounded-4 mb-4">
                 <div class="card-header bg-white border-bottom py-3 px-4">
@@ -164,10 +165,12 @@
                         <span class="text-muted">VAT (+15%)</span>
                         <strong class="text-success font-monospace">+ETB {{ number_format($vat, 2) }}</strong>
                     </div>
+                    @if($hasWht)
                     <div class="d-flex justify-content-between mb-2 pb-2 border-bottom">
-                        <span class="text-muted">WHT (-3%)</span>
+                        <span class="text-muted">WHT (-{{ number_format($income->withholding_rate ?: 3, 0) }}%)</span>
                         <strong class="text-danger font-monospace">-ETB {{ number_format($wht, 2) }}</strong>
                     </div>
+                    @endif
                     <div class="d-flex justify-content-between pt-2">
                         <span class="fw-bold text-dark">Net Total</span>
                         <strong class="text-primary font-monospace fs-5">ETB {{ number_format($net, 2) }}</strong>
@@ -175,17 +178,20 @@
                 </div>
             </div>
 
-            <!-- Receipt Slip Preview -->
+            <!-- Sales Receipt Slip Preview -->
             <div class="card shadow-sm border-0 rounded-4 mb-4">
-                <div class="card-header bg-white border-bottom py-3 px-4">
-                    <h6 class="fw-bold text-dark mb-0"><i class="fa-solid fa-receipt text-primary me-2"></i>Physical Receipt Slip</h6>
+                <div class="card-header bg-white border-bottom py-3 px-4 d-flex justify-content-between align-items-center">
+                    <h6 class="fw-bold text-dark mb-0"><i class="fa-solid fa-receipt text-primary me-2"></i>Sales Receipt Slip</h6>
+                    @if(!empty($income->formatted_receipt_no))
+                        <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle font-monospace">{{ $income->formatted_receipt_no }}</span>
+                    @endif
                 </div>
                 <div class="card-body p-4 text-center">
                     @if(!empty($income->receipt_url))
                         <div class="mb-3">
                             <a href="{{ $income->receipt_url }}" target="_blank">
                                 @if(preg_match('/\.(jpg|jpeg|png|webp)$/i', $income->receipt_file_path))
-                                    <img src="{{ $income->receipt_url }}" alt="Receipt Slip" class="img-fluid rounded-3 shadow-xs border" style="max-height: 240px; object-fit: contain;">
+                                    <img src="{{ $income->receipt_url }}" alt="Receipt Slip" class="img-fluid rounded-3 shadow-xs border" style="max-height: 200px; object-fit: contain;">
                                 @else
                                     <div class="p-4 bg-light rounded-3 border">
                                         <i class="fa-solid fa-file-pdf fs-1 text-danger mb-2"></i>
@@ -195,12 +201,46 @@
                             </a>
                         </div>
                         <a href="{{ $income->receipt_url }}" target="_blank" class="btn btn-outline-primary btn-sm rounded-pill px-3 shadow-xs">
-                            <i class="fa-solid fa-arrow-up-right-from-square me-1"></i>View Full Receipt
+                            <i class="fa-solid fa-arrow-up-right-from-square me-1"></i>View Sales Receipt
                         </a>
                     @else
                         <div class="py-4 text-muted">
                             <i class="fa-solid fa-file-circle-question fs-2 mb-2 d-block opacity-50"></i>
-                            <span class="small">No physical receipt slip attached to this record.</span>
+                            <span class="small">No sales receipt slip attached.</span>
+                        </div>
+                    @endif
+                </div>
+            </div>
+
+            <!-- Withholding Tax Receipt Slip Preview -->
+            <div class="card shadow-sm border-0 rounded-4 mb-4">
+                <div class="card-header bg-white border-bottom py-3 px-4 d-flex justify-content-between align-items-center">
+                    <h6 class="fw-bold text-danger mb-0"><i class="fa-solid fa-file-invoice-dollar text-danger me-2"></i>Withholding Tax Receipt</h6>
+                    @if(!empty($income->withholding_receipt_number))
+                        <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle font-monospace">Ref: {{ $income->withholding_receipt_number }}</span>
+                    @endif
+                </div>
+                <div class="card-body p-4 text-center">
+                    @if(!empty($income->withholding_receipt_url))
+                        <div class="mb-3">
+                            <a href="{{ $income->withholding_receipt_url }}" target="_blank">
+                                @if(preg_match('/\.(jpg|jpeg|png|webp)$/i', $income->withholding_receipt))
+                                    <img src="{{ $income->withholding_receipt_url }}" alt="Withholding Receipt Slip" class="img-fluid rounded-3 shadow-xs border" style="max-height: 200px; object-fit: contain;">
+                                @else
+                                    <div class="p-4 bg-light rounded-3 border">
+                                        <i class="fa-solid fa-file-pdf fs-1 text-danger mb-2"></i>
+                                        <p class="small text-muted mb-0">PDF Withholding Document</p>
+                                    </div>
+                                @endif
+                            </a>
+                        </div>
+                        <a href="{{ $income->withholding_receipt_url }}" target="_blank" class="btn btn-outline-danger btn-sm rounded-pill px-3 shadow-xs">
+                            <i class="fa-solid fa-arrow-up-right-from-square me-1"></i>View Withholding Slip
+                        </a>
+                    @else
+                        <div class="py-4 text-muted">
+                            <i class="fa-solid fa-file-circle-exclamation fs-2 mb-2 d-block opacity-50"></i>
+                            <span class="small">No withholding receipt slip attached.</span>
                         </div>
                     @endif
                 </div>

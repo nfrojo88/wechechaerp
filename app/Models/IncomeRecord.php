@@ -38,20 +38,30 @@ class IncomeRecord extends Model
         'receipt_date',
         'encoded_by',
         'receipt_file_path',
+        'has_withholding',
+        'withholding_rate',
+        'withholding_amount',
+        'withholding_receipt',
+        'withholding_receipt_number',
+        'net_amount',
         'vat_settled',
         'vat_settlement_id',
         'tax_settled_at',
     ];
 
     protected $casts = [
-        'income_date'    => 'date',
-        'receipt_date'   => 'date',
-        'amount'         => 'decimal:2',
-        'unit_price'     => 'decimal:2',
-        'quantity'       => 'decimal:2',
-        'is_deposited'   => 'boolean',
-        'vat_settled'    => 'boolean',
-        'tax_settled_at' => 'datetime',
+        'income_date'        => 'date',
+        'receipt_date'       => 'date',
+        'amount'             => 'decimal:2',
+        'unit_price'         => 'decimal:2',
+        'quantity'           => 'decimal:2',
+        'has_withholding'    => 'boolean',
+        'withholding_rate'   => 'decimal:2',
+        'withholding_amount' => 'decimal:2',
+        'net_amount'         => 'decimal:2',
+        'is_deposited'       => 'boolean',
+        'vat_settled'        => 'boolean',
+        'tax_settled_at'     => 'datetime',
     ];
 
     protected static function booted()
@@ -94,6 +104,56 @@ class IncomeRecord extends Model
         }
 
         return asset('storage/' . ltrim($this->receipt_file_path, '/'));
+    }
+
+    /**
+     * Get the accessible public URL for the attached withholding tax receipt.
+     */
+    public function getWithholdingReceiptUrlAttribute(): ?string
+    {
+        if (empty($this->withholding_receipt)) {
+            return null;
+        }
+
+        if (str_starts_with($this->withholding_receipt, 'http://') || str_starts_with($this->withholding_receipt, 'https://')) {
+            return $this->withholding_receipt;
+        }
+
+        if (str_starts_with($this->withholding_receipt, 'uploads/') || str_starts_with($this->withholding_receipt, 'storage/')) {
+            return asset($this->withholding_receipt);
+        }
+
+        return asset('storage/' . ltrim($this->withholding_receipt, '/'));
+    }
+
+    /**
+     * Get calculated withholding tax amount.
+     */
+    public function getCalculatedWithholdingAmountAttribute(): float
+    {
+        if (!$this->has_withholding && empty($this->withholding_receipt)) {
+            return 0.0;
+        }
+        if ((float)$this->withholding_amount > 0) {
+            return (float)$this->withholding_amount;
+        }
+        $gross = (float)($this->unit_price > 0 && $this->quantity > 0 ? ($this->unit_price * $this->quantity) : $this->amount);
+        $rate = (float)($this->withholding_rate ?: 3.00);
+        return round($gross * ($rate / 100), 2);
+    }
+
+    /**
+     * Get effective net amount (Gross + 15% VAT - Withholding).
+     */
+    public function getEffectiveNetAmountAttribute(): float
+    {
+        if ((float)$this->net_amount > 0) {
+            return (float)$this->net_amount;
+        }
+        $gross = (float)($this->unit_price > 0 && $this->quantity > 0 ? ($this->unit_price * $this->quantity) : $this->amount);
+        $vat = round($gross * 0.15, 2);
+        $wht = $this->calculated_withholding_amount;
+        return round($gross + $vat - $wht, 2);
     }
 
     /**

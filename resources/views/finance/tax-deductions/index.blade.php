@@ -4741,10 +4741,22 @@
                     <td class="text-end font-monospace text-danger fw-semibold">+ETB ${formatMoney(inc.output_vat)}</td>
                     <td class="text-end font-monospace text-warning fw-semibold">-ETB ${formatMoney(inc.withholding_amount || 0)}</td>
                     <td class="text-end font-monospace text-success fw-bold">ETB ${formatMoney(inc.net_total || inc.gross_amount)}</td>
-                    <td class="text-center pe-3">
-                        <button type="button" class="btn btn-sm btn-outline-danger rounded-circle p-0 d-inline-flex align-items-center justify-content-center" style="width: 26px; height: 26px;" onclick="deleteIncomeRecordFromTaxReport(${inc.id}, '${inc.income_no}')" title="Delete this income record and reverse VAT & movements">
-                            <i class="fa-solid fa-trash-alt" style="font-size: 0.72rem;"></i>
-                        </button>
+                    <td class="text-center pe-3 text-nowrap">
+                        <div class="d-inline-flex align-items-center gap-1">
+                            ${inc.receipt_url ? `
+                                <a href="${inc.receipt_url}" target="_blank" class="btn btn-sm btn-outline-primary rounded-pill px-2 py-0.5 shadow-2xs" style="font-size:0.68rem;" title="View Sales Receipt Slip">
+                                    <i class="fa-solid fa-receipt me-1"></i>Slip
+                                </a>
+                            ` : ''}
+                            ${inc.withholding_receipt_url ? `
+                                <a href="${inc.withholding_receipt_url}" target="_blank" class="btn btn-sm btn-outline-danger rounded-pill px-2 py-0.5 shadow-2xs" style="font-size:0.68rem;" title="View Withholding Tax Slip ${inc.withholding_receipt_number ? '(Ref: ' + inc.withholding_receipt_number + ')' : ''}">
+                                    <i class="fa-solid fa-file-invoice-dollar me-1"></i>WHT
+                                </a>
+                            ` : ''}
+                            <button type="button" class="btn btn-sm btn-outline-danger rounded-circle p-0 d-inline-flex align-items-center justify-content-center" style="width: 24px; height: 24px;" onclick="deleteIncomeRecordFromTaxReport(${inc.id}, '${inc.income_no}')" title="Delete this income record and reverse VAT & movements">
+                                <i class="fa-solid fa-trash-alt" style="font-size: 0.68rem;"></i>
+                            </button>
+                        </div>
                     </td>
                 `;
                 incomeTbody.appendChild(tr);

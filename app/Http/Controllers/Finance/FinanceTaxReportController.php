@@ -957,8 +957,11 @@ class FinanceTaxReportController extends Controller
                 'net_total'          => $net,
                 'gross_amount'       => $gross,
                 'description'        => $inc->description ?: ($inc->notes ?: '-'),
-                'receipt_url'        => $inc->receipt_file_path ? asset('storage/' . $inc->receipt_file_path) : null,
-                'is_settled'         => (bool)$inc->vat_settled,
+                'receipt_url'                => $inc->receipt_url ?: ($inc->receipt_file_path ? asset('storage/' . $inc->receipt_file_path) : null),
+                'withholding_receipt_url'    => $inc->withholding_receipt_url,
+                'withholding_receipt_number' => $inc->withholding_receipt_number,
+                'has_withholding'            => (bool)($inc->has_withholding || !empty($inc->withholding_receipt)),
+                'is_settled'                 => (bool)$inc->vat_settled,
             ];
         });
 
