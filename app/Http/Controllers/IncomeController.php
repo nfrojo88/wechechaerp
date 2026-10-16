@@ -993,13 +993,20 @@ class IncomeController extends Controller
                         $je->delete();
                     }
                 }
-                JournalEntry::where('reference_type', 'IncomeRecord')
-                    ->where('reference_id', $record->id)
-                    ->orWhere('reference_no', $record->income_no)
-                    ->each(function ($entry) {
+                if (Schema::hasTable('journal_entries')) {
+                    JournalEntry::where(function ($q) use ($record) {
+                        $q->where(function ($sub) use ($record) {
+                            $sub->where('reference_type', 'IncomeRecord')
+                                ->where('reference_id', $record->id);
+                        });
+                        if (!empty($record->income_no)) {
+                            $q->orWhere('description', 'like', "%{$record->income_no}%");
+                        }
+                    })->each(function ($entry) {
                         $entry->lines()->delete();
                         $entry->delete();
                     });
+                }
 
                 // 4. Adjust or clean up Tax Settlements (VAT movements)
                 if ($record->vat_settlement_id) {
@@ -1011,7 +1018,13 @@ class IncomeController extends Controller
 
                         $settlement->decrement('records_count', 1);
                         if ($settlement->records_count <= 0) {
-                            $settlement->delete();
+                            $settlement->update([
+                                'status'            => TaxSettlement::STATUS_CANCELLED,
+                                'total_base_amount' => 0,
+                                'vat_amount'        => 0,
+                                'total_tax_paid'    => 0,
+                                'records_count'     => 0,
+                            ]);
                         } else {
                             $settlement->decrement('total_base_amount', min((float)$settlement->total_base_amount, $base));
                             $settlement->decrement('vat_amount', min((float)$settlement->vat_amount, $vat));
