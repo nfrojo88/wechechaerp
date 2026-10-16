@@ -339,7 +339,7 @@
                                             </a>
                                         @else
                                             <span class="text-muted small font-italic d-block mb-1">No receipt</span>
-                                            <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2 shadow-2xs d-inline-block" style="font-size:0.7rem;" data-bs-toggle="modal" data-bs-target="#attachReceiptModal_{{ ->id }}" title="Attach Receipt Proof">
+                                            <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2 shadow-2xs d-inline-block" style="font-size:0.7rem;" data-bs-toggle="modal" data-bs-target="#attachReceiptModal_{{ $pmt->id }}" title="Attach Receipt Proof">
                                                 <i class="fa-solid fa-cloud-arrow-up me-1"></i> Add Receipt
                                             </button>
                                         @endif
@@ -957,12 +957,12 @@
     </div>
 </div>
 
-@foreach(->payments as )
-    @if(!->receipt_path)
-        <div class="modal fade" id="attachReceiptModal_{{ ->id }}" tabindex="-1" aria-labelledby="attachReceiptModalLabel_{{ ->id }}" aria-hidden="true">
+@foreach($ledger->payments as $pmt)
+    @if(!$pmt->receipt_path)
+        <div class="modal fade" id="attachReceiptModal_{{ $pmt->id }}" tabindex="-1" aria-labelledby="attachReceiptModalLabel_{{ $pmt->id }}" aria-hidden="true">
             <div class="modal-dialog modal-lg modal-dialog-centered">
                 <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
-                    <form action="{{ route('finance.credit-store.attach-receipt', [, ]) }}" method="POST" enctype="multipart/form-data">
+                    <form action="{{ route('finance.credit-store.attach-receipt', [$ledger, $pmt]) }}" method="POST" enctype="multipart/form-data">
                         @csrf
                         <div class="modal-header bg-dark text-white py-3 px-4">
                             <div class="d-flex align-items-center gap-2">
@@ -971,7 +971,7 @@
                                 </span>
                                 <div>
                                     <h6 class="modal-title fw-bold mb-0">Attach Receipt Proof via OCR Studio</h6>
-                                    <small class="text-white-50">Payment #{{ ->id }} &bull; {{ number_format(->amount, 2) }} ETB &bull; {{ ->payment_date }}</small>
+                                    <small class="text-white-50">Payment #{{ $pmt->id }} &bull; {{ number_format($pmt->amount, 2) }} ETB &bull; {{ $pmt->payment_date }}</small>
                                 </div>
                             </div>
                             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -984,18 +984,18 @@
                             <div class="mb-3">
                                 <div class="border border-2 border-dashed rounded-3 p-3 text-center bg-light cursor-pointer"
                                      style="border-color:#10b981 !important;"
-                                     onclick="document.getElementById('attachReceiptInput_{{ ->id }}').click()">
-                                    <input type="file" name="receipt_file" id="attachReceiptInput_{{ ->id }}" class="d-none" accept=".pdf,.jpg,.jpeg,.png,.webp" required>
+                                     onclick="document.getElementById('attachReceiptInput_{{ $pmt->id }}').click()">
+                                    <input type="file" name="receipt_file" id="attachReceiptInput_{{ $pmt->id }}" class="d-none" accept=".pdf,.jpg,.jpeg,.png,.webp" required>
                                     <i class="fa-solid fa-cloud-arrow-up fa-2x text-success mb-2"></i>
                                     <div class="fw-bold small text-dark">Click to Browse or Drag &amp; Drop Receipt</div>
                                     <div class="text-muted" style="font-size:0.72rem;">JPG, PNG, WEBP, PDF up to 10MB</div>
                                 </div>
-                                <div id="attachReceiptFeedback_{{ ->id }}" class="mt-2"></div>
+                                <div id="attachReceiptFeedback_{{ $pmt->id }}" class="mt-2"></div>
                             </div>
                         </div>
                         <div class="modal-footer bg-light py-2.5 px-4 d-flex justify-content-between">
                             <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-                            <button type="submit" class="btn btn-success btn-sm fw-bold px-3" id="attachSubmitBtn_{{ ->id }}">
+                            <button type="submit" class="btn btn-success btn-sm fw-bold px-3" id="attachSubmitBtn_{{ $pmt->id }}">
                                 <i class="fa-solid fa-check-circle me-1"></i> Save &amp; Attach Receipt
                             </button>
                         </div>
@@ -1007,10 +1007,10 @@
             document.addEventListener('DOMContentLoaded', () => {
                 if (window.ReceiptOcrScanner) {
                     ReceiptOcrScanner.init({
-                        fileInput: '#attachReceiptInput_{{ ->id }}',
-                        form: '#attachReceiptModal_{{ ->id }} form',
-                        submitBtn: '#attachSubmitBtn_{{ ->id }}',
-                        statusContainer: '#attachReceiptFeedback_{{ ->id }}',
+                        fileInput: '#attachReceiptInput_{{ $pmt->id }}',
+                        form: '#attachReceiptModal_{{ $pmt->id }} form',
+                        submitBtn: '#attachSubmitBtn_{{ $pmt->id }}',
+                        statusContainer: '#attachReceiptFeedback_{{ $pmt->id }}',
                         studioMode: true
                     });
                 }
