@@ -337,11 +337,11 @@ class EthiopianDate
 
     /**
      * Calculate Signed Net VAT:
-     * Net = Input VAT - Output VAT (factoring in opening credit).
+     * Net = Output VAT - Input VAT (factoring in opening credit).
      *
      * Rules:
-     * - Output > Input: negative (-), red, "VAT payable to ERCA"
-     * - Input > Output: positive (+), green, "VAT credit (carry forward)"
+     * - Income (Output) > Purchase (Creditable Input): positive (+), red, "VAT payable to ERCA"
+     * - Purchase (Creditable Input) > Income (Output): negative (-), green, "VAT credit (carry forward)"
      * - Equal: 0.00, neutral
      *
      * @param float $inputVat Creditable 15% VAT from paid expenses/OCR
@@ -371,30 +371,30 @@ class EthiopianDate
         $openingCredit = round(max(0, $openingCredit), 2);
 
         $totalCreditable = round($inputVat + $openingCredit, 2);
-        $net = round($totalCreditable - $outputVat, 2);
+        $net = round($outputVat - $totalCreditable, 2);
 
         // Determine status and presentation
-        if ($net < -0.004) {
-            // Output > Input: negative, red, "VAT payable to ERCA"
+        if ($net > 0.004) {
+            // Output > Input: positive, red, "VAT payable to ERCA"
             $status = 'payable';
             $label = 'VAT payable to ERCA';
             $badgeClass = 'bg-danger text-white';
             $textClass = 'text-danger';
-            $signedNetFormatted = '-' . number_format(abs($net), 2, '.', ',');
+            $signedNetFormatted = '+' . number_format($net, 2, '.', ',');
             $isPayable = true;
             $isCredit = false;
             $creditCarryForward = 0.0;
-            $amountPayable = round(abs($net), 2);
-        } elseif ($net > 0.004) {
-            // Input > Output: positive, green, "VAT credit (carry forward)"
+            $amountPayable = round($net, 2);
+        } elseif ($net < -0.004) {
+            // Input > Output: negative, green, "VAT credit (carry forward)"
             $status = 'credit';
             $label = 'VAT credit (carry forward)';
             $badgeClass = 'bg-success text-white';
             $textClass = 'text-success';
-            $signedNetFormatted = '+' . number_format($net, 2, '.', ',');
+            $signedNetFormatted = '-' . number_format(abs($net), 2, '.', ',');
             $isPayable = false;
             $isCredit = true;
-            $creditCarryForward = $net;
+            $creditCarryForward = round(abs($net), 2);
             $amountPayable = 0.0;
         } else {
             // Equal: 0.00, neutral

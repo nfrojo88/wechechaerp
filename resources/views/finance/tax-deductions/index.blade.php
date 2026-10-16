@@ -367,7 +367,7 @@
                     <div class="p-3 rounded-4 border h-100 d-flex flex-column justify-content-between {{ !empty($isMonthVatCleared) ? 'bg-success bg-opacity-10 border-success' : (!empty($netVatDetails['is_payable']) ? 'bg-danger bg-opacity-10 border-danger' : (!empty($netVatDetails['is_credit']) ? 'bg-success bg-opacity-10 border-success' : 'bg-light')) }}">
                         <div>
                             <span class="text-muted small text-uppercase fw-bold d-block" style="font-size: 0.72rem;">Signed Net VAT</span>
-                            <span class="text-muted d-block" style="font-size: 0.68rem;">የተጣራ ቫት (Input - Output)</span>
+                            <span class="text-muted d-block" style="font-size: 0.68rem;">የተጣራ ቫት (Output - Input)</span>
                             <div class="fs-4 fw-bold font-monospace mt-1 {{ $netVatDetails['text_class'] ?? 'text-dark' }}">
                                 {{ $netVatDetails['signed_net_formatted'] ?? '0.00' }}
                             </div>
@@ -3080,8 +3080,8 @@
                                             </div>
                                             <div class="list-group-item d-flex justify-content-between align-items-center py-3 border-top border-2" id="mAuditNetRow">
                                                 <div>
-                                                    <span class="fs-6 fw-bold text-dark">7. Signed Net VAT = (6) &minus; (2)</span>
-                                                    <small class="d-block" id="mAuditNetStatusText">Formula: Total Creditable Input &minus; Output VAT</small>
+                                                    <span class="fs-6 fw-bold text-dark">7. Signed Net VAT = (2) &minus; (6)</span>
+                                                    <small class="d-block" id="mAuditNetStatusText">Formula: Output VAT (Income) &minus; Total Creditable Input (Purchases)</small>
                                                 </div>
                                                 <span class="font-monospace fs-5 fw-bold" id="mAuditNetSigned">0.00</span>
                                             </div>
@@ -4547,7 +4547,7 @@
                                                 <span class="font-monospace">ETB ${formatMoney(s.total_creditable_input)}</span>
                                             </li>
                                             <li class="list-group-item d-flex justify-content-between py-2.5 border-top border-2 bg-light">
-                                                <span class="fw-bold">7. Signed Net VAT = (6) &minus; (2)</span>
+                                                <span class="fw-bold">7. Signed Net VAT = (2) &minus; (6)</span>
                                                 <span class="font-monospace fs-6 fw-bold ${s.text_class}">${s.signed_net_formatted}</span>
                                             </li>
                                         </ul>
@@ -4905,7 +4905,7 @@
             decisionBanner.innerHTML = `
                 <div class="d-flex align-items-center gap-2 mb-1">
                     <i class="fa-solid fa-arrow-turn-up fs-5"></i>
-                    <h6 class="fw-bold mb-0">Credit Carried Forward: + ETB ${formatMoney(s.credit_carry_forward)}</h6>
+                    <h6 class="fw-bold mb-0">Credit Carried Forward: ETB ${formatMoney(s.credit_carry_forward)}</h6>
                 </div>
                 <div class="small">Input VAT on creditable business purchases exceeded Output VAT. This positive credit automatically carries forward as an opening balance into the next Ethiopian month.</div>
             `;

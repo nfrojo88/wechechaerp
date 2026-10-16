@@ -78,10 +78,10 @@ class EthiopianCalendarTest extends TestCase
      */
     public function test_signed_monthly_net_vat_calculation(): void
     {
-        // Case 1: Output 50,000 and Input 30,000 -> -20,000.00 (VAT payable to ERCA)
+        // Case 1: Output 50,000 and Input 30,000 -> +20,000.00 (Income > Purchase -> VAT payable to ERCA)
         $result1 = EthiopianDate::calculateNetVat(30000.00, 50000.00);
-        $this->assertEquals(-20000.00, $result1['net']);
-        $this->assertEquals('-20,000.00', $result1['signed_net_formatted']);
+        $this->assertEquals(20000.00, $result1['net']);
+        $this->assertEquals('+20,000.00', $result1['signed_net_formatted']);
         $this->assertEquals('payable', $result1['status']);
         $this->assertEquals('VAT payable to ERCA', $result1['label']);
         $this->assertTrue($result1['is_payable']);
@@ -90,10 +90,10 @@ class EthiopianCalendarTest extends TestCase
         $this->assertEquals(20000.00, $result1['payable_amount']);
         $this->assertEquals(0.00, $result1['credit_carry_forward']);
 
-        // Case 2: Output 30,000 and Input 50,000 -> +20,000.00 (VAT credit carry forward)
+        // Case 2: Output 30,000 and Input 50,000 -> -20,000.00 (Purchase > Income -> VAT credit carry forward)
         $result2 = EthiopianDate::calculateNetVat(50000.00, 30000.00);
-        $this->assertEquals(20000.00, $result2['net']);
-        $this->assertEquals('+20,000.00', $result2['signed_net_formatted']);
+        $this->assertEquals(-20000.00, $result2['net']);
+        $this->assertEquals('-20,000.00', $result2['signed_net_formatted']);
         $this->assertEquals('credit', $result2['status']);
         $this->assertEquals('VAT credit (carry forward)', $result2['label']);
         $this->assertFalse($result2['is_payable']);
@@ -111,10 +111,10 @@ class EthiopianCalendarTest extends TestCase
         $this->assertFalse($result3['is_credit']);
 
         // Case 4: With Opening Credit carried forward from previous month:
-        // Output 50,000, Input 30,000, Opening Credit 25,000 -> Net = (30k + 25k) - 50k = +5,000.00
+        // Output 50,000, Input 30,000, Opening Credit 25,000 -> Net = 50k - (30k + 25k) = -5,000.00
         $result4 = EthiopianDate::calculateNetVat(30000.00, 50000.00, 25000.00);
-        $this->assertEquals(5000.00, $result4['net']);
-        $this->assertEquals('+5,000.00', $result4['signed_net_formatted']);
+        $this->assertEquals(-5000.00, $result4['net']);
+        $this->assertEquals('-5,000.00', $result4['signed_net_formatted']);
         $this->assertEquals('credit', $result4['status']);
     }
 
@@ -195,33 +195,33 @@ class EthiopianCalendarTest extends TestCase
         $outputVat = 2000.00;
 
         $calc = EthiopianDate::calculateNetVat($inputVat, $outputVat);
-        // Net = 1,500 - 2,000 = -500.00 (payable)
-        $this->assertEquals(-500.00, $calc['net']);
-        $this->assertEquals('-500.00', $calc['signed_net_formatted']);
+        // Net = 2,000 - 1,500 = +500.00 (payable)
+        $this->assertEquals(500.00, $calc['net']);
+        $this->assertEquals('+500.00', $calc['signed_net_formatted']);
         $this->assertTrue($calc['is_payable']);
 
-        // If VAT B was erroneously included: 3000 - 2000 = +1000.00 (wrong!)
+        // If VAT B was erroneously included: 2000 - 3000 = -1000.00 (wrong!)
         $wrongCalc = EthiopianDate::calculateNetVat($inputVat + $nonCreditableVatB, $outputVat);
         $this->assertNotEquals($wrongCalc['net'], $calc['net'], 'VAT B must not be added to creditable Input VAT');
     }
 
     /**
      * Test settlement condition:
-     * "Settle VAT" enabled only when Net is negative (-); otherwise show "Credit carried forward".
+     * "Settle VAT" enabled only when Net is positive (+); otherwise show "Credit carried forward".
      */
-    public function test_settle_vat_enabled_only_when_net_is_negative(): void
+    public function test_settle_vat_enabled_only_when_net_is_positive(): void
     {
-        // Net negative: Output > Input -> Payable -> Settle enabled
+        // Net positive: Output > Input -> Payable -> Settle enabled
         $payable = EthiopianDate::calculateNetVat(10000, 25000);
-        $this->assertTrue($payable['is_payable'], 'Settle VAT must be enabled when Net is negative');
-        $this->assertEquals('-15,000.00', $payable['signed_net_formatted']);
+        $this->assertTrue($payable['is_payable'], 'Settle VAT must be enabled when Net is positive');
+        $this->assertEquals('+15,000.00', $payable['signed_net_formatted']);
         $this->assertEquals(15000.00, $payable['amount_payable']);
 
-        // Net positive: Input > Output -> Credit -> Settle disabled, Credit carried forward
+        // Net negative: Input > Output -> Credit -> Settle disabled, Credit carried forward
         $credit = EthiopianDate::calculateNetVat(25000, 10000);
-        $this->assertFalse($credit['is_payable'], 'Settle VAT must be disabled when Net is positive');
+        $this->assertFalse($credit['is_payable'], 'Settle VAT must be disabled when Net is negative');
         $this->assertTrue($credit['is_credit']);
-        $this->assertEquals('+15,000.00', $credit['signed_net_formatted']);
+        $this->assertEquals('-15,000.00', $credit['signed_net_formatted']);
         $this->assertEquals(15000.00, $credit['credit_carry_forward']);
 
         // Net zero: Neutral
@@ -237,25 +237,25 @@ class EthiopianCalendarTest extends TestCase
      */
     public function test_multi_month_credit_carry_forward(): void
     {
-        // Month 1: Input 50k, Output 30k -> Credit +20,000.00
+        // Month 1: Input 50k, Output 30k -> Credit -20,000.00
         $m1 = EthiopianDate::calculateNetVat(50000.00, 30000.00, 0.00);
-        $this->assertEquals(20000.00, $m1['net']);
-        $this->assertEquals('+20,000.00', $m1['signed_net_formatted']);
+        $this->assertEquals(-20000.00, $m1['net']);
+        $this->assertEquals('-20,000.00', $m1['signed_net_formatted']);
         $this->assertEquals(20000.00, $m1['credit_carry_forward']);
 
         // Month 2: Input 10k, Output 25k, Opening Credit carried from Month 1 (20k)
-        // Net = (10k + 20k) - 25k = +5,000.00
+        // Net = 25k - (10k + 20k) = -5,000.00
         $m2 = EthiopianDate::calculateNetVat(10000.00, 25000.00, $m1['credit_carry_forward']);
-        $this->assertEquals(5000.00, $m2['net']);
-        $this->assertEquals('+5,000.00', $m2['signed_net_formatted']);
+        $this->assertEquals(-5000.00, $m2['net']);
+        $this->assertEquals('-5,000.00', $m2['signed_net_formatted']);
         $this->assertTrue($m2['is_credit']);
         $this->assertEquals(5000.00, $m2['credit_carry_forward']);
 
         // Month 3: Input 5k, Output 15k, Opening Credit carried from Month 2 (5k)
-        // Net = (5k + 5k) - 15k = -5,000.00 (Payable to ERCA)
+        // Net = 15k - (5k + 5k) = +5,000.00 (Payable to ERCA)
         $m3 = EthiopianDate::calculateNetVat(5000.00, 15000.00, $m2['credit_carry_forward']);
-        $this->assertEquals(-5000.00, $m3['net']);
-        $this->assertEquals('-5,000.00', $m3['signed_net_formatted']);
+        $this->assertEquals(5000.00, $m3['net']);
+        $this->assertEquals('+5,000.00', $m3['signed_net_formatted']);
         $this->assertTrue($m3['is_payable']);
         $this->assertEquals(0.00, $m3['credit_carry_forward']);
         $this->assertEquals(5000.00, $m3['amount_payable']);
