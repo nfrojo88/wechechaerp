@@ -60,6 +60,10 @@ class Receipt extends Model
         'needs_review'     => 'boolean',
     ];
 
+    protected $appends = [
+        'file_url',
+    ];
+
     /**
      * Auto-generate receipt_number before create.
      */
@@ -114,4 +118,17 @@ class Receipt extends Model
     {
         return $this->morphTo();
     }
+
+    /**
+     * Get accessible public URL for the receipt image or PDF slip.
+     */
+    public function getFileUrlAttribute(): ?string
+    {
+        if (empty($this->file_path)) {
+            return null;
+        }
+
+        return \App\Services\FileUploadService::url($this->file_path);
+    }
 }
+

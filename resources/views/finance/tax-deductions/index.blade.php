@@ -2235,6 +2235,7 @@
                     <div class="col-md-7 text-center">
                         <div class="p-2 border rounded-3 bg-light shadow-xs d-inline-block w-100" style="min-height: 280px; max-height: 520px; overflow: auto;">
                             <img id="modalSlipImg" src="" alt="Receipt Slip" class="img-fluid rounded" style="max-height: 480px; object-fit: contain;">
+                            <iframe id="modalSlipPdf" src="" class="w-100 rounded d-none" style="height: 480px; border: none;"></iframe>
                         </div>
                     </div>
                     <div class="col-md-5">
@@ -3101,7 +3102,8 @@
                                                 <th class="py-2.5">Item Description</th>
                                                 <th class="py-2.5 text-end">Base Value</th>
                                                 <th class="py-2.5 text-end text-success">VAT (15%)</th>
-                                                <th class="py-2.5 text-end text-dark pe-3">Value After VAT</th>
+                                                <th class="py-2.5 text-end text-dark">Value After VAT</th>
+                                                <th class="py-2.5 text-center pe-3">Receipt Slip</th>
                                             </tr>
                                         </thead>
                                         <tbody id="mOcrTableBody" class="divide-y">
@@ -3112,7 +3114,8 @@
                                                 <td colspan="6" class="ps-3 py-2 text-uppercase small text-muted">Total Scanned Invoices</td>
                                                 <td class="text-end py-2 font-monospace text-dark" id="mOcrTotalBase">ETB 0.00</td>
                                                 <td class="text-end py-2 font-monospace text-success" id="mOcrTotalVat">ETB 0.00</td>
-                                                <td class="text-end py-2 font-monospace text-dark pe-3" id="mOcrTotalAfter">ETB 0.00</td>
+                                                <td class="text-end py-2 font-monospace text-dark" id="mOcrTotalAfter">ETB 0.00</td>
+                                                <td class="pe-3"></td>
                                             </tr>
                                         </tfoot>
                                     </table>
@@ -3933,7 +3936,27 @@
 
     // ── High-Res Slip Modal ──────────────────────────────────────────────────
     function openVatSlipModal(imgUrl, vendor, tin, fs, mrc, date, base, vat, total, studioUrl) {
-        document.getElementById('modalSlipImg').src = imgUrl;
+        const isPdf = imgUrl && (imgUrl.toLowerCase().endsWith('.pdf') || imgUrl.toLowerCase().includes('pdf'));
+        const imgEl = document.getElementById('modalSlipImg');
+        const pdfEl = document.getElementById('modalSlipPdf');
+
+        if (isPdf) {
+            if (imgEl) imgEl.classList.add('d-none');
+            if (pdfEl) {
+                pdfEl.src = imgUrl;
+                pdfEl.classList.remove('d-none');
+            }
+        } else {
+            if (pdfEl) {
+                pdfEl.classList.add('d-none');
+                pdfEl.src = '';
+            }
+            if (imgEl) {
+                imgEl.src = imgUrl || '';
+                imgEl.classList.remove('d-none');
+            }
+        }
+
         document.getElementById('modalVendorName').textContent = vendor || 'N/A';
         document.getElementById('modalVendorTin').textContent = tin || 'N/A';
         document.getElementById('modalFsNo').textContent = fs || '—';
@@ -3943,12 +3966,33 @@
         document.getElementById('modalBase').textContent = base || '0.00';
         document.getElementById('modalVat').textContent = vat || '0.00';
         document.getElementById('modalTotal').textContent = total || '0.00';
-        document.getElementById('modalDownloadBtn').href = imgUrl;
+        document.getElementById('modalDownloadBtn').href = imgUrl || '#';
         if (studioUrl) {
             document.getElementById('modalStudioLink').href = studioUrl;
         }
         const modal = new bootstrap.Modal(document.getElementById('vatReceiptSlipModal'));
         modal.show();
+    }
+
+    // ── Cache & Preview for Monthly Scanned OCR Receipts ─────────────────────
+    window._movementOcrCache = window._movementOcrCache || {};
+
+    function previewMovementOcrSlip(cacheKey, idx) {
+        const list = (window._movementOcrCache && window._movementOcrCache[cacheKey]) || [];
+        const ocr = list[idx];
+        if (!ocr || !ocr.file_url) return;
+        openVatSlipModal(
+            ocr.file_url,
+            ocr.vendor_name,
+            ocr.vendor_tin,
+            ocr.fs_no,
+            ocr.mrc_no,
+            ocr.date_gc,
+            formatMoney(ocr.base_value),
+            formatMoney(ocr.vat_amount),
+            formatMoney(ocr.value_after_vat),
+            '{{ route("admin.ocr.index") }}'
+        );
     }
 
     // ── Delete OCR Row ────────────────────────────────────────────────────────
@@ -4410,8 +4454,22 @@
         }
 
         let ocrRows = '';
+        window._movementOcrCache[`drawer_${monthNum}`] = data.ocr_items || [];
         if (data.ocr_items && data.ocr_items.length > 0) {
             data.ocr_items.forEach((ocr, idx) => {
+                const slipBtnHtml = ocr.file_url
+                    ? (ocr.is_pdf
+                        ? `<button type="button" class="btn btn-xs btn-outline-danger rounded-pill px-2 py-0.5 d-inline-flex align-items-center gap-1 shadow-xs" onclick="previewMovementOcrSlip('drawer_${monthNum}', ${idx})" title="View PDF Receipt Slip">
+                             <i class="fa-solid fa-file-pdf text-danger"></i>
+                             <span>PDF</span>
+                           </button>`
+                        : `<button type="button" class="btn btn-xs btn-outline-info rounded-pill px-2 py-0.5 d-inline-flex align-items-center gap-1 shadow-xs" onclick="previewMovementOcrSlip('drawer_${monthNum}', ${idx})" title="View High-Res Receipt Slip">
+                             <img src="${ocr.file_url}" alt="Slip" class="rounded border" style="width:20px; height:20px; object-fit:cover;" onerror="this.style.display='none'">
+                             <i class="fa-solid fa-receipt"></i>
+                             <span>Slip</span>
+                           </button>`)
+                    : `<span class="badge bg-light text-muted border" style="font-size:0.7rem;"><i class="fa-solid fa-ban me-1"></i>No Slip</span>`;
+
                 ocrRows += `
                     <tr>
                         <td class="ps-3 font-monospace small text-muted">${idx + 1}</td>
@@ -4419,15 +4477,16 @@
                         <td><span class="badge bg-light text-primary border font-monospace">${ocr.fs_no}</span></td>
                         <td><span class="fw-semibold text-dark">${ocr.vendor_name}</span><small class="text-muted d-block font-monospace" style="font-size:0.75rem;">TIN: ${ocr.vendor_tin}</small></td>
                         <td><span class="badge bg-secondary-subtle text-secondary rounded-pill small">${ocr.project_name}</span></td>
-                        <td class="small text-dark text-truncate" style="max-width: 200px;">${ocr.item_description}</td>
+                        <td class="small text-dark text-truncate" style="max-width: 200px;" title="${ocr.item_description}">${ocr.item_description}</td>
                         <td class="text-end font-monospace">ETB ${formatMoney(ocr.base_value)}</td>
                         <td class="text-end font-monospace text-success fw-semibold">ETB ${formatMoney(ocr.vat_amount)}</td>
-                        <td class="text-end font-monospace text-dark fw-bold pe-3">ETB ${formatMoney(ocr.value_after_vat)}</td>
+                        <td class="text-end font-monospace text-dark fw-bold">ETB ${formatMoney(ocr.value_after_vat)}</td>
+                        <td class="text-center pe-3">${slipBtnHtml}</td>
                     </tr>
                 `;
             });
         } else {
-            ocrRows = `<tr><td colspan="9" class="text-center py-4 text-muted"><i class="fa-solid fa-folder-open me-2 text-secondary"></i>No OCR scanned invoices recorded for this month.</td></tr>`;
+            ocrRows = `<tr><td colspan="10" class="text-center py-4 text-muted"><i class="fa-solid fa-folder-open me-2 text-secondary"></i>No OCR scanned invoices recorded for this month.</td></tr>`;
         }
 
         container.innerHTML = `
@@ -4636,10 +4695,20 @@
                                             <th class="py-2">Description</th>
                                             <th class="py-2 text-end">Base Value</th>
                                             <th class="py-2 text-end text-success">VAT Amount</th>
-                                            <th class="py-2 text-end pe-3">Total Value</th>
+                                            <th class="py-2 text-end">Total Value</th>
+                                            <th class="py-2 text-center pe-3">Receipt Slip</th>
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y">${ocrRows}</tbody>
+                                    <tfoot class="bg-light fw-bold">
+                                        <tr>
+                                            <td colspan="6" class="ps-3 py-2 small text-uppercase text-muted">Total Scanned Invoices</td>
+                                            <td class="text-end py-2 font-monospace">ETB ${formatMoney(s.ocr_base || s.purchases_base)}</td>
+                                            <td class="text-end py-2 font-monospace text-success">ETB ${formatMoney(s.ocr_vat || s.input_vat)}</td>
+                                            <td class="text-end py-2 font-monospace text-dark">ETB ${formatMoney(s.ocr_total || ((s.ocr_base || s.purchases_base) + (s.ocr_vat || s.input_vat)))}</td>
+                                            <td class="pe-3"></td>
+                                        </tr>
+                                    </tfoot>
                                 </table>
                             </div>
                         </div>
@@ -4958,11 +5027,26 @@
         const ocrTbody = document.getElementById('mOcrTableBody');
         ocrTbody.innerHTML = '';
         let ocrSumBase = 0, ocrSumVat = 0, ocrSumAfter = 0;
+        window._movementOcrCache['modal'] = data.ocr_items || [];
+
         if (data.ocr_items && data.ocr_items.length > 0) {
             data.ocr_items.forEach((ocr, idx) => {
                 ocrSumBase += ocr.base_value;
                 ocrSumVat += ocr.vat_amount;
                 ocrSumAfter += ocr.value_after_vat;
+
+                const slipBtnHtml = ocr.file_url
+                    ? (ocr.is_pdf
+                        ? `<button type="button" class="btn btn-xs btn-outline-danger rounded-pill px-2 py-0.5 d-inline-flex align-items-center gap-1 shadow-xs" onclick="previewMovementOcrSlip('modal', ${idx})" title="View PDF Receipt Slip">
+                             <i class="fa-solid fa-file-pdf text-danger"></i>
+                             <span>PDF Slip</span>
+                           </button>`
+                        : `<button type="button" class="btn btn-xs btn-outline-info rounded-pill px-2 py-0.5 d-inline-flex align-items-center gap-1 shadow-xs" onclick="previewMovementOcrSlip('modal', ${idx})" title="View High-Res Receipt Slip">
+                             <img src="${ocr.file_url}" alt="Slip" class="rounded border" style="width:22px; height:22px; object-fit:cover;" onerror="this.style.display='none'">
+                             <i class="fa-solid fa-receipt"></i>
+                             <span>Slip</span>
+                           </button>`)
+                    : `<span class="badge bg-light text-muted border" style="font-size:0.7rem;"><i class="fa-solid fa-ban me-1"></i>No Slip</span>`;
 
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
@@ -4988,14 +5072,15 @@
                     </td>
                     <td class="text-end font-monospace">ETB ${formatMoney(ocr.base_value)}</td>
                     <td class="text-end font-monospace text-success fw-semibold">ETB ${formatMoney(ocr.vat_amount)}</td>
-                    <td class="text-end font-monospace text-dark fw-bold pe-3">ETB ${formatMoney(ocr.value_after_vat)}</td>
+                    <td class="text-end font-monospace text-dark fw-bold">ETB ${formatMoney(ocr.value_after_vat)}</td>
+                    <td class="text-center pe-3">${slipBtnHtml}</td>
                 `;
                 ocrTbody.appendChild(tr);
             });
         } else {
             ocrTbody.innerHTML = `
                 <tr>
-                    <td colspan="9" class="text-center py-4 text-muted">
+                    <td colspan="10" class="text-center py-4 text-muted">
                         <i class="fa-solid fa-folder-open me-2 text-secondary"></i>No OCR scanned receipts recorded for this Ethiopian month.
                     </td>
                 </tr>

@@ -1077,15 +1077,136 @@ class FinanceTaxReportController extends Controller
         // 3. OCR Scanned Receipts in this Ethiopian month
         $ocrItems = collect();
         if (Schema::hasTable('receipt_items')) {
+            // Auto-sync any standalone receipts in this period to have a ReceiptItem
+            if (Schema::hasTable('receipts')) {
+                $standaloneReceipts = \App\Models\Receipt::doesntHave('items')
+                    ->where(function ($rq) use ($startDate, $endDate) {
+                        $rq->whereBetween('receipt_date', [$startDate, $endDate])
+                           ->orWhere(function ($sub) use ($startDate, $endDate) {
+                               $sub->whereNull('receipt_date')
+                                   ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+                           });
+                    })
+                    ->get();
+
+                foreach ($standaloneReceipts as $sr) {
+                    $subtotal = (float)$sr->subtotal;
+                    $vat = (float)$sr->vat_amount;
+                    $total = (float)$sr->total_amount;
+                    if ($total <= 0 && ($subtotal > 0 || $vat > 0)) {
+                        $total = round($subtotal + $vat, 2);
+                    }
+                    if ($subtotal <= 0 && $total > 0) {
+                        if ($vat > 0) {
+                            $subtotal = round($total - $vat, 2);
+                        } else {
+                            $subtotal = round($total / 1.15, 2);
+                            $vat = round($total - $subtotal, 2);
+                        }
+                    }
+                    \App\Models\ReceiptItem::create([
+                        'receipt_id'       => $sr->id,
+                        'item_description' => $sr->description ?: 'Purchased Goods/Services',
+                        'vat_category'     => 'G',
+                        'calendar_type'    => 'G',
+                        'purchase_type'    => 3,
+                        'uom'              => '9',
+                        'qty'              => 1.00,
+                        'unit_price'       => $subtotal,
+                        'total_value'      => $subtotal,
+                        'vat_amount'       => $vat,
+                        'value_after_vat'  => $total,
+                    ]);
+                }
+            }
+
+            // Auto-sync any CreditStorePayments in this month that have receipt_path but no linked Receipt
+            if (Schema::hasTable('credit_store_payments') && Schema::hasTable('receipts')) {
+                $unlinkedPayments = \App\Models\CreditStorePayment::with('ledger')
+                    ->whereNotNull('receipt_path')
+                    ->where('receipt_path', '!=', '')
+                    ->whereBetween('payment_date', [$startDate, $endDate])
+                    ->whereDoesntHave('receiptRecords')
+                    ->get();
+
+                foreach ($unlinkedPayments as $p) {
+                    $ledger = $p->ledger;
+                    $gross = (float)$p->amount;
+                    $vatRate = (float)($p->vat_rate ?: 15.00);
+                    $vatIncluded = ((float)($p->vat_amount ?? 0) > 0) || in_array($p->vat_type, ['inclusive', 'vat_b', 'exclusive']);
+                    
+                    if ($vatIncluded && in_array($p->vat_type, ['inclusive', 'vat_b'])) {
+                        $receiptSubtotal = (float)($p->gross_amount > 0 ? $p->gross_amount : round($gross / (1 + ($vatRate / 100)), 2));
+                        $vatAmount = (float)($p->vat_amount > 0 ? $p->vat_amount : round($gross - $receiptSubtotal, 2));
+                        $receiptTotal = $gross;
+                    } elseif ($vatIncluded && $p->vat_type === 'exclusive') {
+                        $receiptSubtotal = $gross;
+                        $vatAmount = (float)($p->vat_amount > 0 ? $p->vat_amount : round($gross * ($vatRate / 100), 2));
+                        $receiptTotal = round($gross + $vatAmount, 2);
+                    } else {
+                        $receiptSubtotal = $gross;
+                        $vatAmount = 0.0;
+                        $receiptTotal = $gross;
+                    }
+
+                    $cleanFs = preg_replace('/[^0-9]/', '', (string)$p->reference_no);
+                    $newReceipt = \App\Models\Receipt::create([
+                        'purchasable_type' => \App\Models\CreditStorePayment::class,
+                        'purchasable_id'   => $p->id,
+                        'vendor_name'      => $ledger?->supplier_name ?: 'Credit Vendor',
+                        'vendor_tin'       => '-',
+                        'tin_valid'        => false,
+                        'buyer_tin'        => '0038480010',
+                        'receipt_number'   => $p->reference_no ?: ('REC-PAY-' . $p->id),
+                        'fs_no'            => $p->reference_no ?: '-',
+                        'fs_no_raw'        => $p->reference_no ?: '-',
+                        'fs_no_valid'      => (strlen($cleanFs) === 8),
+                        'receipt_date'     => $p->payment_date ?: now()->toDateString(),
+                        'subtotal'         => $receiptSubtotal,
+                        'vat_amount'       => $vatAmount,
+                        'total_amount'     => $receiptTotal,
+                        'currency'         => 'ETB',
+                        'category'         => 'material',
+                        'description'      => "Credit Payment #{$p->id} - " . ($ledger?->item_description ?: 'Materials'),
+                        'file_path'        => $p->receipt_path,
+                        'file_type'        => 'image',
+                        'status'           => 'approved',
+                        'is_verified'      => true,
+                        'qc_notes'         => 'Synced from Credit Purchases Ledger payment receipt',
+                        'created_at'       => $p->created_at ?: now(),
+                    ]);
+
+                    \App\Models\ReceiptItem::create([
+                        'receipt_id'       => $newReceipt->id,
+                        'item_description' => $ledger?->item_description ?: 'Credit settlement',
+                        'vat_category'     => $vatIncluded ? 'G' : 'E',
+                        'calendar_type'    => 'G',
+                        'purchase_type'    => $vatIncluded ? 3 : 6,
+                        'uom'              => '9',
+                        'qty'              => 1.0,
+                        'unit_price'       => $receiptSubtotal,
+                        'total_value'      => $receiptSubtotal,
+                        'vat_amount'       => $vatAmount,
+                        'value_after_vat'  => $receiptTotal,
+                    ]);
+                }
+            }
+
             $ocrItems = \App\Models\ReceiptItem::with(['receipt', 'receipt.project', 'receipt.uploader'])
-                ->whereHas('receipt', fn($rq) => $rq->whereBetween('receipt_date', [$startDate, $endDate]))
+                ->whereHas('receipt', function ($rq) use ($startDate, $endDate) {
+                    $rq->whereBetween('receipt_date', [$startDate, $endDate])
+                       ->orWhere(function ($sub) use ($startDate, $endDate) {
+                           $sub->whereNull('receipt_date')
+                               ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+                       });
+                })
                 ->orderBy('id', 'asc')
                 ->get();
         }
 
         $formattedOcrItems = $ocrItems->map(function ($ocr) {
             $r = $ocr->receipt;
-            $date = $r?->receipt_date;
+            $date = $r?->receipt_date ?: $ocr->created_at;
 
             $baseVal  = (float)$ocr->total_value;
             $vatVal   = (float)$ocr->vat_amount;
@@ -1100,12 +1221,20 @@ class FinanceTaxReportController extends Controller
                 }
             }
 
+            $filePath = $r?->file_path;
+            $fileUrl = $r?->file_url ?: ($filePath ? \App\Services\FileUploadService::url($filePath) : null);
+            $fileExt = $filePath ? strtolower(pathinfo($filePath, PATHINFO_EXTENSION)) : '';
+            $isPdf = in_array($fileExt, ['pdf']) || str_contains(strtolower($filePath ?? ''), 'pdf');
+
             return [
                 'id'               => $ocr->id,
+                'receipt_id'       => $r?->id,
                 'receipt_number'   => $r?->receipt_number ?: ('REC-' . $ocr->id),
                 'fs_no'            => $r?->fs_no ?: ($r?->fs_no_raw ?: '-'),
+                'mrc_no'           => $r?->mrc_no ?: '-',
                 'vendor_name'      => $r?->vendor_name ?: 'Vendor',
                 'vendor_tin'       => $r?->vendor_tin ?: '-',
+                'buyer_tin'        => $r?->buyer_tin ?: '0038480010',
                 'date_ec'          => $date ? EthiopianDate::formatDateEc($date, 'DD/MM/YYYY EC') : '-',
                 'date_gc'          => $date ? Carbon::parse($date)->format('M d, Y') : '-',
                 'project_name'     => $r?->project?->name ?: 'General',
@@ -1114,7 +1243,9 @@ class FinanceTaxReportController extends Controller
                 'base_value'       => $baseVal,
                 'vat_amount'       => $vatVal,
                 'value_after_vat'  => $afterVal,
-                'file_url'         => $r?->file_path ? asset('storage/' . $r->file_path) : null,
+                'file_url'         => $fileUrl,
+                'file_type'        => $isPdf ? 'pdf' : ($r?->file_type ?: 'image'),
+                'is_pdf'           => $isPdf,
             ];
         });
 
@@ -1277,6 +1408,9 @@ class FinanceTaxReportController extends Controller
                 'income_wht'             => (float)$formattedIncomes->sum('withholding_amount'),
                 'income_net'             => (float)$formattedIncomes->sum('net_total'),
                 'net_disbursed'          => $totalNetDisbursed,
+                'ocr_base'               => $ocrPurchasesBase,
+                'ocr_vat'                => $ocrInputVat,
+                'ocr_total'              => round($ocrPurchasesBase + $ocrInputVat, 2),
                 'income_count'           => $formattedIncomes->count(),
                 'expense_count'          => $formattedExpenses->count(),
                 'ocr_count'              => $formattedOcrItems->count(),
