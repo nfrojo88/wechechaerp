@@ -984,6 +984,8 @@ class OCRReceiptScannerController extends Controller
             'vat_category'     => 'nullable|string|in:G,S',
             'calendar_type'    => 'nullable|string|in:G,E',
             'purchase_type'    => 'nullable|integer',
+            'project_id'       => 'nullable|integer',
+            'category'         => 'nullable|string',
             'supplier_tin'     => 'nullable|string',
             'seller_name'      => 'nullable|string',
             'receipt_date'     => 'nullable|string',
@@ -1039,6 +1041,8 @@ class OCRReceiptScannerController extends Controller
             $receiptUpdates['fs_no_valid'] = $fsNorm['is_valid'];
         }
         if ($date)                         $receiptUpdates['receipt_date'] = $date;
+        if ($request->has('project_id'))   $receiptUpdates['project_id'] = $request->project_id ?: null;
+        if ($request->has('category'))     $receiptUpdates['category']   = $request->category;
 
         if (!empty($receiptUpdates)) {
             $receipt->update($receiptUpdates);

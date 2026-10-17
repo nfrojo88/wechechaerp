@@ -1151,12 +1151,43 @@
                                     $fsNo = $rcp->fs_no ?? '';
                                     $isFsValid = (bool)($rcp->fs_no_valid ?? (strlen(preg_replace('/\D/', '', $fsNo)) === 8));
                                     $slipUrl = $rcp && $rcp->file_path ? asset('storage/' . $rcp->file_path) : null;
+
+                                    $displayBase = (float)$ocrItem->total_value;
+                                    $displayVat  = (float)$ocrItem->vat_amount;
+                                    $displayAfter = (float)$ocrItem->value_after_vat;
+                                    if ($displayBase > 0 && $displayVat > 0) {
+                                        $calcBase = round($displayBase / 1.15, 2);
+                                        if (abs(($displayBase - $displayVat) - $calcBase) <= 0.05 && abs(round($calcBase * 0.15, 2) - $displayVat) <= 0.05) {
+                                            $displayAfter = $displayBase;
+                                            $displayBase  = $calcBase;
+                                        }
+                                    }
+                                    $rcpDateYmd = optional($rcp?->receipt_date)->format('Y-m-d') ?: '';
+                                    $rcpDateEc = $rcp && $rcp->receipt_date ? \App\Services\EthiopianDate::formatDateEc($rcp->receipt_date, 'DD/MM/YYYY EC') : '';
                                 @endphp
-                                <tr id="ocr-row-{{ $ocrItem->id }}">
+                                <tr id="ocr-row-{{ $ocrItem->id }}"
+                                    data-id="{{ $ocrItem->id }}"
+                                    data-slip-url="{{ $slipUrl ?? '' }}"
+                                    data-vendor-name="{{ $rcp->vendor_name ?? '' }}"
+                                    data-vendor-tin="{{ $tin }}"
+                                    data-fs-no="{{ $fsNo }}"
+                                    data-mrc-no="{{ $rcp->mrc_no ?? '' }}"
+                                    data-receipt-date="{{ $rcpDateYmd }}"
+                                    data-receipt-date-ec="{{ $rcpDateEc }}"
+                                    data-item-description="{{ $ocrItem->item_description ?: '' }}"
+                                    data-vat-category="{{ $ocrItem->vat_category ?: 'G' }}"
+                                    data-purchase-type="{{ $ocrItem->purchase_type ?: 3 }}"
+                                    data-project-id="{{ $rcp->project_id ?? '' }}"
+                                    data-project-name="{{ $rcp && $rcp->project ? $rcp->project->name : 'General Company / HQ' }}"
+                                    data-category="{{ $rcp->category ?? 'materials' }}"
+                                    data-base-value="{{ number_format($displayBase, 2, '.', '') }}"
+                                    data-vat-amount="{{ number_format($displayVat, 2, '.', '') }}"
+                                    data-total-value="{{ number_format($displayAfter, 2, '.', '') }}"
+                                    data-studio-url="{{ route('admin.ocr.index') }}">
                                     <td class="ps-4 text-muted small">{{ $ocrItems->firstItem() + $index }}</td>
                                     
                                     {{-- Supplier TIN (Col D) --}}
-                                    <td>
+                                    <td class="cell-tin">
                                         <div class="d-flex align-items-center gap-1.5">
                                             <span class="font-monospace fw-bold {{ $isTinValid ? 'text-dark' : 'text-danger' }}">
                                                 {{ $tin ?: 'N/A' }}
@@ -1167,7 +1198,7 @@
                                                         <i class="fa-solid fa-check"></i>
                                                     </span>
                                                 @else
-                                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill px-1.5 py-0.5" style="font-size:0.65rem;" title="Invalid TIN Length">
+                                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill px-1.5 py-0.5" style="font-size:0.65rem;" title="Invalid TIN Length (Requires 10 Digits)">
                                                         <i class="fa-solid fa-triangle-exclamation"></i>
                                                     </span>
                                                 @endif
@@ -1176,27 +1207,29 @@
                                     </td>
 
                                     {{-- Supplier Name (Col E) --}}
-                                    <td>
-                                        <div class="fw-semibold text-dark small">{{ $rcp->vendor_name ?? 'Unknown Vendor' }}</div>
-                                        @if($rcp && $rcp->project)
-                                            <span class="badge bg-light text-secondary border fw-normal mt-0.5" style="font-size: 0.68rem;">
-                                                <i class="fa-solid fa-building me-1"></i>{{ $rcp->project->name }}
-                                            </span>
-                                        @endif
+                                    <td class="cell-vendor">
+                                        <div class="fw-semibold text-dark small vendor-name-text">{{ $rcp->vendor_name ?? 'Unknown Vendor' }}</div>
+                                        <div class="vendor-project-badge">
+                                            @if($rcp && $rcp->project)
+                                                <span class="badge bg-light text-secondary border fw-normal mt-0.5" style="font-size: 0.68rem;">
+                                                    <i class="fa-solid fa-building me-1"></i>{{ $rcp->project->name }}
+                                                </span>
+                                            @endif
+                                        </div>
                                     </td>
 
                                     {{-- Receipt Date (Col F) --}}
-                                    <td class="small text-muted font-monospace">
-                                        {{ $rcp && $rcp->receipt_date ? \App\Services\EthiopianDate::formatDateEc($rcp->receipt_date, 'DD/MM/YYYY EC') : '—' }}
+                                    <td class="cell-date small text-muted font-monospace">
+                                        {{ $rcpDateEc ?: '—' }}
                                     </td>
 
                                     {{-- MRC # (Col G) --}}
-                                    <td class="small font-monospace text-secondary">
+                                    <td class="cell-mrc small font-monospace text-secondary">
                                         {{ $rcp->mrc_no ?: '—' }}
                                     </td>
 
                                     {{-- FS / Receipt # (Col H) --}}
-                                    <td>
+                                    <td class="cell-fs">
                                         <div class="d-flex align-items-center gap-1.5">
                                             <span class="font-monospace fw-bold text-primary">{{ $fsNo ?: '—' }}</span>
                                             @if($fsNo)
@@ -1214,65 +1247,58 @@
                                     </td>
 
                                     {{-- Item Description (Col I) --}}
-                                    <td>
-                                        <div class="small text-dark fw-medium">{{ $ocrItem->item_description ?: 'General Purchase' }}</div>
-                                        @if($rcp && $rcp->category)
-                                            <span class="badge bg-light text-muted border" style="font-size: 0.65rem;">
-                                                {{ ucfirst($rcp->category) }}
-                                            </span>
-                                        @endif
+                                    <td class="cell-desc">
+                                        <div class="small text-dark fw-medium desc-text">{{ $ocrItem->item_description ?: 'General Purchase' }}</div>
+                                        <div class="desc-cat-badge">
+                                            @if($rcp && $rcp->category)
+                                                <span class="badge bg-light text-muted border" style="font-size: 0.65rem;">
+                                                    {{ ucfirst($rcp->category) }}
+                                                </span>
+                                            @endif
+                                        </div>
                                     </td>
 
-                                    @php
-                                        $displayBase = (float)$ocrItem->total_value;
-                                        $displayVat  = (float)$ocrItem->vat_amount;
-                                        $displayAfter = (float)$ocrItem->value_after_vat;
-                                        if ($displayBase > 0 && $displayVat > 0) {
-                                            $calcBase = round($displayBase / 1.15, 2);
-                                            if (abs(($displayBase - $displayVat) - $calcBase) <= 0.05 && abs(round($calcBase * 0.15, 2) - $displayVat) <= 0.05) {
-                                                $displayAfter = $displayBase;
-                                                $displayBase  = $calcBase;
-                                            }
-                                        }
-                                    @endphp
                                     {{-- Taxable Base (Col M) --}}
-                                    <td class="text-end font-monospace fw-semibold small">
+                                    <td class="cell-base text-end font-monospace fw-semibold small">
                                         ETB {{ number_format($displayBase, 2) }}
                                     </td>
 
                                     {{-- 15% VAT (Col N) --}}
-                                    <td class="text-end font-monospace fw-bold text-info small">
+                                    <td class="cell-vat text-end font-monospace fw-bold text-info small">
                                         + ETB {{ number_format($displayVat, 2) }}
                                     </td>
 
                                     {{-- Total with VAT (Col O) --}}
-                                    <td class="text-end font-monospace fw-bold text-success small">
+                                    <td class="cell-total text-end font-monospace fw-bold text-success small">
                                         ETB {{ number_format($displayAfter, 2) }}
                                     </td>
 
                                     {{-- Slip Preview Thumbnail --}}
                                     <td class="text-center">
                                         @if($slipUrl)
-                                            <button type="button" class="btn btn-xs btn-outline-info rounded-pill px-2 py-0.5 shadow-xs" 
-                                                    onclick="openVatSlipModal('{{ $slipUrl }}', '{{ addslashes($rcp->vendor_name ?? '') }}', '{{ $tin }}', '{{ $fsNo }}', '{{ $rcp->mrc_no ?? '' }}', '{{ optional($rcp->receipt_date)->format('d M Y') }}', '{{ number_format($displayBase, 2) }}', '{{ number_format($displayVat, 2) }}', '{{ number_format($displayAfter, 2) }}', '{{ route('admin.ocr.index') }}')"
+                                            <button type="button" class="btn btn-xs btn-outline-info rounded-pill px-2.5 py-0.5 shadow-xs" 
+                                                    onclick="openVatSlipModalFromRow(this)"
                                                     title="View High-Res Receipt Slip">
                                                 <i class="fa-solid fa-image me-1"></i>Slip
                                             </button>
                                         @else
-                                            <span class="text-muted small">—</span>
+                                            <button type="button" class="btn btn-xs btn-light text-muted border rounded-pill px-2 py-0.5 opacity-75" 
+                                                    onclick="openVatSlipModalFromRow(this)"
+                                                    title="No image attached &mdash; Click to view &amp; edit details">
+                                                <i class="fa-solid fa-pen me-1"></i>Edit
+                                            </button>
                                         @endif
                                     </td>
 
                                     {{-- Actions --}}
                                     <td class="text-center pe-4">
-                                        <div class="d-flex justify-content-center gap-1">
-                                            @if($slipUrl)
-                                                <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-2 py-0.5" 
-                                                        onclick="openVatSlipModal('{{ $slipUrl }}', '{{ addslashes($rcp->vendor_name ?? '') }}', '{{ $tin }}', '{{ $fsNo }}', '{{ $rcp->mrc_no ?? '' }}', '{{ optional($rcp->receipt_date)->format('d M Y') }}', '{{ number_format($displayBase, 2) }}', '{{ number_format($displayVat, 2) }}', '{{ number_format($displayAfter, 2) }}', '{{ route('admin.ocr.index') }}')"
-                                                        title="View Details">
-                                                    <i class="fa-solid fa-eye"></i>
-                                                </button>
-                                            @endif
+                                        <div class="d-flex justify-content-center align-items-center gap-1.5">
+                                            <button type="button" class="btn btn-primary btn-sm rounded-pill px-2.5 py-0.5 d-inline-flex align-items-center gap-1 text-white shadow-xs" 
+                                                    onclick="openVatSlipModalFromRow(this)"
+                                                    title="See Receipt Slip &amp; Edit Line Declaration">
+                                                <i class="fa-solid fa-eye"></i>
+                                                <span class="small fw-semibold">See</span>
+                                            </button>
                                             <button type="button" class="btn btn-outline-danger btn-sm rounded-pill px-2 py-0.5" 
                                                     onclick="deleteOcrItem({{ $ocrItem->id }}, '{{ addslashes($fsNo ?: 'Row #' . ($index + 1)) }}')"
                                                     title="Delete Row">
@@ -2214,87 +2240,251 @@
     </div>
 @endforeach
 
-{{-- ── MODAL: High-Res OCR Receipt Slip Preview ────────────────────────────────────── --}}
+{{-- ── MODAL: High-Res OCR Receipt Slip Preview & Live Line 100 Edit ──────────────────── --}}
 <div class="modal fade" id="vatReceiptSlipModal" tabindex="-1" aria-labelledby="vatReceiptSlipModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-dialog modal-dialog-centered modal-xl modal-fullscreen-lg-down">
         <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
-            <div class="modal-header bg-dark text-white py-3 px-4">
-                <div class="d-flex align-items-center gap-2">
-                    <i class="fa-solid fa-receipt text-info fs-5"></i>
+            <div class="modal-header bg-dark text-white py-2.5 px-4">
+                <div class="d-flex align-items-center gap-2.5">
+                    <div class="bg-primary bg-opacity-25 text-info p-2 rounded-circle d-flex align-items-center justify-content-center" style="width:36px; height:36px;">
+                        <i class="fa-solid fa-receipt fs-5"></i>
+                    </div>
                     <div>
-                        <h5 class="modal-title fw-bold mb-0" id="vatReceiptSlipModalLabel">
-                            Receipt Slip Preview &mdash; <span id="modalFsNoDisplay" class="font-monospace text-info"></span>
+                        <h5 class="modal-title fw-bold mb-0 text-white fs-6" id="vatReceiptSlipModalLabel">
+                            ERCA Line 100 Invoice &amp; Fiscal Slip Inspector &mdash; <span id="modalFsNoDisplay" class="font-monospace text-info"></span>
                         </h5>
-                        <small class="text-white-50">Verified ERCA Fiscal Receipt Document</small>
+                        <small class="text-white-50" style="font-size:0.75rem;">
+                            Side-by-side reconciliation: Edit declaration on the left &bull; Inspect scanned receipt on the right
+                        </small>
                     </div>
                 </div>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                <div class="d-flex align-items-center gap-2">
+                    <span id="modalHeaderStatusBadge" class="badge bg-info-subtle text-info border border-info-subtle rounded-pill px-2.5 py-1 small font-monospace">ERCA Line 100</span>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
             </div>
-            <div class="modal-body p-4">
-                <div class="row g-4 align-items-center">
-                    <div class="col-md-7 text-center">
-                        <div class="p-2 border rounded-3 bg-light shadow-xs d-inline-block w-100" style="min-height: 280px; max-height: 520px; overflow: auto;">
-                            <img id="modalSlipImg" src="" alt="Receipt Slip" class="img-fluid rounded" style="max-height: 480px; object-fit: contain;">
-                            <iframe id="modalSlipPdf" src="" class="w-100 rounded d-none" style="height: 480px; border: none;"></iframe>
+
+            <div class="modal-body p-3 p-lg-4 bg-light bg-opacity-50">
+                <div class="row g-3 g-lg-4">
+                    {{-- LEFT COLUMN: Option to edit to meet our system --}}
+                    <div class="col-12 col-lg-6">
+                        <div class="card border-0 shadow-xs rounded-3 h-100 bg-white">
+                            <div class="card-header bg-white border-bottom py-2.5 px-3 d-flex align-items-center justify-content-between">
+                                <div class="d-flex align-items-center gap-2">
+                                    <i class="fa-solid fa-sliders text-primary"></i>
+                                    <span class="fw-bold text-dark small text-uppercase">ERCA Declaration &amp; System Adjustment</span>
+                                </div>
+                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill font-monospace" id="edit_ocr_badge_id">Row #</span>
+                            </div>
+                            <div class="card-body p-3">
+                                <div id="ocrModalAlert" class="alert d-none py-2 px-3 small rounded-3 mb-3"></div>
+
+                                <form id="ocrModalEditForm" onsubmit="saveOcrSlipEdits(event)">
+                                    <input type="hidden" id="edit_ocr_item_id" name="id">
+
+                                    {{-- Supplier Name --}}
+                                    <div class="mb-2.5">
+                                        <label class="form-label small fw-bold text-dark mb-1">
+                                            <i class="fa-solid fa-store text-muted me-1"></i>Supplier / Merchant Name (Col E) <span class="text-danger">*</span>
+                                        </label>
+                                        <input type="text" class="form-control form-control-sm rounded-2" id="edit_seller_name" name="seller_name" required placeholder="e.g. TotalEnergies Marketing Ethiopia">
+                                    </div>
+
+                                    {{-- Row: Supplier TIN & FS # --}}
+                                    <div class="row g-2 mb-2.5">
+                                        <div class="col-6">
+                                            <label class="form-label small fw-bold text-dark mb-1">
+                                                <i class="fa-solid fa-id-card text-muted me-1"></i>Supplier TIN (Col D) <span class="text-danger">*</span>
+                                            </label>
+                                            <div class="input-group input-group-sm">
+                                                <input type="text" class="form-control font-monospace fw-bold" id="edit_supplier_tin" name="supplier_tin" maxlength="12" placeholder="10 Digits" oninput="validateOcrTin(this.value)">
+                                                <span class="input-group-text p-1 px-2" id="edit_tin_badge" title="TIN Status"><i class="fa-solid fa-minus text-muted"></i></span>
+                                            </div>
+                                            <div class="form-text text-muted" style="font-size:0.68rem;" id="edit_tin_hint">ERCA requires 10 digits</div>
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="form-label small fw-bold text-dark mb-1">
+                                                <i class="fa-solid fa-receipt text-muted me-1"></i>FS / Receipt # (Col H) <span class="text-danger">*</span>
+                                            </label>
+                                            <div class="input-group input-group-sm">
+                                                <input type="text" class="form-control font-monospace fw-bold text-primary" id="edit_fs_no" name="fs_no" maxlength="12" placeholder="8 Digits" oninput="validateOcrFs(this.value)">
+                                                <span class="input-group-text p-1 px-2" id="edit_fs_badge" title="FS # Status"><i class="fa-solid fa-minus text-muted"></i></span>
+                                            </div>
+                                            <div class="form-text text-muted" style="font-size:0.68rem;" id="edit_fs_hint">Standard 8-digit fiscal slip</div>
+                                        </div>
+                                    </div>
+
+                                    {{-- Row: MRC # & Receipt Date --}}
+                                    <div class="row g-2 mb-2.5">
+                                        <div class="col-6">
+                                            <label class="form-label small fw-bold text-dark mb-1">
+                                                <i class="fa-solid fa-microchip text-muted me-1"></i>MRC # (Col G)
+                                            </label>
+                                            <input type="text" class="form-control form-control-sm font-monospace" id="edit_mrc_no" name="mrc_no" placeholder="e.g. MTR12345678">
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="form-label small fw-bold text-dark mb-1">
+                                                <i class="fa-regular fa-calendar text-muted me-1"></i>Receipt Date (Col F)
+                                            </label>
+                                            <input type="date" class="form-control form-control-sm font-monospace" id="edit_receipt_date" name="receipt_date" onchange="syncDateToEc(this.value)">
+                                            <div class="form-text text-primary font-monospace fw-semibold" style="font-size:0.68rem;" id="edit_date_ec_preview"></div>
+                                        </div>
+                                    </div>
+
+                                    {{-- Item Description --}}
+                                    <div class="mb-2.5">
+                                        <label class="form-label small fw-bold text-dark mb-1">
+                                            <i class="fa-solid fa-tag text-muted me-1"></i>Item Description / Particulars (Col I) <span class="text-danger">*</span>
+                                        </label>
+                                        <input type="text" class="form-control form-control-sm rounded-2" id="edit_item_description" name="item_description" required placeholder="e.g. Fuel, Cement, Office stationery">
+                                    </div>
+
+                                    {{-- Project & Category --}}
+                                    <div class="row g-2 mb-2.5">
+                                        <div class="col-6">
+                                            <label class="form-label small fw-bold text-dark mb-1">
+                                                <i class="fa-solid fa-building text-muted me-1"></i>Project Attribution
+                                            </label>
+                                            <select class="form-select form-select-sm" id="edit_project_id" name="project_id">
+                                                <option value="">-- General Company / HQ --</option>
+                                                @foreach($ocrProjects ?? [] as $proj)
+                                                    <option value="{{ $proj->id }}">{{ $proj->name }}</option>
+                                                @endforeach
+                                            </select>
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="form-label small fw-bold text-dark mb-1">
+                                                <i class="fa-solid fa-folder text-muted me-1"></i>Expense Category
+                                            </label>
+                                            <select class="form-select form-select-sm" id="edit_category" name="category">
+                                                @foreach($ocrCategories ?? [] as $catKey => $catLabel)
+                                                    <option value="{{ $catKey }}">{{ $catLabel }}</option>
+                                                @endforeach
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    {{-- VAT Category & Purchase Type --}}
+                                    <div class="row g-2 mb-2.5">
+                                        <div class="col-6">
+                                            <label class="form-label small fw-bold text-dark mb-1">
+                                                <i class="fa-solid fa-shapes text-muted me-1"></i>VAT Category
+                                            </label>
+                                            <select class="form-select form-select-sm" id="edit_vat_category" name="vat_category">
+                                                <option value="G">Goods (G)</option>
+                                                <option value="S">Services (S)</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="form-label small fw-bold text-dark mb-1">
+                                                <i class="fa-solid fa-list-ol text-muted me-1"></i>ERCA Purchase Type
+                                            </label>
+                                            <select class="form-select form-select-sm" id="edit_purchase_type" name="purchase_type">
+                                                <option value="1">1 - Raw Materials / Inputs</option>
+                                                <option value="2">2 - Capital Goods / Equipment</option>
+                                                <option value="3">3 - General Operating &amp; Consumables</option>
+                                                <option value="4">4 - Subcontracting Services</option>
+                                                <option value="5">5 - Utilities &amp; Telecommunications</option>
+                                                <option value="6">6 - Other Taxable Inward Supplies</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    {{-- Financial Amounts & Live Recalculation --}}
+                                    <div class="p-2.5 bg-light rounded-3 border mb-3">
+                                        <div class="d-flex align-items-center justify-content-between mb-2">
+                                            <span class="small fw-bold text-dark">
+                                                <i class="fa-solid fa-calculator text-primary me-1"></i>Financial Reconciliation (15% VAT)
+                                            </span>
+                                            <span class="badge bg-secondary-subtle text-secondary" style="font-size:0.68rem;">Live Synced</span>
+                                        </div>
+                                        <div class="row g-2">
+                                            <div class="col-4">
+                                                <label class="form-label small fw-semibold text-muted mb-0.5" style="font-size:0.7rem;">Taxable Base (M)</label>
+                                                <div class="input-group input-group-sm">
+                                                    <span class="input-group-text px-1 text-muted" style="font-size:0.7rem;">ETB</span>
+                                                    <input type="number" step="0.01" min="0" class="form-control font-monospace fw-semibold" id="edit_total_value" name="total_value" required oninput="recalcFromBase(this.value)">
+                                                </div>
+                                            </div>
+                                            <div class="col-4">
+                                                <label class="form-label small fw-semibold text-info mb-0.5" style="font-size:0.7rem;">15% VAT (N)</label>
+                                                <div class="input-group input-group-sm">
+                                                    <span class="input-group-text px-1 text-info" style="font-size:0.7rem;">+</span>
+                                                    <input type="number" step="0.01" min="0" class="form-control font-monospace fw-bold text-info" id="edit_vat_amount" name="vat_amount" required oninput="recalcFromVat(this.value)">
+                                                </div>
+                                            </div>
+                                            <div class="col-4">
+                                                <label class="form-label small fw-semibold text-success mb-0.5" style="font-size:0.7rem;">Total with VAT (O)</label>
+                                                <div class="input-group input-group-sm">
+                                                    <span class="input-group-text px-1 text-success" style="font-size:0.7rem;">=</span>
+                                                    <input type="number" step="0.01" min="0" class="form-control font-monospace fw-bold text-success" id="edit_value_after_vat" name="value_after_vat" required oninput="recalcFromTotal(this.value)">
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="d-flex justify-content-between align-items-center mt-2 pt-1 border-top" style="font-size:0.72rem;">
+                                            <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none text-muted" onclick="autoCalcVatFromBase()">
+                                                <i class="fa-solid fa-wand-magic-sparkles me-1 text-primary"></i>Base &rarr; Auto VAT (15%)
+                                            </button>
+                                            <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none text-muted" onclick="autoExtractBaseFromTotal()">
+                                                <i class="fa-solid fa-wand-magic-sparkles me-1 text-success"></i>Total &rarr; Extract Base (/1.15)
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {{-- Save Button --}}
+                                    <div class="d-flex align-items-center justify-content-between pt-1">
+                                        <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
+                                        <button type="submit" id="edit_submit_btn" class="btn btn-primary btn-sm rounded-pill px-4 shadow-sm fw-semibold">
+                                            <i class="fa-solid fa-floppy-disk me-1.5"></i>Save Changes &amp; Update System
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
                         </div>
                     </div>
-                    <div class="col-md-5">
-                        <div class="p-3 bg-light rounded-3 border">
-                            <h6 class="fw-bold text-dark border-bottom pb-2 mb-3">
-                                <i class="fa-solid fa-file-invoice text-info me-1"></i>ERCA Declaration Data
-                            </h6>
-                            <div class="d-flex flex-column gap-2 small">
-                                <div>
-                                    <span class="text-muted text-uppercase fw-bold d-block" style="font-size:0.7rem;">Supplier / Merchant</span>
-                                    <span id="modalVendorName" class="fw-bold text-dark fs-6"></span>
+
+                    {{-- RIGHT COLUMN: Receipt Slip Preview --}}
+                    <div class="col-12 col-lg-6">
+                        <div class="card border-0 shadow-xs rounded-3 h-100 bg-white d-flex flex-column">
+                            <div class="card-header bg-white border-bottom py-2.5 px-3 d-flex align-items-center justify-content-between">
+                                <div class="d-flex align-items-center gap-2">
+                                    <i class="fa-solid fa-image text-info"></i>
+                                    <span class="fw-bold text-dark small text-uppercase">Scanned Receipt Slip Preview</span>
                                 </div>
-                                <div class="row g-2">
-                                    <div class="col-6">
-                                        <span class="text-muted text-uppercase fw-bold d-block" style="font-size:0.7rem;">Supplier TIN (Col D)</span>
-                                        <span id="modalVendorTin" class="font-monospace fw-bold text-primary"></span>
+                                <div class="btn-group btn-group-sm shadow-xs" role="group">
+                                    <button type="button" class="btn btn-outline-secondary btn-xs py-1 px-2" onclick="zoomSlip(0.15)" title="Zoom In"><i class="fa-solid fa-magnifying-glass-plus"></i></button>
+                                    <button type="button" class="btn btn-outline-secondary btn-xs py-1 px-2" onclick="zoomSlip(-0.15)" title="Zoom Out"><i class="fa-solid fa-magnifying-glass-minus"></i></button>
+                                    <button type="button" class="btn btn-outline-secondary btn-xs py-1 px-2" onclick="rotateSlip()" title="Rotate 90°"><i class="fa-solid fa-rotate-right"></i></button>
+                                    <button type="button" class="btn btn-outline-secondary btn-xs py-1 px-2" onclick="resetSlipView()" title="Reset View"><i class="fa-solid fa-arrows-rotate"></i></button>
+                                    <a id="modalSlipOpenNewTab" href="#" target="_blank" class="btn btn-outline-secondary btn-xs py-1 px-2" title="Open in New Tab"><i class="fa-solid fa-up-right-from-square"></i></a>
+                                </div>
+                            </div>
+                            <div class="card-body p-2 flex-grow-1 d-flex flex-column">
+                                <div class="flex-grow-1 position-relative border rounded-3 bg-secondary bg-opacity-10 d-flex align-items-center justify-content-center p-2" style="min-height: 480px; max-height: 580px; overflow: auto;" id="slipViewport">
+                                    <img id="modalSlipImg" src="" alt="Receipt Slip" class="img-fluid rounded shadow-sm" style="max-height: 540px; object-fit: contain; transition: transform 0.2s ease;">
+                                    <iframe id="modalSlipPdf" src="" class="w-100 h-100 rounded d-none" style="min-height: 500px; border: none;"></iframe>
+                                    <div id="modalSlipEmpty" class="text-center p-4 d-none">
+                                        <div class="p-3 bg-white bg-opacity-75 rounded-circle d-inline-block text-muted mb-2 shadow-xs">
+                                            <i class="fa-solid fa-file-invoice text-secondary fs-2"></i>
+                                        </div>
+                                        <div class="fw-semibold text-muted small">No Scanned Slip File Attached</div>
+                                        <div class="text-muted" style="font-size:0.75rem;">You can still edit and save all declaration fields on the left.</div>
                                     </div>
-                                    <div class="col-6">
-                                        <span class="text-muted text-uppercase fw-bold d-block" style="font-size:0.7rem;">Receipt Date (Col F)</span>
-                                        <span id="modalDate" class="font-monospace text-secondary"></span>
-                                    </div>
                                 </div>
-                                <div class="row g-2">
-                                    <div class="col-6">
-                                        <span class="text-muted text-uppercase fw-bold d-block" style="font-size:0.7rem;">FS # (Col H)</span>
-                                        <span id="modalFsNo" class="font-monospace fw-bold text-dark"></span>
-                                    </div>
-                                    <div class="col-6">
-                                        <span class="text-muted text-uppercase fw-bold d-block" style="font-size:0.7rem;">MRC # (Col G)</span>
-                                        <span id="modalMrcNo" class="font-monospace text-secondary"></span>
-                                    </div>
-                                </div>
-                                <hr class="my-1">
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <span class="text-muted">Taxable Base (Col M):</span>
-                                    <span class="font-monospace fw-semibold text-dark">ETB <span id="modalBase"></span></span>
-                                </div>
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <span class="text-muted">VAT 15% (Col N):</span>
-                                    <span class="font-monospace fw-bold text-info">+ ETB <span id="modalVat"></span></span>
-                                </div>
-                                <div class="d-flex justify-content-between align-items-center border-top pt-1 mt-1">
-                                    <span class="fw-bold text-dark">Total with VAT (Col O):</span>
-                                    <span class="font-monospace fw-bold text-success fs-6">ETB <span id="modalTotal"></span></span>
+                            </div>
+                            <div class="card-footer bg-white border-top py-2 px-3 d-flex align-items-center justify-content-between">
+                                <span class="small text-muted font-monospace" id="modalSlipFilename" style="font-size:0.75rem;">Document: Receipt Slip</span>
+                                <div class="d-flex gap-2">
+                                    <a id="modalDownloadBtn" href="#" target="_blank" download class="btn btn-outline-info btn-xs rounded-pill px-3 shadow-xs">
+                                        <i class="fa-solid fa-download me-1"></i>Download Slip
+                                    </a>
+                                    <a id="modalStudioLink" href="{{ route('admin.ocr.index') }}" target="_blank" class="btn btn-outline-primary btn-xs rounded-pill px-3">
+                                        <i class="fa-solid fa-wand-magic-sparkles me-1"></i>OCR Studio
+                                    </a>
                                 </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            </div>
-            <div class="modal-footer bg-light border-0 py-3 px-4 d-flex justify-content-between">
-                <a id="modalStudioLink" href="{{ route('admin.ocr.index') }}" target="_blank" class="btn btn-outline-primary btn-sm rounded-pill px-3">
-                    <i class="fa-solid fa-up-right-from-square me-1"></i>Open in OCR Studio
-                </a>
-                <div class="d-flex gap-2">
-                    <a id="modalDownloadBtn" href="#" target="_blank" download class="btn btn-info text-white btn-sm rounded-pill px-3 shadow-xs">
-                        <i class="fa-solid fa-download me-1"></i>Download Slip
-                    </a>
-                    <button type="button" class="btn btn-secondary btn-sm rounded-pill px-3" data-bs-dismiss="modal">Close</button>
                 </div>
             </div>
         </div>
@@ -3934,44 +4124,475 @@
         document.getElementById('export_to_date')?.addEventListener('change', updateExportSummary);
     });
 
-    // ── High-Res Slip Modal ──────────────────────────────────────────────────
-    function openVatSlipModal(imgUrl, vendor, tin, fs, mrc, date, base, vat, total, studioUrl) {
-        const isPdf = imgUrl && (imgUrl.toLowerCase().endsWith('.pdf') || imgUrl.toLowerCase().includes('pdf'));
+    // ── High-Res Slip Modal & Interactive Line 100 Edit ─────────────────────
+    let _slipZoom = 1;
+    let _slipRotation = 0;
+
+    function _updateSlipTransform() {
+        const img = document.getElementById('modalSlipImg');
+        if (img) {
+            img.style.transform = `scale(${_slipZoom}) rotate(${_slipRotation}deg)`;
+        }
+    }
+
+    function zoomSlip(delta) {
+        _slipZoom = Math.max(0.4, Math.min(3.5, _slipZoom + delta));
+        _updateSlipTransform();
+    }
+
+    function rotateSlip() {
+        _slipRotation = (_slipRotation + 90) % 360;
+        _updateSlipTransform();
+    }
+
+    function resetSlipView() {
+        _slipZoom = 1;
+        _slipRotation = 0;
+        _updateSlipTransform();
+    }
+
+    function validateOcrTin(val) {
+        const digits = (val || '').replace(/\D/g, '');
+        const badge = document.getElementById('edit_tin_badge');
+        const hint = document.getElementById('edit_tin_hint');
+        if (!badge || !hint) return;
+        if (digits.length === 10) {
+            badge.innerHTML = '<i class="fa-solid fa-check text-success"></i>';
+            hint.innerHTML = '<span class="text-success"><i class="fa-solid fa-check-circle me-1"></i>Valid 10-Digit ERCA TIN</span>';
+        } else if (digits.length > 0) {
+            badge.innerHTML = '<i class="fa-solid fa-triangle-exclamation text-danger"></i>';
+            hint.innerHTML = `<span class="text-danger"><i class="fa-solid fa-circle-exclamation me-1"></i>${digits.length}/10 digits entered</span>`;
+        } else {
+            badge.innerHTML = '<i class="fa-solid fa-minus text-muted"></i>';
+            hint.innerHTML = '<span class="text-muted">ERCA requires exactly 10 digits</span>';
+        }
+    }
+
+    function validateOcrFs(val) {
+        const digits = (val || '').replace(/\D/g, '');
+        const badge = document.getElementById('edit_fs_badge');
+        const hint = document.getElementById('edit_fs_hint');
+        if (!badge || !hint) return;
+        if (digits.length === 8) {
+            badge.innerHTML = '<i class="fa-solid fa-check text-success"></i>';
+            hint.innerHTML = '<span class="text-success"><i class="fa-solid fa-check-circle me-1"></i>Valid 8-Digit FS #</span>';
+        } else if (digits.length > 0) {
+            badge.innerHTML = '<i class="fa-solid fa-exclamation text-warning"></i>';
+            hint.innerHTML = `<span class="text-warning"><i class="fa-solid fa-info-circle me-1"></i>${digits.length}/8 digits</span>`;
+        } else {
+            badge.innerHTML = '<i class="fa-solid fa-minus text-muted"></i>';
+            hint.innerHTML = '<span class="text-muted">Standard 8-digit fiscal slip</span>';
+        }
+    }
+
+    function syncDateToEc(ymd) {
+        const preview = document.getElementById('edit_date_ec_preview');
+        if (!preview) return;
+        if (!ymd) {
+            preview.textContent = '';
+            return;
+        }
+        preview.textContent = 'GC: ' + ymd;
+    }
+
+    function recalcFromBase(val) {
+        const base = parseFloat(val) || 0;
+        const vat = Math.round(base * 0.15 * 100) / 100;
+        const total = Math.round((base + vat) * 100) / 100;
+        const vatEl = document.getElementById('edit_vat_amount');
+        const totalEl = document.getElementById('edit_value_after_vat');
+        if (vatEl) vatEl.value = vat.toFixed(2);
+        if (totalEl) totalEl.value = total.toFixed(2);
+    }
+
+    function recalcFromVat(val) {
+        const vat = parseFloat(val) || 0;
+        const base = parseFloat(document.getElementById('edit_total_value')?.value) || 0;
+        const total = Math.round((base + vat) * 100) / 100;
+        const totalEl = document.getElementById('edit_value_after_vat');
+        if (totalEl) totalEl.value = total.toFixed(2);
+    }
+
+    function recalcFromTotal(val) {
+        const total = parseFloat(val) || 0;
+        const base = Math.round((total / 1.15) * 100) / 100;
+        const vat = Math.round((total - base) * 100) / 100;
+        const baseEl = document.getElementById('edit_total_value');
+        const vatEl = document.getElementById('edit_vat_amount');
+        if (baseEl) baseEl.value = base.toFixed(2);
+        if (vatEl) vatEl.value = vat.toFixed(2);
+    }
+
+    function autoCalcVatFromBase() {
+        const baseInput = document.getElementById('edit_total_value');
+        if (baseInput) recalcFromBase(baseInput.value);
+    }
+
+    function autoExtractBaseFromTotal() {
+        const totalInput = document.getElementById('edit_value_after_vat');
+        if (totalInput) recalcFromTotal(totalInput.value);
+    }
+
+    function _setSlipPreview(slipUrl) {
+        const isPdf = slipUrl && (slipUrl.toLowerCase().endsWith('.pdf') || slipUrl.toLowerCase().includes('pdf'));
         const imgEl = document.getElementById('modalSlipImg');
         const pdfEl = document.getElementById('modalSlipPdf');
+        const emptyEl = document.getElementById('modalSlipEmpty');
+        const newTabEl = document.getElementById('modalSlipOpenNewTab');
+        const downloadEl = document.getElementById('modalDownloadBtn');
+        const filenameEl = document.getElementById('modalSlipFilename');
 
-        if (isPdf) {
-            if (imgEl) imgEl.classList.add('d-none');
-            if (pdfEl) {
-                pdfEl.src = imgUrl;
-                pdfEl.classList.remove('d-none');
+        resetSlipView();
+
+        if (slipUrl) {
+            if (emptyEl) emptyEl.classList.add('d-none');
+            if (newTabEl) newTabEl.href = slipUrl;
+            if (downloadEl) downloadEl.href = slipUrl;
+            if (filenameEl) {
+                const parts = slipUrl.split('/');
+                filenameEl.textContent = 'Slip: ' + decodeURIComponent(parts[parts.length - 1] || 'receipt');
+            }
+
+            if (isPdf) {
+                if (imgEl) imgEl.classList.add('d-none');
+                if (pdfEl) {
+                    pdfEl.src = slipUrl;
+                    pdfEl.classList.remove('d-none');
+                }
+            } else {
+                if (pdfEl) {
+                    pdfEl.classList.add('d-none');
+                    pdfEl.src = '';
+                }
+                if (imgEl) {
+                    imgEl.src = slipUrl;
+                    imgEl.classList.remove('d-none');
+                }
             }
         } else {
+            if (imgEl) imgEl.classList.add('d-none');
             if (pdfEl) {
                 pdfEl.classList.add('d-none');
                 pdfEl.src = '';
             }
-            if (imgEl) {
-                imgEl.src = imgUrl || '';
-                imgEl.classList.remove('d-none');
-            }
+            if (emptyEl) emptyEl.classList.remove('d-none');
+            if (newTabEl) newTabEl.href = '#';
+            if (downloadEl) downloadEl.href = '#';
+            if (filenameEl) filenameEl.textContent = 'No slip attached';
+        }
+    }
+
+    function openVatSlipModalFromRow(btn) {
+        const tr = btn.closest('tr');
+        if (!tr) return;
+
+        const id = tr.dataset.id || '';
+        const slipUrl = tr.dataset.slipUrl || '';
+        const vendor = tr.dataset.vendorName || '';
+        const tin = tr.dataset.vendorTin || '';
+        const fs = tr.dataset.fsNo || '';
+        const mrc = tr.dataset.mrcNo || '';
+        const date = tr.dataset.receiptDate || '';
+        const dateEc = tr.dataset.receiptDateEc || '';
+        const desc = tr.dataset.itemDescription || '';
+        const vatCat = tr.dataset.vatCategory || 'G';
+        const purcType = tr.dataset.purchaseType || '3';
+        const projectId = tr.dataset.projectId || '';
+        const category = tr.dataset.category || 'materials';
+        const base = tr.dataset.baseValue || '0.00';
+        const vat = tr.dataset.vatAmount || '0.00';
+        const total = tr.dataset.totalValue || '0.00';
+        const studioUrl = tr.dataset.studioUrl || '{{ route("admin.ocr.index") }}';
+
+        // Populate Left Edit Form
+        document.getElementById('edit_ocr_item_id').value = id;
+        const badgeId = document.getElementById('edit_ocr_badge_id');
+        if (badgeId) badgeId.textContent = 'Invoice #' + id;
+
+        const sellerName = document.getElementById('edit_seller_name');
+        if (sellerName) sellerName.value = vendor;
+
+        const tinInput = document.getElementById('edit_supplier_tin');
+        if (tinInput) {
+            tinInput.value = tin === '-' ? '' : tin;
+            validateOcrTin(tinInput.value);
         }
 
-        document.getElementById('modalVendorName').textContent = vendor || 'N/A';
-        document.getElementById('modalVendorTin').textContent = tin || 'N/A';
-        document.getElementById('modalFsNo').textContent = fs || '—';
-        document.getElementById('modalFsNoDisplay').textContent = fs ? ('FS #' + fs) : 'Slip View';
-        document.getElementById('modalMrcNo').textContent = mrc || '—';
-        document.getElementById('modalDate').textContent = date || '—';
-        document.getElementById('modalBase').textContent = base || '0.00';
-        document.getElementById('modalVat').textContent = vat || '0.00';
-        document.getElementById('modalTotal').textContent = total || '0.00';
-        document.getElementById('modalDownloadBtn').href = imgUrl || '#';
-        if (studioUrl) {
-            document.getElementById('modalStudioLink').href = studioUrl;
+        const fsInput = document.getElementById('edit_fs_no');
+        if (fsInput) {
+            fsInput.value = fs === '-' ? '' : fs;
+            validateOcrFs(fsInput.value);
         }
-        const modal = new bootstrap.Modal(document.getElementById('vatReceiptSlipModal'));
-        modal.show();
+
+        const mrcInput = document.getElementById('edit_mrc_no');
+        if (mrcInput) mrcInput.value = mrc === '-' ? '' : mrc;
+
+        const dateInput = document.getElementById('edit_receipt_date');
+        if (dateInput) dateInput.value = date;
+
+        const dateEcPreview = document.getElementById('edit_date_ec_preview');
+        if (dateEcPreview) dateEcPreview.textContent = dateEc ? ('EC: ' + dateEc) : '';
+
+        const descInput = document.getElementById('edit_item_description');
+        if (descInput) descInput.value = desc;
+
+        const projSelect = document.getElementById('edit_project_id');
+        if (projSelect) projSelect.value = projectId;
+
+        const catSelect = document.getElementById('edit_category');
+        if (catSelect) catSelect.value = category;
+
+        const vatCatSelect = document.getElementById('edit_vat_category');
+        if (vatCatSelect) vatCatSelect.value = vatCat;
+
+        const purcTypeSelect = document.getElementById('edit_purchase_type');
+        if (purcTypeSelect) purcTypeSelect.value = purcType;
+
+        const baseInput = document.getElementById('edit_total_value');
+        if (baseInput) baseInput.value = parseFloat(base).toFixed(2);
+
+        const vatInput = document.getElementById('edit_vat_amount');
+        if (vatInput) vatInput.value = parseFloat(vat).toFixed(2);
+
+        const totalInput = document.getElementById('edit_value_after_vat');
+        if (totalInput) totalInput.value = parseFloat(total).toFixed(2);
+
+        // Header FS display
+        const fsDisplay = document.getElementById('modalFsNoDisplay');
+        if (fsDisplay) fsDisplay.textContent = fs && fs !== '-' ? ('FS #' + fs) : ('Invoice #' + id);
+
+        // Studio link
+        const studioLink = document.getElementById('modalStudioLink');
+        if (studioLink) studioLink.href = studioUrl;
+
+        // Clear alerts
+        const alertBox = document.getElementById('ocrModalAlert');
+        if (alertBox) {
+            alertBox.className = 'alert d-none';
+            alertBox.innerHTML = '';
+        }
+
+        // Set Slip preview on right side
+        _setSlipPreview(slipUrl);
+
+        // Show modal
+        const modalEl = document.getElementById('vatReceiptSlipModal');
+        if (modalEl) {
+            const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+            modal.show();
+        }
+    }
+
+    function openVatSlipModal(imgUrl, vendor, tin, fs, mrc, date, base, vat, total, studioUrl) {
+        const sellerName = document.getElementById('edit_seller_name');
+        if (sellerName) sellerName.value = vendor || '';
+
+        const tinInput = document.getElementById('edit_supplier_tin');
+        if (tinInput) {
+            tinInput.value = tin || '';
+            validateOcrTin(tin || '');
+        }
+
+        const fsInput = document.getElementById('edit_fs_no');
+        if (fsInput) {
+            fsInput.value = fs || '';
+            validateOcrFs(fs || '');
+        }
+
+        const mrcInput = document.getElementById('edit_mrc_no');
+        if (mrcInput) mrcInput.value = mrc || '';
+
+        const baseClean = (base || '0').replace(/[^0-9.]/g, '');
+        const vatClean = (vat || '0').replace(/[^0-9.]/g, '');
+        const totalClean = (total || '0').replace(/[^0-9.]/g, '');
+
+        const baseInput = document.getElementById('edit_total_value');
+        if (baseInput) baseInput.value = parseFloat(baseClean || 0).toFixed(2);
+
+        const vatInput = document.getElementById('edit_vat_amount');
+        if (vatInput) vatInput.value = parseFloat(vatClean || 0).toFixed(2);
+
+        const totalInput = document.getElementById('edit_value_after_vat');
+        if (totalInput) totalInput.value = parseFloat(totalClean || 0).toFixed(2);
+
+        const fsDisplay = document.getElementById('modalFsNoDisplay');
+        if (fsDisplay) fsDisplay.textContent = fs ? ('FS #' + fs) : 'Receipt View';
+
+        if (studioUrl) {
+            const studioLink = document.getElementById('modalStudioLink');
+            if (studioLink) studioLink.href = studioUrl;
+        }
+
+        _setSlipPreview(imgUrl);
+
+        const modalEl = document.getElementById('vatReceiptSlipModal');
+        if (modalEl) {
+            const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+            modal.show();
+        }
+    }
+
+    function saveOcrSlipEdits(e) {
+        e.preventDefault();
+        const form = document.getElementById('ocrModalEditForm');
+        if (!form) return;
+
+        const submitBtn = document.getElementById('edit_submit_btn');
+        const alertBox = document.getElementById('ocrModalAlert');
+        const origBtnHtml = submitBtn ? submitBtn.innerHTML : '';
+
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1.5"></i>Updating System...';
+        }
+        if (alertBox) {
+            alertBox.className = 'alert alert-info py-2 px-3 small rounded-3 mb-3 d-flex align-items-center gap-2';
+            alertBox.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving changes and reconciling system tax records...';
+            alertBox.classList.remove('d-none');
+        }
+
+        const formData = new FormData(form);
+
+        fetch('{{ route("finance.tax-deductions.update-ocr-item") }}', {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = origBtnHtml;
+            }
+
+            if (data.success && data.item) {
+                const itm = data.item;
+                if (alertBox) {
+                    alertBox.className = 'alert alert-success py-2 px-3 small rounded-3 mb-3 d-flex align-items-center gap-2';
+                    alertBox.innerHTML = '<i class="fa-solid fa-circle-check fs-6 text-success"></i> ' + (data.message || 'Invoice successfully updated & reconciled with system.');
+                }
+
+                // Update row in table
+                const tr = document.getElementById('ocr-row-' + itm.id);
+                if (tr) {
+                    tr.dataset.vendorName = itm.vendor_name;
+                    tr.dataset.vendorTin = itm.vendor_tin;
+                    tr.dataset.fsNo = itm.fs_no;
+                    tr.dataset.mrcNo = itm.mrc_no;
+                    tr.dataset.receiptDate = itm.receipt_date_ymd;
+                    tr.dataset.receiptDateEc = itm.receipt_date_ec;
+                    tr.dataset.itemDescription = itm.item_description;
+                    tr.dataset.vatCategory = itm.vat_category;
+                    tr.dataset.purchaseType = itm.purchase_type;
+                    tr.dataset.projectId = itm.project_id || '';
+                    tr.dataset.projectName = itm.project_name || 'General Company / HQ';
+                    tr.dataset.category = itm.category;
+                    tr.dataset.baseValue = itm.base_value.toFixed(2);
+                    tr.dataset.vatAmount = itm.vat_amount.toFixed(2);
+                    tr.dataset.totalValue = itm.total_value.toFixed(2);
+
+                    const cellTin = tr.querySelector('.cell-tin');
+                    if (cellTin) {
+                        const isTinValid = itm.tin_valid;
+                        cellTin.innerHTML = `
+                            <div class="d-flex align-items-center gap-1.5">
+                                <span class="font-monospace fw-bold ${isTinValid ? 'text-dark' : 'text-danger'}">
+                                    ${itm.vendor_tin && itm.vendor_tin !== '-' ? itm.vendor_tin : 'N/A'}
+                                </span>
+                                ${itm.vendor_tin && itm.vendor_tin !== '-' ? (
+                                    isTinValid ? 
+                                    '<span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-1.5 py-0.5" style="font-size:0.65rem;" title="Valid 10-Digit ERCA TIN"><i class="fa-solid fa-check"></i></span>' :
+                                    '<span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill px-1.5 py-0.5" style="font-size:0.65rem;" title="Invalid TIN Length (Requires 10 Digits)"><i class="fa-solid fa-triangle-exclamation"></i></span>'
+                                ) : ''}
+                            </div>
+                        `;
+                    }
+
+                    const cellVendor = tr.querySelector('.cell-vendor');
+                    if (cellVendor) {
+                        const vendorNameText = cellVendor.querySelector('.vendor-name-text');
+                        if (vendorNameText) vendorNameText.textContent = itm.vendor_name;
+                        const projBadge = cellVendor.querySelector('.vendor-project-badge');
+                        if (projBadge) {
+                            if (itm.project_id && itm.project_name) {
+                                projBadge.innerHTML = `<span class="badge bg-light text-secondary border fw-normal mt-0.5" style="font-size: 0.68rem;"><i class="fa-solid fa-building me-1"></i>${itm.project_name}</span>`;
+                            } else {
+                                projBadge.innerHTML = '';
+                            }
+                        }
+                    }
+
+                    const cellDate = tr.querySelector('.cell-date');
+                    if (cellDate) cellDate.textContent = itm.receipt_date_ec || itm.receipt_date_ymd || '—';
+
+                    const cellMrc = tr.querySelector('.cell-mrc');
+                    if (cellMrc) cellMrc.textContent = itm.mrc_no && itm.mrc_no !== '-' ? itm.mrc_no : '—';
+
+                    const cellFs = tr.querySelector('.cell-fs');
+                    if (cellFs) {
+                        const isFsValid = itm.fs_no_valid;
+                        cellFs.innerHTML = `
+                            <div class="d-flex align-items-center gap-1.5">
+                                <span class="font-monospace fw-bold text-primary">${itm.fs_no && itm.fs_no !== '-' ? itm.fs_no : '—'}</span>
+                                ${itm.fs_no && itm.fs_no !== '-' ? (
+                                    isFsValid ?
+                                    '<span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-1.5 py-0.5" style="font-size:0.65rem;" title="Valid 8-Digit FS #"><i class="fa-solid fa-check"></i></span>' :
+                                    '<span class="badge bg-warning-subtle text-warning border border-warning-subtle rounded-pill px-1.5 py-0.5" style="font-size:0.65rem;" title="Check FS # format">!</span>'
+                                ) : ''}
+                            </div>
+                        `;
+                    }
+
+                    const cellDesc = tr.querySelector('.cell-desc');
+                    if (cellDesc) {
+                        const descText = cellDesc.querySelector('.desc-text');
+                        if (descText) descText.textContent = itm.item_description;
+                        const catBadge = cellDesc.querySelector('.desc-cat-badge');
+                        if (catBadge) {
+                            if (itm.category) {
+                                catBadge.innerHTML = `<span class="badge bg-light text-muted border" style="font-size: 0.65rem;">${itm.category.charAt(0).toUpperCase() + itm.category.slice(1)}</span>`;
+                            } else {
+                                catBadge.innerHTML = '';
+                            }
+                        }
+                    }
+
+                    const cellBase = tr.querySelector('.cell-base');
+                    if (cellBase) cellBase.textContent = 'ETB ' + (typeof formatMoney === 'function' ? formatMoney(itm.base_value) : itm.base_value.toFixed(2));
+
+                    const cellVat = tr.querySelector('.cell-vat');
+                    if (cellVat) cellVat.textContent = '+ ETB ' + (typeof formatMoney === 'function' ? formatMoney(itm.vat_amount) : itm.vat_amount.toFixed(2));
+
+                    const cellTotal = tr.querySelector('.cell-total');
+                    if (cellTotal) cellTotal.textContent = 'ETB ' + (typeof formatMoney === 'function' ? formatMoney(itm.total_value) : itm.total_value.toFixed(2));
+
+                    tr.style.transition = 'background-color 0.4s ease';
+                    tr.style.backgroundColor = '#d1e7dd';
+                    setTimeout(() => {
+                        tr.style.backgroundColor = '';
+                    }, 2000);
+                }
+            } else {
+                if (alertBox) {
+                    alertBox.className = 'alert alert-danger py-2 px-3 small rounded-3 mb-3 d-flex align-items-center gap-2';
+                    alertBox.innerHTML = '<i class="fa-solid fa-triangle-exclamation text-danger fs-6"></i> ' + (data.message || 'Failed to update record.');
+                }
+            }
+        })
+        .catch(err => {
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = origBtnHtml;
+            }
+            if (alertBox) {
+                alertBox.className = 'alert alert-danger py-2 px-3 small rounded-3 mb-3 d-flex align-items-center gap-2';
+                alertBox.innerHTML = '<i class="fa-solid fa-triangle-exclamation text-danger fs-6"></i> Error saving changes: ' + err.message;
+            }
+        });
     }
 
     // ── Cache & Preview for Monthly Scanned OCR Receipts ─────────────────────

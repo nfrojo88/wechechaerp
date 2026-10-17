@@ -3370,4 +3370,161 @@ class FinanceTaxReportController extends Controller
             return back()->with('error', 'Failed to save receipt: ' . $e->getMessage())->withInput();
         }
     }
+
+    /**
+     * AJAX endpoint: Update an existing OCR Receipt Item and its parent Receipt record directly from the tax audit modal.
+     */
+    public function updateOcrItem(Request $request)
+    {
+        $this->ensureSchema();
+
+        $request->validate([
+            'id'               => 'required|exists:receipt_items,id',
+            'seller_name'      => 'nullable|string|max:255',
+            'supplier_tin'     => 'nullable|string|max:50',
+            'receipt_date'     => 'nullable|string',
+            'mrc_no'           => 'nullable|string|max:100',
+            'fs_no'            => 'nullable|string|max:100',
+            'item_description' => 'required|string|max:500',
+            'vat_category'     => 'nullable|string|in:G,S',
+            'purchase_type'    => 'nullable|integer',
+            'project_id'       => 'nullable',
+            'category'         => 'nullable|string|max:100',
+            'qty'              => 'nullable|numeric|min:0',
+            'unit_price'       => 'nullable|numeric|min:0',
+            'total_value'      => 'required|numeric|min:0',
+            'vat_amount'       => 'required|numeric|min:0',
+            'value_after_vat'  => 'required|numeric|min:0',
+        ]);
+
+        try {
+            $item = \App\Models\ReceiptItem::with('receipt')->findOrFail($request->id);
+            $receipt = $item->receipt;
+
+            $qty       = round((float)($request->qty ?: 1), 2);
+            $unitPrice = round((float)($request->unit_price ?: $request->total_value), 2);
+            $totalVal  = round((float)$request->total_value, 2);
+            $vat       = round((float)$request->vat_amount, 2);
+            $valAfter  = round((float)$request->value_after_vat, 2);
+
+            $item->update([
+                'item_description' => $request->item_description,
+                'vat_category'     => $request->vat_category ?: ($item->vat_category ?: 'G'),
+                'purchase_type'    => (int)($request->purchase_type ?: ($item->purchase_type ?: 3)),
+                'qty'              => $qty,
+                'unit_price'       => $unitPrice,
+                'total_value'      => $totalVal,
+                'vat_amount'       => $vat,
+                'value_after_vat'  => $valAfter,
+            ]);
+
+            if ($receipt) {
+                $receiptUpdates = [];
+                if ($request->filled('seller_name')) {
+                    $receiptUpdates['vendor_name'] = $request->seller_name;
+                }
+                if ($request->has('supplier_tin')) {
+                    $cleanTin = preg_replace('/\D/', '', (string)$request->supplier_tin);
+                    $receiptUpdates['vendor_tin'] = $cleanTin ?: (string)$request->supplier_tin;
+                    $receiptUpdates['tin_valid']  = (strlen($cleanTin) === 10);
+                }
+                if ($request->has('mrc_no')) {
+                    $receiptUpdates['mrc_no'] = $request->mrc_no;
+                }
+                if ($request->has('fs_no')) {
+                    $cleanFs = preg_replace('/\D/', '', (string)$request->fs_no);
+                    $receiptUpdates['fs_no']       = $cleanFs ?: (string)$request->fs_no;
+                    $receiptUpdates['fs_no_raw']   = (string)$request->fs_no;
+                    $receiptUpdates['fs_no_valid'] = (strlen($cleanFs) === 8);
+                }
+                if ($request->filled('receipt_date')) {
+                    $parsedDate = EthiopianDate::parseEcToGregorian($request->receipt_date);
+                    if (!$parsedDate) {
+                        try {
+                            $parsedDate = Carbon::parse($request->receipt_date)->format('Y-m-d');
+                        } catch (\Throwable $e) {
+                            $parsedDate = null;
+                        }
+                    }
+                    if ($parsedDate) {
+                        $receiptUpdates['receipt_date'] = $parsedDate;
+                    }
+                }
+                if ($request->has('project_id')) {
+                    $receiptUpdates['project_id'] = $request->project_id ? (int)$request->project_id : null;
+                }
+                if ($request->filled('category')) {
+                    $receiptUpdates['category'] = $request->category;
+                }
+
+                if (!empty($receiptUpdates)) {
+                    $receipt->update($receiptUpdates);
+                }
+
+                // Recalculate parent receipt totals
+                $receipt->subtotal     = round($receipt->items()->sum('total_value'), 2);
+                $receipt->vat_amount   = round($receipt->items()->sum('vat_amount'), 2);
+                $receipt->total_amount = round($receipt->items()->sum('value_after_vat'), 2);
+                $receipt->save();
+
+                // If an ExpenseRequest was auto-created for this receipt, sync its financial values as well
+                try {
+                    $linkedExp = ExpenseRequest::where('payment_reference', 'like', '%' . ($receipt->fs_no ?: 'NONEXIST') . '%')
+                        ->orWhere('payment_reference', 'like', '%' . ($receipt->receipt_number ?: 'NONEXIST') . '%')
+                        ->latest('id')
+                        ->first();
+                    if ($linkedExp) {
+                        $linkedExp->amount       = $totalVal;
+                        $linkedExp->vat_amount   = $vat;
+                        $linkedExp->gross_amount = $valAfter;
+                        $linkedExp->net_amount   = max(0, $valAfter - (float)$linkedExp->withholding_amount);
+                        if ($request->filled('seller_name')) {
+                            $linkedExp->payee = $request->seller_name;
+                        }
+                        if (!empty($receiptUpdates['receipt_date'])) {
+                            $linkedExp->created_at = Carbon::parse($receiptUpdates['receipt_date'])->setTime(12, 0, 0);
+                        }
+                        $linkedExp->save();
+                    }
+                } catch (\Throwable $e) {
+                    Log::warning('updateOcrItem linkedExp sync error: ' . $e->getMessage());
+                }
+            }
+
+            $item->refresh();
+            $receipt?->refresh();
+
+            return response()->json([
+                'success' => true,
+                'message' => "Invoice #{$item->id} updated successfully and reconciled with system tax records.",
+                'item'    => [
+                    'id'               => $item->id,
+                    'receipt_id'       => $receipt?->id,
+                    'vendor_name'      => $receipt?->vendor_name ?: 'Unknown Vendor',
+                    'vendor_tin'       => $receipt?->vendor_tin ?: '-',
+                    'tin_valid'        => (bool)($receipt?->tin_valid ?? (strlen(preg_replace('/\D/', '', $receipt?->vendor_tin ?? '')) === 10)),
+                    'fs_no'            => $receipt?->fs_no ?: '-',
+                    'fs_no_valid'      => (bool)($receipt?->fs_no_valid ?? (strlen(preg_replace('/\D/', '', $receipt?->fs_no ?? '')) === 8)),
+                    'mrc_no'           => $receipt?->mrc_no ?: '-',
+                    'receipt_date_ymd' => $receipt?->receipt_date ? Carbon::parse($receipt->receipt_date)->format('Y-m-d') : '',
+                    'receipt_date_ec'  => $receipt?->receipt_date ? EthiopianDate::formatDateEc($receipt->receipt_date, 'DD/MM/YYYY EC') : '',
+                    'item_description' => $item->item_description,
+                    'vat_category'     => $item->vat_category ?: 'G',
+                    'purchase_type'    => (int)($item->purchase_type ?: 3),
+                    'project_id'       => $receipt?->project_id,
+                    'project_name'     => $receipt?->project?->name ?: 'General',
+                    'category'         => $receipt?->category ?: 'materials',
+                    'base_value'       => (float)$item->total_value,
+                    'vat_amount'       => (float)$item->vat_amount,
+                    'total_value'      => (float)$item->value_after_vat,
+                ]
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('FinanceTaxReportController updateOcrItem error: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update invoice item: ' . $e->getMessage(),
+            ], 422);
+        }
+    }
 }

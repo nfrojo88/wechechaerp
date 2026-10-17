@@ -2309,6 +2309,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('finance/tax-deductions/export-csv', [App\Http\Controllers\Finance\FinanceTaxReportController::class, 'exportCsv'])->name('finance.tax-deductions.export-csv');
     Route::post('finance/tax-deductions/scan-receipt', [App\Http\Controllers\Finance\FinanceTaxReportController::class, 'scanReceipt'])->name('finance.tax-deductions.scan-receipt');
     Route::post('finance/tax-deductions/store-receipt', [App\Http\Controllers\Finance\FinanceTaxReportController::class, 'storeReceipt'])->name('finance.tax-deductions.store-receipt');
+    Route::post('finance/tax-deductions/update-ocr-item', [App\Http\Controllers\Finance\FinanceTaxReportController::class, 'updateOcrItem'])->name('finance.tax-deductions.update-ocr-item');
     Route::post('finance/tax-deductions/settle', [App\Http\Controllers\Finance\FinanceTaxReportController::class, 'initiateSettlement'])->name('finance.tax-deductions.settle');
     Route::post('finance/tax-deductions/settle/{settlement}/pay', [App\Http\Controllers\Finance\FinanceTaxReportController::class, 'recordPayment'])->name('finance.tax-deductions.settle.pay');
     Route::post('finance/tax-deductions/settle/{settlement}/cancel', [App\Http\Controllers\Finance\FinanceTaxReportController::class, 'cancelSettlement'])->name('finance.tax-deductions.settle.cancel');
