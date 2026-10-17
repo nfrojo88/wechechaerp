@@ -1168,18 +1168,18 @@
                                 <tr id="ocr-row-{{ $ocrItem->id }}"
                                     data-id="{{ $ocrItem->id }}"
                                     data-slip-url="{{ $slipUrl ?? '' }}"
-                                    data-vendor-name="{{ $rcp->vendor_name ?? '' }}"
-                                    data-vendor-tin="{{ $tin }}"
-                                    data-fs-no="{{ $fsNo }}"
-                                    data-mrc-no="{{ $rcp->mrc_no ?? '' }}"
+                                    data-vendor-name="{{ e($rcp?->vendor_name ?? '') }}"
+                                    data-vendor-tin="{{ e($tin) }}"
+                                    data-fs-no="{{ e($fsNo) }}"
+                                    data-mrc-no="{{ e($rcp?->mrc_no ?? '') }}"
                                     data-receipt-date="{{ $rcpDateYmd }}"
                                     data-receipt-date-ec="{{ $rcpDateEc }}"
-                                    data-item-description="{{ $ocrItem->item_description ?: '' }}"
+                                    data-item-description="{{ e($ocrItem->item_description ?: '') }}"
                                     data-vat-category="{{ $ocrItem->vat_category ?: 'G' }}"
                                     data-purchase-type="{{ $ocrItem->purchase_type ?: 3 }}"
-                                    data-project-id="{{ $rcp->project_id ?? '' }}"
-                                    data-project-name="{{ $rcp && $rcp->project ? $rcp->project->name : 'General Company / HQ' }}"
-                                    data-category="{{ $rcp->category ?? 'materials' }}"
+                                    data-project-id="{{ $rcp?->project_id ?? '' }}"
+                                    data-project-name="{{ e($rcp && $rcp->project ? $rcp->project->name : 'General Company / HQ') }}"
+                                    data-category="{{ $rcp?->category ?? 'materials' }}"
                                     data-base-value="{{ number_format($displayBase, 2, '.', '') }}"
                                     data-vat-amount="{{ number_format($displayVat, 2, '.', '') }}"
                                     data-total-value="{{ number_format($displayAfter, 2, '.', '') }}"
@@ -1277,13 +1277,13 @@
                                     <td class="text-center">
                                         @if($slipUrl)
                                             <button type="button" class="btn btn-xs btn-outline-info rounded-pill px-2.5 py-0.5 shadow-xs" 
-                                                    onclick="openVatSlipModalFromRow(this)"
+                                                    onclick="openVatSlipModalFromRow(this, {{ $ocrItem->id }})"
                                                     title="View High-Res Receipt Slip">
                                                 <i class="fa-solid fa-image me-1"></i>Slip
                                             </button>
                                         @else
                                             <button type="button" class="btn btn-xs btn-light text-muted border rounded-pill px-2 py-0.5 opacity-75" 
-                                                    onclick="openVatSlipModalFromRow(this)"
+                                                    onclick="openVatSlipModalFromRow(this, {{ $ocrItem->id }})"
                                                     title="No image attached &mdash; Click to view &amp; edit details">
                                                 <i class="fa-solid fa-pen me-1"></i>Edit
                                             </button>
@@ -1294,7 +1294,7 @@
                                     <td class="text-center pe-4">
                                         <div class="d-flex justify-content-center align-items-center gap-1.5">
                                             <button type="button" class="btn btn-primary btn-sm rounded-pill px-2.5 py-0.5 d-inline-flex align-items-center gap-1 text-white shadow-xs" 
-                                                    onclick="openVatSlipModalFromRow(this)"
+                                                    onclick="openVatSlipModalFromRow(this, {{ $ocrItem->id }})"
                                                     title="See Receipt Slip &amp; Edit Line Declaration">
                                                 <i class="fa-solid fa-eye"></i>
                                                 <span class="small fw-semibold">See</span>
@@ -2242,9 +2242,11 @@
 
 {{-- ── MODAL: High-Res OCR Receipt Slip Preview & Live Line 100 Edit ──────────────────── --}}
 <div class="modal fade" id="vatReceiptSlipModal" tabindex="-1" aria-labelledby="vatReceiptSlipModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-xl modal-fullscreen-lg-down">
-        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
-            <div class="modal-header bg-dark text-white py-2.5 px-4">
+    <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable my-lg-3" style="max-height: 94vh;">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden d-flex flex-column" style="max-height: 94vh;">
+            
+            {{-- Fixed Modal Header --}}
+            <div class="modal-header bg-dark text-white py-2.5 px-4 flex-shrink-0" style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%) !important;">
                 <div class="d-flex align-items-center gap-2.5">
                     <div class="bg-primary bg-opacity-25 text-info p-2 rounded-circle d-flex align-items-center justify-content-center" style="width:36px; height:36px;">
                         <i class="fa-solid fa-receipt fs-5"></i>
@@ -2260,18 +2262,20 @@
                 </div>
                 <div class="d-flex align-items-center gap-2">
                     <span id="modalHeaderStatusBadge" class="badge bg-info-subtle text-info border border-info-subtle rounded-pill px-2.5 py-1 small font-monospace">ERCA Line 100</span>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
             </div>
 
-            <div class="modal-body p-3 p-lg-4 bg-light bg-opacity-50">
-                <div class="row g-3 g-lg-4">
+            {{-- Scrollable Modal Body (Side-by-Side) --}}
+            <div class="modal-body p-3 p-lg-4 bg-light bg-opacity-50" style="overflow-y: auto;">
+                <div class="row g-3 g-lg-4 align-items-stretch">
+                    
                     {{-- LEFT COLUMN: Option to edit to meet our system --}}
                     <div class="col-12 col-lg-6">
                         <div class="card border-0 shadow-xs rounded-3 h-100 bg-white">
                             <div class="card-header bg-white border-bottom py-2.5 px-3 d-flex align-items-center justify-content-between">
                                 <div class="d-flex align-items-center gap-2">
-                                    <i class="fa-solid fa-sliders text-primary"></i>
+                                    <i class="fa-solid fa-pen-to-square text-primary"></i>
                                     <span class="fw-bold text-dark small text-uppercase">ERCA Declaration &amp; System Adjustment</span>
                                 </div>
                                 <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill font-monospace" id="edit_ocr_badge_id">Row #</span>
@@ -2391,7 +2395,7 @@
                                     </div>
 
                                     {{-- Financial Amounts & Live Recalculation --}}
-                                    <div class="p-2.5 bg-light rounded-3 border mb-3">
+                                    <div class="p-2.5 bg-light rounded-3 border mb-0">
                                         <div class="d-flex align-items-center justify-content-between mb-2">
                                             <span class="small fw-bold text-dark">
                                                 <i class="fa-solid fa-calculator text-primary me-1"></i>Financial Reconciliation (15% VAT)
@@ -2430,14 +2434,6 @@
                                             </button>
                                         </div>
                                     </div>
-
-                                    {{-- Save Button --}}
-                                    <div class="d-flex align-items-center justify-content-between pt-1">
-                                        <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
-                                        <button type="submit" id="edit_submit_btn" class="btn btn-primary btn-sm rounded-pill px-4 shadow-sm fw-semibold">
-                                            <i class="fa-solid fa-floppy-disk me-1.5"></i>Save Changes &amp; Update System
-                                        </button>
-                                    </div>
                                 </form>
                             </div>
                         </div>
@@ -2446,23 +2442,23 @@
                     {{-- RIGHT COLUMN: Receipt Slip Preview --}}
                     <div class="col-12 col-lg-6">
                         <div class="card border-0 shadow-xs rounded-3 h-100 bg-white d-flex flex-column">
-                            <div class="card-header bg-white border-bottom py-2.5 px-3 d-flex align-items-center justify-content-between">
+                            <div class="card-header bg-white border-bottom py-2.5 px-3 d-flex align-items-center justify-content-between flex-shrink-0">
                                 <div class="d-flex align-items-center gap-2">
                                     <i class="fa-solid fa-image text-info"></i>
-                                    <span class="fw-bold text-dark small text-uppercase">Scanned Receipt Slip Preview</span>
+                                    <span class="fw-bold text-dark small text-uppercase">Original Scanned Receipt Slip</span>
                                 </div>
                                 <div class="btn-group btn-group-sm shadow-xs" role="group">
-                                    <button type="button" class="btn btn-outline-secondary btn-xs py-1 px-2" onclick="zoomSlip(0.15)" title="Zoom In"><i class="fa-solid fa-magnifying-glass-plus"></i></button>
-                                    <button type="button" class="btn btn-outline-secondary btn-xs py-1 px-2" onclick="zoomSlip(-0.15)" title="Zoom Out"><i class="fa-solid fa-magnifying-glass-minus"></i></button>
-                                    <button type="button" class="btn btn-outline-secondary btn-xs py-1 px-2" onclick="rotateSlip()" title="Rotate 90°"><i class="fa-solid fa-rotate-right"></i></button>
-                                    <button type="button" class="btn btn-outline-secondary btn-xs py-1 px-2" onclick="resetSlipView()" title="Reset View"><i class="fa-solid fa-arrows-rotate"></i></button>
-                                    <a id="modalSlipOpenNewTab" href="#" target="_blank" class="btn btn-outline-secondary btn-xs py-1 px-2" title="Open in New Tab"><i class="fa-solid fa-up-right-from-square"></i></a>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm py-1 px-2" onclick="zoomSlip(0.15)" title="Zoom In"><i class="fa-solid fa-magnifying-glass-plus"></i></button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm py-1 px-2" onclick="zoomSlip(-0.15)" title="Zoom Out"><i class="fa-solid fa-magnifying-glass-minus"></i></button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm py-1 px-2" onclick="rotateSlip()" title="Rotate 90°"><i class="fa-solid fa-rotate-right"></i></button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm py-1 px-2" onclick="resetSlipView()" title="Reset View"><i class="fa-solid fa-arrows-rotate"></i></button>
+                                    <a id="modalSlipOpenNewTab" href="#" target="_blank" class="btn btn-outline-secondary btn-sm py-1 px-2" title="Open in New Tab"><i class="fa-solid fa-up-right-from-square"></i></a>
                                 </div>
                             </div>
                             <div class="card-body p-2 flex-grow-1 d-flex flex-column">
-                                <div class="flex-grow-1 position-relative border rounded-3 bg-secondary bg-opacity-10 d-flex align-items-center justify-content-center p-2" style="min-height: 480px; max-height: 580px; overflow: auto;" id="slipViewport">
-                                    <img id="modalSlipImg" src="" alt="Receipt Slip" class="img-fluid rounded shadow-sm" style="max-height: 540px; object-fit: contain; transition: transform 0.2s ease;">
-                                    <iframe id="modalSlipPdf" src="" class="w-100 h-100 rounded d-none" style="min-height: 500px; border: none;"></iframe>
+                                <div class="flex-grow-1 position-relative border rounded-3 bg-light d-flex align-items-center justify-content-center p-2" style="min-height: 420px; max-height: 520px; overflow: auto;" id="slipViewport">
+                                    <img id="modalSlipImg" src="" alt="Receipt Slip" class="img-fluid rounded shadow-sm" style="max-height: 480px; width: auto; object-fit: contain; transition: transform 0.2s ease;">
+                                    <iframe id="modalSlipPdf" src="" class="w-100 rounded d-none" style="height: 480px; border: none;"></iframe>
                                     <div id="modalSlipEmpty" class="text-center p-4 d-none">
                                         <div class="p-3 bg-white bg-opacity-75 rounded-circle d-inline-block text-muted mb-2 shadow-xs">
                                             <i class="fa-solid fa-file-invoice text-secondary fs-2"></i>
@@ -2472,13 +2468,13 @@
                                     </div>
                                 </div>
                             </div>
-                            <div class="card-footer bg-white border-top py-2 px-3 d-flex align-items-center justify-content-between">
+                            <div class="card-footer bg-light border-top py-2 px-3 d-flex align-items-center justify-content-between flex-shrink-0">
                                 <span class="small text-muted font-monospace" id="modalSlipFilename" style="font-size:0.75rem;">Document: Receipt Slip</span>
                                 <div class="d-flex gap-2">
-                                    <a id="modalDownloadBtn" href="#" target="_blank" download class="btn btn-outline-info btn-xs rounded-pill px-3 shadow-xs">
-                                        <i class="fa-solid fa-download me-1"></i>Download Slip
+                                    <a id="modalDownloadBtn" href="#" target="_blank" download class="btn btn-outline-info btn-sm rounded-pill px-3 shadow-xs">
+                                        <i class="fa-solid fa-download me-1"></i>Download
                                     </a>
-                                    <a id="modalStudioLink" href="{{ route('admin.ocr.index') }}" target="_blank" class="btn btn-outline-primary btn-xs rounded-pill px-3">
+                                    <a id="modalStudioLink" href="{{ route('admin.ocr.index') }}" target="_blank" class="btn btn-outline-primary btn-sm rounded-pill px-3">
                                         <i class="fa-solid fa-wand-magic-sparkles me-1"></i>OCR Studio
                                     </a>
                                 </div>
@@ -2487,6 +2483,23 @@
                     </div>
                 </div>
             </div>
+
+            {{-- Fixed Modal Footer: Always Visible and Accessible --}}
+            <div class="modal-footer bg-white border-top py-2.5 px-4 d-flex justify-content-between align-items-center flex-shrink-0">
+                <div class="d-flex align-items-center gap-2 text-muted small">
+                    <i class="fa-solid fa-shield-halved text-success"></i>
+                    <span class="d-none d-sm-inline">Reconciles ERCA VAT Line 100 with System Financial Ledgers</span>
+                </div>
+                <div class="d-flex gap-2 align-items-center">
+                    <button type="button" class="btn btn-outline-secondary rounded-pill px-3.5 py-1.5" data-bs-dismiss="modal">
+                        Close
+                    </button>
+                    <button type="submit" form="ocrModalEditForm" id="edit_submit_btn" class="btn btn-primary rounded-pill px-4 py-1.5 shadow-sm fw-semibold">
+                        <i class="fa-solid fa-floppy-disk me-1.5"></i>Save Changes &amp; Update System
+                    </button>
+                </div>
+            </div>
+
         </div>
     </div>
 </div>
@@ -4282,11 +4295,28 @@
         }
     }
 
-    function openVatSlipModalFromRow(btn) {
-        const tr = btn.closest('tr');
-        if (!tr) return;
+    function openVatSlipModalFromRow(btn, fallbackId) {
+        let tr = null;
+        if (btn && btn.closest) {
+            tr = btn.closest('tr');
+        }
+        if (!tr && fallbackId) {
+            tr = document.getElementById('ocr-row-' + fallbackId);
+        }
+        if (!tr && typeof btn === 'string') {
+            tr = document.getElementById(btn) || document.getElementById('ocr-row-' + btn);
+        }
+        if (!tr) {
+            console.warn('Could not locate OCR row element for inspection.');
+            return;
+        }
 
-        const id = tr.dataset.id || '';
+        const cleanNum = (v) => {
+            const n = parseFloat(String(v ?? '0').replace(/[^0-9.-]/g, ''));
+            return isNaN(n) ? 0 : n;
+        };
+
+        const id = tr.dataset.id || fallbackId || '';
         const slipUrl = tr.dataset.slipUrl || '';
         const vendor = tr.dataset.vendorName || '';
         const tin = tr.dataset.vendorTin || '';
@@ -4299,15 +4329,17 @@
         const purcType = tr.dataset.purchaseType || '3';
         const projectId = tr.dataset.projectId || '';
         const category = tr.dataset.category || 'materials';
-        const base = tr.dataset.baseValue || '0.00';
-        const vat = tr.dataset.vatAmount || '0.00';
-        const total = tr.dataset.totalValue || '0.00';
+        const base = cleanNum(tr.dataset.baseValue);
+        const vat = cleanNum(tr.dataset.vatAmount);
+        const total = cleanNum(tr.dataset.totalValue);
         const studioUrl = tr.dataset.studioUrl || '{{ route("admin.ocr.index") }}';
 
         // Populate Left Edit Form
-        document.getElementById('edit_ocr_item_id').value = id;
+        const idInput = document.getElementById('edit_ocr_item_id');
+        if (idInput) idInput.value = id;
+
         const badgeId = document.getElementById('edit_ocr_badge_id');
-        if (badgeId) badgeId.textContent = 'Invoice #' + id;
+        if (badgeId) badgeId.textContent = id ? ('Invoice #' + id) : 'Line Item';
 
         const sellerName = document.getElementById('edit_seller_name');
         if (sellerName) sellerName.value = vendor;
@@ -4349,17 +4381,17 @@
         if (purcTypeSelect) purcTypeSelect.value = purcType;
 
         const baseInput = document.getElementById('edit_total_value');
-        if (baseInput) baseInput.value = parseFloat(base).toFixed(2);
+        if (baseInput) baseInput.value = base.toFixed(2);
 
         const vatInput = document.getElementById('edit_vat_amount');
-        if (vatInput) vatInput.value = parseFloat(vat).toFixed(2);
+        if (vatInput) vatInput.value = vat.toFixed(2);
 
         const totalInput = document.getElementById('edit_value_after_vat');
-        if (totalInput) totalInput.value = parseFloat(total).toFixed(2);
+        if (totalInput) totalInput.value = total.toFixed(2);
 
         // Header FS display
         const fsDisplay = document.getElementById('modalFsNoDisplay');
-        if (fsDisplay) fsDisplay.textContent = fs && fs !== '-' ? ('FS #' + fs) : ('Invoice #' + id);
+        if (fsDisplay) fsDisplay.textContent = fs && fs !== '-' ? ('FS #' + fs) : (id ? 'Invoice #' + id : 'Receipt Inspector');
 
         // Studio link
         const studioLink = document.getElementById('modalStudioLink');
@@ -4375,15 +4407,23 @@
         // Set Slip preview on right side
         _setSlipPreview(slipUrl);
 
-        // Show modal
+        // Show modal safely
         const modalEl = document.getElementById('vatReceiptSlipModal');
         if (modalEl) {
-            const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-            modal.show();
+            if (window.bootstrap && bootstrap.Modal) {
+                bootstrap.Modal.getOrCreateInstance(modalEl).show();
+            } else if (window.$ && $.fn.modal) {
+                $(modalEl).modal('show');
+            }
         }
     }
 
     function openVatSlipModal(imgUrl, vendor, tin, fs, mrc, date, base, vat, total, studioUrl) {
+        const cleanNum = (v) => {
+            const n = parseFloat(String(v ?? '0').replace(/[^0-9.-]/g, ''));
+            return isNaN(n) ? 0 : n;
+        };
+
         const sellerName = document.getElementById('edit_seller_name');
         if (sellerName) sellerName.value = vendor || '';
 
@@ -4402,18 +4442,18 @@
         const mrcInput = document.getElementById('edit_mrc_no');
         if (mrcInput) mrcInput.value = mrc || '';
 
-        const baseClean = (base || '0').replace(/[^0-9.]/g, '');
-        const vatClean = (vat || '0').replace(/[^0-9.]/g, '');
-        const totalClean = (total || '0').replace(/[^0-9.]/g, '');
+        const baseClean = cleanNum(base);
+        const vatClean = cleanNum(vat);
+        const totalClean = cleanNum(total);
 
         const baseInput = document.getElementById('edit_total_value');
-        if (baseInput) baseInput.value = parseFloat(baseClean || 0).toFixed(2);
+        if (baseInput) baseInput.value = baseClean.toFixed(2);
 
         const vatInput = document.getElementById('edit_vat_amount');
-        if (vatInput) vatInput.value = parseFloat(vatClean || 0).toFixed(2);
+        if (vatInput) vatInput.value = vatClean.toFixed(2);
 
         const totalInput = document.getElementById('edit_value_after_vat');
-        if (totalInput) totalInput.value = parseFloat(totalClean || 0).toFixed(2);
+        if (totalInput) totalInput.value = totalClean.toFixed(2);
 
         const fsDisplay = document.getElementById('modalFsNoDisplay');
         if (fsDisplay) fsDisplay.textContent = fs ? ('FS #' + fs) : 'Receipt View';
@@ -4427,8 +4467,11 @@
 
         const modalEl = document.getElementById('vatReceiptSlipModal');
         if (modalEl) {
-            const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-            modal.show();
+            if (window.bootstrap && bootstrap.Modal) {
+                bootstrap.Modal.getOrCreateInstance(modalEl).show();
+            } else if (window.$ && $.fn.modal) {
+                $(modalEl).modal('show');
+            }
         }
     }
 
