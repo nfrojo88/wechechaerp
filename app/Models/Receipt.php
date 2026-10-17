@@ -65,17 +65,32 @@ class Receipt extends Model
     ];
 
     /**
-     * Auto-generate receipt_number before create.
+     * Auto-generate receipt_number and fill mandatory defaults before create.
      */
     protected static function boot()
     {
         parent::boot();
 
         static::creating(function (self $model) {
+            if (empty($model->uploaded_by)) {
+                $model->uploaded_by = \Illuminate\Support\Facades\Auth::id() 
+                    ?: (\App\Models\User::value('id') ?: 1);
+            }
+
+            if ($model->file_path === null) {
+                $model->file_path = '';
+            }
+
             if (empty($model->receipt_number)) {
                 $today  = now()->format('Ymd');
                 $last   = static::whereDate('created_at', now()->toDateString())->count();
-                $model->receipt_number = 'RCP-' . $today . '-' . str_pad($last + 1, 4, '0', STR_PAD_LEFT);
+                $seq    = $last + 1;
+                $candidate = 'RCP-' . $today . '-' . str_pad($seq, 4, '0', STR_PAD_LEFT);
+                while (static::where('receipt_number', $candidate)->exists()) {
+                    $seq++;
+                    $candidate = 'RCP-' . $today . '-' . str_pad($seq, 4, '0', STR_PAD_LEFT);
+                }
+                $model->receipt_number = $candidate;
             }
         });
     }

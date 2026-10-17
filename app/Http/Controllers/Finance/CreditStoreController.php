@@ -1477,14 +1477,26 @@ class CreditStoreController extends Controller
             })->get();
 
             if ($receipts->isEmpty()) {
+                $candidateNo = $fsNo ?: ($payment->reference_no ?: 'REC-PAY-' . $payment->id);
+                if (Receipt::where('receipt_number', $candidateNo)->exists()) {
+                    $candidateNo = $candidateNo . '-P' . $payment->id;
+                    if (Receipt::where('receipt_number', $candidateNo)->exists()) {
+                        $candidateNo = $candidateNo . '-' . time();
+                    }
+                }
+
+                $uploaderId = Auth::id() ?? $payment->created_by ?? $ledger->created_by ?? \App\Models\User::value('id') ?? 1;
+
                 $newReceipt = Receipt::create([
                     'purchasable_type' => CreditStorePayment::class,
                     'purchasable_id'   => $payment->id,
+                    'uploaded_by'      => $uploaderId,
+                    'project_id'       => $ledger->project_id,
                     'vendor_name'      => $ledger->vendor_name ?: ($ledger->supplier_name ?: 'Credit Vendor'),
                     'vendor_tin'       => $supplierTin ?: '-',
                     'tin_valid'        => (strlen($cleanTin) === 10),
                     'buyer_tin'        => '0038480010',
-                    'receipt_number'   => $fsNo ?: ($payment->reference_no ?: 'REC-PAY-' . $payment->id),
+                    'receipt_number'   => $candidateNo,
                     'fs_no'            => $fsNo ?: ($payment->reference_no ?: '-'),
                     'fs_no_raw'        => $fsNo ?: ($payment->reference_no ?: '-'),
                     'fs_no_valid'      => (strlen($cleanFs) === 8),
@@ -1499,7 +1511,6 @@ class CreditStoreController extends Controller
                     'file_path'        => $payment->receipt_path ?: '',
                     'file_type'        => 'image',
                     'status'           => 'approved',
-                    'is_verified'      => true,
                     'qc_notes'         => "Created via Global Admin VAT Correction",
                     'created_at'       => $payment->created_at ?: now(),
                     'updated_at'       => now(),
