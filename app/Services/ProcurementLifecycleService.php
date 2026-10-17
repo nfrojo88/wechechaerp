@@ -503,8 +503,21 @@ class ProcurementLifecycleService
             if ($hasItemProformas && !empty($selectedProformaIds)) {
                 $pr->proformaInvoices()->update(['gm_selected' => false]);
                 $pr->proformaInvoices()->whereIn('id', array_unique($selectedProformaIds))->update(['gm_selected' => true]);
-                $finalAmount = round($computedTotal, 2);
-                $supplierId = $primarySupplierId ?: $pr->supplier_id;
+
+                $uniqueProfIds = array_unique($selectedProformaIds);
+                if (count($uniqueProfIds) === 1) {
+                    $singleProf = $pr->proformaInvoices()->find(reset($uniqueProfIds));
+                    if ($singleProf && (float)$singleProf->grand_total > 0) {
+                        $finalAmount = (float)$singleProf->grand_total;
+                    } else {
+                        $finalAmount = round($computedTotal, 2);
+                    }
+                    $supplierName = $singleProf?->supplier?->name ?? $singleProf?->supplier_name;
+                    $supplierId = $singleProf?->supplier_id ?: $primarySupplierId;
+                } else {
+                    $finalAmount = round($computedTotal, 2);
+                    $supplierId = $primarySupplierId ?: $pr->supplier_id;
+                }
             } else {
                 $chosenProforma = null;
                 if ($selectedProformaId) {
@@ -550,7 +563,7 @@ class ProcurementLifecycleService
                 } else {
                     $finalAmount = (float)($pr->direct_buy_amount ?? 0);
                     if ($finalAmount <= 0) {
-                        $finalAmount = (float)$pr->items->sum(fn($i) => (float)$i->quantity * (float)($i->estimated_unit_price ?? $i->unit_price ?? 0));
+                        $finalAmount = (float)$pr->items->sum(fn($i) => (float)$i->quantity * (float)($i->estimated_unit_cost ?? $i->estimated_unit_price ?? $i->unit_price ?? 0));
                     }
                     $supplierId = $pr->supplier_id;
                     $supplierName = $pr->supplier?->name;
@@ -573,12 +586,15 @@ class ProcurementLifecycleService
                 $financeAmount = $finalAmount;
             } else { // split or mixed items
                 $creditSum = (float)$items->filter(fn($i) => ($i->payment_method ?? '') === 'buy_by_credit')
-                    ->sum(fn($i) => (float)$i->quantity * (float)($i->estimated_unit_price ?? $i->unit_price ?? $i->estimated_unit_cost ?? 0));
+                    ->sum(fn($i) => (float)$i->quantity * (float)($i->estimated_unit_cost ?? $i->estimated_unit_price ?? $i->unit_price ?? 0));
                 $financeSum = (float)$items->filter(fn($i) => ($i->payment_method ?? 'pay_and_buy') !== 'buy_by_credit')
-                    ->sum(fn($i) => (float)$i->quantity * (float)($i->estimated_unit_price ?? $i->unit_price ?? $i->estimated_unit_cost ?? 0));
+                    ->sum(fn($i) => (float)$i->quantity * (float)($i->estimated_unit_cost ?? $i->estimated_unit_price ?? $i->unit_price ?? 0));
                 $totalCalc = $creditSum + $financeSum;
 
-                if ($totalCalc > 0 && $finalAmount > 0) {
+                if ($totalCalc > 0 && abs($finalAmount - $totalCalc) < 0.01) {
+                    $creditAmount = round($creditSum, 2);
+                    $financeAmount = round($financeSum, 2);
+                } elseif ($totalCalc > 0 && $finalAmount > 0) {
                     $ratio = $finalAmount / $totalCalc;
                     $creditAmount = round($creditSum * $ratio, 2);
                     $financeAmount = round($finalAmount - $creditAmount, 2);
@@ -722,7 +738,7 @@ class ProcurementLifecycleService
         if (!$amount || $amount <= 0) {
             $amount = (float)($pr->direct_buy_amount ?? 0);
             if ($amount <= 0) {
-                $amount = (float)$pr->items->sum(fn($i) => (float)$i->quantity * (float)($i->estimated_unit_price ?? $i->unit_price ?? 0));
+                $amount = (float)$pr->items->sum(fn($i) => (float)$i->quantity * (float)($i->estimated_unit_cost ?? $i->estimated_unit_price ?? $i->unit_price ?? 0));
             }
         }
 

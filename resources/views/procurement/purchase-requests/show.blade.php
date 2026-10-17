@@ -1058,7 +1058,7 @@
                                         <div class="d-flex flex-column gap-2" style="max-height: 230px; overflow-y: auto;">
                                             @foreach($purchaseRequest->items as $iIdx => $itm)
                                             @php
-                                                $lineTotal = (float)$itm->quantity * (float)($itm->estimated_unit_price ?? $itm->unit_price ?? $itm->estimated_unit_cost ?? 0);
+                                                $lineTotal = (float)$itm->quantity * (float)($itm->estimated_unit_cost ?? $itm->estimated_unit_price ?? $itm->unit_price ?? 0);
                                                 $currentMethod = $itm->payment_method ?? 'pay_and_buy';
                                             @endphp
                                             <div class="bg-white p-2 rounded border gm-item-allocation-row shadow-2xs" data-item-id="{{ $itm->id }}" data-amount="{{ $lineTotal }}">
@@ -1278,7 +1278,7 @@
                                 $creditVal = (float)($purchaseRequest->direct_buy_amount ?? 0);
                                 if ($creditVal <= 0) {
                                     $selProf = $purchaseRequest->proformaInvoices()->where('gm_selected', true)->first() ?? $purchaseRequest->proformaInvoices()->latest()->first();
-                                    $creditVal = $selProf && (float)$selProf->grand_total > 0 ? (float)$selProf->grand_total : (float)$purchaseRequest->items->sum(fn($i) => (float)$i->quantity * (float)($i->estimated_unit_price ?? $i->unit_price ?? 0));
+                                    $creditVal = $selProf && (float)$selProf->grand_total > 0 ? (float)$selProf->grand_total : (float)$purchaseRequest->items->sum(fn($i) => (float)$i->quantity * (float)($i->estimated_unit_cost ?? $i->estimated_unit_price ?? $i->unit_price ?? 0));
                                 }
                             @endphp
 
@@ -4041,6 +4041,11 @@ function selectGmProformaForEntirePr(profId) {
             }
         }
     });
+
+    const profObj = (window.proformaMatrix && window.proformaMatrix.proformas) ? window.proformaMatrix.proformas[profId] : null;
+    if (profObj && parseFloat(profObj.grand_total) > 0) {
+        totalAwarded = parseFloat(profObj.grand_total);
+    }
 
     // 4. Update grand total displays
     updateAwardedGrandTotalDisplay(totalAwarded);

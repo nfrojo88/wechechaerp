@@ -1701,7 +1701,7 @@ class PurchaseRequestController extends Controller
 
         if ($finalAmount <= 0) {
             $finalAmount = (float)$purchaseRequest->items->sum(
-                fn($i) => (float)$i->quantity * (float)($i->estimated_unit_price ?? $i->unit_price ?? 0)
+                fn($i) => (float)$i->quantity * (float)($i->estimated_unit_cost ?? $i->estimated_unit_price ?? $i->unit_price ?? 0)
             );
         }
 

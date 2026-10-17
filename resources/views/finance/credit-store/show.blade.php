@@ -117,8 +117,13 @@
         <div class="col-12 col-lg-8">
             <!-- Material Items Card -->
             <div class="card border-0 shadow-sm rounded-3 mb-4">
-                <div class="card-header bg-white py-3 px-3 border-bottom d-flex align-items-center justify-content-between">
-                    <h6 class="mb-0 fw-bold text-dark"><i class="fas fa-boxes-stacked me-2 text-primary"></i> Procured Material Items</h6>
+                <div class="card-header bg-white py-3 px-3 border-bottom d-flex align-items-center justify-content-between flex-wrap gap-2">
+                    <div class="d-flex align-items-center gap-2">
+                        <h6 class="mb-0 fw-bold text-dark"><i class="fas fa-boxes-stacked me-2 text-primary"></i> Procured Material Items</h6>
+                        @if($ledger->purchaseRequest)
+                            <span class="badge bg-primary-subtle text-primary border border-primary font-monospace">PR #{{ $ledger->purchaseRequest->pr_no }}</span>
+                        @endif
+                    </div>
                     <span class="badge bg-light text-muted border">COA: {{ optional($ledger->coaAccount)->code ?? '5110' }} - {{ optional($ledger->coaAccount)->name ?? 'Cost Of Material By Credit' }}</span>
                 </div>
                 <div class="table-responsive">
@@ -133,19 +138,31 @@
                             </tr>
                         </thead>
                         <tbody>
+                            @php
+                                $calculatedItemsTotal = 0.0;
+                            @endphp
                             @if($ledger->purchaseRequest && $ledger->purchaseRequest->items->count() > 0)
                                 @foreach($ledger->purchaseRequest->items as $idx => $item)
                                     @php
-                                        $uPrice = (float)($item->estimated_unit_price ?? $item->unit_price ?? 0);
-                                        $lTotal = (float)$item->quantity * $uPrice;
+                                        $uPrice = (float)($item->estimated_unit_cost ?? $item->estimated_unit_price ?? $item->unit_price ?? 0);
+                                        $lTotal = (float)($item->estimated_total > 0 ? $item->estimated_total : ((float)$item->quantity * $uPrice));
+                                        $calculatedItemsTotal += $lTotal;
                                     @endphp
                                     <tr>
                                         <td class="ps-3 text-muted">{{ $idx + 1 }}</td>
                                         <td>
                                             <div class="fw-bold text-dark">{{ optional($item->product)->name ?? ($item->item_name ?? 'Material Item') }}</div>
-                                            @if(optional($item->product)->item_code)
-                                                <small class="text-muted font-monospace">{{ optional($item->product)->item_code }}</small>
-                                            @endif
+                                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                                @if(optional($item->product)->item_code)
+                                                    <small class="text-muted font-monospace">{{ optional($item->product)->item_code }}</small>
+                                                @endif
+                                                @if($item->payment_method)
+                                                    <span class="badge {{ $item->payment_method === 'buy_by_credit' ? 'bg-primary-subtle text-primary border border-primary' : 'bg-success-subtle text-success border border-success' }}" style="font-size: 10px;">
+                                                        <i class="fas {{ $item->payment_method === 'buy_by_credit' ? 'fa-credit-card' : 'fa-money-bill-wave' }} me-0.5"></i>
+                                                        {{ $item->payment_method === 'buy_by_credit' ? 'Buy with Credit' : 'Finance (Pay & Buy)' }}
+                                                    </span>
+                                                @endif
+                                            </div>
                                         </td>
                                         <td class="text-center fw-semibold">{{ number_format($item->quantity, 2) }} {{ $item->unit ?? optional($item->product)->unit }}</td>
                                         <td class="text-end font-monospace">{{ number_format($uPrice, 2) }} ETB</td>
@@ -161,9 +178,28 @@
                             @endif
                         </tbody>
                         <tfoot class="bg-light border-top">
-                            <tr>
-                                <th colspan="4" class="text-end ps-3 text-uppercase small text-muted">Total Credit Purchase Value:</th>
-                                <th class="text-end pe-3 fw-bold text-dark font-monospace">{{ number_format($ledger->credit_amount, 2) }} ETB</th>
+                            @php
+                                $gmTotal = (float)($ledger->purchaseRequest?->direct_buy_amount ?? 0);
+                            @endphp
+                            @if($calculatedItemsTotal > 0 && abs($calculatedItemsTotal - (float)$ledger->credit_amount) > 0.009)
+                                <tr>
+                                    <th colspan="4" class="text-end ps-3 text-muted small text-uppercase">Items Calculated Sum:</th>
+                                    <th class="text-end pe-3 text-muted font-monospace">{{ number_format($calculatedItemsTotal, 2) }} ETB</th>
+                                </tr>
+                            @endif
+                            @if($gmTotal > 0 && abs($gmTotal - (float)$ledger->credit_amount) > 0.009)
+                                <tr>
+                                    <th colspan="4" class="text-end ps-3 text-primary small text-uppercase">
+                                        <i class="fas fa-user-check me-1"></i> GM Approved Request Total:
+                                    </th>
+                                    <th class="text-end pe-3 fw-bold text-primary font-monospace">{{ number_format($gmTotal, 2) }} ETB</th>
+                                </tr>
+                            @endif
+                            <tr class="table-active">
+                                <th colspan="4" class="text-end ps-3 text-uppercase fw-bold text-dark">
+                                    <i class="fas fa-credit-card text-info me-1"></i> Total Credit Purchase Value:
+                                </th>
+                                <th class="text-end pe-3 fw-bold text-dark font-monospace fs-6">{{ number_format($ledger->credit_amount, 2) }} ETB</th>
                             </tr>
                         </tfoot>
                     </table>

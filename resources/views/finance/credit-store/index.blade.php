@@ -284,6 +284,11 @@
                             </td>
                             <td class="text-end fw-bold text-dark">
                                 {{ number_format($ledger->credit_amount, 2) }} <span class="small text-muted">ETB</span>
+                                @if($ledger->purchaseRequest && (float)$ledger->purchaseRequest->direct_buy_amount > 0 && abs((float)$ledger->credit_amount - (float)$ledger->purchaseRequest->direct_buy_amount) > 0.01)
+                                    <div class="small text-muted font-monospace" style="font-size: 0.72rem;" title="GM Approved PR Total Value">
+                                        GM: {{ number_format($ledger->purchaseRequest->direct_buy_amount, 2) }}
+                                    </div>
+                                @endif
                             </td>
                             <td class="text-end text-success fw-bold">
                                 {{ number_format($ledger->paid_amount, 2) }} <span class="small text-muted">ETB</span>

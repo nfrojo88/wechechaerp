@@ -106,6 +106,32 @@ class CreditStoreController extends Controller
             'payments.journalEntry',
         ]);
 
+        // Ensure credit_amount accurately matches GM approved total without rounding discrepancies
+        if ($ledger->purchaseRequest && (float)($ledger->paid_amount ?? 0) <= 0.0) {
+            $pr = $ledger->purchaseRequest;
+            $prDirectAmt = (float)($pr->direct_buy_amount ?? 0);
+            $creditItems = $pr->items->filter(fn($i) => ($i->payment_method ?? '') === 'buy_by_credit');
+            $financeItems = $pr->items->filter(fn($i) => ($i->payment_method ?? 'pay_and_buy') === 'pay_and_buy');
+
+            if ($creditItems->isNotEmpty() && $financeItems->isEmpty() && $prDirectAmt > 0) {
+                if (abs((float)$ledger->credit_amount - $prDirectAmt) > 0.001) {
+                    $ledger->update(['credit_amount' => $prDirectAmt]);
+                    $ledger->credit_amount = $prDirectAmt;
+                }
+            } elseif ($creditItems->isEmpty() && $financeItems->isEmpty() && $prDirectAmt > 0) {
+                if (abs((float)$ledger->credit_amount - $prDirectAmt) > 0.001) {
+                    $ledger->update(['credit_amount' => $prDirectAmt]);
+                    $ledger->credit_amount = $prDirectAmt;
+                }
+            } elseif ($creditItems->isNotEmpty() && $financeItems->isNotEmpty()) {
+                $exactCreditSum = (float)$creditItems->sum(fn($i) => (float)$i->quantity * (float)($i->estimated_unit_cost ?? $i->estimated_unit_price ?? $i->unit_price ?? 0));
+                if ($exactCreditSum > 0 && abs((float)$ledger->credit_amount - $exactCreditSum) > 0.001) {
+                    $ledger->update(['credit_amount' => $exactCreditSum]);
+                    $ledger->credit_amount = $exactCreditSum;
+                }
+            }
+        }
+
         $coaAccounts = ChartOfAccount::with('manager')->where('is_active', true)
             ->where('code', '!=', '5110')
             ->orderBy('code')
