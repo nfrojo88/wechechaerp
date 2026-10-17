@@ -584,15 +584,24 @@ class FinanceTaxReportController extends Controller
                });
         })->get();
 
+        // 2. Creditable Purchases & Input VAT (Exclude "VAT B")
+        $ocrItemsInMonth = \App\Models\ReceiptItem::whereHas('receipt', fn($rq) => 
+            $rq->whereBetween('receipt_date', [$periodStartDate, $periodEndDate])
+        )->get();
+
+        $ocrPurchasesBase = (float)$ocrItemsInMonth->where('vat_amount', '>', 0)->sum('total_value');
+        $ocrInputVat      = (float)$ocrItemsInMonth->sum('vat_amount');
+
         $unsettledIncomeItems  = $monthIncomeItems->filter(fn($inc) => !(bool)$inc->vat_settled);
         $unsettledExpenseItems = $allTaxItems->filter(fn($i) => !(bool)$i->vat_settled && ($i->vat_type ?? '') !== 'vat_b');
         $unsettledWhtItems     = $allTaxItems->filter(fn($i) => !(bool)$i->withholding_settled && ($i->has_withholding || (float)$i->withholding_amount > 0));
 
-        $hasActiveTransactions = $unsettledIncomeItems->isNotEmpty() || $unsettledExpenseItems->isNotEmpty() || $unsettledWhtItems->isNotEmpty();
+        $hasActiveOcr          = ($ocrInputVat > 0) || ($ocrPurchasesBase > 0);
+        $hasActiveTransactions = $unsettledIncomeItems->isNotEmpty() || $unsettledExpenseItems->isNotEmpty() || $unsettledWhtItems->isNotEmpty() || $hasActiveOcr;
         $hasPriorSettlement    = ($selectedMonthSettlement !== null);
 
         $allIncomesSettled  = $monthIncomeItems->isNotEmpty() && $unsettledIncomeItems->isEmpty();
-        $allExpensesSettled = $allTaxItems->isEmpty() || $unsettledExpenseItems->isEmpty();
+        $allExpensesSettled = ($allTaxItems->isEmpty() || $unsettledExpenseItems->isEmpty()) && !$hasActiveOcr;
 
         // Fully cleared: Has a prior settlement (or all historical records marked settled) AND NO active unsettled transactions
         $isMonthVatCleared = ($hasPriorSettlement || ($allIncomesSettled && $allExpensesSettled)) && !$hasActiveTransactions;
@@ -609,14 +618,6 @@ class FinanceTaxReportController extends Controller
             $gross = (float)($inc->unit_price > 0 && $inc->quantity > 0 ? ($inc->unit_price * $inc->quantity) : $inc->amount);
             return round($gross * 0.15, 2);
         });
-
-        // 2. Creditable Purchases & Input VAT (Exclude "VAT B")
-        $ocrItemsInMonth = \App\Models\ReceiptItem::whereHas('receipt', fn($rq) => 
-            $rq->whereBetween('receipt_date', [$periodStartDate, $periodEndDate])
-        )->get();
-
-        $ocrPurchasesBase = (float)$ocrItemsInMonth->where('vat_amount', '>', 0)->sum('total_value');
-        $ocrInputVat      = (float)$ocrItemsInMonth->sum('vat_amount');
 
         $expensePurchasesBase = (float)$allTaxItems->filter(fn($i) => ($i->vat_type ?? '') !== 'vat_b')->sum(function ($i) use ($cycle) {
             if ($cycle === 'active' && $i->vat_settled) return 0.0;
@@ -702,6 +703,7 @@ class FinanceTaxReportController extends Controller
             $signedNetVat = 0.0;
         } else {
             $netVatDetails = EthiopianDate::calculateNetVat($inputVat, $outputVat, $openingCredit);
+            $netVatDetails['total_creditable_input'] = round($inputVat + $openingCredit, 2);
             $netVatDetails['is_cleared'] = false;
             $netVatDetails['is_fresh_start'] = $isFreshStart;
             $netVatDetails['settlement_number'] = $selectedMonthSettlement?->settlement_number;
@@ -802,6 +804,7 @@ class FinanceTaxReportController extends Controller
                         'output_vat'           => 0.0,
                         'input_vat'            => 0.0,
                         'opening_credit'       => 0.0,
+                        'total_creditable_input' => 0.0,
                         'net'                  => 0.0,
                         'signed_net_formatted' => '0.00',
                         'status'               => 'cleared',
@@ -828,6 +831,7 @@ class FinanceTaxReportController extends Controller
                         'output_vat'           => $mOutTotal,
                         'input_vat'            => $mInTotal,
                         'opening_credit'       => $runningOpeningCredit,
+                        'total_creditable_input' => round($mInTotal + $runningOpeningCredit, 2),
                         'net'                  => 0.0,
                         'signed_net_formatted' => '0.00 (Settled)',
                         'status'               => 'cleared',
@@ -860,6 +864,7 @@ class FinanceTaxReportController extends Controller
                     'output_vat'           => $curOut,
                     'input_vat'            => $curIn,
                     'opening_credit'       => $curOpening,
+                    'total_creditable_input' => round($curIn + $curOpening, 2),
                     'net'                  => $mNetCalc['net'],
                     'signed_net_formatted' => $mNetCalc['signed_net_formatted'],
                     'status'               => $mNetCalc['status'],
@@ -1395,11 +1400,12 @@ class FinanceTaxReportController extends Controller
 
         $unsettledIncomes = $incomes->filter(fn($i) => !(bool)$i->vat_settled);
         $unsettledExpenses = $expenses->filter(fn($e) => !(bool)$e->vat_settled);
-        $hasActiveTransactions = $unsettledIncomes->isNotEmpty() || $unsettledExpenses->isNotEmpty();
+        $hasActiveOcr = $formattedOcrItems->isNotEmpty() || $ocrInputVat > 0;
+        $hasActiveTransactions = $unsettledIncomes->isNotEmpty() || $unsettledExpenses->isNotEmpty() || $hasActiveOcr;
         $hasPriorSettlement = ($mSettlement !== null);
 
         $allIncomesSettled = $incomes->isNotEmpty() && $unsettledIncomes->isEmpty();
-        $allExpensesSettled = $expenses->isEmpty() || $unsettledExpenses->isEmpty();
+        $allExpensesSettled = ($expenses->isEmpty() || $unsettledExpenses->isEmpty()) && !$hasActiveOcr;
 
         $isCleared = ($hasPriorSettlement || ($allIncomesSettled && $allExpensesSettled)) && !$hasActiveTransactions;
         $isFreshStart = $hasPriorSettlement && $hasActiveTransactions;
@@ -1428,10 +1434,13 @@ class FinanceTaxReportController extends Controller
             $activeIncomes = $formattedIncomes->filter(fn($i) => !$i['is_settled']);
             $activeExpenses = $formattedExpenses->filter(fn($e) => !$e['is_settled']);
 
+            $activePurchasesBase = max((float)$activeExpenses->sum('base_amount'), $ocrPurchasesBase);
+            $activeInputVat      = max((float)$activeExpenses->sum('vat_amount'), $ocrInputVat);
+
             $dispSalesBase     = (float)$activeIncomes->sum('sales_base');
             $dispOutputVat     = (float)$activeIncomes->sum('output_vat');
-            $dispPurchasesBase = (float)$activeExpenses->sum('base_amount');
-            $dispInputVat      = (float)$activeExpenses->sum('vat_amount');
+            $dispPurchasesBase = $activePurchasesBase;
+            $dispInputVat      = $activeInputVat;
             $dispOpeningCredit = 0.0;
             $dispWithholding   = round((float)$activeExpenses->sum('withholding_amount') + (float)$activeIncomes->sum('withholding_amount'), 2);
 
@@ -1446,6 +1455,9 @@ class FinanceTaxReportController extends Controller
 
             $summaryNet = EthiopianDate::calculateNetVat($effectiveInputVat, $totalOutputVat, $openingCredit);
         }
+
+        $totalCreditableInput = $isCleared ? 0.0 : round($dispInputVat + $dispOpeningCredit, 2);
+        $summaryNet['total_creditable_input'] = $totalCreditableInput;
 
         return response()->json([
             'success' => true,
@@ -1467,7 +1479,7 @@ class FinanceTaxReportController extends Controller
                 'purchases_base'         => $dispPurchasesBase,
                 'input_vat'              => $dispInputVat,
                 'opening_credit'         => $dispOpeningCredit,
-                'total_creditable_input' => $summaryNet['total_creditable_input'] ?? 0.0,
+                'total_creditable_input' => $totalCreditableInput,
                 'net_vat'                => $summaryNet['net'],
                 'signed_net_formatted'   => $summaryNet['signed_net_formatted'],
                 'status'                 => $summaryNet['status'],

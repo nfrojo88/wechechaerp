@@ -4402,6 +4402,9 @@
     function renderInlineDrawer(monthNum, data) {
         const m = data.month;
         const s = data.summary;
+        const totalCreditable = (parseFloat(s.total_creditable_input) > 0)
+            ? parseFloat(s.total_creditable_input)
+            : Math.round(((parseFloat(s.input_vat) || 0) + (parseFloat(s.opening_credit) || 0)) * 100) / 100;
         const container = document.getElementById(`trend-drawer-content-${monthNum}`);
         if (!container) return;
 
@@ -4561,7 +4564,7 @@
                                 <div class="fw-bold text-info font-monospace fs-6">+ ETB ${formatMoney(s.opening_credit)}</div>
                                 <div class="mt-1 pt-1 border-top border-secondary-subtle d-flex justify-content-between small" style="font-size: 0.7rem;">
                                     <span class="text-muted">Creditable Pool:</span>
-                                    <span class="fw-bold text-dark font-monospace">ETB ${formatMoney(s.total_creditable_input)}</span>
+                                    <span class="fw-bold text-dark font-monospace">ETB ${formatMoney(totalCreditable)}</span>
                                 </div>
                             </div>
                         </div>
@@ -4741,7 +4744,7 @@
                                             </li>
                                             <li class="list-group-item d-flex justify-content-between py-2 small fw-bold bg-white">
                                                 <span>6. Total Creditable Pool = (4) + (5)</span>
-                                                <span class="font-monospace">ETB ${formatMoney(s.total_creditable_input)}</span>
+                                                <span class="font-monospace">ETB ${formatMoney(totalCreditable)}</span>
                                             </li>
                                             <li class="list-group-item d-flex justify-content-between py-2.5 border-top border-2 bg-light">
                                                 <span class="fw-bold">7. Signed Net VAT = (2) &minus; (6)</span>
@@ -4860,6 +4863,9 @@
     function renderMovementsData(data) {
         const m = data.month;
         const s = data.summary;
+        const totalCreditable = (parseFloat(s.total_creditable_input) > 0)
+            ? parseFloat(s.total_creditable_input)
+            : Math.round(((parseFloat(s.input_vat) || 0) + (parseFloat(s.opening_credit) || 0)) * 100) / 100;
 
         // Header info
         document.getElementById('mMovementsTitle').innerHTML = `<i class="fa-solid fa-calendar-day me-2 text-warning"></i>${m.title} &bull; Financial Movements &amp; Tax Audit`;
@@ -4875,7 +4881,7 @@
         document.getElementById('mMovementsExpenseCount').innerText = `${s.expense_count} expenses`;
 
         document.getElementById('mMovementsOpeningCredit').innerText = '+ ETB ' + formatMoney(s.opening_credit);
-        document.getElementById('mMovementsTotalCreditable').innerText = 'ETB ' + formatMoney(s.total_creditable_input);
+        document.getElementById('mMovementsTotalCreditable').innerText = 'ETB ' + formatMoney(totalCreditable);
 
         // Signed Net VAT presentation
         const netEl = document.getElementById('mMovementsSignedNet');
@@ -5097,7 +5103,7 @@
         document.getElementById('mAuditPurchasesBase').innerText = formatMoney(s.purchases_base);
         document.getElementById('mAuditInputVat').innerText = formatMoney(s.input_vat);
         document.getElementById('mAuditOpeningCredit').innerText = '+ ' + formatMoney(s.opening_credit);
-        document.getElementById('mAuditTotalCreditable').innerText = formatMoney(s.total_creditable_input);
+        document.getElementById('mAuditTotalCreditable').innerText = formatMoney(totalCreditable);
         document.getElementById('mAuditNetSigned').innerText = s.signed_net_formatted;
         document.getElementById('mAuditNetSigned').className = `font-monospace fs-5 fw-bold ${s.text_class}`;
         document.getElementById('mAuditWht').innerText = '- ' + formatMoney(s.withholding_tax);
@@ -5175,6 +5181,9 @@
         const d = currentMovementsData;
         const m = d.month;
         const s = d.summary;
+        const totalCreditable = (parseFloat(s.total_creditable_input) > 0)
+            ? parseFloat(s.total_creditable_input)
+            : Math.round(((parseFloat(s.input_vat) || 0) + (parseFloat(s.opening_credit) || 0)) * 100) / 100;
 
         const printWindow = window.open('', '_blank');
         if (!printWindow) {
@@ -5258,7 +5267,7 @@
                     <div class="kpi-card">
                         <div class="lbl">Opening Credit</div>
                         <div class="val">+ ETB ${formatMoney(s.opening_credit)}</div>
-                        <small>Total Creditable: ETB ${formatMoney(s.total_creditable_input)}</small>
+                        <small>Total Creditable: ETB ${formatMoney(totalCreditable)}</small>
                     </div>
                     <div class="kpi-card">
                         <div class="lbl">Signed Net VAT</div>
