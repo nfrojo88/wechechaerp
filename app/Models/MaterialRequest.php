@@ -96,12 +96,7 @@ class MaterialRequest extends Model
         }
 
         return \Illuminate\Support\Facades\DB::transaction(function () use ($actorId) {
-            $count = PurchaseRequest::withTrashed()->count() + 1;
-            $prNo = 'PR-' . date('Ymd') . '-' . str_pad($count, 4, '0', STR_PAD_LEFT);
-            while (PurchaseRequest::withTrashed()->where('pr_no', $prNo)->exists()) {
-                $count++;
-                $prNo = 'PR-' . date('Ymd') . '-' . str_pad($count, 4, '0', STR_PAD_LEFT);
-            }
+            $prNo = PurchaseRequest::generatePrNo();
 
             // Determine initial status & owner based on current MR state
             $initialStatus = PurchaseRequest::STATUS_PENDING_STORE_REVIEW;

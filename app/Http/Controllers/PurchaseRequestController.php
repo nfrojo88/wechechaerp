@@ -191,51 +191,64 @@ class PurchaseRequestController extends Controller
         ]);
 
         $createdPr = null;
-        DB::transaction(function () use ($request, $isSecretary, &$createdPr) {
-            $no = 'PR-' . date('Ymd') . '-' . str_pad(PurchaseRequest::withTrashed()->count() + 1, 4, '0', STR_PAD_LEFT);
+        $attempts = 0;
+        $maxAttempts = 3;
 
-            $isOfficeRequest = $isSecretary || $request->boolean('is_office_request');
-            $prData = [
-                'pr_no'               => $no,
-                'project_id'          => $request->project_id,
-                'store_id'            => $request->store_id,
-                'requested_by'        => Auth::id(),
-                'material_request_id' => $request->material_request_id,
-                'priority'            => $request->priority,
-                'type'                => $request->type,
-                'is_office_request'   => $isOfficeRequest,
-                'office_purpose'      => $isOfficeRequest ? ($request->office_purpose ?? 'Head Office Purchase Request') : null,
-                'required_date'       => $request->required_date,
-                'justification'       => $request->justification,
-                'status'              => PurchaseRequest::STATUS_DRAFT,
-                'current_owner_role'  => 'coordinator', // Will be resolved if needed
-            ];
+        while ($attempts < $maxAttempts && !$createdPr) {
+            $attempts++;
+            try {
+                DB::transaction(function () use ($request, $isSecretary, &$createdPr) {
+                    $no = PurchaseRequest::generatePrNo();
 
-            $pr = PurchaseRequest::create($prData);
-            $pr->update(['current_owner_role' => $this->lifecycle->resolveOwnerRole('coordinator', $pr)]);
-            $createdPr = $pr;
+                    $isOfficeRequest = $isSecretary || $request->boolean('is_office_request');
+                    $prData = [
+                        'pr_no'               => $no,
+                        'project_id'          => $request->project_id,
+                        'store_id'            => $request->store_id,
+                        'requested_by'        => Auth::id(),
+                        'material_request_id' => $request->material_request_id,
+                        'priority'            => $request->priority,
+                        'type'                => $request->type,
+                        'is_office_request'   => $isOfficeRequest,
+                        'office_purpose'      => $isOfficeRequest ? ($request->office_purpose ?? 'Head Office Purchase Request') : null,
+                        'required_date'       => $request->required_date,
+                        'justification'       => $request->justification,
+                        'status'              => PurchaseRequest::STATUS_DRAFT,
+                        'current_owner_role'  => 'coordinator', // Will be resolved if needed
+                    ];
 
-            foreach ($request->items as $item) {
-                $prod = Product::find($item['product_id']);
-                $unit = !empty($item['unit']) ? $item['unit'] : ($prod?->unit ?? 'pcs');
-                
-                $latestPriceRecord = \App\Models\MaterialPrice::where('product_id', $item['product_id'])
-                    ->orderBy('effective_date', 'desc')
-                    ->first();
-                $estCost = $latestPriceRecord ? (float)$latestPriceRecord->price : (float)($prod?->unit_price ?? $prod?->selling_price ?? 0);
-                if (isset($item['estimated_unit_cost']) && $item['estimated_unit_cost'] !== '' && $item['estimated_unit_cost'] > 0) {
-                    $estCost = (float) $item['estimated_unit_cost'];
+                    $pr = PurchaseRequest::create($prData);
+                    $pr->update(['current_owner_role' => $this->lifecycle->resolveOwnerRole('coordinator', $pr)]);
+                    $createdPr = $pr;
+
+                    foreach ($request->items as $item) {
+                        $prod = Product::find($item['product_id']);
+                        $unit = !empty($item['unit']) ? $item['unit'] : ($prod?->unit ?? 'pcs');
+                        
+                        $latestPriceRecord = \App\Models\MaterialPrice::where('product_id', $item['product_id'])
+                            ->orderBy('effective_date', 'desc')
+                            ->first();
+                        $estCost = $latestPriceRecord ? (float)$latestPriceRecord->price : (float)($prod?->unit_price ?? $prod?->selling_price ?? 0);
+                        if (isset($item['estimated_unit_cost']) && $item['estimated_unit_cost'] !== '' && $item['estimated_unit_cost'] > 0) {
+                            $estCost = (float) $item['estimated_unit_cost'];
+                        }
+
+                        $pr->items()->create([
+                            'product_id'          => $item['product_id'],
+                            'quantity'            => $item['quantity'],
+                            'unit'                => $unit,
+                            'specifications'      => $item['specifications'] ?? null,
+                            'estimated_unit_cost' => $estCost,
+                        ]);
+                    }
+                });
+            } catch (\Illuminate\Database\QueryException $qe) {
+                if ($attempts >= $maxAttempts || !str_contains($qe->getMessage(), 'Duplicate entry')) {
+                    throw $qe;
                 }
-
-                $pr->items()->create([
-                    'product_id'          => $item['product_id'],
-                    'quantity'            => $item['quantity'],
-                    'unit'                => $unit,
-                    'specifications'      => $item['specifications'] ?? null,
-                    'estimated_unit_cost' => $estCost,
-                ]);
+                usleep(50000); // 50ms wait before retry
             }
-        });
+        }
 
         if ($createdPr) {
             $coordRole = $this->lifecycle->resolveOwnerRole('coordinator', $createdPr);
@@ -847,7 +860,7 @@ class PurchaseRequestController extends Controller
         // Partial selection: split selected items into a new PR for purchase
         $newPr = null;
         DB::transaction(function () use ($purchaseRequest, $itemIds, $request, &$newPr) {
-            $newPrNo = 'PR-' . date('Ymd') . '-' . str_pad(PurchaseRequest::withTrashed()->count() + 1, 4, '0', STR_PAD_LEFT);
+            $newPrNo = PurchaseRequest::generatePrNo();
 
             $newPr = PurchaseRequest::create([
                 'pr_no'               => $newPrNo,
@@ -1042,7 +1055,7 @@ class PurchaseRequestController extends Controller
         // Partial selection: split selected items into a new PR returned to Store Manager
         $newPr = null;
         DB::transaction(function () use ($purchaseRequest, $itemIds, $request, &$newPr) {
-            $newPrNo = 'PR-' . date('Ymd') . '-' . str_pad(PurchaseRequest::withTrashed()->count() + 1, 4, '0', STR_PAD_LEFT);
+            $newPrNo = PurchaseRequest::generatePrNo();
 
             $newPr = PurchaseRequest::create([
                 'pr_no'               => $newPrNo,
@@ -1139,7 +1152,7 @@ class PurchaseRequestController extends Controller
         }
 
         return DB::transaction(function () use ($purchaseRequest, $itemIds, $method, $request) {
-            $newPrNo = 'PR-' . date('Ymd') . '-' . str_pad(PurchaseRequest::withTrashed()->count() + 1, 4, '0', STR_PAD_LEFT);
+            $newPrNo = PurchaseRequest::generatePrNo();
 
             $newPr = PurchaseRequest::create([
                 'pr_no'               => $newPrNo,
@@ -1227,7 +1240,7 @@ class PurchaseRequestController extends Controller
 
         // Subset selected: Split into new PR and advance the selected items
         return DB::transaction(function () use ($purchaseRequest, $itemIds, $method, $request, $itemPrices, $amount) {
-            $newPrNo = 'PR-' . date('Ymd') . '-' . str_pad(PurchaseRequest::withTrashed()->count() + 1, 4, '0', STR_PAD_LEFT);
+            $newPrNo = PurchaseRequest::generatePrNo();
 
             $newPr = PurchaseRequest::create([
                 'pr_no'               => $newPrNo,
@@ -1322,7 +1335,7 @@ class PurchaseRequestController extends Controller
 
         // Split selected items and send back to PM
         return DB::transaction(function () use ($purchaseRequest, $itemIds, $request) {
-            $newPrNo = 'PR-' . date('Ymd') . '-' . str_pad(PurchaseRequest::withTrashed()->count() + 1, 4, '0', STR_PAD_LEFT);
+            $newPrNo = PurchaseRequest::generatePrNo();
 
             $newPr = PurchaseRequest::create([
                 'pr_no'               => $newPrNo,

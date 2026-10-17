@@ -139,6 +139,16 @@ class PurchaseRequest extends Model
 
     protected static function booted()
     {
+        static::creating(function (PurchaseRequest $pr) {
+            if (empty($pr->pr_no)) {
+                $pr->pr_no = static::generatePrNo();
+            } else {
+                if (static::withTrashed()->where('pr_no', $pr->pr_no)->exists()) {
+                    $pr->pr_no = static::generatePrNo($pr->pr_no);
+                }
+            }
+        });
+
         static::updating(function (PurchaseRequest $pr) {
             if ($pr->isDirty('status') && !$pr->isDirty('current_owner_role')) {
                 $newRole = static::resolveDefaultOwnerRoleForStatus($pr->status);
@@ -194,6 +204,66 @@ class PurchaseRequest extends Model
                 }
             }
         });
+    }
+
+    /**
+     * Generate a guaranteed unique PR number (e.g. PR-20261017-0111).
+     */
+    public static function generatePrNo(?string $preferredNo = null): string
+    {
+        $datePrefix = 'PR-' . date('Ymd') . '-';
+
+        if (!empty($preferredNo)) {
+            $candidate = trim($preferredNo);
+            if (!static::withTrashed()->where('pr_no', $candidate)->exists()) {
+                return $candidate;
+            }
+
+            if (preg_match('/^PR-(\d{8})-(\d+)$/', $candidate, $matches)) {
+                $pDate = $matches[1];
+                $pSeq  = (int)$matches[2];
+                do {
+                    $pSeq++;
+                    $candidate = 'PR-' . $pDate . '-' . str_pad($pSeq, 4, '0', STR_PAD_LEFT);
+                } while (static::withTrashed()->where('pr_no', $candidate)->exists());
+                return $candidate;
+            }
+
+            $suffix = 1;
+            $original = $candidate;
+            do {
+                $candidate = $original . '-' . $suffix;
+                $suffix++;
+            } while (static::withTrashed()->where('pr_no', $candidate)->exists());
+            return $candidate;
+        }
+
+        $existingNos = static::withTrashed()
+            ->where('pr_no', 'like', $datePrefix . '%')
+            ->pluck('pr_no')
+            ->all();
+
+        $maxSeq = 0;
+        foreach ($existingNos as $no) {
+            if (preg_match('/' . preg_quote($datePrefix, '/') . '(\d+)/', $no, $m)) {
+                $seq = (int)$m[1];
+                if ($seq > $maxSeq) {
+                    $maxSeq = $seq;
+                }
+            }
+        }
+
+        $nextSeq = max($maxSeq + 1, static::withTrashed()->count() + 1);
+
+        do {
+            $candidate = $datePrefix . str_pad($nextSeq, 4, '0', STR_PAD_LEFT);
+            $exists = in_array($candidate, $existingNos) || static::withTrashed()->where('pr_no', $candidate)->exists();
+            if ($exists) {
+                $nextSeq++;
+            }
+        } while ($exists);
+
+        return $candidate;
     }
 
     protected $fillable = [
