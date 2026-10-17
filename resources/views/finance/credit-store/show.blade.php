@@ -739,7 +739,7 @@
                                                     <input type="hidden" name="purchase_type" id="creditSinglePurchaseType" value="3">
                                                     <input type="hidden" name="encoded_by" id="creditSingleEncodedBy" value="{{ strtolower(preg_replace('/[^a-zA-Z0-9_]/', '', Auth::user()->name ?? 'wechacha')) }}">
                                                     <input type="hidden" name="subtotal" id="creditSingleSubtotal">
-                                                    <input type="hidden" name="vat_amount" id="creditSingleVatAmount">
+                                                    <input type="hidden" id="creditSingleVatAmount">
                                                     <input type="hidden" name="total_amount" id="creditSingleTotalAmount">
                                                     <input type="hidden" name="vat_included" id="creditSingleVatIncluded" value="1">
                                                     <input type="hidden" name="is_verified" id="creditSingleIsVerified" value="1">
@@ -889,12 +889,22 @@
 
                                 // Set hidden inputs
                                 const hiddenVat = document.getElementById('quickPayVatAmount');
+                                const singleVat = document.getElementById('creditSingleVatAmount');
                                 const hiddenWht = document.getElementById('quickPayWithholdingAmount');
                                 const hiddenNet = document.getElementById('quickPayNetAmount');
+                                const singleSubtotal = document.getElementById('creditSingleSubtotal');
+                                const singleTotal = document.getElementById('creditSingleTotalAmount');
+                                const singleVatInc = document.getElementById('creditSingleVatIncluded');
+                                const singlePurcType = document.getElementById('creditSinglePurcType');
 
                                 if (hiddenVat) hiddenVat.value = vatAmount.toFixed(2);
+                                if (singleVat) singleVat.value = vatAmount.toFixed(2);
                                 if (hiddenWht) hiddenWht.value = whtAmount.toFixed(2);
                                 if (hiddenNet) hiddenNet.value = netAmount.toFixed(2);
+                                if (singleSubtotal) singleSubtotal.value = baseAmount.toFixed(2);
+                                if (singleTotal) singleTotal.value = (vatType === 'exclusive' ? (baseAmount + vatAmount) : gross).toFixed(2);
+                                if (singleVatInc) singleVatInc.value = (vatType !== 'none' && vatAmount > 0) ? '1' : '0';
+                                if (singlePurcType) singlePurcType.value = (vatType !== 'none' && vatAmount > 0) ? '3' : '6';
 
                                 // Update display labels
                                 const dispBase = document.getElementById('quickDisplayBaseAmount');

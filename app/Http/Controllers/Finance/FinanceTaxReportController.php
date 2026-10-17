@@ -438,6 +438,38 @@ class FinanceTaxReportController extends Controller
         // ── OCR SCANNED RECEIPTS & ERCA VAT DECLARATION (LED BY OCR) ─────────
         $vatSource = $request->query('vat_source', 'ocr');
 
+        // Self-heal any existing records where inclusive VAT gross was stored in total_value (e.g. 550.00 instead of 478.26)
+        try {
+            \App\Models\ReceiptItem::where('vat_amount', '>', 0)
+                ->where('value_after_vat', '>', DB::raw('total_value'))
+                ->limit(50)
+                ->get()
+                ->each(function ($item) {
+                    $totalVal = (float)$item->total_value;
+                    $vat = (float)$item->vat_amount;
+                    if ($totalVal > 0 && $vat > 0) {
+                        $calcBase = round($totalVal / 1.15, 2);
+                        if (abs(($totalVal - $vat) - $calcBase) <= 0.05 && abs(round($calcBase * 0.15, 2) - $vat) <= 0.05) {
+                            $item->total_value = $calcBase;
+                            $qty = (float)$item->qty > 0 ? (float)$item->qty : 1.0;
+                            $item->unit_price = round($calcBase / $qty, 2);
+                            $item->value_after_vat = $totalVal;
+                            $item->save();
+                            if ($item->receipt_id) {
+                                $r = \App\Models\Receipt::find($item->receipt_id);
+                                if ($r && abs((float)$r->total_amount - $totalVal) <= 0.05) {
+                                    $r->update([
+                                        'subtotal'     => $calcBase,
+                                        'vat_amount'   => $vat,
+                                        'total_amount' => $totalVal,
+                                    ]);
+                                }
+                            }
+                        }
+                    }
+                });
+        } catch (\Throwable $e) {}
+
         $ocrQuery = \App\Models\ReceiptItem::with(['receipt', 'receipt.project', 'receipt.uploader'])
             ->whereHas('receipt')
             ->latest('id');
@@ -1054,6 +1086,20 @@ class FinanceTaxReportController extends Controller
         $formattedOcrItems = $ocrItems->map(function ($ocr) {
             $r = $ocr->receipt;
             $date = $r?->receipt_date;
+
+            $baseVal  = (float)$ocr->total_value;
+            $vatVal   = (float)$ocr->vat_amount;
+            $afterVal = (float)$ocr->value_after_vat;
+
+            // In-memory fallback guard if base was gross (e.g. 550) + vat (71.74) = afterVal (621.74)
+            if ($baseVal > 0 && $vatVal > 0) {
+                $calcBase = round($baseVal / 1.15, 2);
+                if (abs(($baseVal - $vatVal) - $calcBase) <= 0.05 && abs(round($calcBase * 0.15, 2) - $vatVal) <= 0.05) {
+                    $afterVal = $baseVal;
+                    $baseVal  = $calcBase;
+                }
+            }
+
             return [
                 'id'               => $ocr->id,
                 'receipt_number'   => $r?->receipt_number ?: ('REC-' . $ocr->id),
@@ -1065,9 +1111,9 @@ class FinanceTaxReportController extends Controller
                 'project_name'     => $r?->project?->name ?: 'General',
                 'category'         => $r?->category ?: ($ocr->vat_category ?: 'General'),
                 'item_description' => $ocr->item_description ?: ($r?->description ?: 'Purchased Goods/Services'),
-                'base_value'       => (float)$ocr->total_value,
-                'vat_amount'       => (float)$ocr->vat_amount,
-                'value_after_vat'  => (float)$ocr->value_after_vat,
+                'base_value'       => $baseVal,
+                'vat_amount'       => $vatVal,
+                'value_after_vat'  => $afterVal,
                 'file_url'         => $r?->file_path ? asset('storage/' . $r->file_path) : null,
             ];
         });
@@ -2252,6 +2298,12 @@ class FinanceTaxReportController extends Controller
             $sellerTinVal = ($sellerDigits !== '') ? (int)$sellerDigits : (trim($rawTin) ?: '');
 
             $amountVal = (float)($item->value_after_vat > 0 ? $item->value_after_vat : ($item->total_value > 0 ? $item->total_value : ($r ? $r->total_amount : 0)));
+            if ($item->total_value > 0 && $item->vat_amount > 0) {
+                $calcBase = round($item->total_value / 1.15, 2);
+                if (abs(($item->total_value - $item->vat_amount) - $calcBase) <= 0.05 && abs(round($calcBase * 0.15, 2) - $item->vat_amount) <= 0.05) {
+                    $amountVal = (float)$item->total_value;
+                }
+            }
             $amountVal = round($amountVal, 2);
 
             $receiptNo = '';
@@ -2436,6 +2488,20 @@ class FinanceTaxReportController extends Controller
             $fsDigits = preg_replace('/[^0-9]/', '', $rawFs);
             $fsText = (strlen($fsDigits) === 8) ? $fsDigits : $rawFs;
 
+            $baseVal = (float)$item->total_value;
+            $vatVal = (float)$item->vat_amount;
+            $afterVal = (float)$item->value_after_vat;
+            $unitVal = (float)$item->unit_price;
+
+            if ($baseVal > 0 && $vatVal > 0) {
+                $calcBase = round($baseVal / 1.15, 2);
+                if (abs(($baseVal - $vatVal) - $calcBase) <= 0.05 && abs(round($calcBase * 0.15, 2) - $vatVal) <= 0.05) {
+                    $afterVal = $baseVal;
+                    $baseVal = $calcBase;
+                    $unitVal = ((float)$item->qty > 0) ? round($calcBase / (float)$item->qty, 2) : $calcBase;
+                }
+            }
+
             $rows[] = [
                 (string)($item->vat_category ?: 'G'),
                 (string)($item->calendar_type ?: 'E'),
@@ -2448,10 +2514,10 @@ class FinanceTaxReportController extends Controller
                 (string)($item->item_description ?: 'Material'),
                 (string)($item->uom ?: '9'),
                 (float)$item->qty,
-                (float)$item->unit_price,
-                (float)$item->total_value,
-                (float)$item->vat_amount,
-                (float)$item->value_after_vat,
+                $unitVal,
+                $baseVal,
+                $vatVal,
+                $afterVal,
             ];
         }
 

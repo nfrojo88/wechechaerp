@@ -470,6 +470,21 @@ class CreditStoreController extends Controller
                     $purchaseType = (int)($request->input('purc_type') ?: ($request->input('purchase_type') ?: ($vatIncluded ? 3 : 6)));
                     $effectiveVat = $vatIncluded ? (float)$vatAmount : 0.00;
 
+                    // Resolve base, vat, and total amounts based on VAT treatment
+                    if ($vatIncluded && ($vatType === 'inclusive' || $vatType === 'vat_b')) {
+                        $receiptSubtotal = $baseAmount;
+                        $receiptVat      = $vatAmount;
+                        $receiptTotal    = $gross;
+                    } elseif ($vatIncluded && $vatType === 'exclusive') {
+                        $receiptSubtotal = $gross;
+                        $receiptVat      = $vatAmount;
+                        $receiptTotal    = round($gross + $vatAmount, 2);
+                    } else {
+                        $receiptSubtotal = $gross;
+                        $receiptVat      = 0.00;
+                        $receiptTotal    = $gross;
+                    }
+
                     // Parse itemized materials from OCR studio if submitted
                     $items = [];
                     if ($request->filled('ocr_items_json')) {
@@ -481,6 +496,17 @@ class CreditStoreController extends Controller
                                 $itTotal = (float)($it['total_value'] ?? round($itQty * $itUnit, 2));
                                 $itVat = $vatIncluded ? (float)($it['vat'] ?? round($itTotal * 0.15, 2)) : 0.00;
                                 $itAfter = $vatIncluded ? (float)($it['value_after_vat'] ?? round($itTotal + $itVat, 2)) : $itTotal;
+
+                                // If inclusive VAT, ensure itTotal is base, not gross
+                                if ($vatIncluded && ($vatType === 'inclusive' || $vatType === 'vat_b') && $itTotal > 0 && $itVat > 0) {
+                                    $calcBase = round($itTotal / 1.15, 2);
+                                    if (abs(($itTotal - $itVat) - $calcBase) <= 0.05) {
+                                        $itTotal = $calcBase;
+                                        $itUnit = $itQty > 0 ? round($itTotal / $itQty, 2) : $itTotal;
+                                        $itAfter = round($itTotal + $itVat, 2);
+                                    }
+                                }
+
                                 $items[] = [
                                     'item_description' => $it['item_description'] ?? ($ledger->item_description ?: 'Material item'),
                                     'uom'              => (string)($it['uom'] ?? '9'),
@@ -501,19 +527,25 @@ class CreditStoreController extends Controller
                             'item_description' => $ledger->item_description ?: 'Credit settlement',
                             'uom'              => '9',
                             'qty'              => 1.0,
-                            'unit_price'       => (float)$settledCreditAmount,
-                            'total_value'      => (float)$settledCreditAmount,
-                            'vat'              => $effectiveVat,
-                            'value_after_vat'  => (float)($settledCreditAmount + $effectiveVat),
+                            'unit_price'       => (float)$receiptSubtotal,
+                            'total_value'      => (float)$receiptSubtotal,
+                            'vat'              => $receiptVat,
+                            'value_after_vat'  => (float)$receiptTotal,
                             'purchase_type'    => $purchaseType,
                             'vat_category'     => $vatIncluded ? 'G' : 'E',
                         ];
                     }
 
                     $isVerified = $request->boolean('is_verified', true);
-                    $receiptSubtotal = $request->filled('subtotal') ? (float)$request->input('subtotal') : (float)($gross ?: $settledCreditAmount);
-                    $receiptVat = $vatIncluded ? ($request->filled('vat_amount') ? (float)$request->input('vat_amount') : $effectiveVat) : 0.00;
-                    $receiptTotal = $request->filled('total_amount') ? (float)$request->input('total_amount') : round($receiptSubtotal + $receiptVat, 2);
+                    if ($request->filled('subtotal') && (float)$request->input('subtotal') > 0 && abs((float)$request->input('subtotal') - $gross) > 0.01) {
+                        $receiptSubtotal = (float)$request->input('subtotal');
+                    }
+                    if ($request->filled('vat_amount') && (float)$request->input('vat_amount') > 0) {
+                        $receiptVat = (float)$request->input('vat_amount');
+                    }
+                    if ($request->filled('total_amount') && (float)$request->input('total_amount') > 0) {
+                        $receiptTotal = (float)$request->input('total_amount');
+                    }
 
                     $cleanTin = preg_replace('/[^0-9]/', '', $supplierTin);
                     $cleanFs = preg_replace('/[^0-9]/', '', (string)$fsNo);
@@ -950,7 +982,27 @@ class CreditStoreController extends Controller
                 $encodedBy = trim((string)($request->input('encoded_by') ?: (Auth::user()?->name ?: 'wechacha')));
                 $vatIncluded = $request->boolean('vat_included', false);
                 $purchaseType = (int)($request->input('purc_type') ?: ($request->input('purchase_type') ?: ($vatIncluded ? 3 : 6)));
-                $vatAmount = $vatIncluded ? (float)$request->input('vat_amount', round($totalPaidSum * 0.15, 2)) : 0.00;
+                
+                if ($vatIncluded) {
+                    $baseAmount = round($totalPaidSum / 1.15, 2);
+                    $vatAmount = round($totalPaidSum - $baseAmount, 2);
+                    $receiptSubtotal = $baseAmount;
+                    $receiptTotal = $totalPaidSum;
+                } else {
+                    $receiptSubtotal = $totalPaidSum;
+                    $vatAmount = 0.00;
+                    $receiptTotal = $totalPaidSum;
+                }
+
+                if ($request->filled('subtotal') && (float)$request->input('subtotal') > 0 && abs((float)$request->input('subtotal') - $totalPaidSum) > 0.01) {
+                    $receiptSubtotal = (float)$request->input('subtotal');
+                }
+                if ($request->filled('vat_amount') && (float)$request->input('vat_amount') > 0) {
+                    $vatAmount = (float)$request->input('vat_amount');
+                }
+                if ($request->filled('total_amount') && (float)$request->input('total_amount') > 0) {
+                    $receiptTotal = (float)$request->input('total_amount');
+                }
 
                 $items = [];
                 if ($request->filled('ocr_items_json')) {
@@ -962,6 +1014,16 @@ class CreditStoreController extends Controller
                             $itTotal = (float)($it['total_value'] ?? round($itQty * $itUnit, 2));
                             $itVat = $vatIncluded ? (float)($it['vat'] ?? round($itTotal * 0.15, 2)) : 0.00;
                             $itAfter = $vatIncluded ? (float)($it['value_after_vat'] ?? round($itTotal + $itVat, 2)) : $itTotal;
+
+                            if ($vatIncluded && $itTotal > 0 && $itVat > 0) {
+                                $calcBase = round($itTotal / 1.15, 2);
+                                if (abs(($itTotal - $itVat) - $calcBase) <= 0.05) {
+                                    $itTotal = $calcBase;
+                                    $itUnit = $itQty > 0 ? round($itTotal / $itQty, 2) : $itTotal;
+                                    $itAfter = round($itTotal + $itVat, 2);
+                                }
+                            }
+
                             $items[] = [
                                 'item_description' => $it['item_description'] ?? 'Batch settlement item',
                                 'uom'              => (string)($it['uom'] ?? '9'),
@@ -982,19 +1044,16 @@ class CreditStoreController extends Controller
                         'item_description' => "Batch credit settlement ({$processedCount} items)",
                         'uom'              => '9',
                         'qty'              => 1.0,
-                        'unit_price'       => (float)$totalPaidSum,
-                        'total_value'      => (float)$totalPaidSum,
+                        'unit_price'       => (float)$receiptSubtotal,
+                        'total_value'      => (float)$receiptSubtotal,
                         'vat'              => $vatAmount,
-                        'value_after_vat'  => (float)($totalPaidSum + $vatAmount),
+                        'value_after_vat'  => (float)$receiptTotal,
                         'purchase_type'    => $purchaseType,
                         'vat_category'     => $vatIncluded ? 'G' : 'E',
                     ];
                 }
 
                 $isVerified = $request->boolean('is_verified', true);
-                $receiptSubtotal = $request->filled('subtotal') ? (float)$request->input('subtotal') : (float)$totalPaidSum;
-                $receiptVat = $vatIncluded ? ($request->filled('vat_amount') ? (float)$request->input('vat_amount') : $vatAmount) : 0.00;
-                $receiptTotal = $request->filled('total_amount') ? (float)$request->input('total_amount') : round($receiptSubtotal + $receiptVat, 2);
 
                 $cleanTin = preg_replace('/[^0-9]/', '', $supplierTin);
                 $cleanFs = preg_replace('/[^0-9]/', '', (string)$fsNo);
@@ -1109,9 +1168,33 @@ class CreditStoreController extends Controller
             $vatIncluded = $request->boolean('vat_included', ((float)($payment->vat_amount ?? 0) > 0));
             $purchaseType = (int)($request->input('purc_type') ?: ($request->input('purchase_type') ?: ($vatIncluded ? 3 : 6)));
             $isVerified = $request->boolean('is_verified', true);
-            $receiptSubtotal = $request->filled('subtotal') ? (float)$request->input('subtotal') : (float)$payment->amount;
-            $vatAmount = $vatIncluded ? (float)$request->input('vat_amount', $payment->vat_amount ?? round($receiptSubtotal * 0.15, 2)) : 0.00;
-            $receiptTotal = $request->filled('total_amount') ? (float)$request->input('total_amount') : round($receiptSubtotal + $vatAmount, 2);
+            $vatType = $payment->vat_type ?? ($vatIncluded ? 'vat_b' : 'none');
+            $gross = (float)$payment->amount;
+            $vatRate = (float)($payment->vat_rate ?: 15.00);
+
+            if ($vatIncluded && ($vatType === 'inclusive' || $vatType === 'vat_b')) {
+                $receiptSubtotal = (float)($payment->gross_amount > 0 ? $payment->gross_amount : round($gross / (1 + ($vatRate / 100)), 2));
+                $vatAmount = (float)($payment->vat_amount > 0 ? $payment->vat_amount : round($gross - $receiptSubtotal, 2));
+                $receiptTotal = $gross;
+            } elseif ($vatIncluded && $vatType === 'exclusive') {
+                $receiptSubtotal = $gross;
+                $vatAmount = (float)($payment->vat_amount > 0 ? $payment->vat_amount : round($gross * ($vatRate / 100), 2));
+                $receiptTotal = round($gross + $vatAmount, 2);
+            } else {
+                $receiptSubtotal = $gross;
+                $vatAmount = 0.00;
+                $receiptTotal = $gross;
+            }
+
+            if ($request->filled('subtotal') && (float)$request->input('subtotal') > 0 && abs((float)$request->input('subtotal') - $gross) > 0.01) {
+                $receiptSubtotal = (float)$request->input('subtotal');
+            }
+            if ($request->filled('vat_amount') && (float)$request->input('vat_amount') > 0) {
+                $vatAmount = (float)$request->input('vat_amount');
+            }
+            if ($request->filled('total_amount') && (float)$request->input('total_amount') > 0) {
+                $receiptTotal = (float)$request->input('total_amount');
+            }
 
             // Parse itemized materials from OCR studio if submitted
             $items = [];
@@ -1124,6 +1207,16 @@ class CreditStoreController extends Controller
                         $itTotal = (float)($it['total_value'] ?? round($itQty * $itUnit, 2));
                         $itVat = $vatIncluded ? (float)($it['vat'] ?? round($itTotal * 0.15, 2)) : 0.00;
                         $itAfter = $vatIncluded ? (float)($it['value_after_vat'] ?? round($itTotal + $itVat, 2)) : $itTotal;
+
+                        if ($vatIncluded && ($vatType === 'inclusive' || $vatType === 'vat_b') && $itTotal > 0 && $itVat > 0) {
+                            $calcBase = round($itTotal / 1.15, 2);
+                            if (abs(($itTotal - $itVat) - $calcBase) <= 0.05) {
+                                $itTotal = $calcBase;
+                                $itUnit = $itQty > 0 ? round($itTotal / $itQty, 2) : $itTotal;
+                                $itAfter = round($itTotal + $itVat, 2);
+                            }
+                        }
+
                         $items[] = [
                             'item_description' => $it['item_description'] ?? ($ledger->item_description ?: 'Material item'),
                             'uom'              => (string)($it['uom'] ?? '9'),
@@ -1147,7 +1240,7 @@ class CreditStoreController extends Controller
                     'unit_price'       => (float)$receiptSubtotal,
                     'total_value'      => (float)$receiptSubtotal,
                     'vat'              => $vatAmount,
-                    'value_after_vat'  => (float)($receiptSubtotal + $vatAmount),
+                    'value_after_vat'  => (float)$receiptTotal,
                     'purchase_type'    => $purchaseType,
                     'vat_category'     => $vatIncluded ? 'G' : 'E',
                 ];
@@ -1354,66 +1447,156 @@ class CreditStoreController extends Controller
             $payment->update($paymentData);
 
             // 2. Synchronize linked central Receipt and ReceiptItems
-            $receipts = Receipt::where(function($q) use ($payment) {
-                $q->where('purchasable_type', CreditStorePayment::class)
-                  ->where('purchasable_id', $payment->id);
-            });
-            if ($payment->receipt_path) {
-                $receipts = $receipts->orWhere('file_path', $payment->receipt_path);
-            }
-            $receiptRecords = $receipts->get();
+            $cleanTin = $supplierTin ? preg_replace('/[^0-9]/', '', $supplierTin) : '';
+            $cleanFs  = $fsNo ? preg_replace('/[^0-9]/', '', (string)$fsNo) : '';
 
-            foreach ($receiptRecords as $receipt) {
-                $cleanTin = $supplierTin ? preg_replace('/[^0-9]/', '', $supplierTin) : preg_replace('/[^0-9]/', '', (string)$receipt->vendor_tin);
-                $cleanFs = $fsNo ? preg_replace('/[^0-9]/', '', (string)$fsNo) : preg_replace('/[^0-9]/', '', (string)$receipt->fs_no);
-
-                $receiptUpdate = [
-                    'subtotal'     => $baseAmount,
-                    'vat_amount'   => $vatAmount,
-                    'total_amount' => $totalReceiptVal,
-                    'qc_notes'     => "Credit payment receipt #{$payment->id} [VAT Corrected by Global Admin to {$vatType}: ETB " . number_format($vatAmount, 2) . " - " . ($vatIncluded ? "Sent to ERCA Line 100 VAT Section (PurcType 3)" : "Sent to Purchase TAS Excel (PurcType {$purchaseType})") . "]",
-                ];
-
-                if (!empty($supplierTin)) {
-                    $receiptUpdate['vendor_tin'] = $supplierTin;
-                    $receiptUpdate['tin_valid']  = (strlen($cleanTin) === 10);
+            $receipts = Receipt::where(function($q) use ($payment, $cleanFs, $fsNo) {
+                $q->where(function($sub) use ($payment) {
+                    $sub->where('purchasable_type', CreditStorePayment::class)
+                        ->where('purchasable_id', $payment->id);
+                });
+                if ($payment->receipt_path) {
+                    $cleanPath = ltrim(str_replace('storage/', '', $payment->receipt_path), '/');
+                    $q->orWhere('file_path', $payment->receipt_path)
+                      ->orWhere('file_path', $cleanPath)
+                      ->orWhere('file_path', 'like', '%' . basename($payment->receipt_path));
                 }
-                if (!empty($fsNo)) {
-                    $receiptUpdate['fs_no']       = $fsNo;
-                    $receiptUpdate['fs_no_raw']   = $fsNo;
-                    $receiptUpdate['fs_no_valid'] = (strlen($cleanFs) === 8);
+                if ($cleanFs) {
+                    $q->orWhere('fs_no', $cleanFs)
+                      ->orWhere('fs_no_raw', $cleanFs);
                 }
-                if (!empty($mrcNo)) {
-                    $receiptUpdate['mrc_no'] = $mrcNo;
+                if ($fsNo) {
+                    $q->orWhere('fs_no', $fsNo)
+                      ->orWhere('fs_no_raw', $fsNo);
                 }
-                if (!empty($receiptDate)) {
-                    $receiptUpdate['receipt_date'] = $receiptDate;
+                if ($payment->reference_no) {
+                    $q->orWhere('fs_no', $payment->reference_no)
+                      ->orWhere('receipt_number', $payment->reference_no);
                 }
+            })->get();
 
-                $parsed = is_string($receipt->parsed_data) ? (json_decode($receipt->parsed_data, true) ?: []) : (array)($receipt->parsed_data ?? []);
-                $parsed['vat_type']      = $vatType;
-                $parsed['vat_amount']    = $vatAmount;
-                $parsed['subtotal']      = $baseAmount;
-                $parsed['total_amount']  = $totalReceiptVal;
-                $parsed['purc_type']     = $purchaseType;
-                $parsed['purchase_type'] = $purchaseType;
-                $parsed['vat_included']  = $vatIncluded;
-                if (!empty($supplierTin)) $parsed['seller_tin'] = $supplierTin;
-                if (!empty($fsNo)) $parsed['receipt_no'] = $fsNo;
-                if (!empty($mrcNo)) $parsed['mrc'] = $mrcNo;
-                if (!empty($receiptDate)) $parsed['receipt_date'] = $receiptDate;
-                $receiptUpdate['parsed_data'] = $parsed;
+            if ($receipts->isEmpty()) {
+                $newReceipt = Receipt::create([
+                    'purchasable_type' => CreditStorePayment::class,
+                    'purchasable_id'   => $payment->id,
+                    'vendor_name'      => $ledger->vendor_name ?: ($ledger->supplier_name ?: 'Credit Vendor'),
+                    'vendor_tin'       => $supplierTin ?: '-',
+                    'tin_valid'        => (strlen($cleanTin) === 10),
+                    'buyer_tin'        => '0038480010',
+                    'receipt_number'   => $fsNo ?: ($payment->reference_no ?: 'REC-PAY-' . $payment->id),
+                    'fs_no'            => $fsNo ?: ($payment->reference_no ?: '-'),
+                    'fs_no_raw'        => $fsNo ?: ($payment->reference_no ?: '-'),
+                    'fs_no_valid'      => (strlen($cleanFs) === 8),
+                    'mrc_no'           => $mrcNo,
+                    'receipt_date'     => $receiptDate,
+                    'subtotal'         => $baseAmount,
+                    'vat_amount'       => $vatAmount,
+                    'total_amount'     => $totalReceiptVal,
+                    'currency'         => 'ETB',
+                    'category'         => 'material',
+                    'description'      => "Credit Payment #{$payment->id} - " . ($ledger->item_description ?: 'Materials'),
+                    'file_path'        => $payment->receipt_path ?: '',
+                    'file_type'        => 'image',
+                    'status'           => 'approved',
+                    'is_verified'      => true,
+                    'qc_notes'         => "Created via Global Admin VAT Correction",
+                    'created_at'       => $payment->created_at ?: now(),
+                    'updated_at'       => now(),
+                ]);
 
-                $receipt->update($receiptUpdate);
+                ReceiptItem::create([
+                    'receipt_id'       => $newReceipt->id,
+                    'item_description' => $ledger->item_description ?: 'Credit settlement',
+                    'vat_category'     => $vatIncluded ? 'G' : 'E',
+                    'calendar_type'    => 'E',
+                    'purchase_type'    => $purchaseType,
+                    'uom'              => '9',
+                    'qty'              => 1.0,
+                    'unit_price'       => $baseAmount,
+                    'total_value'      => $baseAmount,
+                    'vat_amount'       => $vatAmount,
+                    'value_after_vat'  => $totalReceiptVal,
+                    'is_flagged'       => false,
+                    'flag_reasons'     => null,
+                ]);
+            } else {
+                foreach ($receipts as $receipt) {
+                    $rCleanTin = $supplierTin ? preg_replace('/[^0-9]/', '', $supplierTin) : preg_replace('/[^0-9]/', '', (string)$receipt->vendor_tin);
+                    $rCleanFs  = $fsNo ? preg_replace('/[^0-9]/', '', (string)$fsNo) : preg_replace('/[^0-9]/', '', (string)$receipt->fs_no);
 
-                // Update items in receipt_items
-                foreach ($receipt->items as $it) {
-                    $it->update([
-                        'vat_category'    => $vatIncluded ? 'G' : 'E',
-                        'purchase_type'   => $purchaseType,
-                        'vat_amount'      => $vatAmount,
-                        'value_after_vat' => $totalReceiptVal,
-                    ]);
+                    $receiptUpdate = [
+                        'subtotal'         => $baseAmount,
+                        'vat_amount'       => $vatAmount,
+                        'total_amount'     => $totalReceiptVal,
+                        'purchasable_type' => CreditStorePayment::class,
+                        'purchasable_id'   => $payment->id,
+                        'qc_notes'         => "Credit payment receipt #{$payment->id} [VAT Corrected by Global Admin to {$vatType}: ETB " . number_format($vatAmount, 2) . " - " . ($vatIncluded ? "Sent to ERCA Line 100 VAT Section (PurcType 3)" : "Sent to Purchase TAS Excel (PurcType {$purchaseType})") . "]",
+                    ];
+
+                    if (!empty($supplierTin)) {
+                        $receiptUpdate['vendor_tin'] = $supplierTin;
+                        $receiptUpdate['tin_valid']  = (strlen($rCleanTin) === 10);
+                    }
+                    if (!empty($fsNo)) {
+                        $receiptUpdate['fs_no']       = $fsNo;
+                        $receiptUpdate['fs_no_raw']   = $fsNo;
+                        $receiptUpdate['fs_no_valid'] = (strlen($rCleanFs) === 8);
+                    }
+                    if (!empty($mrcNo)) {
+                        $receiptUpdate['mrc_no'] = $mrcNo;
+                    }
+                    if (!empty($receiptDate)) {
+                        $receiptUpdate['receipt_date'] = $receiptDate;
+                    }
+
+                    $parsed = is_string($receipt->parsed_data) ? (json_decode($receipt->parsed_data, true) ?: []) : (array)($receipt->parsed_data ?? []);
+                    $parsed['vat_type']      = $vatType;
+                    $parsed['vat_amount']    = $vatAmount;
+                    $parsed['subtotal']      = $baseAmount;
+                    $parsed['total_amount']  = $totalReceiptVal;
+                    $parsed['purc_type']     = $purchaseType;
+                    $parsed['purchase_type'] = $purchaseType;
+                    $parsed['vat_included']  = $vatIncluded;
+                    if (!empty($supplierTin)) $parsed['seller_tin'] = $supplierTin;
+                    if (!empty($fsNo)) $parsed['receipt_no'] = $fsNo;
+                    if (!empty($mrcNo)) $parsed['mrc'] = $mrcNo;
+                    if (!empty($receiptDate)) $parsed['receipt_date'] = $receiptDate;
+                    $receiptUpdate['parsed_data'] = $parsed;
+
+                    $receipt->update($receiptUpdate);
+
+                    if ($receipt->items()->count() > 0) {
+                        foreach ($receipt->items as $it) {
+                            $itQty = (float)$it->qty > 0 ? (float)$it->qty : 1.0;
+                            $it->update([
+                                'item_description' => $it->item_description ?: ($ledger->item_description ?: 'Credit settlement'),
+                                'unit_price'       => round($baseAmount / $itQty, 2),
+                                'total_value'      => $baseAmount,
+                                'vat_amount'       => $vatAmount,
+                                'value_after_vat'  => $totalReceiptVal,
+                                'purchase_type'    => $purchaseType,
+                                'vat_category'     => $vatIncluded ? 'G' : 'E',
+                                'is_flagged'       => false,
+                                'flag_reasons'     => null,
+                            ]);
+                        }
+                    } else {
+                        ReceiptItem::create([
+                            'receipt_id'       => $receipt->id,
+                            'item_description' => $ledger->item_description ?: 'Credit settlement',
+                            'vat_category'     => $vatIncluded ? 'G' : 'E',
+                            'calendar_type'    => 'E',
+                            'purchase_type'    => $purchaseType,
+                            'uom'              => '9',
+                            'qty'              => 1.0,
+                            'unit_price'       => $baseAmount,
+                            'total_value'      => $baseAmount,
+                            'vat_amount'       => $vatAmount,
+                            'value_after_vat'  => $totalReceiptVal,
+                            'is_flagged'       => false,
+                            'flag_reasons'     => null,
+                        ]);
+                    }
                 }
             }
 

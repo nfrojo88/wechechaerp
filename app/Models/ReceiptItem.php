@@ -39,6 +39,31 @@ class ReceiptItem extends Model
     ];
 
     /**
+     * Auto-heal inverted/inclusive VAT where gross was saved as total_value (base)
+     * and VAT was added on top (e.g. Base 550 + VAT 71.74 = 621.74).
+     */
+    protected static function booted()
+    {
+        static::saving(function ($item) {
+            $totalVal = (float)$item->total_value;
+            $vat = (float)$item->vat_amount;
+            $afterVal = (float)$item->value_after_vat;
+
+            if ($totalVal > 0 && $vat > 0) {
+                $calcBase = round($totalVal / 1.15, 2);
+                $isGrossSavedAsBase = (abs(($totalVal - $vat) - $calcBase) <= 0.05 && abs(round($calcBase * 0.15, 2) - $vat) <= 0.05);
+                if ($isGrossSavedAsBase && (abs(($totalVal + $vat) - $afterVal) <= 0.05 || $afterVal > $totalVal)) {
+                    $item->total_value = $calcBase;
+                    if ((float)$item->qty > 0) {
+                        $item->unit_price = round($calcBase / (float)$item->qty, 2);
+                    }
+                    $item->value_after_vat = $totalVal;
+                }
+            }
+        });
+    }
+
+    /**
      * Parent Receipt relationship.
      */
     public function receipt()

@@ -1223,26 +1223,38 @@
                                         @endif
                                     </td>
 
+                                    @php
+                                        $displayBase = (float)$ocrItem->total_value;
+                                        $displayVat  = (float)$ocrItem->vat_amount;
+                                        $displayAfter = (float)$ocrItem->value_after_vat;
+                                        if ($displayBase > 0 && $displayVat > 0) {
+                                            $calcBase = round($displayBase / 1.15, 2);
+                                            if (abs(($displayBase - $displayVat) - $calcBase) <= 0.05 && abs(round($calcBase * 0.15, 2) - $displayVat) <= 0.05) {
+                                                $displayAfter = $displayBase;
+                                                $displayBase  = $calcBase;
+                                            }
+                                        }
+                                    @endphp
                                     {{-- Taxable Base (Col M) --}}
                                     <td class="text-end font-monospace fw-semibold small">
-                                        ETB {{ number_format((float)$ocrItem->total_value, 2) }}
+                                        ETB {{ number_format($displayBase, 2) }}
                                     </td>
 
                                     {{-- 15% VAT (Col N) --}}
                                     <td class="text-end font-monospace fw-bold text-info small">
-                                        + ETB {{ number_format((float)$ocrItem->vat_amount, 2) }}
+                                        + ETB {{ number_format($displayVat, 2) }}
                                     </td>
 
                                     {{-- Total with VAT (Col O) --}}
                                     <td class="text-end font-monospace fw-bold text-success small">
-                                        ETB {{ number_format((float)$ocrItem->value_after_vat, 2) }}
+                                        ETB {{ number_format($displayAfter, 2) }}
                                     </td>
 
                                     {{-- Slip Preview Thumbnail --}}
                                     <td class="text-center">
                                         @if($slipUrl)
                                             <button type="button" class="btn btn-xs btn-outline-info rounded-pill px-2 py-0.5 shadow-xs" 
-                                                    onclick="openVatSlipModal('{{ $slipUrl }}', '{{ addslashes($rcp->vendor_name ?? '') }}', '{{ $tin }}', '{{ $fsNo }}', '{{ $rcp->mrc_no ?? '' }}', '{{ optional($rcp->receipt_date)->format('d M Y') }}', '{{ number_format((float)$ocrItem->total_value, 2) }}', '{{ number_format((float)$ocrItem->vat_amount, 2) }}', '{{ number_format((float)$ocrItem->value_after_vat, 2) }}', '{{ route('admin.ocr.index') }}')"
+                                                    onclick="openVatSlipModal('{{ $slipUrl }}', '{{ addslashes($rcp->vendor_name ?? '') }}', '{{ $tin }}', '{{ $fsNo }}', '{{ $rcp->mrc_no ?? '' }}', '{{ optional($rcp->receipt_date)->format('d M Y') }}', '{{ number_format($displayBase, 2) }}', '{{ number_format($displayVat, 2) }}', '{{ number_format($displayAfter, 2) }}', '{{ route('admin.ocr.index') }}')"
                                                     title="View High-Res Receipt Slip">
                                                 <i class="fa-solid fa-image me-1"></i>Slip
                                             </button>
@@ -1256,7 +1268,7 @@
                                         <div class="d-flex justify-content-center gap-1">
                                             @if($slipUrl)
                                                 <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-2 py-0.5" 
-                                                        onclick="openVatSlipModal('{{ $slipUrl }}', '{{ addslashes($rcp->vendor_name ?? '') }}', '{{ $tin }}', '{{ $fsNo }}', '{{ $rcp->mrc_no ?? '' }}', '{{ optional($rcp->receipt_date)->format('d M Y') }}', '{{ number_format((float)$ocrItem->total_value, 2) }}', '{{ number_format((float)$ocrItem->vat_amount, 2) }}', '{{ number_format((float)$ocrItem->value_after_vat, 2) }}', '{{ route('admin.ocr.index') }}')"
+                                                        onclick="openVatSlipModal('{{ $slipUrl }}', '{{ addslashes($rcp->vendor_name ?? '') }}', '{{ $tin }}', '{{ $fsNo }}', '{{ $rcp->mrc_no ?? '' }}', '{{ optional($rcp->receipt_date)->format('d M Y') }}', '{{ number_format($displayBase, 2) }}', '{{ number_format($displayVat, 2) }}', '{{ number_format($displayAfter, 2) }}', '{{ route('admin.ocr.index') }}')"
                                                         title="View Details">
                                                     <i class="fa-solid fa-eye"></i>
                                                 </button>
