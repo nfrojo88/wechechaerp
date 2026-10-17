@@ -128,7 +128,11 @@ class Receipt extends Model
             return null;
         }
 
-        return \App\Services\FileUploadService::url($this->file_path);
+        try {
+            return \App\Services\FileUploadService::url($this->file_path);
+        } catch (\Throwable $e) {
+            return asset('storage/' . ltrim($this->file_path, '/'));
+        }
     }
 }
 

@@ -123,6 +123,47 @@ class FinanceTaxReportController extends Controller
                 });
             }
 
+            if (Schema::hasTable('receipts')) {
+                Schema::table('receipts', function (\Illuminate\Database\Schema\Blueprint $table) {
+                    if (!Schema::hasColumn('receipts', 'purchasable_type')) {
+                        $table->string('purchasable_type')->nullable()->index();
+                    }
+                    if (!Schema::hasColumn('receipts', 'purchasable_id')) {
+                        $table->unsignedBigInteger('purchasable_id')->nullable()->index();
+                    }
+                    if (!Schema::hasColumn('receipts', 'fs_no')) {
+                        $table->string('fs_no')->nullable()->index();
+                    }
+                    if (!Schema::hasColumn('receipts', 'mrc_no')) {
+                        $table->string('mrc_no')->nullable();
+                    }
+                    if (!Schema::hasColumn('receipts', 'buyer_tin')) {
+                        $table->string('buyer_tin')->nullable();
+                    }
+                    if (!Schema::hasColumn('receipts', 'tin_valid')) {
+                        $table->boolean('tin_valid')->default(true);
+                    }
+                    if (!Schema::hasColumn('receipts', 'fs_no_raw')) {
+                        $table->string('fs_no_raw')->nullable();
+                    }
+                    if (!Schema::hasColumn('receipts', 'fs_no_valid')) {
+                        $table->boolean('fs_no_valid')->default(true);
+                    }
+                    if (!Schema::hasColumn('receipts', 'confidence')) {
+                        $table->string('confidence', 50)->default('high');
+                    }
+                    if (!Schema::hasColumn('receipts', 'confidence_score')) {
+                        $table->integer('confidence_score')->default(90);
+                    }
+                    if (!Schema::hasColumn('receipts', 'needs_review')) {
+                        $table->boolean('needs_review')->default(false);
+                    }
+                    if (!Schema::hasColumn('receipts', 'qc_notes')) {
+                        $table->text('qc_notes')->nullable();
+                    }
+                });
+            }
+
             // Sync/heal: If any IncomeRecord or ExpenseRequest was created AFTER a TaxSettlement was paid/created,
             // but was inadvertently linked or marked settled, restore it to active/unsettled!
             // When a month is cleared, subsequent new transactions must start adding up fresh from zero.
@@ -932,9 +973,12 @@ class FinanceTaxReportController extends Controller
      */
     public function monthMovements(Request $request)
     {
-        $curEth = EthiopianDate::toEthiopian(now());
-        $year  = (int)($request->query('ethiopian_year') ?: $curEth['year']);
-        $month = (int)($request->query('ethiopian_month') ?: $curEth['month']);
+        try {
+            $this->ensureSchema();
+
+            $curEth = EthiopianDate::toEthiopian(now());
+            $year  = (int)($request->query('ethiopian_year') ?: $curEth['year']);
+            $month = (int)($request->query('ethiopian_month') ?: $curEth['month']);
 
         if ($month < 1 || $month > 13) {
             $month = $curEth['month'];
@@ -1077,9 +1121,28 @@ class FinanceTaxReportController extends Controller
         // 3. OCR Scanned Receipts in this Ethiopian month
         $ocrItems = collect();
         if (Schema::hasTable('receipt_items')) {
-            // Auto-sync any standalone receipts in this period to have a ReceiptItem
-            if (Schema::hasTable('receipts')) {
-                $standaloneReceipts = \App\Models\Receipt::doesntHave('items')
+            try {
+                $ocrItems = \App\Models\ReceiptItem::with(['receipt', 'receipt.project', 'receipt.uploader'])
+                    ->whereHas('receipt', function ($rq) use ($startDate, $endDate) {
+                        $rq->whereBetween('receipt_date', [$startDate, $endDate])
+                           ->orWhere(function ($sub) use ($startDate, $endDate) {
+                               $sub->whereNull('receipt_date')
+                                   ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+                           });
+                    })
+                    ->orderBy('id', 'asc')
+                    ->get();
+            } catch (\Throwable $e) {
+                Log::warning("monthMovements ReceiptItem query: " . $e->getMessage());
+                $ocrItems = collect();
+            }
+        }
+
+        // Also include standalone Receipts that don't have receipt_items (mapped safely in-memory)
+        if (Schema::hasTable('receipts')) {
+            try {
+                $standaloneReceipts = \App\Models\Receipt::with(['project', 'uploader'])
+                    ->doesntHave('items')
                     ->where(function ($rq) use ($startDate, $endDate) {
                         $rq->whereBetween('receipt_date', [$startDate, $endDate])
                            ->orWhere(function ($sub) use ($startDate, $endDate) {
@@ -1104,7 +1167,8 @@ class FinanceTaxReportController extends Controller
                             $vat = round($total - $subtotal, 2);
                         }
                     }
-                    \App\Models\ReceiptItem::create([
+
+                    $virtualItem = new \App\Models\ReceiptItem([
                         'receipt_id'       => $sr->id,
                         'item_description' => $sr->description ?: 'Purchased Goods/Services',
                         'vat_category'     => 'G',
@@ -1117,24 +1181,42 @@ class FinanceTaxReportController extends Controller
                         'vat_amount'       => $vat,
                         'value_after_vat'  => $total,
                     ]);
+                    $virtualItem->id = $sr->id;
+                    $virtualItem->setRelation('receipt', $sr);
+                    $ocrItems->push($virtualItem);
                 }
+            } catch (\Throwable $e) {
+                Log::warning("monthMovements standalone receipts mapping error: " . $e->getMessage());
             }
+        }
 
-            // Auto-sync any CreditStorePayments in this month that have receipt_path but no linked Receipt
-            if (Schema::hasTable('credit_store_payments') && Schema::hasTable('receipts')) {
-                $unlinkedPayments = \App\Models\CreditStorePayment::with('ledger')
+        // Include any CreditStorePayments in this month that have receipt_path (mapped in-memory)
+        if (Schema::hasTable('credit_store_payments')) {
+            try {
+                $paymentSlips = \App\Models\CreditStorePayment::with(['ledger', 'ledger.project'])
                     ->whereNotNull('receipt_path')
                     ->where('receipt_path', '!=', '')
-                    ->whereBetween('payment_date', [$startDate, $endDate])
-                    ->whereDoesntHave('receiptRecords')
+                    ->where(function ($q) use ($startDate, $endDate) {
+                        $q->whereBetween('payment_date', [$startDate, $endDate])
+                          ->orWhere(function ($sub) use ($startDate, $endDate) {
+                              $sub->whereNull('payment_date')
+                                  ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+                          });
+                    })
                     ->get();
 
-                foreach ($unlinkedPayments as $p) {
+                $existingFiles = $ocrItems->map(fn($it) => $it->receipt?->file_path)->filter()->all();
+
+                foreach ($paymentSlips as $p) {
+                    if (in_array($p->receipt_path, $existingFiles)) {
+                        continue;
+                    }
+
                     $ledger = $p->ledger;
                     $gross = (float)$p->amount;
                     $vatRate = (float)($p->vat_rate ?: 15.00);
                     $vatIncluded = ((float)($p->vat_amount ?? 0) > 0) || in_array($p->vat_type, ['inclusive', 'vat_b', 'exclusive']);
-                    
+
                     if ($vatIncluded && in_array($p->vat_type, ['inclusive', 'vat_b'])) {
                         $receiptSubtotal = (float)($p->gross_amount > 0 ? $p->gross_amount : round($gross / (1 + ($vatRate / 100)), 2));
                         $vatAmount = (float)($p->vat_amount > 0 ? $p->vat_amount : round($gross - $receiptSubtotal, 2));
@@ -1149,35 +1231,27 @@ class FinanceTaxReportController extends Controller
                         $receiptTotal = $gross;
                     }
 
-                    $cleanFs = preg_replace('/[^0-9]/', '', (string)$p->reference_no);
-                    $newReceipt = \App\Models\Receipt::create([
-                        'purchasable_type' => \App\Models\CreditStorePayment::class,
-                        'purchasable_id'   => $p->id,
-                        'vendor_name'      => $ledger?->supplier_name ?: 'Credit Vendor',
-                        'vendor_tin'       => '-',
-                        'tin_valid'        => false,
-                        'buyer_tin'        => '0038480010',
-                        'receipt_number'   => $p->reference_no ?: ('REC-PAY-' . $p->id),
-                        'fs_no'            => $p->reference_no ?: '-',
-                        'fs_no_raw'        => $p->reference_no ?: '-',
-                        'fs_no_valid'      => (strlen($cleanFs) === 8),
-                        'receipt_date'     => $p->payment_date ?: now()->toDateString(),
-                        'subtotal'         => $receiptSubtotal,
-                        'vat_amount'       => $vatAmount,
-                        'total_amount'     => $receiptTotal,
-                        'currency'         => 'ETB',
-                        'category'         => 'material',
-                        'description'      => "Credit Payment #{$p->id} - " . ($ledger?->item_description ?: 'Materials'),
-                        'file_path'        => $p->receipt_path,
-                        'file_type'        => 'image',
-                        'status'           => 'approved',
-                        'is_verified'      => true,
-                        'qc_notes'         => 'Synced from Credit Purchases Ledger payment receipt',
-                        'created_at'       => $p->created_at ?: now(),
+                    $vReceipt = new \App\Models\Receipt([
+                        'vendor_name'    => $ledger?->supplier_name ?: 'Credit Vendor',
+                        'vendor_tin'     => '-',
+                        'buyer_tin'      => '0038480010',
+                        'receipt_number' => $p->reference_no ?: ('REC-PAY-' . $p->id),
+                        'fs_no'          => $p->reference_no ?: '-',
+                        'receipt_date'   => $p->payment_date ?: $p->created_at?->toDateString(),
+                        'subtotal'       => $receiptSubtotal,
+                        'vat_amount'     => $vatAmount,
+                        'total_amount'   => $receiptTotal,
+                        'file_path'      => $p->receipt_path,
+                        'file_type'      => 'image',
+                        'description'    => "Credit Payment #{$p->id} - " . ($ledger?->item_description ?: 'Materials'),
                     ]);
+                    $vReceipt->id = 'P' . $p->id;
+                    if ($ledger?->project) {
+                        $vReceipt->setRelation('project', $ledger->project);
+                    }
 
-                    \App\Models\ReceiptItem::create([
-                        'receipt_id'       => $newReceipt->id,
+                    $vItem = new \App\Models\ReceiptItem([
+                        'receipt_id'       => $vReceipt->id,
                         'item_description' => $ledger?->item_description ?: 'Credit settlement',
                         'vat_category'     => $vatIncluded ? 'G' : 'E',
                         'calendar_type'    => 'G',
@@ -1189,19 +1263,15 @@ class FinanceTaxReportController extends Controller
                         'vat_amount'       => $vatAmount,
                         'value_after_vat'  => $receiptTotal,
                     ]);
-                }
-            }
+                    $vItem->id = 'P' . $p->id;
+                    $vItem->setRelation('receipt', $vReceipt);
 
-            $ocrItems = \App\Models\ReceiptItem::with(['receipt', 'receipt.project', 'receipt.uploader'])
-                ->whereHas('receipt', function ($rq) use ($startDate, $endDate) {
-                    $rq->whereBetween('receipt_date', [$startDate, $endDate])
-                       ->orWhere(function ($sub) use ($startDate, $endDate) {
-                           $sub->whereNull('receipt_date')
-                               ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
-                       });
-                })
-                ->orderBy('id', 'asc')
-                ->get();
+                    $ocrItems->push($vItem);
+                    $existingFiles[] = $p->receipt_path;
+                }
+            } catch (\Throwable $e) {
+                Log::warning("monthMovements paymentSlips mapping error: " . $e->getMessage());
+            }
         }
 
         $formattedOcrItems = $ocrItems->map(function ($ocr) {
@@ -1222,7 +1292,14 @@ class FinanceTaxReportController extends Controller
             }
 
             $filePath = $r?->file_path;
-            $fileUrl = $r?->file_url ?: ($filePath ? \App\Services\FileUploadService::url($filePath) : null);
+            $fileUrl = null;
+            if (!empty($filePath)) {
+                try {
+                    $fileUrl = $r->file_url ?: \App\Services\FileUploadService::url($filePath);
+                } catch (\Throwable $e) {
+                    $fileUrl = asset('storage/' . ltrim($filePath, '/'));
+                }
+            }
             $fileExt = $filePath ? strtolower(pathinfo($filePath, PATHINFO_EXTENSION)) : '';
             $isPdf = in_array($fileExt, ['pdf']) || str_contains(strtolower($filePath ?? ''), 'pdf');
 
@@ -1416,11 +1493,66 @@ class FinanceTaxReportController extends Controller
                 'ocr_count'              => $formattedOcrItems->count(),
                 'total_count'            => $formattedIncomes->count() + $formattedExpenses->count() + $formattedOcrItems->count(),
             ],
-            'incomes'   => $formattedIncomes,
-            'expenses'  => $formattedExpenses,
-            'ocr_items' => $formattedOcrItems,
+            'incomes'   => $formattedIncomes->values(),
+            'expenses'  => $formattedExpenses->values(),
+            'ocr_items' => $formattedOcrItems->values(),
         ]);
+    } catch (\Throwable $e) {
+        Log::error("FinanceTaxReportController monthMovements error: " . $e->getMessage() . "\n" . $e->getTraceAsString());
+        return response()->json([
+            'success' => false,
+            'message' => 'Movements error: ' . $e->getMessage(),
+            'error'   => 'Movements error: ' . $e->getMessage(),
+            'month'   => [
+                'year'             => (int)($request->query('ethiopian_year') ?: 2017),
+                'month'            => (int)($request->query('ethiopian_month') ?: 1),
+                'month_name'       => 'Month',
+                'month_am'         => 'ወር',
+                'title'            => 'Movements',
+                'gregorian_window' => 'N/A',
+                'start_date'       => now()->toDateString(),
+                'end_date'         => now()->toDateString(),
+                'days'             => 30,
+            ],
+            'summary' => [
+                'sales_base'             => 0,
+                'output_vat'             => 0,
+                'gross_income'           => 0,
+                'purchases_base'         => 0,
+                'input_vat'              => 0,
+                'opening_credit'         => 0,
+                'total_creditable_input' => 0,
+                'net_vat'                => 0,
+                'signed_net_formatted'   => 'ETB 0.00',
+                'status'                 => 'neutral',
+                'label'                  => 'Neutral',
+                'badge_class'            => 'bg-secondary',
+                'text_class'             => 'text-dark',
+                'is_payable'             => false,
+                'is_credit'              => false,
+                'payable_amount'         => 0,
+                'credit_carry_forward'   => 0,
+                'is_cleared'             => false,
+                'is_fresh_start'         => false,
+                'settlement_number'      => null,
+                'withholding_tax'        => 0,
+                'income_wht'             => 0,
+                'income_net'             => 0,
+                'net_disbursed'          => 0,
+                'ocr_base'               => 0,
+                'ocr_vat'                => 0,
+                'ocr_total'              => 0,
+                'income_count'           => 0,
+                'expense_count'          => 0,
+                'ocr_count'              => 0,
+                'total_count'            => 0,
+            ],
+            'incomes'   => [],
+            'expenses'  => [],
+            'ocr_items' => [],
+        ], 200);
     }
+}
 
     /**
      * Initiate a Tax Payment / Remittance for VAT or Withholding (Finance Head assigns Finance Staff or pays immediately).

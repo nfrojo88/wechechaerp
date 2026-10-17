@@ -112,9 +112,11 @@ class FileUploadService
         }
 
         // 3. If file exists in public/uploads/
-        if (file_exists(public_path('uploads/' . $cleanPath))) {
-            return $formatUrl('uploads/' . $cleanPath);
-        }
+        try {
+            if (file_exists(public_path('uploads/' . $cleanPath))) {
+                return $formatUrl('uploads/' . $cleanPath);
+            }
+        } catch (\Throwable $e) {}
 
         // 4. Legacy storage link support (storage/...)
         if (Str::startsWith($cleanPath, 'storage/')) {
@@ -122,9 +124,11 @@ class FileUploadService
         }
 
         // 5. Check if it exists in public/ direct
-        if (file_exists(public_path($cleanPath))) {
-            return $formatUrl($cleanPath);
-        }
+        try {
+            if (file_exists(public_path($cleanPath))) {
+                return $formatUrl($cleanPath);
+            }
+        } catch (\Throwable $e) {}
 
         // Fallback: Default to uploads/ path
         return $formatUrl('uploads/' . $cleanPath);
