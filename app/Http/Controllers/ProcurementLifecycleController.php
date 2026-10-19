@@ -37,6 +37,31 @@ class ProcurementLifecycleController extends Controller
             foreach ($unlinkedMrs as $uMr) {
                 $uMr->createOrGetPurchaseRequest();
             }
+
+            // Also ensure any planning-approved MR has companion PR forwarded to Coordinator
+            $approvedMrsToSync = MaterialRequest::whereHas('items')
+                ->where(function($q) {
+                    $q->where('status', 'planning_approved')
+                      ->orWhere('planning_approval_status', 'approved');
+                })
+                ->whereNotIn('status', ['sent_to_store_manager', 'approved', 'rejected', 'cancelled', 'completed'])
+                ->with('purchaseRequests')
+                ->get();
+
+            foreach ($approvedMrsToSync as $aMr) {
+                if ($aMr->purchaseRequests->isEmpty()) {
+                    $aMr->createOrGetPurchaseRequest();
+                    $aMr->load('purchaseRequests');
+                }
+                foreach ($aMr->purchaseRequests as $aPr) {
+                    if (in_array($aPr->status, [PurchaseRequest::STATUS_PENDING_PLANNING, 'pending_planning', PurchaseRequest::STATUS_DRAFT])) {
+                        $aPr->update([
+                            'status'             => PurchaseRequest::STATUS_PENDING_HR_APPROVAL,
+                            'current_owner_role' => 'coordinator',
+                        ]);
+                    }
+                }
+            }
         } catch (\Throwable $e) {
             \Log::error("ProcurementLifecycleController::myQueue auto-sync MRs to PR flow error: " . $e->getMessage());
         }
@@ -193,6 +218,8 @@ class ProcurementLifecycleController extends Controller
         } else {
             if ($isCoordinator) {
                 $targetRoles[] = 'coordinator';
+                $targetRoles[] = 'project_coordinator';
+                $targetRoles[] = 'site_coordinator';
                 $targetRoles[] = 'hr_manager';
             }
             if ($isHr) {
@@ -316,6 +343,20 @@ class ProcurementLifecycleController extends Controller
                       ->orWhereIn('status', ['pending_planning', 'submitted', 'pending']);
                 })
                 ->whereNotIn('status', ['planning_approved', 'approved', 'rejected', 'cancelled'])
+                ->latest()
+                ->get();
+        }
+
+        // 3b. Emergency MRs approved by Planning awaiting Coordinator review & dispatch
+        $coordinatorEmergencyMrs = collect();
+        if ($isCoordinator || $isAdmin) {
+            $coordinatorEmergencyMrs = MaterialRequest::with(['project', 'store', 'creator', 'requestedBy', 'maintenanceRequest', 'items.product', 'purchaseRequests'])
+                ->whereHas('items')
+                ->where(function($q) {
+                    $q->where('status', 'planning_approved')
+                      ->orWhere('planning_approval_status', 'approved');
+                })
+                ->whereNotIn('status', ['sent_to_store_manager', 'approved', 'rejected', 'cancelled', 'completed'])
                 ->latest()
                 ->get();
         }
@@ -461,7 +502,7 @@ class ProcurementLifecycleController extends Controller
         // 9. Summary Counters
         $pendingCount = $isAuditor
             ? PurchaseRequest::whereHas('items')->where('status', '!=', PurchaseRequest::STATUS_INTAKE_COMPLETE)->count()
-            : ($myPrs->total() + $materialRequestsQueue->count());
+            : ($myPrs->total() + $materialRequestsQueue->count() + $coordinatorEmergencyMrs->count());
 
         $completedCountQuery = PurchaseRequest::whereHas('items')->where('status', PurchaseRequest::STATUS_INTAKE_COMPLETE);
         $applyPrStoreScope($completedCountQuery);
@@ -475,6 +516,7 @@ class ProcurementLifecycleController extends Controller
             'my_pending'                     => $pendingCount,
             'my_created'                     => $myCreatedCount,
             'emergency_mrs'                  => $emergencyMrs->count(),
+            'coordinator_emergency_mrs'      => $coordinatorEmergencyMrs->count(),
             'material_requests_queue'        => $materialRequestsQueue->count(),
             'pending_office_requests'        => $pendingOfficeCount,
             'pending_store_office_requests'  => $pendingStoreOfficeCount,
@@ -505,7 +547,7 @@ class ProcurementLifecycleController extends Controller
         }
 
         return view('procurement.lifecycle.my-queue', compact(
-            'myPrs', 'emergencyMrs', 'materialRequestsQueue', 'kpi', 'projects',
+            'myPrs', 'emergencyMrs', 'coordinatorEmergencyMrs', 'materialRequestsQueue', 'kpi', 'projects',
             'myCreatedPrs', 'myCreatedMrs', 'completedPrs', 'allPrs', 'deletedPrs', 'deletedMrs', 'activeTab',
             'isHr', 'isCoordinator', 'isStoreManager', 'isStoreKeeper', 'isPurchaseManager', 'isFinanceHead', 'isAuditor', 'isAdmin', 'isGm',
             'assignedStore'

@@ -278,6 +278,98 @@
     </div>
     @endif
 
+    <!-- Emergency MRs Section Approved by Planning (Awaiting Coordinator Review & Dispatch) -->
+    @if(!empty($coordinatorEmergencyMrs) && $coordinatorEmergencyMrs->count() > 0)
+    <div class="card border-primary shadow-sm mb-4">
+        <div class="card-header bg-primary bg-opacity-10 border-primary d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div>
+                <h5 class="mb-0 text-primary font-weight-bold">
+                    <i class="fas fa-bolt text-danger me-2"></i>Emergency Material Requests (Approved by Planning — Awaiting Coordinator Action)
+                </h5>
+                <small class="text-muted">These emergency requests have been approved by the Planning Manager and require your review and dispatch to the Store Manager.</small>
+            </div>
+            <span class="badge bg-danger rounded-pill px-3 py-2">{{ $coordinatorEmergencyMrs->count() }} Urgent</span>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Ref No</th>
+                            <th>Project &amp; Store</th>
+                            <th>Requested By</th>
+                            <th>Planning Approval</th>
+                            <th>Items</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach($coordinatorEmergencyMrs as $cmr)
+                        @php
+                            $compPr = $cmr->purchaseRequests->first();
+                        @endphp
+                        <tr>
+                            <td>
+                                <strong>{{ $cmr->reference_number }}</strong>
+                                @if($compPr)
+                                    <div class="small">
+                                        <a href="{{ route('purchase-requests.show', $compPr->id) }}" class="badge bg-light text-primary border text-decoration-none">
+                                            PR #{{ $compPr->pr_no }}
+                                        </a>
+                                    </div>
+                                @endif
+                            </td>
+                            <td>
+                                <strong>{{ $cmr->project?->name ?? 'General Project' }}</strong>
+                                <small class="text-muted d-block"><i class="fas fa-warehouse me-1"></i>Store: {{ $cmr->store?->name ?? $cmr->destinationStore?->name ?? 'N/A' }}</small>
+                            </td>
+                            <td>{{ $cmr->requestedBy?->name ?? $cmr->creator?->name ?? 'Site Engineer' }}</td>
+                            <td>
+                                <span class="badge bg-success-subtle text-success border border-success-subtle">
+                                    <i class="fas fa-check-circle me-1"></i>Planning Approved
+                                </span>
+                                <small class="text-muted d-block">{{ optional($cmr->planning_approved_at)->format('M d, Y H:i') ?? $cmr->updated_at->format('M d, Y') }}</small>
+                            </td>
+                            <td>
+                                <span class="badge bg-light text-dark border">{{ $cmr->items->count() }} item(s)</span>
+                                <small class="text-muted d-block">
+                                    {{ Str::limit($cmr->items->map(fn($it) => $it->product?->name)->filter()->join(', '), 30, '...') }}
+                                </small>
+                            </td>
+                            <td class="text-end">
+                                <div class="d-flex justify-content-end align-items-center gap-1">
+                                    @if($compPr)
+                                        <form method="POST" action="{{ route('purchase-requests.coordinator-approve', $compPr) }}" class="d-inline">
+                                            @csrf
+                                            <button type="submit" class="btn btn-sm btn-primary fw-bold shadow-xs">
+                                                <i class="fas fa-share me-1"></i> Dispatch to Store
+                                            </button>
+                                        </form>
+                                        <a href="{{ route('purchase-requests.show', $compPr->id) }}" class="btn btn-sm btn-outline-info shadow-xs">
+                                            <i class="fas fa-eye me-1"></i> Review
+                                        </a>
+                                    @else
+                                        <form method="POST" action="{{ route('material-requests.coordinator-dispatch', $cmr) }}" class="d-inline">
+                                            @csrf
+                                            <button type="submit" class="btn btn-sm btn-primary fw-bold shadow-xs">
+                                                <i class="fas fa-share me-1"></i> Dispatch to Store
+                                            </button>
+                                        </form>
+                                        <a href="{{ route('material-requests.show', $cmr) }}" class="btn btn-sm btn-outline-info shadow-xs">
+                                            <i class="fas fa-eye me-1"></i> Review
+                                        </a>
+                                    @endif
+                                </div>
+                            </td>
+                        </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    @endif
+
     <!-- Main Navigation Card with Queue & History Tabs -->
     <div class="card border-0 shadow-sm mb-4">
         <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -477,6 +569,7 @@
                                         elseif (in_array($owner, ['gm', 'general_manager']) && $isGmUser) $canActOnThisPr = true;
                                         elseif (in_array($owner, ['finance_head', 'finance', 'finance_manager']) && $isFinanceHeadUser) $canActOnThisPr = true;
                                         elseif (in_array($owner, ['general_service', 'general_services']) && $isGeneralServiceUser) $canActOnThisPr = true;
+                                        elseif ((in_array($owner, ['coordinator', 'project_coordinator', 'site_coordinator']) || $pr->status === \App\Models\PurchaseRequest::STATUS_PENDING_HR_APPROVAL) && $isCoordinatorUser) $canActOnThisPr = true;
                                         elseif ($pr->status === 'draft' && ($authUser && $pr->requested_by === $authUser->id || $isCoordinatorUser)) $canActOnThisPr = true;
                                     }
                                 }

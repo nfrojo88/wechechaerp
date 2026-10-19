@@ -1692,14 +1692,24 @@
             </a>
         </li>
         @endcanany
-        @if(!$isCoordinator && !auth()->user()->hasAnyRole(['coordinator', 'Coordinator']))
         <li class="sidebar-nav-item">
             <a href="{{ route('procurement.my-queue') }}" class="sidebar-nav-link {{ request()->routeIs('procurement.*') || request()->routeIs('purchase-requests.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-tasks text-warning"></i>
                 <span>Procurement — My Queue</span>
+                @php
+                    $pendingQueueGeneral = 0;
+                    try {
+                        if ($isCoordinator || ($authUser && $authUser->hasAnyRole(['coordinator', 'Coordinator']))) {
+                            $pendingQueueGeneral = \App\Models\PurchaseRequest::where('current_owner_role', 'coordinator')->count()
+                                + \App\Models\MaterialRequest::where('is_emergency', true)->where('status', 'planning_approved')->count();
+                        }
+                    } catch (\Throwable $e) {}
+                @endphp
+                @if($pendingQueueGeneral > 0)
+                    <span class="badge bg-danger rounded-pill ms-auto">{{ $pendingQueueGeneral }}</span>
+                @endif
             </a>
         </li>
-        @endif
         @canany(['purchases.view', 'purchases.*'])
         <li class="sidebar-nav-item">
             <a href="{{ route('purchase-orders.index') }}" class="sidebar-nav-link {{ request()->routeIs('purchase-orders.*') ? 'active' : '' }}">
@@ -1778,6 +1788,22 @@
             </a>
         </li>
         @endif
+        <li class="sidebar-nav-item">
+            <a href="{{ route('procurement.my-queue') }}" class="sidebar-nav-link {{ request()->routeIs('procurement.*') || request()->routeIs('purchase-requests.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-bolt text-danger"></i>
+                <span>Procurement Queue</span>
+                @php
+                    $pendingCoordPrCount = 0;
+                    try {
+                        $pendingCoordPrCount = \App\Models\PurchaseRequest::where('current_owner_role', 'coordinator')->count()
+                            + \App\Models\MaterialRequest::where('is_emergency', true)->where('status', 'planning_approved')->count();
+                    } catch (\Throwable $e) {}
+                @endphp
+                @if($pendingCoordPrCount > 0)
+                    <span class="badge bg-danger rounded-pill ms-auto">{{ $pendingCoordPrCount }}</span>
+                @endif
+            </a>
+        </li>
         <li class="sidebar-nav-item">
             <a href="{{ route('expenses.index') }}?tab=pending_hr" class="sidebar-nav-link {{ (request()->routeIs('expenses.*') || request()->is('expenses*') || request()->routeIs('approvals.*')) && request('tab') === 'pending_hr' ? 'active' : '' }}">
                 <i class="fa-solid fa-file-invoice-dollar text-warning"></i>

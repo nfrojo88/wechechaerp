@@ -105,7 +105,7 @@ class MaterialRequest extends Model
             if (in_array($this->status, ['pending_planning', 'submitted', 'pending']) && $this->planning_approval_status !== 'approved') {
                 $initialStatus = PurchaseRequest::STATUS_PENDING_PLANNING;
                 $initialOwner = 'planning';
-            } elseif ($this->status === 'planning_approved') {
+            } elseif ($this->status === 'planning_approved' || $this->planning_approval_status === 'approved') {
                 $initialStatus = PurchaseRequest::STATUS_PENDING_HR_APPROVAL;
                 $initialOwner = 'coordinator';
             } elseif (in_array($this->status, ['needs_purchase', 'sent_to_pr'])) {
@@ -152,7 +152,7 @@ class MaterialRequest extends Model
                 ]);
             }
 
-            if (!in_array($this->status, ['sent_to_pr', 'issued', 'processed'])) {
+            if (!in_array($this->status, ['pending_planning', 'planning_approved', 'sent_to_pr', 'issued', 'processed'])) {
                 $this->update(['status' => 'sent_to_pr']);
             }
 

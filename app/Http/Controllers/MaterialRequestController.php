@@ -327,8 +327,12 @@ class MaterialRequestController extends Controller
         try {
             $lifecycle = app(ProcurementLifecycleService::class);
             $materialRequest->loadMissing('purchaseRequests');
+            if ($materialRequest->purchaseRequests->isEmpty()) {
+                $materialRequest->createOrGetPurchaseRequest(auth()->id());
+                $materialRequest->load('purchaseRequests');
+            }
             foreach ($materialRequest->purchaseRequests as $pr) {
-                if (in_array($pr->status, [PurchaseRequest::STATUS_PENDING_PLANNING, PurchaseRequest::STATUS_DRAFT])) {
+                if (in_array($pr->status, [PurchaseRequest::STATUS_PENDING_PLANNING, 'pending_planning', PurchaseRequest::STATUS_DRAFT])) {
                     $targetRole = $lifecycle->resolveOwnerRole('coordinator', $pr);
                     $pr->update([
                         'status'             => PurchaseRequest::STATUS_PENDING_HR_APPROVAL,

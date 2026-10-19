@@ -1381,13 +1381,35 @@ class DashboardController extends Controller
     // ─── Coordinator (also: general_service) ─────────────────────────────────────
     public function coordinator()
     {
+        $approvedEmergencyRequests = $this->safe(fn() => \App\Models\MaterialRequest::with(['project', 'store', 'creator', 'items.product', 'purchaseRequests'])
+            ->where(function($q) {
+                $q->where('status', 'planning_approved')
+                  ->orWhere('planning_approval_status', 'approved');
+            })
+            ->whereNotIn('status', ['sent_to_store_manager', 'approved', 'rejected', 'cancelled', 'completed'])
+            ->latest()
+            ->take(10)
+            ->get(), collect());
+
+        $pendingCoordinatorPrs = $this->safe(fn() => \App\Models\PurchaseRequest::with(['project', 'store', 'materialRequest', 'items.product'])
+            ->whereHas('items')
+            ->where('is_office_request', false)
+            ->where(function($q) {
+                $q->whereIn('current_owner_role', ['coordinator', 'project_coordinator', 'site_coordinator'])
+                  ->orWhere('status', \App\Models\PurchaseRequest::STATUS_PENDING_HR_APPROVAL);
+            })
+            ->latest()
+            ->take(10)
+            ->get(), collect());
+
         $kpi = [
-            'total_inventory_value' => $this->safe(fn() => \App\Models\Inventory::sum('total_value')),
-            'schedules_today'       => $this->safe(fn() => \App\Models\Schedule::whereDate('start_date', '<=', now())->whereDate('end_date', '>=', now())->count()),
-            'daily_reports_today'   => $this->safe(fn() => \App\Models\DailyReport::whereDate('report_date', now())->count()),
-            'material_requests'     => $this->safe(fn() => \App\Models\MaterialRequest::where('status', 'pending')->count()),
-            'pending_plans'         => $this->safe(fn() => \App\Models\ProjectPlanWorkflow::where('status', 'planning_manager_approved')->count()),
-            'pending_office_reqs'   => $this->safe(fn() => \App\Models\PurchaseRequest::where(function($q) {
+            'total_inventory_value'       => $this->safe(fn() => \App\Models\Inventory::sum('total_value')),
+            'schedules_today'             => $this->safe(fn() => \App\Models\Schedule::whereDate('start_date', '<=', now())->whereDate('end_date', '>=', now())->count()),
+            'daily_reports_today'         => $this->safe(fn() => \App\Models\DailyReport::whereDate('report_date', now())->count()),
+            'material_requests'           => $this->safe(fn() => \App\Models\MaterialRequest::whereIn('status', ['pending', 'planning_approved'])->count()),
+            'approved_emergency_requests' => $approvedEmergencyRequests->count() + $pendingCoordinatorPrs->count(),
+            'pending_plans'               => $this->safe(fn() => \App\Models\ProjectPlanWorkflow::where('status', 'planning_manager_approved')->count()),
+            'pending_office_reqs'         => $this->safe(fn() => \App\Models\PurchaseRequest::where(function($q) {
                 $q->where('is_office_request', true)
                   ->orWhere('status', \App\Models\PurchaseRequest::STATUS_PENDING_HR_APPROVAL);
             })->where('status', \App\Models\PurchaseRequest::STATUS_PENDING_HR_APPROVAL)->count(), 0),
@@ -1411,7 +1433,10 @@ class DashboardController extends Controller
             ->take(5)
             ->get(), collect());
 
-        return view('dashboard.coordinator', compact('kpi', 'recentSchedules', 'recentDailyReports', 'pendingPlansFromPlanning', 'erpPlans', 'pendingOfficeRequests'));
+        return view('dashboard.coordinator', compact(
+            'kpi', 'recentSchedules', 'recentDailyReports', 'pendingPlansFromPlanning', 
+            'erpPlans', 'pendingOfficeRequests', 'approvedEmergencyRequests', 'pendingCoordinatorPrs'
+        ));
     }
 
     // ─── General Service Hub ───────────────────────────────────────────────────
