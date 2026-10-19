@@ -1875,6 +1875,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('finance/credit-store/{creditStore}/payment/{payment}/attach-receipt', [App\Http\Controllers\Finance\CreditStoreController::class, 'attachReceipt'])->name('finance.credit-store.attach-receipt');
     Route::post('finance/credit-store/{creditStore}/payment/{payment}/correct-vat', [App\Http\Controllers\Finance\CreditStoreController::class, 'correctVat'])->name('finance.credit-store.correct-vat');
     Route::post('finance/credit-store/{creditStore}/assign-expense', [App\Http\Controllers\Finance\CreditStoreController::class, 'assignExpense'])->name('finance.credit-store.assign-expense');
+    Route::post('finance/credit-store/{creditStore}/sync-amount', [App\Http\Controllers\Finance\CreditStoreController::class, 'syncAmount'])->name('finance.credit-store.sync-amount');
 
     // Global Slip Sequence Resource & API
     Route::resource('slip-sequences', App\Http\Controllers\SlipSequenceController::class);

@@ -106,29 +106,22 @@ class CreditStoreController extends Controller
             'payments.journalEntry',
         ]);
 
-        // Ensure credit_amount accurately matches GM approved total without rounding discrepancies
-        if ($ledger->purchaseRequest && (float)($ledger->paid_amount ?? 0) <= 0.0) {
-            $pr = $ledger->purchaseRequest;
-            $prDirectAmt = (float)($pr->direct_buy_amount ?? 0);
-            $creditItems = $pr->items->filter(fn($i) => ($i->payment_method ?? '') === 'buy_by_credit');
-            $financeItems = $pr->items->filter(fn($i) => ($i->payment_method ?? 'pay_and_buy') === 'pay_and_buy');
+        // Calculate items sum and VAT from purchase request
+        $calculatedItemsTotal = 0.0;
+        if ($ledger->purchaseRequest && $ledger->purchaseRequest->items->count() > 0) {
+            foreach ($ledger->purchaseRequest->items as $item) {
+                $uPrice = (float)($item->estimated_unit_cost ?? $item->estimated_unit_price ?? $item->unit_price ?? 0);
+                $calculatedItemsTotal += (float)($item->estimated_total > 0 ? $item->estimated_total : ((float)$item->quantity * $uPrice));
+            }
+        }
+        $calculatedItemsWithVat = round($calculatedItemsTotal * 1.15, 2);
 
-            if ($creditItems->isNotEmpty() && $financeItems->isEmpty() && $prDirectAmt > 0) {
-                if (abs((float)$ledger->credit_amount - $prDirectAmt) > 0.001) {
-                    $ledger->update(['credit_amount' => $prDirectAmt]);
-                    $ledger->credit_amount = $prDirectAmt;
-                }
-            } elseif ($creditItems->isEmpty() && $financeItems->isEmpty() && $prDirectAmt > 0) {
-                if (abs((float)$ledger->credit_amount - $prDirectAmt) > 0.001) {
-                    $ledger->update(['credit_amount' => $prDirectAmt]);
-                    $ledger->credit_amount = $prDirectAmt;
-                }
-            } elseif ($creditItems->isNotEmpty() && $financeItems->isNotEmpty()) {
-                $exactCreditSum = (float)$creditItems->sum(fn($i) => (float)$i->quantity * (float)($i->estimated_unit_cost ?? $i->estimated_unit_price ?? $i->unit_price ?? 0));
-                if ($exactCreditSum > 0 && abs((float)$ledger->credit_amount - $exactCreditSum) > 0.001) {
-                    $ledger->update(['credit_amount' => $exactCreditSum]);
-                    $ledger->credit_amount = $exactCreditSum;
-                }
+        // If credit_amount is unset (<= 0), initialize with calculated items sum or PR amount
+        if ((float)($ledger->credit_amount ?? 0) <= 0.0 && (float)($ledger->paid_amount ?? 0) <= 0.0) {
+            $initAmt = $calculatedItemsTotal > 0 ? $calculatedItemsTotal : (float)($ledger->purchaseRequest?->direct_buy_amount ?? 0);
+            if ($initAmt > 0) {
+                $ledger->update(['credit_amount' => $initAmt]);
+                $ledger->credit_amount = $initAmt;
             }
         }
 
@@ -192,7 +185,71 @@ class CreditStoreController extends Controller
             ->latest()
             ->get();
 
-        return view('finance.credit-store.show', compact('ledger', 'coaAccounts', 'cashAccounts', 'bankAccounts', 'financeStaff', 'linkedExpenseRequests'));
+        return view('finance.credit-store.show', compact('ledger', 'coaAccounts', 'cashAccounts', 'bankAccounts', 'financeStaff', 'linkedExpenseRequests', 'calculatedItemsTotal', 'calculatedItemsWithVat'));
+    }
+
+    /**
+     * Synchronize credit purchase amount with calculated items total, items total + 15% VAT, or custom amount.
+     */
+    public function syncAmount(Request $request, CreditStoreLedger $creditStore)
+    {
+        $ledger = $creditStore;
+        $pr = $ledger->purchaseRequest;
+
+        $calculatedItemsTotal = 0.0;
+        if ($pr && $pr->items->count() > 0) {
+            foreach ($pr->items as $item) {
+                $uPrice = (float)($item->estimated_unit_cost ?? $item->estimated_unit_price ?? $item->unit_price ?? 0);
+                $calculatedItemsTotal += (float)($item->estimated_total > 0 ? $item->estimated_total : ((float)$item->quantity * $uPrice));
+            }
+        }
+
+        $syncMode = $request->input('sync_mode', 'items_sum');
+        $newAmount = (float)$ledger->credit_amount;
+
+        if ($syncMode === 'items_sum') {
+            $newAmount = $calculatedItemsTotal > 0 ? $calculatedItemsTotal : (float)$request->input('amount', $ledger->credit_amount);
+        } elseif ($syncMode === 'items_sum_with_vat') {
+            $vatRate = (float)$request->input('vat_rate', 15.00);
+            $base = $calculatedItemsTotal > 0 ? $calculatedItemsTotal : (float)$ledger->credit_amount;
+            $newAmount = round($base * (1 + ($vatRate / 100)), 2);
+        } elseif ($syncMode === 'pr_direct') {
+            $newAmount = (float)($pr?->direct_buy_amount ?? $ledger->credit_amount);
+        } elseif ($syncMode === 'custom') {
+            $newAmount = round((float)$request->input('custom_amount', $ledger->credit_amount), 2);
+        }
+
+        if ($newAmount <= 0) {
+            return back()->with('error', 'Invalid amount specified for credit store ledger synchronization.');
+        }
+
+        $oldAmount = (float)$ledger->credit_amount;
+        $newPaid = (float)$ledger->paid_amount;
+        $newStatus = ($newPaid >= $newAmount && $newAmount > 0) ? 'fully_paid' : ($newPaid > 0 ? 'partially_paid' : 'outstanding');
+
+        $ledger->update([
+            'credit_amount' => $newAmount,
+            'status'        => $newStatus,
+        ]);
+
+        if ($pr && $request->boolean('sync_pr', true)) {
+            $pr->update(['direct_buy_amount' => $newAmount]);
+        }
+
+        // Update ProcurementPayment if exists
+        $procPayment = \App\Models\ProcurementPayment::where('purchase_request_id', $ledger->purchase_request_id)->first();
+        if ($procPayment && $procPayment->method === 'credit') {
+            $procPayment->update(['amount' => $newAmount]);
+        }
+
+        $label = match($syncMode) {
+            'items_sum_with_vat' => 'Items Sum + 15% VAT',
+            'items_sum'          => 'Items Calculated Sum',
+            'pr_direct'          => 'GM Approved Direct Buy Amount',
+            default              => 'Custom Adjusted Value',
+        };
+
+        return back()->with('success', "✅ Total Credit Purchase Value successfully updated from ETB " . number_format($oldAmount, 2) . " to ETB " . number_format($newAmount, 2) . " ({$label}).");
     }
 
     /**
@@ -204,8 +261,19 @@ class CreditStoreController extends Controller
         $ledger = $creditStore;
         $remaining = $ledger->remaining_amount;
 
+        $calculatedItemsTotal = 0.0;
+        if ($ledger->purchaseRequest && $ledger->purchaseRequest->items) {
+            foreach ($ledger->purchaseRequest->items as $item) {
+                $uPrice = (float)($item->estimated_unit_cost ?? $item->estimated_unit_price ?? $item->unit_price ?? 0);
+                $calculatedItemsTotal += (float)($item->estimated_total > 0 ? $item->estimated_total : ((float)$item->quantity * $uPrice));
+            }
+        }
+        $calculatedItemsWithVat = round($calculatedItemsTotal * 1.15, 2);
+        $allowedMax = max((float)$remaining, (float)$ledger->credit_amount, $calculatedItemsTotal, $calculatedItemsWithVat) * 1.5;
+        if ($allowedMax < 100) $allowedMax = 999999999;
+
         $request->validate([
-            'amount'                    => 'required|numeric|min:0.01|max:' . ($remaining > 0 ? $remaining : 999999999),
+            'amount'                    => 'required|numeric|min:0.01|max:' . $allowedMax,
             'account_source'            => 'required|string',
             'assigned_finance_staff_id' => 'nullable|exists:users,id',
             'category'                  => 'nullable|string',
@@ -213,6 +281,13 @@ class CreditStoreController extends Controller
         ]);
 
         $amount = (float)$request->amount;
+        if ($amount > (float)$ledger->credit_amount) {
+            $ledger->update(['credit_amount' => $amount]);
+            $ledger->credit_amount = $amount;
+            if ($ledger->purchaseRequest) {
+                $ledger->purchaseRequest->update(['direct_buy_amount' => $amount]);
+            }
+        }
 
         // Resolve funding accounts
         $bankAccountId = null;
@@ -304,9 +379,19 @@ class CreditStoreController extends Controller
     {
         $ledger = $creditStore;
         $remaining = $ledger->remaining_amount;
+        $calculatedItemsTotal = 0.0;
+        if ($ledger->purchaseRequest && $ledger->purchaseRequest->items) {
+            foreach ($ledger->purchaseRequest->items as $item) {
+                $uPrice = (float)($item->estimated_unit_cost ?? $item->estimated_unit_price ?? $item->unit_price ?? 0);
+                $calculatedItemsTotal += (float)($item->estimated_total > 0 ? $item->estimated_total : ((float)$item->quantity * $uPrice));
+            }
+        }
+        $calculatedItemsWithVat = round($calculatedItemsTotal * 1.15, 2);
+        $allowedMax = max((float)$remaining, (float)$ledger->credit_amount, $calculatedItemsTotal, $calculatedItemsWithVat) * 1.5;
+        if ($allowedMax < 100) $allowedMax = 999999999;
 
         $request->validate([
-            'amount'                     => 'required|numeric|min:0.01|max:' . ($remaining > 0 ? $remaining : 999999999),
+            'amount'                     => 'required|numeric|min:0.01|max:' . $allowedMax,
             'payment_date'               => 'required|date',
             'payment_method'             => 'required|string|in:cash,bank_transfer,cheque,other',
             'account_source'             => 'nullable|string',
@@ -774,6 +859,14 @@ class CreditStoreController extends Controller
             }
 
             // 5. Update Ledger balances and status
+            if ($settledCreditAmount > (float)$ledger->credit_amount) {
+                $ledger->update(['credit_amount' => $settledCreditAmount]);
+                $ledger->credit_amount = $settledCreditAmount;
+                if ($ledger->purchaseRequest) {
+                    $ledger->purchaseRequest->update(['direct_buy_amount' => $settledCreditAmount]);
+                }
+            }
+
             $newPaid = (float)$ledger->paid_amount + $settledCreditAmount;
             $newStatus = ($newPaid >= (float)$ledger->credit_amount) ? 'fully_paid' : 'partially_paid';
 

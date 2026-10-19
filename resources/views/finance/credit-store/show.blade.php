@@ -185,13 +185,70 @@
                         <tfoot class="bg-light border-top">
                             @php
                                 $gmTotal = (float)($ledger->purchaseRequest?->direct_buy_amount ?? 0);
+                                $itemsDiff = abs($calculatedItemsTotal - (float)$ledger->credit_amount);
+                                $calculatedItemsWithVat = round($calculatedItemsTotal * 1.15, 2);
                             @endphp
-                            @if($calculatedItemsTotal > 0 && abs($calculatedItemsTotal - (float)$ledger->credit_amount) > 0.009)
-                                <tr>
-                                    <th colspan="4" class="text-end ps-3 text-muted small text-uppercase">Items Calculated Sum:</th>
-                                    <th class="text-end pe-3 text-muted font-monospace">{{ number_format($calculatedItemsTotal, 2) }} ETB</th>
+
+                            @if($calculatedItemsTotal > 0 && $itemsDiff > 0.009)
+                                <!-- Value Mismatch Alert & 1-Click Sync Console -->
+                                <tr class="table-warning border-start border-4 border-warning">
+                                    <td colspan="5" class="p-3">
+                                        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                            <div>
+                                                <div class="fw-bold text-dark small d-flex align-items-center gap-2">
+                                                    <i class="fa-solid fa-triangle-exclamation text-warning fs-5"></i>
+                                                    <span>
+                                                        Value Discrepancy Detected: Procured Items calculate to <strong class="text-primary font-monospace">{{ number_format($calculatedItemsTotal, 2) }} ETB</strong>, but Credit Purchase Value is set to <strong class="text-danger font-monospace">{{ number_format($ledger->credit_amount, 2) }} ETB</strong>.
+                                                    </span>
+                                                </div>
+                                                <div class="text-muted small mt-1" style="font-size:0.75rem;">
+                                                    Update the credit ledger value to match the real itemized total, or add 15% VAT on top to pay the full gross supplier invoice:
+                                                </div>
+                                            </div>
+                                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                                <!-- Form to Sync to Items Calculated Sum -->
+                                                <form action="{{ route('finance.credit-store.sync-amount', $ledger) }}" method="POST" class="d-inline">
+                                                    @csrf
+                                                    <input type="hidden" name="sync_mode" value="items_sum">
+                                                    <button type="submit" class="btn btn-sm btn-primary fw-bold shadow-2xs py-1.5 px-2.5" title="Update Credit Purchase Value to match the exact sum of line items">
+                                                        <i class="fa-solid fa-arrows-rotate me-1"></i> Sync to Items Sum ({{ number_format($calculatedItemsTotal, 2) }} ETB)
+                                                    </button>
+                                                </form>
+
+                                                <!-- Form to Sync to Items Sum + 15% VAT -->
+                                                <form action="{{ route('finance.credit-store.sync-amount', $ledger) }}" method="POST" class="d-inline">
+                                                    @csrf
+                                                    <input type="hidden" name="sync_mode" value="items_sum_with_vat">
+                                                    <button type="submit" class="btn btn-sm btn-success fw-bold shadow-2xs py-1.5 px-2.5" title="Update Credit Purchase Value to Items Sum + 15% Ethiopian VAT">
+                                                        <i class="fa-solid fa-receipt me-1"></i> Sync Items Sum + 15% VAT ({{ number_format($calculatedItemsWithVat, 2) }} ETB)
+                                                    </button>
+                                                </form>
+
+                                                <!-- Button to open custom adjust modal -->
+                                                <button type="button" class="btn btn-sm btn-outline-secondary fw-semibold py-1.5 px-2.5" data-bs-toggle="modal" data-bs-target="#syncCreditValueModal">
+                                                    <i class="fa-solid fa-sliders me-1"></i> Custom Value...
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </td>
                                 </tr>
                             @endif
+
+                            @if($calculatedItemsTotal > 0)
+                                <tr>
+                                    <th colspan="4" class="text-end ps-3 text-muted small text-uppercase">
+                                        <i class="fa-solid fa-list-check text-muted me-1"></i> Items Calculated Sum:
+                                    </th>
+                                    <th class="text-end pe-3 text-dark font-monospace fw-bold">{{ number_format($calculatedItemsTotal, 2) }} ETB</th>
+                                </tr>
+                                <tr>
+                                    <th colspan="4" class="text-end ps-3 text-muted small text-uppercase">
+                                        <i class="fa-solid fa-percent text-info me-1"></i> Items Sum + 15% VAT (Exclusive):
+                                    </th>
+                                    <th class="text-end pe-3 text-info font-monospace fw-bold">{{ number_format($calculatedItemsWithVat, 2) }} ETB</th>
+                                </tr>
+                            @endif
+
                             @if($gmTotal > 0 && abs($gmTotal - (float)$ledger->credit_amount) > 0.009)
                                 <tr>
                                     <th colspan="4" class="text-end ps-3 text-primary small text-uppercase">
@@ -200,9 +257,16 @@
                                     <th class="text-end pe-3 fw-bold text-primary font-monospace">{{ number_format($gmTotal, 2) }} ETB</th>
                                 </tr>
                             @endif
+
                             <tr class="table-active">
                                 <th colspan="4" class="text-end ps-3 text-uppercase fw-bold text-dark">
-                                    <i class="fas fa-credit-card text-info me-1"></i> Total Credit Purchase Value:
+                                    <div class="d-flex align-items-center justify-content-end gap-2">
+                                        <i class="fas fa-credit-card text-info"></i>
+                                        <span>Total Credit Purchase Value:</span>
+                                        <button type="button" class="btn btn-xs btn-outline-primary py-0.5 px-1.5 rounded-pill fw-normal" style="font-size:0.68rem;" data-bs-toggle="modal" data-bs-target="#syncCreditValueModal">
+                                            <i class="fa-solid fa-pen-to-square me-0.5"></i> Adjust
+                                        </button>
+                                    </div>
                                 </th>
                                 <th class="text-end pe-3 fw-bold text-dark font-monospace fs-6">{{ number_format($ledger->credit_amount, 2) }} ETB</th>
                             </tr>
@@ -470,13 +534,23 @@
                         <form action="{{ route('finance.credit-store.assign-expense', $ledger) }}" method="POST">
                             @csrf
 
+                            @php
+                                $assignMaxLimit = max((float)$ledger->remaining_amount, (float)$ledger->credit_amount, $calculatedItemsTotal ?? 0, ($calculatedItemsTotal ?? 0) * 1.15);
+                            @endphp
                             <div class="mb-3">
-                                <label class="form-label small fw-bold text-uppercase text-muted">Payment Amount (ETB) <span class="text-danger">*</span></label>
+                                <div class="d-flex align-items-center justify-content-between mb-1">
+                                    <label class="form-label small fw-bold text-uppercase text-muted mb-0">Payment Amount (ETB) <span class="text-danger">*</span></label>
+                                    @if(($calculatedItemsTotal ?? 0) > 0 && abs(($calculatedItemsTotal ?? 0) - (float)$ledger->remaining_amount) > 0.01)
+                                        <button type="button" class="btn btn-link btn-xs p-0 text-primary text-decoration-none fw-bold" style="font-size:0.7rem;" onclick="document.querySelector('form[action*=\'assign-expense\'] input[name=\'amount\']').value = '{{ number_format($calculatedItemsTotal, 2, '.', '') }}'">
+                                            Use Items: {{ number_format($calculatedItemsTotal, 2) }}
+                                        </button>
+                                    @endif
+                                </div>
                                 <div class="input-group input-group-sm">
-                                    <input type="number" step="0.01" min="0.01" max="{{ $ledger->remaining_amount }}" name="amount" class="form-control fw-bold fs-6" value="{{ number_format($ledger->remaining_amount, 2, '.', '') }}" required>
+                                    <input type="number" step="0.01" min="0.01" max="{{ $assignMaxLimit }}" name="amount" class="form-control fw-bold fs-6" value="{{ number_format($ledger->remaining_amount, 2, '.', '') }}" required>
                                     <span class="input-group-text bg-light fw-bold text-primary">ETB</span>
                                 </div>
-                                <div class="form-text small text-muted">Max payable: <strong>{{ number_format($ledger->remaining_amount, 2) }} ETB</strong></div>
+                                <div class="form-text small text-muted">Ceiling: <strong>{{ number_format($assignMaxLimit, 2) }} ETB</strong> &bull; Ledger Balance: {{ number_format($ledger->remaining_amount, 2) }} ETB</div>
                             </div>
 
                             <div class="mb-3">
@@ -721,19 +795,38 @@
                                     </div>
 
                                     <!-- Payment Amount (ETB) -->
+                                    @php
+                                        $disburseMaxLimit = max((float)$ledger->remaining_amount, (float)$ledger->credit_amount, $calculatedItemsTotal ?? 0, ($calculatedItemsTotal ?? 0) * 1.15);
+                                    @endphp
                                     <div class="mb-3">
                                         <div class="d-flex align-items-center justify-content-between mb-1">
                                             <label class="form-label small fw-bold text-uppercase text-dark mb-0">Disbursed Amount (ETB) <span class="text-danger">*</span></label>
                                             <button type="button" class="btn btn-link btn-sm p-0 text-success text-decoration-none fw-bold" style="font-size: 0.75rem;" onclick="setQuickPayFullAmount()">
-                                                <i class="fa-solid fa-bolt me-0.5 text-warning"></i> Pay Max ({{ number_format($ledger->remaining_amount, 2) }} ETB)
+                                                <i class="fa-solid fa-bolt me-0.5 text-warning"></i> Pay Balance ({{ number_format($ledger->remaining_amount, 2) }} ETB)
                                             </button>
                                         </div>
+
+                                        <!-- Quick Selection Chips: Items Sum, VAT, Ledger Balance -->
+                                        <div class="d-flex flex-wrap gap-1.5 mb-2">
+                                            <button type="button" class="btn btn-xs btn-outline-secondary fw-semibold py-1 px-2 rounded-2" onclick="setQuickPayAmount({{ (float)$ledger->remaining_amount }}, 'none')">
+                                                <i class="fa-solid fa-wallet text-secondary me-1"></i> Balance: {{ number_format($ledger->remaining_amount, 2) }} ETB
+                                            </button>
+                                            @if(($calculatedItemsTotal ?? 0) > 0)
+                                                <button type="button" class="btn btn-xs btn-outline-primary fw-bold py-1 px-2 rounded-2" onclick="setQuickPayAmount({{ (float)$calculatedItemsTotal }}, 'none')">
+                                                    <i class="fa-solid fa-calculator text-primary me-1"></i> Items Sum: {{ number_format($calculatedItemsTotal, 2) }} ETB
+                                                </button>
+                                                <button type="button" class="btn btn-xs btn-outline-success fw-bold py-1 px-2 rounded-2" onclick="setQuickPayAmountWithVat({{ (float)$calculatedItemsTotal }}, 'exclusive')">
+                                                    <i class="fa-solid fa-receipt text-success me-1"></i> Items Sum + 15% VAT: {{ number_format(round(($calculatedItemsTotal ?? 0) * 1.15, 2), 2) }} ETB
+                                                </button>
+                                            @endif
+                                        </div>
+
                                         <div class="input-group">
                                             <span class="input-group-text bg-light fw-bold text-dark">ETB</span>
-                                            <input type="number" step="0.01" min="0.01" max="{{ $ledger->remaining_amount }}" name="amount" id="quickPayAmountInput" class="form-control fw-bold fs-5 text-dark" value="{{ number_format($ledger->remaining_amount, 2, '.', '') }}" required oninput="recalculateQuickPayTax()">
+                                            <input type="number" step="0.01" min="0.01" max="{{ $disburseMaxLimit }}" name="amount" id="quickPayAmountInput" class="form-control fw-bold fs-5 text-dark" value="{{ number_format($ledger->remaining_amount, 2, '.', '') }}" required oninput="recalculateQuickPayTax()">
                                         </div>
                                         <div class="d-flex justify-content-between small text-muted mt-1" style="font-size:0.73rem;">
-                                            <span>Payable Ceiling: <strong class="text-dark">{{ number_format($ledger->remaining_amount, 2) }} ETB</strong></span>
+                                            <span>Ledger Value: <strong class="text-dark">{{ number_format($ledger->credit_amount, 2) }} ETB</strong></span>
                                             <span>Already Paid: <strong class="text-success">{{ number_format($ledger->paid_amount, 2) }} ETB</strong></span>
                                         </div>
                                     </div>
@@ -1007,6 +1100,51 @@
         }
     }
 
+    function setQuickPayAmount(amount, vatType = null) {
+        const amtInput = document.getElementById('quickPayAmountInput');
+        const vatSelect = document.getElementById('quickPayVatType');
+        if (amtInput) {
+            amtInput.value = parseFloat(amount).toFixed(2);
+        }
+        if (vatType && vatSelect) {
+            vatSelect.value = vatType;
+        }
+        recalculateQuickPayTax();
+        const studioEl = document.getElementById('disbursePaymentSection');
+        if (studioEl && window.scrollY < studioEl.offsetTop - 300) {
+            studioEl.scrollIntoView({ behavior: 'smooth' });
+        }
+    }
+
+    function setQuickPayAmountWithVat(baseAmount, vatType = 'exclusive') {
+        const amtInput = document.getElementById('quickPayAmountInput');
+        const vatSelect = document.getElementById('quickPayVatType');
+        if (amtInput) {
+            amtInput.value = parseFloat(baseAmount).toFixed(2);
+        }
+        if (vatSelect) {
+            vatSelect.value = vatType;
+        }
+        recalculateQuickPayTax();
+        const studioEl = document.getElementById('disbursePaymentSection');
+        if (studioEl && window.scrollY < studioEl.offsetTop - 300) {
+            studioEl.scrollIntoView({ behavior: 'smooth' });
+        }
+    }
+
+    function toggleCustomAmountInput(isCustom) {
+        const wrapper = document.getElementById('customAmountInputWrapper');
+        const input = document.getElementById('customAmountInput');
+        if (wrapper) {
+            if (isCustom) {
+                wrapper.classList.remove('d-none');
+                if (input) input.focus();
+            } else {
+                wrapper.classList.add('d-none');
+            }
+        }
+    }
+
     function recalculateQuickPayTax() {
         const grossInput = document.getElementById('quickPayAmountInput');
         const vatTypeSelect = document.getElementById('quickPayVatType');
@@ -1097,6 +1235,9 @@
     document.addEventListener('DOMContentLoaded', () => {
         window.recalculateQuickPayTax = recalculateQuickPayTax;
         window.setQuickPayFullAmount = setQuickPayFullAmount;
+        window.setQuickPayAmount = setQuickPayAmount;
+        window.setQuickPayAmountWithVat = setQuickPayAmountWithVat;
+        window.toggleCustomAmountInput = toggleCustomAmountInput;
         const selSingle = document.getElementById('singlePaymentAccountSelect');
         if (selSingle) onSingleAccountChange(selSingle);
         const selAssign = document.getElementById('assignAccountSelect');
@@ -1608,5 +1749,103 @@
         });
     </script>
 @endif
+
+<!-- Sync / Adjust Credit Value Modal -->
+<div class="modal fade" id="syncCreditValueModal" tabindex="-1" aria-labelledby="syncCreditValueModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+            <form action="{{ route('finance.credit-store.sync-amount', $ledger) }}" method="POST">
+                @csrf
+                <div class="modal-header bg-dark text-white py-3 px-4">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="badge bg-primary text-white p-2 rounded-circle">
+                            <i class="fa-solid fa-scale-balanced fs-6"></i>
+                        </span>
+                        <div>
+                            <h6 class="modal-title fw-bold mb-0">Adjust &amp; Synchronize Credit Purchase Value</h6>
+                            <small class="text-white-50">PR #{{ $ledger->pr_no }} &bull; Supplier: {{ $ledger->supplier_name ?: 'Credit Supplier' }}</small>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <p class="text-muted small mb-3">
+                        Choose how to align this credit purchase liability. You can sync directly to the sum of line items from the purchase request, add 15% VAT on top, or set a custom invoice amount.
+                    </p>
+
+                    <div class="list-group mb-3">
+                        <!-- Option 1: Items Calculated Sum -->
+                        <label class="list-group-item list-group-item-action d-flex align-items-center gap-3 p-3 cursor-pointer">
+                            <input class="form-check-input flex-shrink-0 mt-0" type="radio" name="sync_mode" value="items_sum" checked onchange="toggleCustomAmountInput(false)">
+                            <div class="w-100">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <strong class="text-dark small">Procured Items Calculated Sum</strong>
+                                    <span class="badge bg-primary font-monospace fs-6">{{ number_format($calculatedItemsTotal ?? 0, 2) }} ETB</span>
+                                </div>
+                                <div class="text-muted small" style="font-size:0.75rem;">Calculated directly from the quantities and unit prices of items in PR #{{ $ledger->pr_no }}.</div>
+                            </div>
+                        </label>
+
+                        <!-- Option 2: Items Calculated Sum + 15% VAT -->
+                        <label class="list-group-item list-group-item-action d-flex align-items-center gap-3 p-3 cursor-pointer">
+                            <input class="form-check-input flex-shrink-0 mt-0" type="radio" name="sync_mode" value="items_sum_with_vat" onchange="toggleCustomAmountInput(false)">
+                            <div class="w-100">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <strong class="text-dark small">Items Sum + 15% VAT (Exclusive Mode)</strong>
+                                    <span class="badge bg-success font-monospace fs-6">{{ number_format(($calculatedItemsTotal ?? 0) * 1.15, 2) }} ETB</span>
+                                </div>
+                                <div class="text-muted small" style="font-size:0.75rem;">Adds 15% Ethiopian VAT (+{{ number_format(($calculatedItemsTotal ?? 0) * 0.15, 2) }} ETB) to the base items total.</div>
+                            </div>
+                        </label>
+
+                        @if(($ledger->purchaseRequest?->direct_buy_amount ?? 0) > 0)
+                            <!-- Option 3: GM Approved Direct Buy Amount -->
+                            <label class="list-group-item list-group-item-action d-flex align-items-center gap-3 p-3 cursor-pointer">
+                                <input class="form-check-input flex-shrink-0 mt-0" type="radio" name="sync_mode" value="pr_direct" onchange="toggleCustomAmountInput(false)">
+                                <div class="w-100">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <strong class="text-dark small">GM Approved Request Total</strong>
+                                        <span class="badge bg-secondary font-monospace">{{ number_format($ledger->purchaseRequest->direct_buy_amount, 2) }} ETB</span>
+                                    </div>
+                                    <div class="text-muted small" style="font-size:0.75rem;">Keep or revert to the initial lump-sum amount entered during GM approval.</div>
+                                </div>
+                            </label>
+                        @endif
+
+                        <!-- Option 4: Custom Amount -->
+                        <label class="list-group-item list-group-item-action d-flex align-items-center gap-3 p-3 cursor-pointer">
+                            <input class="form-check-input flex-shrink-0 mt-0" type="radio" name="sync_mode" value="custom" id="syncModeCustomRadio" onchange="toggleCustomAmountInput(true)">
+                            <div class="w-100">
+                                <strong class="text-dark small">Custom Vendor Invoice Value</strong>
+                                <div class="text-muted small" style="font-size:0.75rem;">Specify an exact agreed amount if vendor final bill differs.</div>
+                            </div>
+                        </label>
+                    </div>
+
+                    <div id="customAmountInputWrapper" class="mb-3 d-none">
+                        <label class="form-label small fw-bold text-uppercase text-dark">Enter Custom Purchase Amount (ETB) <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light fw-bold text-dark">ETB</span>
+                            <input type="number" step="0.01" min="0.01" name="custom_amount" id="customAmountInput" class="form-control fw-bold" placeholder="e.g. 1582.58">
+                        </div>
+                    </div>
+
+                    <div class="form-check form-switch mb-0">
+                        <input class="form-check-input" type="checkbox" name="sync_pr" value="1" id="syncPrToggle" checked>
+                        <label class="form-check-label small text-muted" for="syncPrToggle">
+                            Also update Purchase Request direct buy amount to stay perfectly in sync.
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light py-2 px-4">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm fw-bold px-3">
+                        <i class="fa-solid fa-check me-1"></i> Apply &amp; Update Ledger
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 
 @endsection
