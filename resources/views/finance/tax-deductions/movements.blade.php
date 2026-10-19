@@ -65,9 +65,12 @@
 
                         {{-- Month Select --}}
                         <select name="ethiopian_month" class="form-select form-select-sm border-0 bg-transparent fw-bold text-primary pe-3" style="width: auto; font-size: 0.8rem;" onchange="this.form.submit()">
-                            @foreach($availableEthMonths as $mNum => $mLabel)
+                            @foreach($availableEthMonths as $mNum => $m)
+                                @php
+                                    $monthText = is_array($m) ? ($m['label'] ?? (($m['name_en'] ?? '') . ' (' . ($m['name_am'] ?? '') . ')')) : "{$mNum}. {$m}";
+                                @endphp
                                 <option value="{{ $mNum }}" {{ $selectedEthMonth == $mNum ? 'selected' : '' }}>
-                                    {{ $mNum }}. {{ $mLabel }}
+                                    {{ $monthText }}
                                 </option>
                             @endforeach
                         </select>
