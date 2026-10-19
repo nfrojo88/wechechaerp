@@ -754,7 +754,6 @@
                     <input type="hidden" name="subtotal" id="creditSingleSubtotal" value="{{ number_format($ledger->remaining_amount, 2, '.', '') }}">
                     <input type="hidden" name="total_amount" id="creditSingleTotalAmount" value="{{ number_format($ledger->remaining_amount, 2, '.', '') }}">
                     <input type="hidden" name="vat_included" id="creditSingleVatIncluded" value="0">
-                    <input type="hidden" name="vat_amount" id="creditSingleVatAmount" value="0.00">
                     <input type="hidden" name="purc_type" id="creditSinglePurcType" value="6">
                     <input type="hidden" name="purchaser_tin" id="creditSinglePurchaserTin" value="0038480010">
                     <input type="hidden" name="seller_tin" id="creditSingleSellerTin" value="{{ optional($ledger->supplier)->tin ?? '' }}">
@@ -766,196 +765,205 @@
                     <input type="hidden" name="encoded_by" id="creditSingleEncodedBy" value="{{ strtolower(preg_replace('/[^a-zA-Z0-9_]/', '', Auth::user()->name ?? 'wechacha')) }}">
 
                     <div class="row g-4">
-                        <!-- Left Sub-Column: Payment & Tax Parameters -->
-                        <div class="col-12 col-xl-5">
-                            <div class="card border-0 shadow-sm rounded-3 bg-white h-100">
-                                <div class="card-header bg-white py-2.5 px-3 border-bottom d-flex align-items-center justify-content-between">
+                        <!-- Top Card: Payment & Tax Parameters (Full Width) -->
+                        <div class="col-12">
+                            <div class="card border-0 shadow-sm rounded-3 bg-white">
+                                <div class="card-header bg-white py-2.5 px-3 border-bottom d-flex align-items-center justify-content-between flex-wrap gap-2">
                                     <h6 class="fw-bold text-dark mb-0 small text-uppercase">
                                         <i class="fa-solid fa-coins text-warning me-1.5"></i> 1. Payment &amp; Tax Parameters
                                     </h6>
                                     <span class="badge bg-light text-muted border font-monospace" style="font-size:0.7rem;">Step 1 of 2</span>
                                 </div>
                                 <div class="card-body p-3">
-                                    <!-- Payment Date & Method -->
-                                    <div class="row g-2 mb-3">
-                                        <div class="col-sm-6">
-                                            <label class="form-label small fw-bold text-uppercase text-muted">Payment Date <span class="text-danger">*</span></label>
-                                            <input type="date" name="payment_date" class="form-control form-control-sm" value="{{ date('Y-m-d') }}" required>
-                                        </div>
-                                        <div class="col-sm-6">
-                                            <label class="form-label small fw-bold text-uppercase text-muted">Payment Method <span class="text-danger">*</span></label>
-                                            <select name="payment_method" id="singlePaymentMethodSelect" class="form-select form-select-sm" required>
-                                                <option value="bank_transfer" selected>Bank Transfer (CBE, Awash, etc.)</option>
-                                                <option value="cash">Cash / Site Petty Cash</option>
-                                                <option value="cheque">Cheque</option>
-                                                <option value="telebirr">Telebirr / Mobile Money</option>
-                                                <option value="other">Other</option>
-                                            </select>
-                                        </div>
-                                    </div>
+                                    <div class="row g-3">
+                                        <!-- Column 1: Amount & Date/Method -->
+                                        <div class="col-12 col-lg-4">
+                                            <!-- Payment Amount (ETB) -->
+                                            @php
+                                                $disburseMaxLimit = max((float)$ledger->remaining_amount, (float)$ledger->credit_amount, $calculatedItemsTotal ?? 0, ($calculatedItemsTotal ?? 0) * 1.15);
+                                            @endphp
+                                            <div class="mb-3">
+                                                <div class="d-flex align-items-center justify-content-between mb-1">
+                                                    <label class="form-label small fw-bold text-uppercase text-dark mb-0">Disbursed Amount (ETB) <span class="text-danger">*</span></label>
+                                                    <button type="button" class="btn btn-link btn-sm p-0 text-success text-decoration-none fw-bold" style="font-size: 0.75rem;" onclick="setQuickPayFullAmount()">
+                                                        <i class="fa-solid fa-bolt me-0.5 text-warning"></i> Pay Balance ({{ number_format($ledger->remaining_amount, 2) }} ETB)
+                                                    </button>
+                                                </div>
 
-                                    <!-- Payment Amount (ETB) -->
-                                    @php
-                                        $disburseMaxLimit = max((float)$ledger->remaining_amount, (float)$ledger->credit_amount, $calculatedItemsTotal ?? 0, ($calculatedItemsTotal ?? 0) * 1.15);
-                                    @endphp
-                                    <div class="mb-3">
-                                        <div class="d-flex align-items-center justify-content-between mb-1">
-                                            <label class="form-label small fw-bold text-uppercase text-dark mb-0">Disbursed Amount (ETB) <span class="text-danger">*</span></label>
-                                            <button type="button" class="btn btn-link btn-sm p-0 text-success text-decoration-none fw-bold" style="font-size: 0.75rem;" onclick="setQuickPayFullAmount()">
-                                                <i class="fa-solid fa-bolt me-0.5 text-warning"></i> Pay Balance ({{ number_format($ledger->remaining_amount, 2) }} ETB)
-                                            </button>
-                                        </div>
+                                                <!-- Quick Selection Chips: Items Sum, VAT, Ledger Balance -->
+                                                <div class="d-flex flex-wrap gap-1.5 mb-2">
+                                                    <button type="button" class="btn btn-xs btn-outline-secondary fw-semibold py-1 px-2 rounded-2" onclick="setQuickPayAmount({{ (float)$ledger->remaining_amount }}, 'none')">
+                                                        <i class="fa-solid fa-wallet text-secondary me-1"></i> Balance: {{ number_format($ledger->remaining_amount, 2) }} ETB
+                                                    </button>
+                                                    @if(($calculatedItemsTotal ?? 0) > 0)
+                                                        <button type="button" class="btn btn-xs btn-outline-primary fw-bold py-1 px-2 rounded-2" onclick="setQuickPayAmount({{ (float)$calculatedItemsTotal }}, 'none')">
+                                                            <i class="fa-solid fa-calculator text-primary me-1"></i> Items Sum: {{ number_format($calculatedItemsTotal, 2) }} ETB
+                                                        </button>
+                                                        <button type="button" class="btn btn-xs btn-outline-success fw-bold py-1 px-2 rounded-2" onclick="setQuickPayAmountWithVat({{ (float)$calculatedItemsTotal }}, 'exclusive')">
+                                                            <i class="fa-solid fa-receipt text-success me-1"></i> Items Sum + 15% VAT: {{ number_format(round(($calculatedItemsTotal ?? 0) * 1.15, 2), 2) }} ETB
+                                                        </button>
+                                                    @endif
+                                                </div>
 
-                                        <!-- Quick Selection Chips: Items Sum, VAT, Ledger Balance -->
-                                        <div class="d-flex flex-wrap gap-1.5 mb-2">
-                                            <button type="button" class="btn btn-xs btn-outline-secondary fw-semibold py-1 px-2 rounded-2" onclick="setQuickPayAmount({{ (float)$ledger->remaining_amount }}, 'none')">
-                                                <i class="fa-solid fa-wallet text-secondary me-1"></i> Balance: {{ number_format($ledger->remaining_amount, 2) }} ETB
-                                            </button>
-                                            @if(($calculatedItemsTotal ?? 0) > 0)
-                                                <button type="button" class="btn btn-xs btn-outline-primary fw-bold py-1 px-2 rounded-2" onclick="setQuickPayAmount({{ (float)$calculatedItemsTotal }}, 'none')">
-                                                    <i class="fa-solid fa-calculator text-primary me-1"></i> Items Sum: {{ number_format($calculatedItemsTotal, 2) }} ETB
-                                                </button>
-                                                <button type="button" class="btn btn-xs btn-outline-success fw-bold py-1 px-2 rounded-2" onclick="setQuickPayAmountWithVat({{ (float)$calculatedItemsTotal }}, 'exclusive')">
-                                                    <i class="fa-solid fa-receipt text-success me-1"></i> Items Sum + 15% VAT: {{ number_format(round(($calculatedItemsTotal ?? 0) * 1.15, 2), 2) }} ETB
-                                                </button>
-                                            @endif
-                                        </div>
-
-                                        <div class="input-group">
-                                            <span class="input-group-text bg-light fw-bold text-dark">ETB</span>
-                                            <input type="number" step="0.01" min="0.01" max="{{ $disburseMaxLimit }}" name="amount" id="quickPayAmountInput" class="form-control fw-bold fs-5 text-dark" value="{{ number_format($ledger->remaining_amount, 2, '.', '') }}" required oninput="recalculateQuickPayTax()">
-                                        </div>
-                                        <div class="d-flex justify-content-between small text-muted mt-1" style="font-size:0.73rem;">
-                                            <span>Ledger Value: <strong class="text-dark">{{ number_format($ledger->credit_amount, 2) }} ETB</strong></span>
-                                            <span>Already Paid: <strong class="text-success">{{ number_format($ledger->paid_amount, 2) }} ETB</strong></span>
-                                        </div>
-                                    </div>
-
-                                    <!-- Funding Account (COA / Bank) -->
-                                    <div class="mb-3">
-                                        <label class="form-label small fw-bold text-uppercase text-dark">
-                                            Paying Bank / Cash Account <span class="text-danger">*</span>
-                                        </label>
-                                        <select name="account_source" id="singlePaymentAccountSelect" class="form-select form-select-sm" required onchange="onSingleAccountChange(this)">
-                                            <option value="">-- Choose Paying Account * --</option>
-                                            @if(isset($bankAccounts) && $bankAccounts->count() > 0)
-                                                <optgroup label="🏦 Company Bank Accounts">
-                                                    @foreach($bankAccounts as $bk)
-                                                        <option value="bank:{{ $bk->id }}" data-method="bank_transfer" data-balance="{{ (float)($bk->current_balance ?? 0) }}" {{ $loop->first ? 'selected' : '' }}>
-                                                            {{ $bk->bank_name }} - {{ $bk->account_number }} (Bal: ETB {{ number_format($bk->current_balance ?? 0, 2) }})
-                                                        </option>
-                                                    @endforeach
-                                                </optgroup>
-                                            @endif
-                                            @if(isset($cashAccounts) && $cashAccounts->count() > 0)
-                                                <optgroup label="💵 Cash on Hand &amp; Site Petty Cash">
-                                                    @foreach($cashAccounts as $ca)
-                                                        <option value="coa:{{ $ca->id }}" data-method="cash" data-balance="{{ (float)$ca->current_balance }}">
-                                                            {{ $ca->code }} - {{ $ca->name }} (Bal: ETB {{ number_format($ca->current_balance, 2) }})
-                                                        </option>
-                                                    @endforeach
-                                                </optgroup>
-                                            @endif
-                                        </select>
-                                        <div class="small text-muted mt-1" id="singleAccountBalanceDisplay">
-                                            <i class="fa-solid fa-coins text-warning me-1"></i>Funds will be credited directly from this account.
-                                        </div>
-                                    </div>
-
-                                    <!-- Tax Treatment Section (Ethiopian ERCA / VAT / WHT) -->
-                                    <div class="card border border-secondary border-opacity-25 rounded-3 mb-3 bg-light bg-opacity-50">
-                                        <div class="card-body p-2.5">
-                                            <div class="d-flex align-items-center justify-content-between mb-2">
-                                                <span class="fw-bold small text-dark"><i class="fa-solid fa-calculator text-primary me-1"></i> Tax &amp; Withholding Computation</span>
-                                                <span class="badge bg-secondary-subtle text-secondary" style="font-size:0.68rem;">ERCA Rules</span>
+                                                <div class="input-group">
+                                                    <span class="input-group-text bg-light fw-bold text-dark">ETB</span>
+                                                    <input type="number" step="0.01" min="0.01" max="{{ $disburseMaxLimit }}" name="amount" id="quickPayAmountInput" class="form-control fw-bold fs-5 text-dark" value="{{ number_format($ledger->remaining_amount, 2, '.', '') }}" required oninput="recalculateQuickPayTax()">
+                                                </div>
+                                                <div class="d-flex justify-content-between small text-muted mt-1" style="font-size:0.73rem;">
+                                                    <span>Ledger Value: <strong class="text-dark">{{ number_format($ledger->credit_amount, 2) }} ETB</strong></span>
+                                                    <span>Already Paid: <strong class="text-success">{{ number_format($ledger->paid_amount, 2) }} ETB</strong></span>
+                                                </div>
                                             </div>
 
-                                            <div class="row g-2 mb-2">
-                                                <div class="col-sm-7">
-                                                    <label class="form-label small text-muted mb-1" style="font-size:0.72rem;">VAT Option</label>
-                                                    <select name="vat_type" id="quickPayVatType" class="form-select form-select-sm" onchange="recalculateQuickPayTax()">
-                                                        <option value="none" selected>No VAT / Exempt (PurcType 6 / TAS Excel)</option>
-                                                        <option value="inclusive">15% VAT Inclusive (PurcType 3 / Line 100)</option>
-                                                        <option value="exclusive">15% VAT Exclusive (Add 15% to Base)</option>
-                                                        <option value="vat_b">15% VAT-B (Standard Ethiopian Rate)</option>
+                                            <!-- Payment Date & Method -->
+                                            <div class="row g-2">
+                                                <div class="col-sm-6">
+                                                    <label class="form-label small fw-bold text-uppercase text-muted">Payment Date <span class="text-danger">*</span></label>
+                                                    <input type="date" name="payment_date" class="form-control form-control-sm" value="{{ date('Y-m-d') }}" required>
+                                                </div>
+                                                <div class="col-sm-6">
+                                                    <label class="form-label small fw-bold text-uppercase text-muted">Payment Method <span class="text-danger">*</span></label>
+                                                    <select name="payment_method" id="singlePaymentMethodSelect" class="form-select form-select-sm" required>
+                                                        <option value="bank_transfer" selected>Bank Transfer (CBE, Awash, etc.)</option>
+                                                        <option value="cash">Cash / Site Petty Cash</option>
+                                                        <option value="cheque">Cheque</option>
+                                                        <option value="telebirr">Telebirr / Mobile Money</option>
+                                                        <option value="other">Other</option>
                                                     </select>
                                                 </div>
-                                                <div class="col-sm-5 d-flex align-items-end">
-                                                    <div class="form-check form-switch mb-1">
-                                                        <input class="form-check-input" type="checkbox" id="quickPayWithholdingToggle" checked onchange="recalculateQuickPayTax()">
-                                                        <label class="form-check-label small fw-bold text-dark" for="quickPayWithholdingToggle" style="font-size:0.72rem;">
-                                                            Deduct 3% WHT
-                                                        </label>
+                                            </div>
+                                        </div>
+
+                                        <!-- Column 2: Funding Account & Reference / Notes -->
+                                        <div class="col-12 col-lg-4">
+                                            <!-- Funding Account (COA / Bank) -->
+                                            <div class="mb-3">
+                                                <label class="form-label small fw-bold text-uppercase text-dark">
+                                                    Paying Bank / Cash Account <span class="text-danger">*</span>
+                                                </label>
+                                                <select name="account_source" id="singlePaymentAccountSelect" class="form-select form-select-sm" required onchange="onSingleAccountChange(this)">
+                                                    <option value="">-- Choose Paying Account * --</option>
+                                                    @if(isset($bankAccounts) && $bankAccounts->count() > 0)
+                                                        <optgroup label="🏦 Company Bank Accounts">
+                                                            @foreach($bankAccounts as $bk)
+                                                                <option value="bank:{{ $bk->id }}" data-method="bank_transfer" data-balance="{{ (float)($bk->current_balance ?? 0) }}" {{ $loop->first ? 'selected' : '' }}>
+                                                                    {{ $bk->bank_name }} - {{ $bk->account_number }} (Bal: ETB {{ number_format($bk->current_balance ?? 0, 2) }})
+                                                                </option>
+                                                            @endforeach
+                                                        </optgroup>
+                                                    @endif
+                                                    @if(isset($cashAccounts) && $cashAccounts->count() > 0)
+                                                        <optgroup label="💵 Cash on Hand &amp; Site Petty Cash">
+                                                            @foreach($cashAccounts as $ca)
+                                                                <option value="coa:{{ $ca->id }}" data-method="cash" data-balance="{{ (float)$ca->current_balance }}">
+                                                                    {{ $ca->code }} - {{ $ca->name }} (Bal: ETB {{ number_format($ca->current_balance, 2) }})
+                                                                </option>
+                                                            @endforeach
+                                                        </optgroup>
+                                                    @endif
+                                                </select>
+                                                <div class="small text-muted mt-1" id="singleAccountBalanceDisplay">
+                                                    <i class="fa-solid fa-coins text-warning me-1"></i>Funds will be credited directly from this account.
+                                                </div>
+                                            </div>
+
+                                            <!-- Reference & Notes -->
+                                            <div class="mb-2">
+                                                <label class="form-label small fw-bold text-uppercase text-muted">Reference / Check / Tx #</label>
+                                                <input type="text" name="reference_no" class="form-control form-control-sm font-monospace" placeholder="e.g. CBE-TX-998231 or FS-0012">
+                                            </div>
+                                            <div>
+                                                <label class="form-label small fw-bold text-uppercase text-muted">Notes / Memo</label>
+                                                <input type="text" name="notes" class="form-control form-control-sm" placeholder="e.g. Settlement for delivery batch 1">
+                                            </div>
+                                        </div>
+
+                                        <!-- Column 3: Tax Treatment & Submit Action -->
+                                        <div class="col-12 col-lg-4">
+                                            <!-- Tax Treatment Section (Ethiopian ERCA / VAT / WHT) -->
+                                            <div class="card border border-secondary border-opacity-25 rounded-3 mb-2 bg-light bg-opacity-50">
+                                                <div class="card-body p-2.5">
+                                                    <div class="d-flex align-items-center justify-content-between mb-2">
+                                                        <span class="fw-bold small text-dark"><i class="fa-solid fa-calculator text-primary me-1"></i> Tax &amp; Withholding Computation</span>
+                                                        <span class="badge bg-secondary-subtle text-secondary" style="font-size:0.68rem;">ERCA Rules</span>
+                                                    </div>
+
+                                                    <div class="row g-2 mb-2">
+                                                        <div class="col-sm-7">
+                                                            <label class="form-label small text-muted mb-1" style="font-size:0.72rem;">VAT Option</label>
+                                                            <select name="vat_type" id="quickPayVatType" class="form-select form-select-sm" onchange="recalculateQuickPayTax()">
+                                                                <option value="none" selected>No VAT / Exempt (PurcType 6 / TAS Excel)</option>
+                                                                <option value="inclusive">15% VAT Inclusive (PurcType 3 / Line 100)</option>
+                                                                <option value="exclusive">15% VAT Exclusive (Add 15% to Base)</option>
+                                                                <option value="vat_b">15% VAT-B (Standard Ethiopian Rate)</option>
+                                                            </select>
+                                                        </div>
+                                                        <div class="col-sm-5 d-flex align-items-end">
+                                                            <div class="form-check form-switch mb-1">
+                                                                <input class="form-check-input" type="checkbox" id="quickPayWithholdingToggle" checked onchange="recalculateQuickPayTax()">
+                                                                <label class="form-check-label small fw-bold text-dark" for="quickPayWithholdingToggle" style="font-size:0.72rem;">
+                                                                    Deduct 3% WHT
+                                                                </label>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div id="quickPayWithholdingSection" class="p-2 rounded bg-warning bg-opacity-10 border border-warning border-opacity-25 small text-dark mb-2" style="font-size: 0.72rem;">
+                                                        <div class="d-flex align-items-center justify-content-between">
+                                                            <span><i class="fa-solid fa-stamp text-warning me-1"></i> <strong>3% Withholding Tax</strong> deducted from vendor net payment.</span>
+                                                            <span class="badge bg-warning text-dark font-monospace">Rate: 3.00%</span>
+                                                        </div>
+                                                    </div>
+
+                                                    <!-- Live Calculation Summary Breakdown -->
+                                                    <div class="p-2 rounded bg-white border font-monospace small" style="font-size: 0.74rem;">
+                                                        <div class="d-flex justify-content-between text-muted mb-0.5">
+                                                            <span>Base / Subtotal:</span>
+                                                            <span id="quickDisplayBaseAmount" class="fw-bold text-dark">ETB 0.00</span>
+                                                        </div>
+                                                        <div class="d-flex justify-content-between text-muted mb-0.5">
+                                                            <span>VAT (15%):</span>
+                                                            <span id="quickDisplayVatAmount" class="fw-bold text-info">+ ETB 0.00</span>
+                                                        </div>
+                                                        <div class="d-flex justify-content-between text-muted mb-0.5">
+                                                            <span>Withholding Tax (3%):</span>
+                                                            <span id="quickDisplayWhtAmount" class="fw-bold text-danger">- ETB 0.00</span>
+                                                        </div>
+                                                        <div class="d-flex justify-content-between pt-1 border-top fw-bold fs-6">
+                                                            <span class="text-dark">Net Disbursed:</span>
+                                                            <span id="quickDisplayNetAmount" class="text-success">ETB 0.00</span>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
 
-                                            <div id="quickPayWithholdingSection" class="p-2 rounded bg-warning bg-opacity-10 border border-warning border-opacity-25 small text-dark mb-2" style="font-size: 0.72rem;">
-                                                <div class="d-flex align-items-center justify-content-between">
-                                                    <span><i class="fa-solid fa-stamp text-warning me-1"></i> <strong>3% Withholding Tax</strong> deducted from vendor net payment.</span>
-                                                    <span class="badge bg-warning text-dark font-monospace">Rate: 3.00%</span>
-                                                </div>
+                                            <!-- No Receipt Toggle Option -->
+                                            <div class="form-check form-switch mb-2 p-2 rounded bg-light border">
+                                                <input class="form-check-input ms-0 me-2" type="checkbox" id="singleNoReceiptToggle" onchange="toggleSingleReceiptMode(this.checked)">
+                                                <label class="form-check-label small fw-bold text-dark" for="singleNoReceiptToggle">
+                                                    Pay Without Vendor Fiscal Receipt (TAS / Non-VAT Proof Only)
+                                                </label>
                                             </div>
 
-                                            <!-- Live Calculation Summary Breakdown -->
-                                            <div class="p-2.5 rounded bg-white border font-monospace small" style="font-size: 0.74rem;">
-                                                <div class="d-flex justify-content-between text-muted mb-1">
-                                                    <span>Base / Subtotal:</span>
-                                                    <span id="quickDisplayBaseAmount" class="fw-bold text-dark">ETB 0.00</span>
-                                                </div>
-                                                <div class="d-flex justify-content-between text-muted mb-1">
-                                                    <span>VAT (15%):</span>
-                                                    <span id="quickDisplayVatAmount" class="fw-bold text-info">+ ETB 0.00</span>
-                                                </div>
-                                                <div class="d-flex justify-content-between text-muted mb-1">
-                                                    <span>Withholding Tax (3%):</span>
-                                                    <span id="quickDisplayWhtAmount" class="fw-bold text-danger">- ETB 0.00</span>
-                                                </div>
-                                                <div class="d-flex justify-content-between pt-1 border-top fw-bold fs-6">
-                                                    <span class="text-dark">Net Cash Disbursed:</span>
-                                                    <span id="quickDisplayNetAmount" class="text-success">ETB 0.00</span>
-                                                </div>
-                                            </div>
+                                            <!-- Submit Button Top -->
+                                            <button type="submit" id="singleSubmitBtn" class="btn btn-success fw-bold shadow-sm w-100 py-2">
+                                                <i class="fas fa-check-circle me-1"></i> Record Payment &amp; Liquidate Credit
+                                            </button>
                                         </div>
                                     </div>
-
-                                    <!-- Reference & Notes -->
-                                    <div class="row g-2 mb-3">
-                                        <div class="col-sm-6">
-                                            <label class="form-label small fw-bold text-uppercase text-muted">Reference / Check / Tx #</label>
-                                            <input type="text" name="reference_no" class="form-control form-control-sm font-monospace" placeholder="e.g. CBE-TX-998231 or FS-0012">
-                                        </div>
-                                        <div class="col-sm-6">
-                                            <label class="form-label small fw-bold text-uppercase text-muted">Notes / Memo</label>
-                                            <input type="text" name="notes" class="form-control form-control-sm" placeholder="e.g. Settlement for delivery batch 1">
-                                        </div>
-                                    </div>
-
-                                    <!-- No Receipt Toggle Option -->
-                                    <div class="form-check form-switch mb-3 p-2 rounded bg-light border">
-                                        <input class="form-check-input ms-0 me-2" type="checkbox" id="singleNoReceiptToggle" onchange="toggleSingleReceiptMode(this.checked)">
-                                        <label class="form-check-label small fw-bold text-dark" for="singleNoReceiptToggle">
-                                            Pay Without Vendor Fiscal Receipt (TAS / Non-VAT Proof Only)
-                                        </label>
-                                    </div>
-
-                                    <!-- Submit Button -->
-                                    <button type="submit" id="singleSubmitBtn" class="btn btn-success fw-bold shadow-sm w-100 py-2.5">
-                                        <i class="fas fa-check-circle me-1"></i> Record Payment &amp; Liquidate Credit
-                                    </button>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Right Sub-Column: Receipt OCR Studio & Proof -->
-                        <div class="col-12 col-xl-7">
-                            <div class="card border-0 shadow-sm rounded-3 bg-white h-100">
+                        <!-- Bottom Card: Receipt OCR Studio & Proof (Placed Under, Full Width) -->
+                        <div class="col-12">
+                            <div class="card border-0 shadow-sm rounded-3 bg-white">
                                 <div class="card-header bg-white py-2.5 px-3 border-bottom d-flex align-items-center justify-content-between flex-wrap gap-2">
                                     <h6 class="fw-bold text-dark mb-0 small text-uppercase">
                                         <i class="fa-solid fa-wand-magic-sparkles text-success me-1.5"></i> 2. Receipt OCR Studio &amp; Fiscal Proof
                                     </h6>
                                     <span class="badge bg-success-subtle text-success border border-success font-monospace" style="font-size:0.7rem;">
-                                        Interactive AI Studio
+                                        Interactive AI Studio &bull; Full Width View
                                     </span>
                                 </div>
                                 <div class="card-body p-3">
@@ -1230,6 +1238,10 @@
             const receiptTxt = isNoReceipt ? 'Pay Without Receipt' : 'Record Payment';
             submitBtn.innerHTML = `${icon} ${receiptTxt} & Liquidate (Disburse: ${fmt(netAmount)})`;
         }
+
+        if (typeof window.syncStudioWithQuickPay === 'function') {
+            window.syncStudioWithQuickPay(gross, vatType);
+        }
     }
 
     document.addEventListener('DOMContentLoaded', () => {
@@ -1265,21 +1277,29 @@
                     mrc: '#creditSingleMrc',
                     purc_type: '#creditSinglePurcType',
                     encoded_by: '#creditSingleEncodedBy',
+                    reference_no: 'input[name="reference_no"]',
                     notes: 'input[name="notes"]'
                 },
                 onScanComplete: function(scanData) {
                     const amtInput = document.getElementById('quickPayAmountInput');
                     if (amtInput && scanData.data && scanData.data.total_amount) {
-                        const maxPayable = parseFloat(amtInput.getAttribute('max')) || Infinity;
                         const scannedAmt = parseFloat(scanData.data.total_amount) || 0;
-                        if (scannedAmt > 0 && scannedAmt <= maxPayable) {
+                        if (scannedAmt > 0) {
+                            const currMax = parseFloat(amtInput.getAttribute('max')) || 0;
+                            if (scannedAmt > currMax) {
+                                amtInput.setAttribute('max', (scannedAmt * 1.5).toFixed(2));
+                            }
                             amtInput.value = scannedAmt.toFixed(2);
                             recalculateQuickPayTax();
                         }
                     }
                     const refInput = document.querySelector('form[action*="record-payment"] input[name="reference_no"]');
-                    if (refInput && !refInput.value && scanData.data && scanData.data.fs_no) {
+                    if (refInput && (!refInput.value || refInput.value.startsWith('FS-')) && scanData.data && scanData.data.fs_no) {
                         refInput.value = 'FS-' + scanData.data.fs_no;
+                    }
+                    const dateInput = document.querySelector('form[action*="record-payment"] input[name="payment_date"]');
+                    if (dateInput && scanData.data && (scanData.data.receipt_date_ymd || scanData.data.receipt_date)) {
+                        dateInput.value = scanData.data.receipt_date_ymd || scanData.data.receipt_date;
                     }
                 }
             });
