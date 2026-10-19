@@ -44,7 +44,12 @@
             <p class="text-muted small mb-0">Project: <strong>{{ optional($ledger->project)->name ?? '—' }}</strong> | Supplier: <strong>{{ $ledger->supplier_name ?: 'Credit Supplier' }}</strong></p>
         </div>
 
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 flex-wrap">
+            @if($ledger->remaining_amount > 0)
+                <a href="#disbursePaymentSection" class="btn btn-success btn-sm shadow-sm fw-bold">
+                    <i class="fa-solid fa-receipt me-1"></i> Disburse Payment &amp; OCR
+                </a>
+            @endif
             <a href="{{ route('finance.credit-store.index') }}" class="btn btn-outline-secondary btn-sm shadow-sm">
                 <i class="fas fa-arrow-left me-1"></i> Back to Ledger
             </a>
@@ -427,595 +432,142 @@
             </div>
         </div>
 
-        <!-- Right Side: Settlement / Payment Form & Guidance -->
+        <!-- Right Side: Delegate to Finance & Guidance -->
         <div class="col-12 col-lg-4">
-            <!-- Settlement Action Card -->
-            <div class="card border-0 shadow-sm rounded-3 mb-4 border-top border-4 {{ $ledger->remaining_amount > 0 ? 'border-primary' : 'border-success' }}">
-                <div class="card-header bg-white py-2 px-3 border-bottom">
-                    @if($ledger->remaining_amount > 0)
-                        <!-- Navigation Tabs: Assign to Finance Staff vs Direct Quick Payment -->
-                        <ul class="nav nav-pills nav-fill small fw-bold gap-1" id="settlementTabs" role="tablist">
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link active py-2 px-2" id="assign-tab" data-bs-toggle="pill" data-bs-target="#tab-assign-finance" type="button" role="tab" aria-controls="tab-assign-finance" aria-selected="true">
-                                    <i class="fa-solid fa-user-tag text-primary me-1"></i> Assign to Finance (VAT/WHT)
-                                </button>
-                            </li>
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link py-2 px-2 text-muted" id="direct-tab" data-bs-toggle="pill" data-bs-target="#tab-direct-payment" type="button" role="tab" aria-controls="tab-direct-payment" aria-selected="false">
-                                    <i class="fa-solid fa-bolt text-warning me-1"></i> Quick Pay
-                                </button>
-                            </li>
-                        </ul>
-                    @else
-                        <h6 class="mb-0 fw-bold text-success py-1">
-                            <i class="fas fa-check-circle me-1"></i> Credit Fully Settled
-                        </h6>
-                    @endif
+            @if($ledger->remaining_amount > 0)
+                <!-- Quick Link Banner to Full-Width Disburse & OCR Studio Below -->
+                <div class="card border-0 shadow-sm rounded-3 mb-3 text-white overflow-hidden" style="background: linear-gradient(135deg, #059669 0%, #10b981 100%);">
+                    <div class="card-body p-3 d-flex align-items-center justify-content-between">
+                        <div>
+                            <span class="text-white-50 small text-uppercase fw-semibold d-block" style="font-size:0.7rem;">Direct Disbursement</span>
+                            <h6 class="fw-bold mb-0 text-white">Receipt OCR Studio</h6>
+                            <small class="text-white-50" style="font-size:0.72rem;">Full-width Studio active below</small>
+                        </div>
+                        <a href="#disbursePaymentSection" class="btn btn-light btn-sm fw-bold text-success shadow-xs px-3">
+                            Pay Below <i class="fa-solid fa-arrow-down ms-1"></i>
+                        </a>
+                    </div>
                 </div>
-                <div class="card-body p-3">
-                    @if($ledger->remaining_amount > 0)
-                        <div class="tab-content" id="settlementTabsContent">
-                            <!-- TAB 1: Assign to Finance Staff (Expense with VAT & Withholding Tax) -->
-                            <div class="tab-pane fade show active" id="tab-assign-finance" role="tabpanel" aria-labelledby="assign-tab">
-                                <div class="alert alert-primary bg-primary bg-opacity-10 border-0 p-2.5 rounded-3 mb-3 small">
-                                    <div class="fw-bold text-primary mb-1">
-                                        <i class="fa-solid fa-wand-magic-sparkles me-1"></i> Process via Expenses with Tax
-                                    </div>
-                                    <div class="text-muted" style="font-size: 0.76rem; line-height: 1.45;">
-                                        Assign this payment to a Finance staff member. They will see it in their <strong>Expenses section</strong>, apply <strong>15% VAT</strong> and <strong>3% Withholding Tax</strong>, upload the WHT slip, and disburse payment. This credit ledger will auto-liquidate upon payment!
-                                    </div>
-                                </div>
 
-                                <form action="{{ route('finance.credit-store.assign-expense', $ledger) }}" method="POST">
-                                    @csrf
-
-                                    <div class="mb-3">
-                                        <label class="form-label small fw-bold text-uppercase text-muted">Payment Amount (ETB) <span class="text-danger">*</span></label>
-                                        <div class="input-group input-group-sm">
-                                            <input type="number" step="0.01" min="0.01" max="{{ $ledger->remaining_amount }}" name="amount" class="form-control fw-bold fs-6" value="{{ number_format($ledger->remaining_amount, 2, '.', '') }}" required>
-                                            <span class="input-group-text bg-light fw-bold text-primary">ETB</span>
-                                        </div>
-                                        <div class="form-text small text-muted">Max payable: <strong>{{ number_format($ledger->remaining_amount, 2) }} ETB</strong></div>
-                                    </div>
-
-                                    <div class="mb-3">
-                                        <label class="form-label small fw-bold text-uppercase text-dark">
-                                            Select Funding / COA Account <span class="text-danger">*</span>
-                                        </label>
-                                        <select name="account_source" id="assignAccountSelect" class="form-select form-select-sm" required onchange="onAssignAccountChange(this)">
-                                            <option value="">-- Choose Bank or Cash Account * --</option>
-                                            @if(isset($bankAccounts) && $bankAccounts->count() > 0)
-                                                <optgroup label="🏦 Company Bank Accounts">
-                                                    @foreach($bankAccounts as $bk)
-                                                        @php
-                                                            $bkStaffId = $bk->assigned_to ?? (optional($bk->coa)->assigned_to ?? '');
-                                                            $bkStaffName = optional($bk->assignedStaff)->name ?? (optional(optional($bk->coa)->manager)->name ?? '');
-                                                        @endphp
-                                                        <option value="bank:{{ $bk->id }}" 
-                                                                data-balance="{{ (float)($bk->current_balance ?? 0) }}"
-                                                                data-staff-id="{{ $bkStaffId }}"
-                                                                data-staff-name="{{ $bkStaffName }}"
-                                                                {{ $loop->first ? 'selected' : '' }}>
-                                                            {{ $bk->bank_name }} - {{ $bk->account_number }} (Bal: ETB {{ number_format($bk->current_balance ?? 0, 2) }})
-                                                        </option>
-                                                    @endforeach
-                                                </optgroup>
-                                            @endif
-                                            @if(isset($cashAccounts) && $cashAccounts->count() > 0)
-                                                <optgroup label="💵 Cash on Hand &amp; Site Petty Cash">
-                                                    @foreach($cashAccounts as $ca)
-                                                        <option value="coa:{{ $ca->id }}" 
-                                                                data-balance="{{ (float)$ca->current_balance }}"
-                                                                data-staff-id="{{ $ca->assigned_to ?? '' }}"
-                                                                data-staff-name="{{ optional($ca->manager)->name ?? '' }}">
-                                                            [{{ $ca->code }}] {{ $ca->name }} (Bal: ETB {{ number_format($ca->current_balance, 2) }})
-                                                        </option>
-                                                    @endforeach
-                                                </optgroup>
-                                            @endif
-                                            @if(isset($coaAccounts))
-                                                <optgroup label="📂 Other Asset / Funding Accounts">
-                                                    @foreach($coaAccounts->whereNotIn('id', ($cashAccounts ?? collect())->pluck('id')) as $ca)
-                                                        <option value="coa:{{ $ca->id }}" 
-                                                                data-balance="{{ (float)$ca->current_balance }}"
-                                                                data-staff-id="{{ $ca->assigned_to ?? '' }}"
-                                                                data-staff-name="{{ optional($ca->manager)->name ?? '' }}">
-                                                            [{{ $ca->code }}] {{ $ca->name }} (Bal: ETB {{ number_format($ca->current_balance, 2) }})
-                                                        </option>
-                                                    @endforeach
-                                                </optgroup>
-                                            @endif
-                                        </select>
-                                        <div class="small text-muted mt-1" id="assignAccountBalanceDisplay">
-                                            <i class="fa-solid fa-coins text-warning me-1"></i>Funds will be disbursed from this account.
-                                        </div>
-                                        <div id="assignStaffAutoAlert" class="mt-2" style="display:none;"></div>
-                                    </div>
-
-                                    <div class="mb-3">
-                                        <label class="form-label small fw-bold text-uppercase text-dark d-flex align-items-center justify-content-between">
-                                            <span>Assign to Finance Staff <span class="text-danger">*</span></span>
-                                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle" style="font-size:0.68rem;">
-                                                <i class="fa-solid fa-wand-magic-sparkles me-1"></i>Auto-assigned from COA
-                                            </span>
-                                        </label>
-                                        <select name="assigned_finance_staff_id" id="assignedFinanceStaffSelect" class="form-select form-select-sm" required>
-                                            <option value="">-- Choose Finance Staff Member * --</option>
-                                            @foreach($financeStaff as $staff)
-                                                <option value="{{ $staff->id }}" {{ (old('assigned_finance_staff_id') == $staff->id || (Auth::id() == $staff->id && $loop->count == 1)) ? 'selected' : '' }}>
-                                                    👤 {{ $staff->name }} ({{ $staff->email }})
-                                                </option>
-                                            @endforeach
-                                        </select>
-                                        <div class="form-text small text-muted" style="font-size:0.72rem;">Automatically selected when you choose a COA / Bank account. You may also change it manually if needed.</div>
-                                    </div>
-
-                                    <div class="mb-3">
-                                        <label class="form-label small fw-bold text-uppercase text-muted">Expense Category</label>
-                                        <select name="category" class="form-select form-select-sm">
-                                            <option value="Material (Credit Settlement)" selected>Material (Credit Settlement)</option>
-                                            <option value="Service">Service</option>
-                                            <option value="Contract Work">Contract Work</option>
-                                            <option value="Other">Other</option>
-                                        </select>
-                                    </div>
-
-                                    <div class="mb-3">
-                                        <label class="form-label small fw-bold text-uppercase text-muted">Notes / Instructions</label>
-                                        <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="e.g. Please process payment with 15% VAT and deduct 3% Withholding Tax..."></textarea>
-                                    </div>
-
-                                    <button type="submit" class="btn btn-primary btn-sm w-100 fw-bold shadow-sm py-2">
-                                        <i class="fa-solid fa-paper-plane me-1"></i> Assign to Finance &amp; Send to Expenses
-                                    </button>
-                                </form>
+                <!-- Delegate to Finance Staff Card (Assign to Finance) -->
+                <div class="card border-0 shadow-sm rounded-3 mb-4 border-top border-4 border-primary">
+                    <div class="card-header bg-white py-2.5 px-3 border-bottom d-flex align-items-center justify-content-between">
+                        <h6 class="mb-0 fw-bold text-dark">
+                            <i class="fa-solid fa-user-tag text-primary me-1"></i> Delegate to Finance Staff
+                        </h6>
+                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle" style="font-size:0.68rem;">Expense Route</span>
+                    </div>
+                    <div class="card-body p-3">
+                        <div class="alert alert-primary bg-primary bg-opacity-10 border-0 p-2.5 rounded-3 mb-3 small">
+                            <div class="fw-bold text-primary mb-1">
+                                <i class="fa-solid fa-wand-magic-sparkles me-1"></i> Process via Expenses with Tax
                             </div>
-
-                            <!-- TAB 2: Direct Quick Payment (Direct Payment Form) -->
-                            <div class="tab-pane fade" id="tab-direct-payment" role="tabpanel" aria-labelledby="direct-tab">
-                                <form action="{{ route('finance.credit-store.record-payment', $ledger) }}" method="POST" enctype="multipart/form-data">
-                                    @csrf
-
-                                    <div class="mb-3">
-                                        <label class="form-label small fw-bold text-uppercase text-muted">Payment Amount (ETB) <span class="text-danger">*</span></label>
-                                        <div class="input-group input-group-sm">
-                                            <input type="number" step="0.01" min="0.01" max="{{ $ledger->remaining_amount }}" name="amount" id="quickPayAmountInput" class="form-control fw-bold fs-6" value="{{ number_format($ledger->remaining_amount, 2, '.', '') }}" required oninput="recalculateQuickPayTax()">
-                                            <span class="input-group-text bg-light fw-bold text-primary">ETB</span>
-                                        </div>
-                                        <div class="form-text small text-muted">Max payable: <strong>{{ number_format($ledger->remaining_amount, 2) }} ETB</strong></div>
-                                    </div>
-
-                                    {{-- VAT & Withholding Tax Options for Quick Pay --}}
-                                    <div class="card border rounded-3 p-2.5 mb-3 bg-light shadow-xs">
-                                        <div class="d-flex align-items-center justify-content-between mb-2">
-                                            <span class="small fw-bold text-dark text-uppercase">
-                                                <i class="fa-solid fa-percent text-success me-1"></i> VAT &amp; Withholding Options
-                                            </span>
-                                            <span class="badge bg-success-subtle text-success border border-success px-2 py-0.5" style="font-size:0.68rem;">
-                                                Tax Options
-                                            </span>
-                                        </div>
-
-                                        <div class="row g-2 mb-2">
-                                            <div class="col-12 col-md-6">
-                                                <label class="form-label small fw-semibold text-dark mb-1">VAT Option (ቫት)</label>
-                                                <select name="vat_type" id="quickPayVatType" class="form-select form-select-sm" onchange="recalculateQuickPayTax()">
-                                                    <option value="none" selected>No VAT (0% / ያለ ቫት)</option>
-                                                    <option value="exclusive">15% VAT Added (+15% ተጨማሪ ቫት)</option>
-                                                    <option value="vat_b">15% VAT Included / VAT B (ከቫት 15% ጋር የተካተተ - ቫት ቢ)</option>
-                                                </select>
-                                                <input type="hidden" name="vat_rate" id="quickPayVatRate" value="15.00">
-                                                <input type="hidden" name="vat_amount" id="quickPayVatAmount" value="0.00">
-                                            </div>
-                                            <div class="col-12 col-md-6">
-                                                <label class="form-label small fw-semibold text-dark mb-1">Withholding Tax (የቅድመ ግብር)</label>
-                                                <div class="form-check form-switch pt-1">
-                                                    <input class="form-check-input" type="checkbox" role="switch" name="has_withholding" value="1" id="quickPayWithholdingToggle" onchange="recalculateQuickPayTax()">
-                                                    <label class="form-check-label small fw-semibold text-dark" for="quickPayWithholdingToggle">
-                                                        Apply 3% Withholding
-                                                    </label>
-                                                </div>
-                                                <input type="hidden" name="withholding_rate" id="quickPayWithholdingRate" value="3.00">
-                                                <input type="hidden" name="withholding_amount" id="quickPayWithholdingAmount" value="0.00">
-                                                <input type="hidden" name="net_amount" id="quickPayNetAmount" value="{{ number_format($ledger->remaining_amount, 2, '.', '') }}">
-                                            </div>
-                                        </div>
-
-                                        {{-- Real-time Tax Breakdown Summary --}}
-                                        <div class="p-2 bg-white rounded-2 border">
-                                            <div class="row text-center g-1 small">
-                                                <div class="col-3 border-end">
-                                                    <span class="text-muted d-block" style="font-size:0.7rem;">Base (Taxable)</span>
-                                                    <strong class="text-dark font-monospace" id="quickDisplayBaseAmount">ETB {{ number_format($ledger->remaining_amount, 2) }}</strong>
-                                                </div>
-                                                <div class="col-3 border-end">
-                                                    <span class="text-muted d-block" style="font-size:0.7rem;">VAT (15%)</span>
-                                                    <strong class="text-info font-monospace" id="quickDisplayVatAmount">+ ETB 0.00</strong>
-                                                </div>
-                                                <div class="col-3 border-end">
-                                                    <span class="text-muted d-block" style="font-size:0.7rem;">WHT (3%)</span>
-                                                    <strong class="text-danger font-monospace" id="quickDisplayWhtAmount">- ETB 0.00</strong>
-                                                </div>
-                                                <div class="col-3">
-                                                    <span class="text-muted d-block" style="font-size:0.7rem;">Net Disbursed</span>
-                                                    <strong class="text-success font-monospace" id="quickDisplayNetAmount">ETB {{ number_format($ledger->remaining_amount, 2) }}</strong>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {{-- Withholding Slip Upload (Shown when Withholding is checked) --}}
-                                        <div id="quickPayWithholdingSection" class="mt-2 p-2 bg-white rounded-2 border border-danger-subtle" style="display:none;">
-                                            <div class="d-flex align-items-center justify-content-between mb-1">
-                                                <label class="form-label small fw-bold text-danger text-uppercase mb-0" style="font-size:0.72rem;">
-                                                    <i class="fa-solid fa-file-invoice-dollar me-1"></i>Withholding Slip Upload (የቅድመ ግብር ደረሰኝ)
-                                                </label>
-                                                <span class="badge bg-danger-subtle text-danger px-1.5 py-0" style="font-size:0.65rem;">3% WHT Slip</span>
-                                            </div>
-                                            <div class="row g-2">
-                                                <div class="col-12 col-md-7">
-                                                    <input type="file" name="withholding_receipt" id="quickPayWithholdingReceipt" class="form-control form-control-sm" accept=".pdf,.jpg,.jpeg,.png,.webp">
-                                                    <small class="text-muted" style="font-size:0.7rem;">Upload WHT image or PDF slip.</small>
-                                                </div>
-                                                <div class="col-12 col-md-5">
-                                                    <input type="text" name="withholding_receipt_number" id="quickPayWithholdingReceiptNo" class="form-control form-control-sm" placeholder="Slip / Voucher #">
-                                                    <small class="text-muted" style="font-size:0.7rem;">WHT Serial # (Optional)</small>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div class="mb-3">
-                                        <label class="form-label small fw-bold text-uppercase text-muted">Payment Date <span class="text-danger">*</span></label>
-                                        <input type="date" name="payment_date" class="form-control form-control-sm" value="{{ date('Y-m-d') }}" required>
-                                    </div>
-
-                                    <div class="mb-3">
-                                        <label class="form-label small fw-bold text-uppercase text-muted">Payment Method <span class="text-danger">*</span></label>
-                                        <select name="payment_method" class="form-select form-select-sm" required>
-                                            <option value="bank_transfer" selected>Bank Transfer (Disbursement)</option>
-                                            <option value="cash">Cash Payment</option>
-                                            <option value="cheque">Cheque</option>
-                                            <option value="other">Other Method</option>
-                                        </select>
-                                    </div>
-
-                                    <div class="mb-3">
-                                        <label class="form-label small fw-bold text-uppercase text-dark">
-                                            Select Paying Account <span class="text-danger">*</span>
-                                        </label>
-                                        <select name="account_source" id="singlePaymentAccountSelect" class="form-select form-select-sm" required onchange="onSingleAccountChange(this)">
-                                            <option value="">-- Choose Bank or Cash Account * --</option>
-                                            @if(isset($bankAccounts) && $bankAccounts->count() > 0)
-                                                <optgroup label="🏦 Company Bank Accounts">
-                                                    @foreach($bankAccounts as $bk)
-                                                        <option value="bank:{{ $bk->id }}" data-method="bank_transfer" data-balance="{{ (float)($bk->current_balance ?? 0) }}" {{ $loop->first ? 'selected' : '' }}>
-                                                            {{ $bk->bank_name }} - {{ $bk->account_number }} (Bal: ETB {{ number_format($bk->current_balance ?? 0, 2) }})
-                                                        </option>
-                                                    @endforeach
-                                                </optgroup>
-                                            @endif
-                                            @if(isset($cashAccounts) && $cashAccounts->count() > 0)
-                                                <optgroup label="💵 Cash on Hand &amp; Site Petty Cash">
-                                                    @foreach($cashAccounts as $ca)
-                                                        <option value="coa:{{ $ca->id }}" data-method="cash" data-balance="{{ (float)$ca->current_balance }}">
-                                                            [{{ $ca->code }}] {{ $ca->name }} (Bal: ETB {{ number_format($ca->current_balance, 2) }})
-                                                        </option>
-                                                    @endforeach
-                                                </optgroup>
-                                            @endif
-                                            @if(isset($coaAccounts))
-                                                <optgroup label="📂 Other Asset / Funding Accounts">
-                                                    @foreach($coaAccounts->whereNotIn('id', ($cashAccounts ?? collect())->pluck('id')) as $ca)
-                                                        <option value="coa:{{ $ca->id }}" data-method="other" data-balance="{{ (float)$ca->current_balance }}">
-                                                            [{{ $ca->code }}] {{ $ca->name }} (Bal: ETB {{ number_format($ca->current_balance, 2) }})
-                                                        </option>
-                                                    @endforeach
-                                                </optgroup>
-                                            @endif
-                                        </select>
-                                        <div class="small text-muted mt-1" id="singleAccountBalanceDisplay">
-                                            <i class="fa-solid fa-coins text-warning me-1"></i>Funds will be disbursed from this account.
-                                        </div>
-                                    </div>
-
-                                    <div class="mb-3">
-                                        <label class="form-label small fw-bold text-uppercase text-muted">Reference / Cheque / Transaction No</label>
-                                        <input type="text" name="reference_no" class="form-control form-control-sm" placeholder="e.g. TXN-984321 / CHQ-0012">
-                                    </div>
-
-                                    <div class="mb-3">
-                                        <div class="card border rounded-3 bg-light shadow-xs">
-                                            <div class="card-header bg-white py-2 px-3 d-flex align-items-center justify-content-between border-bottom">
-                                                <span class="small fw-bold text-dark text-uppercase">
-                                                    <i class="fa-solid fa-receipt text-success me-1"></i> Receipt OCR Studio &amp; Proof
-                                                </span>
-                                                <div class="form-check form-switch mb-0">
-                                                    <input class="form-check-input" type="checkbox" role="switch" id="singleNoReceiptToggle" name="no_receipt" value="1" onchange="toggleSingleReceiptMode(this.checked)">
-                                                    <label class="form-check-label small fw-bold text-dark" for="singleNoReceiptToggle">
-                                                        <span class="badge bg-warning text-dark border border-warning px-2 py-0.5">
-                                                            <i class="fa-solid fa-ban me-1"></i> Pay Without Receipt
-                                                        </span>
-                                                    </label>
-                                                </div>
-                                            </div>
-                                            <div class="card-body p-2.5">
-                                                <div id="singleWithReceiptDiv">
-                                                    <!-- OCR Studio Interactive Dropzone -->
-                                                    <div id="creditSingleDropZone" class="border border-2 border-dashed rounded-3 p-3 text-center bg-white shadow-2xs mb-2 transition-all cursor-pointer"
-                                                         style="border-color:#10b981 !important; min-height: 110px; display:flex; flex-direction:column; justify-content:center; align-items:center;"
-                                                         onclick="if(event.target.tagName !== 'BUTTON' && event.target.tagName !== 'INPUT') document.getElementById('creditSingleReceiptInput').click()">
-                                                        <input type="file" name="receipt_file" id="creditSingleReceiptInput" class="d-none" accept=".pdf,.jpg,.jpeg,.png,.webp">
-                                                        <div class="rounded-circle bg-success bg-opacity-10 text-success p-2 d-inline-flex mb-1">
-                                                            <i class="fa-solid fa-cloud-arrow-up fa-lg"></i>
-                                                        </div>
-                                                        <div class="fw-bold text-dark small mb-0">Drag &amp; Drop Receipt or Click to Browse</div>
-                                                        <div class="text-muted" style="font-size:0.72rem;">Accepts JPG, PNG, WEBP, PDF up to 10MB</div>
-                                                        <div class="mt-2 d-flex gap-2">
-                                                            <button type="button" class="btn btn-xs btn-success fw-semibold px-2.5 py-1 shadow-2xs" style="font-size:0.72rem;" onclick="event.stopPropagation(); document.getElementById('creditSingleReceiptInput').click()">
-                                                                <i class="fa-solid fa-folder-open me-1"></i> Browse Receipt
-                                                            </button>
-                                                            <span class="badge bg-primary bg-opacity-10 text-primary border d-flex align-items-center" style="font-size:0.68rem;">
-                                                                <i class="fa-solid fa-wand-magic-sparkles me-1"></i> AI OCR Studio
-                                                            </span>
-                                                        </div>
-                                                    </div>
-
-                                                    <div id="creditSingleOcrFeedbackArea"></div>
-                                                    <input type="hidden" name="purchaser_tin" id="creditSinglePurchaserTin" value="0038480010">
-                                                    <input type="hidden" name="seller_tin" id="creditSingleSellerTin">
-                                                    <input type="hidden" name="supplier_tin" id="creditSingleSupplierTin">
-                                                    <input type="hidden" name="receipt_no" id="creditSingleReceiptNo">
-                                                    <input type="hidden" name="fs_no" id="creditSingleFsNo">
-                                                    <input type="hidden" name="vendor_name" id="creditSingleVendorName">
-                                                    <input type="hidden" name="mrc" id="creditSingleMrc">
-                                                    <input type="hidden" name="mrc_no" id="creditSingleMrcNo">
-                                                    <input type="hidden" name="receipt_date" id="creditSingleReceiptDate">
-                                                    <input type="hidden" name="encoding_date" id="creditSingleEncodingDate" value="{{ date('Y-m-d') }}">
-                                                    <input type="hidden" name="purc_type" id="creditSinglePurcType" value="3">
-                                                    <input type="hidden" name="purchase_type" id="creditSinglePurchaseType" value="3">
-                                                    <input type="hidden" name="encoded_by" id="creditSingleEncodedBy" value="{{ strtolower(preg_replace('/[^a-zA-Z0-9_]/', '', Auth::user()->name ?? 'wechacha')) }}">
-                                                    <input type="hidden" name="subtotal" id="creditSingleSubtotal">
-                                                    <input type="hidden" id="creditSingleVatAmount">
-                                                    <input type="hidden" name="total_amount" id="creditSingleTotalAmount">
-                                                    <input type="hidden" name="vat_included" id="creditSingleVatIncluded" value="1">
-                                                    <input type="hidden" name="is_verified" id="creditSingleIsVerified" value="1">
-                                                    <input type="hidden" name="ocr_items_json" id="creditSingleOcrItemsJson">
-                                                    <div class="form-text small text-muted" style="font-size:0.72rem;">Attach vendor fiscal receipt, invoice, bank slip, or cheque scan. Live ERCA validation applies automatically.</div>
-                                                </div>
-                                                <div id="singleWithoutReceiptDiv" class="p-2 rounded-2 border border-warning bg-warning bg-opacity-10 d-none">
-                                                    <small class="text-dark d-block mb-1"><i class="fa-solid fa-circle-check text-warning me-1"></i> Paying without receipt selected.</small>
-                                                    <input type="text" name="no_receipt_reason" class="form-control form-control-sm bg-white" placeholder="Optional reason (e.g. Direct bank debit, Trust credit)">
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div class="mb-3">
-                                        <label class="form-label small fw-bold text-uppercase text-muted">Payment Notes</label>
-                                        <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="Optional remarks on this payment..."></textarea>
-                                    </div>
-
-                                    <button type="submit" class="btn btn-success btn-sm w-100 fw-bold shadow-sm py-2" id="singleSubmitBtn">
-                                        <i class="fas fa-check-circle me-1"></i> Record Payment &amp; Liquidate Ledger
-                                    </button>
-                                </form>
+                            <div class="text-muted" style="font-size: 0.76rem; line-height: 1.45;">
+                                Assign this payment to a Finance staff member. They will see it in their <strong>Expenses section</strong>, apply <strong>15% VAT</strong> and <strong>3% Withholding Tax</strong>, upload the WHT slip, and disburse payment. This credit ledger will auto-liquidate upon payment!
                             </div>
                         </div>
 
-                        <script>
-                            function onAssignAccountChange(selectEl) {
-                                const selectedOpt = selectEl.options[selectEl.selectedIndex];
-                                const balDisplay = document.getElementById('assignAccountBalanceDisplay');
-                                const staffSelect = document.getElementById('assignedFinanceStaffSelect');
-                                const staffAlert = document.getElementById('assignStaffAutoAlert');
+                        <form action="{{ route('finance.credit-store.assign-expense', $ledger) }}" method="POST">
+                            @csrf
 
-                                if (selectedOpt && selectedOpt.value) {
-                                    const bal = parseFloat(selectedOpt.getAttribute('data-balance')) || 0;
-                                    if (balDisplay) {
-                                        balDisplay.innerHTML = `<i class="fa-solid fa-wallet text-success me-1"></i> Selected Account Balance: <strong class="text-dark font-monospace">ETB ${bal.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</strong>`;
-                                    }
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold text-uppercase text-muted">Payment Amount (ETB) <span class="text-danger">*</span></label>
+                                <div class="input-group input-group-sm">
+                                    <input type="number" step="0.01" min="0.01" max="{{ $ledger->remaining_amount }}" name="amount" class="form-control fw-bold fs-6" value="{{ number_format($ledger->remaining_amount, 2, '.', '') }}" required>
+                                    <span class="input-group-text bg-light fw-bold text-primary">ETB</span>
+                                </div>
+                                <div class="form-text small text-muted">Max payable: <strong>{{ number_format($ledger->remaining_amount, 2) }} ETB</strong></div>
+                            </div>
 
-                                    const staffId = selectedOpt.getAttribute('data-staff-id');
-                                    const staffName = selectedOpt.getAttribute('data-staff-name');
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold text-uppercase text-dark">
+                                    Select Funding / COA Account <span class="text-danger">*</span>
+                                </label>
+                                <select name="account_source" id="assignAccountSelect" class="form-select form-select-sm" required onchange="onAssignAccountChange(this)">
+                                    <option value="">-- Choose Bank or Cash Account * --</option>
+                                    @if(isset($bankAccounts) && $bankAccounts->count() > 0)
+                                        <optgroup label="🏦 Company Bank Accounts">
+                                            @foreach($bankAccounts as $bk)
+                                                @php
+                                                    $bkStaffId = $bk->assigned_to ?? (optional($bk->coa)->assigned_to ?? '');
+                                                    $bkStaffName = optional($bk->assignedStaff)->name ?? (optional(optional($bk->coa)->manager)->name ?? '');
+                                                @endphp
+                                                <option value="bank:{{ $bk->id }}" 
+                                                        data-balance="{{ (float)($bk->current_balance ?? 0) }}"
+                                                        data-staff-id="{{ $bkStaffId }}"
+                                                        data-staff-name="{{ $bkStaffName }}"
+                                                        {{ $loop->first ? 'selected' : '' }}>
+                                                    {{ $bk->bank_name }} - {{ $bk->account_number }} (Bal: ETB {{ number_format($bk->current_balance ?? 0, 2) }})
+                                                </option>
+                                            @endforeach
+                                        </optgroup>
+                                    @endif
+                                    @if(isset($cashAccounts) && $cashAccounts->count() > 0)
+                                        <optgroup label="💵 Cash on Hand &amp; Site Petty Cash">
+                                            @foreach($cashAccounts as $ca)
+                                                <option value="coa:{{ $ca->id }}" 
+                                                        data-balance="{{ (float)$ca->current_balance }}"
+                                                        data-staff-id="{{ $ca->assigned_to }}"
+                                                        data-staff-name="{{ optional($ca->manager)->name ?? '' }}">
+                                                    {{ $ca->code }} - {{ $ca->name }} (Bal: ETB {{ number_format($ca->current_balance, 2) }})
+                                                </option>
+                                            @endforeach
+                                        </optgroup>
+                                    @endif
+                                </select>
+                                <div class="small text-muted mt-1" id="assignAccountBalanceDisplay">
+                                    <i class="fa-solid fa-coins text-warning me-1"></i>Funds will be disbursed from this account.
+                                </div>
+                                <div id="assignStaffAutoAlert" class="mt-2" style="display:none;"></div>
+                            </div>
 
-                                    if (staffSelect) {
-                                        if (staffId) {
-                                            let existingOpt = staffSelect.querySelector(`option[value="${staffId}"]`);
-                                            if (!existingOpt) {
-                                                existingOpt = new Option(`👤 ${staffName} (COA Custodian)`, staffId, true, true);
-                                                staffSelect.add(existingOpt);
-                                            }
-                                            staffSelect.value = staffId;
-                                            if (staffAlert) {
-                                                staffAlert.style.display = 'block';
-                                                staffAlert.innerHTML = `<div class="p-2 rounded bg-success bg-opacity-10 border border-success border-opacity-25 text-success small d-flex align-items-center"><i class="fa-solid fa-circle-check fs-6 me-2"></i><div>Auto-assigned to <strong>${staffName}</strong> (COA Custodian).</div></div>`;
-                                            }
-                                        } else {
-                                            if (staffAlert) {
-                                                staffAlert.style.display = 'block';
-                                                staffAlert.innerHTML = `<div class="p-2 rounded bg-light border text-muted small d-flex align-items-center"><i class="fa-solid fa-circle-info text-info me-2"></i><div>No custodian assigned to this COA in Chart of Accounts. Please choose a Finance staff member or leave default.</div></div>`;
-                                            }
-                                        }
-                                    }
-                                } else {
-                                    if (staffAlert) staffAlert.style.display = 'none';
-                                    if (balDisplay) balDisplay.innerHTML = `<i class="fa-solid fa-coins text-warning me-1"></i>Funds will be disbursed from this account.`;
-                                }
-                            }
-                            function onSingleAccountChange(selectEl) {
-                                const selectedOpt = selectEl.options[selectEl.selectedIndex];
-                                const methodSelect = document.querySelector('select[name="payment_method"]');
-                                const balDisplay = document.getElementById('singleAccountBalanceDisplay');
-                                if (selectedOpt && selectedOpt.value) {
-                                    const method = selectedOpt.getAttribute('data-method') || 'bank_transfer';
-                                    const bal = parseFloat(selectedOpt.getAttribute('data-balance')) || 0;
-                                    if (methodSelect) methodSelect.value = method;
-                                    if (balDisplay) {
-                                        balDisplay.innerHTML = `<i class="fa-solid fa-wallet text-success me-1"></i> Selected Account Balance: <strong class="text-dark font-monospace">ETB ${bal.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</strong>`;
-                                    }
-                                }
-                            }
-                            function toggleSingleReceiptMode(isNoReceipt) {
-                                const withDiv = document.getElementById('singleWithReceiptDiv');
-                                const withoutDiv = document.getElementById('singleWithoutReceiptDiv');
-                                const btn = document.getElementById('singleSubmitBtn');
-                                if (isNoReceipt) {
-                                    if (withDiv) withDiv.classList.add('d-none');
-                                    if (withoutDiv) withoutDiv.classList.remove('d-none');
-                                    if (btn) {
-                                        btn.classList.remove('btn-success');
-                                        btn.classList.add('btn-warning', 'text-dark');
-                                    }
-                                } else {
-                                    if (withDiv) withDiv.classList.remove('d-none');
-                                    if (withoutDiv) withoutDiv.classList.add('d-none');
-                                    if (btn) {
-                                        btn.classList.remove('btn-warning', 'text-dark');
-                                        btn.classList.add('btn-success');
-                                    }
-                                }
-                                recalculateQuickPayTax();
-                            }
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold text-uppercase text-dark d-flex align-items-center justify-content-between">
+                                    <span>Assign to Finance Staff <span class="text-danger">*</span></span>
+                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle" style="font-size:0.68rem;">
+                                        <i class="fa-solid fa-wand-magic-sparkles me-1"></i>Auto-assigned from COA
+                                    </span>
+                                </label>
+                                <select name="assigned_finance_staff_id" id="assignedFinanceStaffSelect" class="form-select form-select-sm" required>
+                                    <option value="">-- Choose Finance Staff Member * --</option>
+                                    @foreach($financeStaff as $staff)
+                                        <option value="{{ $staff->id }}" {{ (old('assigned_finance_staff_id') == $staff->id || (Auth::id() == $staff->id && $loop->count == 1)) ? 'selected' : '' }}>
+                                            👤 {{ $staff->name }} ({{ $staff->email }})
+                                        </option>
+                                    @endforeach
+                                </select>
+                                <div class="form-text small text-muted" style="font-size:0.72rem;">Automatically selected when you choose a COA / Bank account. You may also change it manually if needed.</div>
+                            </div>
 
-                            function recalculateQuickPayTax() {
-                                const grossInput = document.getElementById('quickPayAmountInput');
-                                const vatTypeSelect = document.getElementById('quickPayVatType');
-                                const whtToggle = document.getElementById('quickPayWithholdingToggle');
-                                const whtSection = document.getElementById('quickPayWithholdingSection');
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold text-uppercase text-muted">Expense Category</label>
+                                <select name="category" class="form-select form-select-sm">
+                                    <option value="Material (Credit Settlement)" selected>Material (Credit Settlement)</option>
+                                    <option value="Service">Service</option>
+                                    <option value="Contract Work">Contract Work</option>
+                                    <option value="Other">Other</option>
+                                </select>
+                            </div>
 
-                                if (!grossInput) return;
-                                const gross = parseFloat(grossInput.value) || 0;
-                                const vatType = vatTypeSelect ? vatTypeSelect.value : 'none';
-                                const vatRate = 15.00;
-                                const hasWht = whtToggle ? whtToggle.checked : false;
-                                const whtRate = 3.00;
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold text-uppercase text-muted">Notes / Instructions</label>
+                                <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="e.g. Please process payment with 15% VAT and deduct 3% Withholding Tax..."></textarea>
+                            </div>
 
-                                if (whtSection) {
-                                    whtSection.style.display = hasWht ? 'block' : 'none';
-                                }
-
-                                let vatAmount = 0.0;
-                                let baseAmount = gross;
-                                let whtAmount = 0.0;
-                                let netAmount = gross;
-
-                                if (vatType === 'exclusive') {
-                                    vatAmount = Math.round(gross * (vatRate / 100) * 100) / 100;
-                                    baseAmount = gross;
-                                    const totalGrossWithVat = gross + vatAmount;
-                                    if (hasWht) {
-                                        whtAmount = Math.round(baseAmount * (whtRate / 100) * 100) / 100;
-                                    }
-                                    netAmount = Math.round((totalGrossWithVat - whtAmount) * 100) / 100;
-                                } else if (vatType === 'inclusive' || vatType === 'vat_b') {
-                                    baseAmount = Math.round((gross / (1 + (vatRate / 100))) * 100) / 100;
-                                    vatAmount = Math.round((gross - baseAmount) * 100) / 100;
-                                    if (hasWht) {
-                                        whtAmount = Math.round(baseAmount * (whtRate / 100) * 100) / 100;
-                                    }
-                                    netAmount = Math.round((gross - whtAmount) * 100) / 100;
-                                } else {
-                                    baseAmount = gross;
-                                    vatAmount = 0.0;
-                                    if (hasWht) {
-                                        whtAmount = Math.round(baseAmount * (whtRate / 100) * 100) / 100;
-                                    }
-                                    netAmount = Math.round((gross - whtAmount) * 100) / 100;
-                                }
-
-                                // Set hidden inputs
-                                const hiddenVat = document.getElementById('quickPayVatAmount');
-                                const singleVat = document.getElementById('creditSingleVatAmount');
-                                const hiddenWht = document.getElementById('quickPayWithholdingAmount');
-                                const hiddenNet = document.getElementById('quickPayNetAmount');
-                                const singleSubtotal = document.getElementById('creditSingleSubtotal');
-                                const singleTotal = document.getElementById('creditSingleTotalAmount');
-                                const singleVatInc = document.getElementById('creditSingleVatIncluded');
-                                const singlePurcType = document.getElementById('creditSinglePurcType');
-
-                                if (hiddenVat) hiddenVat.value = vatAmount.toFixed(2);
-                                if (singleVat) singleVat.value = vatAmount.toFixed(2);
-                                if (hiddenWht) hiddenWht.value = whtAmount.toFixed(2);
-                                if (hiddenNet) hiddenNet.value = netAmount.toFixed(2);
-                                if (singleSubtotal) singleSubtotal.value = baseAmount.toFixed(2);
-                                if (singleTotal) singleTotal.value = (vatType === 'exclusive' ? (baseAmount + vatAmount) : gross).toFixed(2);
-                                if (singleVatInc) singleVatInc.value = (vatType !== 'none' && vatAmount > 0) ? '1' : '0';
-                                if (singlePurcType) singlePurcType.value = (vatType !== 'none' && vatAmount > 0) ? '3' : '6';
-
-                                // Update display labels
-                                const dispBase = document.getElementById('quickDisplayBaseAmount');
-                                const dispVat = document.getElementById('quickDisplayVatAmount');
-                                const dispWht = document.getElementById('quickDisplayWhtAmount');
-                                const dispNet = document.getElementById('quickDisplayNetAmount');
-                                const submitBtn = document.getElementById('singleSubmitBtn');
-
-                                const fmt = num => 'ETB ' + num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-                                if (dispBase) dispBase.innerText = fmt(baseAmount);
-                                if (dispVat) dispVat.innerText = '+ ' + fmt(vatAmount);
-                                if (dispWht) dispWht.innerText = '- ' + fmt(whtAmount);
-                                if (dispNet) dispNet.innerText = fmt(netAmount);
-
-                                if (submitBtn) {
-                                    const isNoReceipt = document.getElementById('singleNoReceiptToggle')?.checked;
-                                    const icon = isNoReceipt ? '<i class="fa-solid fa-ban me-1"></i>' : '<i class="fas fa-check-circle me-1"></i>';
-                                    const receiptTxt = isNoReceipt ? 'Pay Without Receipt' : 'Record Payment';
-                                    submitBtn.innerHTML = `${icon} ${receiptTxt} & Liquidate (Disburse: ${fmt(netAmount)})`;
-                                }
-                            }
-
-                                document.addEventListener('DOMContentLoaded', () => {
-                                    window.recalculateQuickPayTax = recalculateQuickPayTax;
-                                    const selSingle = document.getElementById('singlePaymentAccountSelect');
-                                    if (selSingle) onSingleAccountChange(selSingle);
-                                    const selAssign = document.getElementById('assignAccountSelect');
-                                    if (selAssign) onAssignAccountChange(selAssign);
-                                    recalculateQuickPayTax();
-
-                                    // Initialize AI Receipt OCR Scanner
-                                    if (window.ReceiptOcrScanner) {
-                                        ReceiptOcrScanner.init({
-                                            fileInput: '#creditSingleReceiptInput',
-                                            form: 'form[action*="record-payment"]',
-                                            submitBtn: '#singleSubmitBtn',
-                                            statusContainer: '#creditSingleOcrFeedbackArea',
-                                            studioMode: true,
-                                            purchaserTin: '0038480010',
-                                            encodedBy: '{{ strtolower(preg_replace("/[^a-zA-Z0-9_]/", "", Auth::user()->name ?? "wechacha")) }}',
-                                            fields: {
-                                                purchaser_tin: '#creditSinglePurchaserTin',
-                                                seller_tin: '#creditSingleSellerTin',
-                                                supplier_tin: '#creditSingleSupplierTin',
-                                                receipt_no: '#creditSingleReceiptNo',
-                                                fs_no: '#creditSingleFsNo',
-                                                receipt_date: 'input[name="payment_date"]',
-                                                encoding_date: '#creditSingleEncodingDate',
-                                                mrc: '#creditSingleMrc',
-                                                purc_type: '#creditSinglePurcType',
-                                                encoded_by: '#creditSingleEncodedBy',
-                                                notes: 'textarea[name="notes"]'
-                                            },
-                                            onScanComplete: function(scanData) {
-                                                const amtInput = document.getElementById('quickPayAmountInput');
-                                                if (amtInput && scanData.data && scanData.data.total_amount) {
-                                                    const maxPayable = parseFloat(amtInput.getAttribute('max')) || Infinity;
-                                                    const scannedAmt = parseFloat(scanData.data.total_amount) || 0;
-                                                    if (scannedAmt > 0 && scannedAmt <= maxPayable) {
-                                                        amtInput.value = scannedAmt.toFixed(2);
-                                                        recalculateQuickPayTax();
-                                                    }
-                                                }
-                                                const refInput = document.querySelector('form[action*="record-payment"] input[name="reference_no"]');
-                                                if (refInput && !refInput.value && scanData.data && scanData.data.fs_no) {
-                                                    refInput.value = 'FS-' + scanData.data.fs_no;
-                                                }
-                                            }
-                                        });
-                                    }
-                                });
-                        </script>
-                        <script src="{{ asset('js/receipt-ocr-scanner.js') }}"></script>
-                    @else
+                            <button type="submit" class="btn btn-primary btn-sm w-100 fw-bold shadow-sm py-2">
+                                <i class="fa-solid fa-paper-plane me-1"></i> Assign to Finance &amp; Send to Expenses
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            @else
+                <div class="card border-0 shadow-sm rounded-3 mb-4 border-top border-4 border-success">
+                    <div class="card-header bg-white py-2 px-3 border-bottom">
+                        <h6 class="mb-0 fw-bold text-success py-1">
+                            <i class="fas fa-check-circle me-1"></i> Credit Fully Settled
+                        </h6>
+                    </div>
+                    <div class="card-body p-3">
                         <div class="text-center py-4">
                             <div class="text-success mb-2">
                                 <i class="fas fa-circle-check fa-3x"></i>
@@ -1058,9 +610,9 @@
                                 </div>
                             </div>
                         @endif
-                    @endif
+                    </div>
                 </div>
-            </div>
+            @endif
 
             <!-- Accounting Guidance Box -->
             <div class="card border-0 shadow-sm rounded-3 bg-light">
@@ -1081,7 +633,519 @@
             </div>
         </div>
     </div>
-</div>
+
+    @if($ledger->remaining_amount > 0)
+        <!-- Full-Width Disburse Payment & Receipt OCR Studio Section -->
+        <div id="disbursePaymentSection" class="card border-0 shadow-sm rounded-4 mt-4 overflow-hidden border-top border-4 border-success">
+            <!-- Studio Card Header -->
+            <div class="card-header bg-white py-3 px-4 border-bottom d-flex align-items-center justify-content-between flex-wrap gap-3">
+                <div class="d-flex align-items-center gap-3">
+                    <span class="badge bg-success text-white p-2.5 rounded-3 shadow-xs">
+                        <i class="fa-solid fa-cash-register fs-5"></i>
+                    </span>
+                    <div>
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                            <h5 class="fw-bold text-dark mb-0">Disburse Payment &amp; Receipt OCR Studio</h5>
+                            <span class="badge bg-success-subtle text-success border border-success fw-semibold px-2 py-1" style="font-size:0.75rem;">
+                                <i class="fa-solid fa-wand-magic-sparkles me-1"></i> AI Vision + NIM QC
+                            </span>
+                            <span class="badge bg-primary-subtle text-primary border border-primary fw-semibold px-2 py-1" style="font-size:0.75rem;">
+                                <i class="fa-solid fa-scale-balanced me-1"></i> ERCA Line 100 &amp; TAS
+                            </span>
+                        </div>
+                        <small class="text-muted">Direct credit ledger settlement with instant double-entry journal posting, Ethiopian tax computation, and live fiscal receipt scanner.</small>
+                    </div>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <div class="text-end d-none d-md-block">
+                        <span class="text-muted small text-uppercase fw-semibold d-block" style="font-size:0.7rem;">Remaining Balance</span>
+                        <span class="fw-bold text-danger font-monospace fs-6">ETB {{ number_format($ledger->remaining_amount, 2) }}</span>
+                    </div>
+                    <button type="button" class="btn btn-outline-success btn-sm fw-bold px-3 py-1.5 shadow-2xs" onclick="setQuickPayFullAmount()">
+                        <i class="fa-solid fa-bolt me-1 text-warning"></i> Pay Full Balance
+                    </button>
+                </div>
+            </div>
+
+            <!-- Studio Card Body -->
+            <div class="card-body p-4 bg-light bg-opacity-25">
+                <form action="{{ route('finance.credit-store.record-payment', $ledger) }}" method="POST" enctype="multipart/form-data">
+                    @csrf
+
+                    <!-- Hidden Fields for Tax & Fiscal Declaration Sync -->
+                    <input type="hidden" name="vat_amount" id="quickPayVatAmount" value="0.00">
+                    <input type="hidden" name="withholding_amount" id="quickPayWithholdingAmount" value="0.00">
+                    <input type="hidden" name="net_amount" id="quickPayNetAmount" value="{{ number_format($ledger->remaining_amount, 2, '.', '') }}">
+                    
+                    <input type="hidden" name="subtotal" id="creditSingleSubtotal" value="{{ number_format($ledger->remaining_amount, 2, '.', '') }}">
+                    <input type="hidden" name="total_amount" id="creditSingleTotalAmount" value="{{ number_format($ledger->remaining_amount, 2, '.', '') }}">
+                    <input type="hidden" name="vat_included" id="creditSingleVatIncluded" value="0">
+                    <input type="hidden" name="vat_amount" id="creditSingleVatAmount" value="0.00">
+                    <input type="hidden" name="purc_type" id="creditSinglePurcType" value="6">
+                    <input type="hidden" name="purchaser_tin" id="creditSinglePurchaserTin" value="0038480010">
+                    <input type="hidden" name="seller_tin" id="creditSingleSellerTin" value="{{ optional($ledger->supplier)->tin ?? '' }}">
+                    <input type="hidden" name="supplier_tin" id="creditSingleSupplierTin" value="{{ optional($ledger->supplier)->tin ?? '' }}">
+                    <input type="hidden" name="receipt_no" id="creditSingleReceiptNo" value="">
+                    <input type="hidden" name="fs_no" id="creditSingleFsNo" value="">
+                    <input type="hidden" name="encoding_date" id="creditSingleEncodingDate" value="{{ date('Y-m-d') }}">
+                    <input type="hidden" name="mrc" id="creditSingleMrc" value="">
+                    <input type="hidden" name="encoded_by" id="creditSingleEncodedBy" value="{{ strtolower(preg_replace('/[^a-zA-Z0-9_]/', '', Auth::user()->name ?? 'wechacha')) }}">
+
+                    <div class="row g-4">
+                        <!-- Left Sub-Column: Payment & Tax Parameters -->
+                        <div class="col-12 col-xl-5">
+                            <div class="card border-0 shadow-sm rounded-3 bg-white h-100">
+                                <div class="card-header bg-white py-2.5 px-3 border-bottom d-flex align-items-center justify-content-between">
+                                    <h6 class="fw-bold text-dark mb-0 small text-uppercase">
+                                        <i class="fa-solid fa-coins text-warning me-1.5"></i> 1. Payment &amp; Tax Parameters
+                                    </h6>
+                                    <span class="badge bg-light text-muted border font-monospace" style="font-size:0.7rem;">Step 1 of 2</span>
+                                </div>
+                                <div class="card-body p-3">
+                                    <!-- Payment Date & Method -->
+                                    <div class="row g-2 mb-3">
+                                        <div class="col-sm-6">
+                                            <label class="form-label small fw-bold text-uppercase text-muted">Payment Date <span class="text-danger">*</span></label>
+                                            <input type="date" name="payment_date" class="form-control form-control-sm" value="{{ date('Y-m-d') }}" required>
+                                        </div>
+                                        <div class="col-sm-6">
+                                            <label class="form-label small fw-bold text-uppercase text-muted">Payment Method <span class="text-danger">*</span></label>
+                                            <select name="payment_method" id="singlePaymentMethodSelect" class="form-select form-select-sm" required>
+                                                <option value="bank_transfer" selected>Bank Transfer (CBE, Awash, etc.)</option>
+                                                <option value="cash">Cash / Site Petty Cash</option>
+                                                <option value="cheque">Cheque</option>
+                                                <option value="telebirr">Telebirr / Mobile Money</option>
+                                                <option value="other">Other</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <!-- Payment Amount (ETB) -->
+                                    <div class="mb-3">
+                                        <div class="d-flex align-items-center justify-content-between mb-1">
+                                            <label class="form-label small fw-bold text-uppercase text-dark mb-0">Disbursed Amount (ETB) <span class="text-danger">*</span></label>
+                                            <button type="button" class="btn btn-link btn-sm p-0 text-success text-decoration-none fw-bold" style="font-size: 0.75rem;" onclick="setQuickPayFullAmount()">
+                                                <i class="fa-solid fa-bolt me-0.5 text-warning"></i> Pay Max ({{ number_format($ledger->remaining_amount, 2) }} ETB)
+                                            </button>
+                                        </div>
+                                        <div class="input-group">
+                                            <span class="input-group-text bg-light fw-bold text-dark">ETB</span>
+                                            <input type="number" step="0.01" min="0.01" max="{{ $ledger->remaining_amount }}" name="amount" id="quickPayAmountInput" class="form-control fw-bold fs-5 text-dark" value="{{ number_format($ledger->remaining_amount, 2, '.', '') }}" required oninput="recalculateQuickPayTax()">
+                                        </div>
+                                        <div class="d-flex justify-content-between small text-muted mt-1" style="font-size:0.73rem;">
+                                            <span>Payable Ceiling: <strong class="text-dark">{{ number_format($ledger->remaining_amount, 2) }} ETB</strong></span>
+                                            <span>Already Paid: <strong class="text-success">{{ number_format($ledger->paid_amount, 2) }} ETB</strong></span>
+                                        </div>
+                                    </div>
+
+                                    <!-- Funding Account (COA / Bank) -->
+                                    <div class="mb-3">
+                                        <label class="form-label small fw-bold text-uppercase text-dark">
+                                            Paying Bank / Cash Account <span class="text-danger">*</span>
+                                        </label>
+                                        <select name="account_source" id="singlePaymentAccountSelect" class="form-select form-select-sm" required onchange="onSingleAccountChange(this)">
+                                            <option value="">-- Choose Paying Account * --</option>
+                                            @if(isset($bankAccounts) && $bankAccounts->count() > 0)
+                                                <optgroup label="🏦 Company Bank Accounts">
+                                                    @foreach($bankAccounts as $bk)
+                                                        <option value="bank:{{ $bk->id }}" data-method="bank_transfer" data-balance="{{ (float)($bk->current_balance ?? 0) }}" {{ $loop->first ? 'selected' : '' }}>
+                                                            {{ $bk->bank_name }} - {{ $bk->account_number }} (Bal: ETB {{ number_format($bk->current_balance ?? 0, 2) }})
+                                                        </option>
+                                                    @endforeach
+                                                </optgroup>
+                                            @endif
+                                            @if(isset($cashAccounts) && $cashAccounts->count() > 0)
+                                                <optgroup label="💵 Cash on Hand &amp; Site Petty Cash">
+                                                    @foreach($cashAccounts as $ca)
+                                                        <option value="coa:{{ $ca->id }}" data-method="cash" data-balance="{{ (float)$ca->current_balance }}">
+                                                            {{ $ca->code }} - {{ $ca->name }} (Bal: ETB {{ number_format($ca->current_balance, 2) }})
+                                                        </option>
+                                                    @endforeach
+                                                </optgroup>
+                                            @endif
+                                        </select>
+                                        <div class="small text-muted mt-1" id="singleAccountBalanceDisplay">
+                                            <i class="fa-solid fa-coins text-warning me-1"></i>Funds will be credited directly from this account.
+                                        </div>
+                                    </div>
+
+                                    <!-- Tax Treatment Section (Ethiopian ERCA / VAT / WHT) -->
+                                    <div class="card border border-secondary border-opacity-25 rounded-3 mb-3 bg-light bg-opacity-50">
+                                        <div class="card-body p-2.5">
+                                            <div class="d-flex align-items-center justify-content-between mb-2">
+                                                <span class="fw-bold small text-dark"><i class="fa-solid fa-calculator text-primary me-1"></i> Tax &amp; Withholding Computation</span>
+                                                <span class="badge bg-secondary-subtle text-secondary" style="font-size:0.68rem;">ERCA Rules</span>
+                                            </div>
+
+                                            <div class="row g-2 mb-2">
+                                                <div class="col-sm-7">
+                                                    <label class="form-label small text-muted mb-1" style="font-size:0.72rem;">VAT Option</label>
+                                                    <select name="vat_type" id="quickPayVatType" class="form-select form-select-sm" onchange="recalculateQuickPayTax()">
+                                                        <option value="none" selected>No VAT / Exempt (PurcType 6 / TAS Excel)</option>
+                                                        <option value="inclusive">15% VAT Inclusive (PurcType 3 / Line 100)</option>
+                                                        <option value="exclusive">15% VAT Exclusive (Add 15% to Base)</option>
+                                                        <option value="vat_b">15% VAT-B (Standard Ethiopian Rate)</option>
+                                                    </select>
+                                                </div>
+                                                <div class="col-sm-5 d-flex align-items-end">
+                                                    <div class="form-check form-switch mb-1">
+                                                        <input class="form-check-input" type="checkbox" id="quickPayWithholdingToggle" checked onchange="recalculateQuickPayTax()">
+                                                        <label class="form-check-label small fw-bold text-dark" for="quickPayWithholdingToggle" style="font-size:0.72rem;">
+                                                            Deduct 3% WHT
+                                                        </label>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div id="quickPayWithholdingSection" class="p-2 rounded bg-warning bg-opacity-10 border border-warning border-opacity-25 small text-dark mb-2" style="font-size: 0.72rem;">
+                                                <div class="d-flex align-items-center justify-content-between">
+                                                    <span><i class="fa-solid fa-stamp text-warning me-1"></i> <strong>3% Withholding Tax</strong> deducted from vendor net payment.</span>
+                                                    <span class="badge bg-warning text-dark font-monospace">Rate: 3.00%</span>
+                                                </div>
+                                            </div>
+
+                                            <!-- Live Calculation Summary Breakdown -->
+                                            <div class="p-2.5 rounded bg-white border font-monospace small" style="font-size: 0.74rem;">
+                                                <div class="d-flex justify-content-between text-muted mb-1">
+                                                    <span>Base / Subtotal:</span>
+                                                    <span id="quickDisplayBaseAmount" class="fw-bold text-dark">ETB 0.00</span>
+                                                </div>
+                                                <div class="d-flex justify-content-between text-muted mb-1">
+                                                    <span>VAT (15%):</span>
+                                                    <span id="quickDisplayVatAmount" class="fw-bold text-info">+ ETB 0.00</span>
+                                                </div>
+                                                <div class="d-flex justify-content-between text-muted mb-1">
+                                                    <span>Withholding Tax (3%):</span>
+                                                    <span id="quickDisplayWhtAmount" class="fw-bold text-danger">- ETB 0.00</span>
+                                                </div>
+                                                <div class="d-flex justify-content-between pt-1 border-top fw-bold fs-6">
+                                                    <span class="text-dark">Net Cash Disbursed:</span>
+                                                    <span id="quickDisplayNetAmount" class="text-success">ETB 0.00</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Reference & Notes -->
+                                    <div class="row g-2 mb-3">
+                                        <div class="col-sm-6">
+                                            <label class="form-label small fw-bold text-uppercase text-muted">Reference / Check / Tx #</label>
+                                            <input type="text" name="reference_no" class="form-control form-control-sm font-monospace" placeholder="e.g. CBE-TX-998231 or FS-0012">
+                                        </div>
+                                        <div class="col-sm-6">
+                                            <label class="form-label small fw-bold text-uppercase text-muted">Notes / Memo</label>
+                                            <input type="text" name="notes" class="form-control form-control-sm" placeholder="e.g. Settlement for delivery batch 1">
+                                        </div>
+                                    </div>
+
+                                    <!-- No Receipt Toggle Option -->
+                                    <div class="form-check form-switch mb-3 p-2 rounded bg-light border">
+                                        <input class="form-check-input ms-0 me-2" type="checkbox" id="singleNoReceiptToggle" onchange="toggleSingleReceiptMode(this.checked)">
+                                        <label class="form-check-label small fw-bold text-dark" for="singleNoReceiptToggle">
+                                            Pay Without Vendor Fiscal Receipt (TAS / Non-VAT Proof Only)
+                                        </label>
+                                    </div>
+
+                                    <!-- Submit Button -->
+                                    <button type="submit" id="singleSubmitBtn" class="btn btn-success fw-bold shadow-sm w-100 py-2.5">
+                                        <i class="fas fa-check-circle me-1"></i> Record Payment &amp; Liquidate Credit
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Right Sub-Column: Receipt OCR Studio & Proof -->
+                        <div class="col-12 col-xl-7">
+                            <div class="card border-0 shadow-sm rounded-3 bg-white h-100">
+                                <div class="card-header bg-white py-2.5 px-3 border-bottom d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                    <h6 class="fw-bold text-dark mb-0 small text-uppercase">
+                                        <i class="fa-solid fa-wand-magic-sparkles text-success me-1.5"></i> 2. Receipt OCR Studio &amp; Fiscal Proof
+                                    </h6>
+                                    <span class="badge bg-success-subtle text-success border border-success font-monospace" style="font-size:0.7rem;">
+                                        Interactive AI Studio
+                                    </span>
+                                </div>
+                                <div class="card-body p-3">
+                                    <!-- Normal Mode: With Receipt Dropzone & Live Studio -->
+                                    <div id="singleWithReceiptDiv">
+                                        <div class="alert alert-light border small text-muted mb-3 d-flex align-items-center gap-2">
+                                            <i class="fa-solid fa-lightbulb text-warning fs-5"></i>
+                                            <div>
+                                                <strong>Multi-Engine OCR Active:</strong> Upload the supplier receipt or bank transfer slip. AI automatically extracts <strong>FS No, MRC, Supplier TIN, Receipt Date &amp; Total Amount</strong>, verifies ERCA compliance, and updates payment fields in real-time.
+                                            </div>
+                                        </div>
+
+                                        <!-- Upload / Dropzone -->
+                                        <div class="border border-2 border-dashed rounded-3 p-4 text-center bg-light cursor-pointer mb-3 position-relative"
+                                             style="border-color:#10b981 !important; transition: all 0.2s ease-in-out;"
+                                             onclick="document.getElementById('creditSingleReceiptInput').click()">
+                                            <input type="file" name="receipt_file" id="creditSingleReceiptInput" class="d-none" accept=".pdf,.jpg,.jpeg,.png,.webp">
+                                            <div class="d-inline-flex align-items-center justify-content-center p-3 rounded-circle bg-success bg-opacity-10 text-success mb-2">
+                                                <i class="fa-solid fa-cloud-arrow-up fa-2x"></i>
+                                            </div>
+                                            <h6 class="fw-bold text-dark mb-1">Click to Upload or Drag &amp; Drop Receipt Proof</h6>
+                                            <p class="text-muted small mb-2" style="font-size:0.76rem;">Supports high-res JPG, PNG, WEBP, or multi-page PDF up to 10MB</p>
+                                            <button type="button" class="btn btn-sm btn-white border shadow-2xs fw-semibold px-3 py-1">
+                                                <i class="fa-solid fa-folder-open me-1 text-primary"></i> Browse Receipt File
+                                            </button>
+                                        </div>
+
+                                        <!-- Live OCR Studio Feedback Area (Injected by ReceiptOcrScanner) -->
+                                        <div id="creditSingleOcrFeedbackArea" class="ocr-scanner-status-area"></div>
+                                    </div>
+
+                                    <!-- Fallback Mode: Pay Without Receipt Banner -->
+                                    <div id="singleWithoutReceiptDiv" class="d-none">
+                                        <div class="alert alert-warning border border-warning border-opacity-50 rounded-3 p-3">
+                                            <div class="d-flex align-items-start gap-2">
+                                                <i class="fa-solid fa-triangle-exclamation text-warning fs-4 mt-0.5"></i>
+                                                <div>
+                                                    <h6 class="fw-bold text-dark mb-1">Proceeding Without Fiscal Receipt Proof</h6>
+                                                    <p class="small text-muted mb-2">
+                                                        You have toggled payment without a physical/electronic fiscal receipt. This payment will be settled in the credit ledger, and registered for standard accounting and <strong>ERCA Purchase TAS Excel reporting (PurcType 6)</strong> without Input VAT claim.
+                                                    </p>
+                                                    <div class="small fw-semibold text-dark">
+                                                        <i class="fa-solid fa-circle-check text-success me-1"></i> You can still attach a scanned receipt or bank slip later at any time from the Payment History table.
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    @endif
+
+</div> <!-- closes container-fluid py-3 -->
+
+<script>
+    function onAssignAccountChange(selectEl) {
+        const selectedOpt = selectEl.options[selectEl.selectedIndex];
+        const balDisplay = document.getElementById('assignAccountBalanceDisplay');
+        const staffSelect = document.getElementById('assignedFinanceStaffSelect');
+        const staffAlert = document.getElementById('assignStaffAutoAlert');
+
+        if (selectedOpt && selectedOpt.value) {
+            const bal = parseFloat(selectedOpt.getAttribute('data-balance')) || 0;
+            if (balDisplay) {
+                balDisplay.innerHTML = `<i class="fa-solid fa-wallet text-success me-1"></i> Selected Account Balance: <strong class="text-dark font-monospace">ETB ${bal.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</strong>`;
+            }
+
+            const staffId = selectedOpt.getAttribute('data-staff-id');
+            const staffName = selectedOpt.getAttribute('data-staff-name');
+
+            if (staffSelect) {
+                if (staffId) {
+                    let existingOpt = staffSelect.querySelector(`option[value="${staffId}"]`);
+                    if (!existingOpt) {
+                        existingOpt = new Option(`👤 ${staffName} (COA Custodian)`, staffId, true, true);
+                        staffSelect.add(existingOpt);
+                    }
+                    staffSelect.value = staffId;
+                    if (staffAlert) {
+                        staffAlert.style.display = 'block';
+                        staffAlert.innerHTML = `<div class="p-2 rounded bg-success bg-opacity-10 border border-success border-opacity-25 text-success small d-flex align-items-center"><i class="fa-solid fa-circle-check fs-6 me-2"></i><div>Auto-assigned to <strong>${staffName}</strong> (COA Custodian).</div></div>`;
+                    }
+                } else {
+                    if (staffAlert) {
+                        staffAlert.style.display = 'block';
+                        staffAlert.innerHTML = `<div class="p-2 rounded bg-light border text-muted small d-flex align-items-center"><i class="fa-solid fa-circle-info text-info me-2"></i><div>No custodian assigned to this COA in Chart of Accounts. Please choose a Finance staff member or leave default.</div></div>`;
+                    }
+                }
+            }
+        } else {
+            if (staffAlert) staffAlert.style.display = 'none';
+            if (balDisplay) balDisplay.innerHTML = `<i class="fa-solid fa-coins text-warning me-1"></i>Funds will be disbursed from this account.`;
+        }
+    }
+
+    function onSingleAccountChange(selectEl) {
+        const selectedOpt = selectEl.options[selectEl.selectedIndex];
+        const methodSelect = document.getElementById('singlePaymentMethodSelect');
+        const balDisplay = document.getElementById('singleAccountBalanceDisplay');
+        if (selectedOpt && selectedOpt.value) {
+            const method = selectedOpt.getAttribute('data-method') || 'bank_transfer';
+            const bal = parseFloat(selectedOpt.getAttribute('data-balance')) || 0;
+            if (methodSelect) methodSelect.value = method;
+            if (balDisplay) {
+                balDisplay.innerHTML = `<i class="fa-solid fa-wallet text-success me-1"></i> Selected Account Balance: <strong class="text-dark font-monospace">ETB ${bal.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</strong>`;
+            }
+        }
+    }
+
+    function toggleSingleReceiptMode(isNoReceipt) {
+        const withDiv = document.getElementById('singleWithReceiptDiv');
+        const withoutDiv = document.getElementById('singleWithoutReceiptDiv');
+        const btn = document.getElementById('singleSubmitBtn');
+        if (isNoReceipt) {
+            if (withDiv) withDiv.classList.add('d-none');
+            if (withoutDiv) withoutDiv.classList.remove('d-none');
+            if (btn) {
+                btn.classList.remove('btn-success');
+                btn.classList.add('btn-warning', 'text-dark');
+            }
+        } else {
+            if (withDiv) withDiv.classList.remove('d-none');
+            if (withoutDiv) withoutDiv.classList.add('d-none');
+            if (btn) {
+                btn.classList.remove('btn-warning', 'text-dark');
+                btn.classList.add('btn-success');
+            }
+        }
+        recalculateQuickPayTax();
+    }
+
+    function setQuickPayFullAmount() {
+        const amtInput = document.getElementById('quickPayAmountInput');
+        if (amtInput) {
+            amtInput.value = '{{ number_format($ledger->remaining_amount, 2, ".", "") }}';
+            recalculateQuickPayTax();
+        }
+    }
+
+    function recalculateQuickPayTax() {
+        const grossInput = document.getElementById('quickPayAmountInput');
+        const vatTypeSelect = document.getElementById('quickPayVatType');
+        const whtToggle = document.getElementById('quickPayWithholdingToggle');
+        const whtSection = document.getElementById('quickPayWithholdingSection');
+
+        if (!grossInput) return;
+        const gross = parseFloat(grossInput.value) || 0;
+        const vatType = vatTypeSelect ? vatTypeSelect.value : 'none';
+        const vatRate = 15.00;
+        const hasWht = whtToggle ? whtToggle.checked : false;
+        const whtRate = 3.00;
+
+        if (whtSection) {
+            whtSection.style.display = hasWht ? 'block' : 'none';
+        }
+
+        let vatAmount = 0.0;
+        let baseAmount = gross;
+        let whtAmount = 0.0;
+        let netAmount = gross;
+
+        if (vatType === 'exclusive') {
+            vatAmount = Math.round(gross * (vatRate / 100) * 100) / 100;
+            baseAmount = gross;
+            const totalGrossWithVat = gross + vatAmount;
+            if (hasWht) {
+                whtAmount = Math.round(baseAmount * (whtRate / 100) * 100) / 100;
+            }
+            netAmount = Math.round((totalGrossWithVat - whtAmount) * 100) / 100;
+        } else if (vatType === 'inclusive' || vatType === 'vat_b') {
+            baseAmount = Math.round((gross / (1 + (vatRate / 100))) * 100) / 100;
+            vatAmount = Math.round((gross - baseAmount) * 100) / 100;
+            if (hasWht) {
+                whtAmount = Math.round(baseAmount * (whtRate / 100) * 100) / 100;
+            }
+            netAmount = Math.round((gross - whtAmount) * 100) / 100;
+        } else {
+            baseAmount = gross;
+            vatAmount = 0.0;
+            if (hasWht) {
+                whtAmount = Math.round(baseAmount * (whtRate / 100) * 100) / 100;
+            }
+            netAmount = Math.round((gross - whtAmount) * 100) / 100;
+        }
+
+        // Set hidden inputs
+        const hiddenVat = document.getElementById('quickPayVatAmount');
+        const singleVat = document.getElementById('creditSingleVatAmount');
+        const hiddenWht = document.getElementById('quickPayWithholdingAmount');
+        const hiddenNet = document.getElementById('quickPayNetAmount');
+        const singleSubtotal = document.getElementById('creditSingleSubtotal');
+        const singleTotal = document.getElementById('creditSingleTotalAmount');
+        const singleVatInc = document.getElementById('creditSingleVatIncluded');
+        const singlePurcType = document.getElementById('creditSinglePurcType');
+
+        if (hiddenVat) hiddenVat.value = vatAmount.toFixed(2);
+        if (singleVat) singleVat.value = vatAmount.toFixed(2);
+        if (hiddenWht) hiddenWht.value = whtAmount.toFixed(2);
+        if (hiddenNet) hiddenNet.value = netAmount.toFixed(2);
+        if (singleSubtotal) singleSubtotal.value = baseAmount.toFixed(2);
+        if (singleTotal) singleTotal.value = (vatType === 'exclusive' ? (baseAmount + vatAmount) : gross).toFixed(2);
+        if (singleVatInc) singleVatInc.value = (vatType !== 'none' && vatAmount > 0) ? '1' : '0';
+        if (singlePurcType) singlePurcType.value = (vatType !== 'none' && vatAmount > 0) ? '3' : '6';
+
+        // Update display labels
+        const dispBase = document.getElementById('quickDisplayBaseAmount');
+        const dispVat = document.getElementById('quickDisplayVatAmount');
+        const dispWht = document.getElementById('quickDisplayWhtAmount');
+        const dispNet = document.getElementById('quickDisplayNetAmount');
+        const submitBtn = document.getElementById('singleSubmitBtn');
+
+        const fmt = num => 'ETB ' + num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+        if (dispBase) dispBase.innerText = fmt(baseAmount);
+        if (dispVat) dispVat.innerText = '+ ' + fmt(vatAmount);
+        if (dispWht) dispWht.innerText = '- ' + fmt(whtAmount);
+        if (dispNet) dispNet.innerText = fmt(netAmount);
+
+        if (submitBtn) {
+            const isNoReceipt = document.getElementById('singleNoReceiptToggle')?.checked;
+            const icon = isNoReceipt ? '<i class="fa-solid fa-ban me-1"></i>' : '<i class="fas fa-check-circle me-1"></i>';
+            const receiptTxt = isNoReceipt ? 'Pay Without Receipt' : 'Record Payment';
+            submitBtn.innerHTML = `${icon} ${receiptTxt} & Liquidate (Disburse: ${fmt(netAmount)})`;
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        window.recalculateQuickPayTax = recalculateQuickPayTax;
+        window.setQuickPayFullAmount = setQuickPayFullAmount;
+        const selSingle = document.getElementById('singlePaymentAccountSelect');
+        if (selSingle) onSingleAccountChange(selSingle);
+        const selAssign = document.getElementById('assignAccountSelect');
+        if (selAssign) onAssignAccountChange(selAssign);
+        recalculateQuickPayTax();
+
+        // Initialize AI Receipt OCR Scanner for the full-width studio
+        if (window.ReceiptOcrScanner) {
+            ReceiptOcrScanner.init({
+                fileInput: '#creditSingleReceiptInput',
+                form: 'form[action*="record-payment"]',
+                submitBtn: '#singleSubmitBtn',
+                statusContainer: '#creditSingleOcrFeedbackArea',
+                studioMode: true,
+                purchaserTin: '0038480010',
+                encodedBy: '{{ strtolower(preg_replace("/[^a-zA-Z0-9_]/", "", Auth::user()->name ?? "wechacha")) }}',
+                fields: {
+                    purchaser_tin: '#creditSinglePurchaserTin',
+                    seller_tin: '#creditSingleSellerTin',
+                    supplier_tin: '#creditSingleSupplierTin',
+                    receipt_no: '#creditSingleReceiptNo',
+                    fs_no: '#creditSingleFsNo',
+                    receipt_date: 'input[name="payment_date"]',
+                    encoding_date: '#creditSingleEncodingDate',
+                    mrc: '#creditSingleMrc',
+                    purc_type: '#creditSinglePurcType',
+                    encoded_by: '#creditSingleEncodedBy',
+                    notes: 'input[name="notes"]'
+                },
+                onScanComplete: function(scanData) {
+                    const amtInput = document.getElementById('quickPayAmountInput');
+                    if (amtInput && scanData.data && scanData.data.total_amount) {
+                        const maxPayable = parseFloat(amtInput.getAttribute('max')) || Infinity;
+                        const scannedAmt = parseFloat(scanData.data.total_amount) || 0;
+                        if (scannedAmt > 0 && scannedAmt <= maxPayable) {
+                            amtInput.value = scannedAmt.toFixed(2);
+                            recalculateQuickPayTax();
+                        }
+                    }
+                    const refInput = document.querySelector('form[action*="record-payment"] input[name="reference_no"]');
+                    if (refInput && !refInput.value && scanData.data && scanData.data.fs_no) {
+                        refInput.value = 'FS-' + scanData.data.fs_no;
+                    }
+                }
+            });
+        }
+    });
+</script>
+<script src="{{ asset('js/receipt-ocr-scanner.js') }}"></script>
 
 @foreach($ledger->payments as $pmt)
     @if(!$pmt->receipt_path)
