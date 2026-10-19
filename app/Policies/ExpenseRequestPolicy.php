@@ -112,4 +112,11 @@ class ExpenseRequestPolicy
         return ($isAssignedStaff || $isFinanceHead) && in_array($expenseRequest->status, ['Approved - Assigned to Finance', 'Assigned to Finance', ExpenseRequest::STATUS_APPROVED_ASSIGNED, ExpenseRequest::STATUS_ASSIGNED]);
     }
 
+    /**
+     * Determine whether the user can attach or update fiscal receipts via OCR Studio.
+     */
+    public function attachReceipt(User $user, ExpenseRequest $expenseRequest): bool
+    {
+        return true;
+    }
 }

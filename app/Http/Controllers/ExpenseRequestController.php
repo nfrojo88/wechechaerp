@@ -12,7 +12,10 @@ use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
 use App\Models\ActivityLog;
 use App\Models\User;
+use App\Models\Receipt;
+use App\Models\ReceiptItem;
 use App\Services\CloudinaryService;
+use App\Services\ReceiptOcrService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -244,6 +247,7 @@ class ExpenseRequestController extends Controller
             'purchaseRequest.supplier',
             'purchaseRequest.proformaInvoices.supplier',
             'purchaseRequest.gmDecisions',
+            'receipt',
         ])
         ->where($baseUserScope)
         ->where($filterNonProcurementScope);
@@ -1527,5 +1531,255 @@ class ExpenseRequestController extends Controller
         $paidRequests = $query->latest('paid_at')->paginate(20)->withQueryString();
 
         return view('expense-requests.history', compact('paidRequests'));
+    }
+
+    /**
+     * Attach or update receipt proof via AI OCR Studio, with ON/OFF switch for VAT recording.
+     * When ON: Saves receipt and registers into ERCA Line 100 VAT declaration & VAT reports.
+     * When OFF: Saves receipt as non-VAT proof only and explicitly omits from VAT reports.
+     */
+    public function attachReceipt(Request $request, ExpenseRequest $expenseRequest)
+    {
+        $user = auth()->user();
+        if (!$user) {
+            abort(401, 'Unauthenticated');
+        }
+
+        $validated = $request->validate([
+            'receipt_file'        => 'nullable|file|mimes:jpeg,png,jpg,pdf,webp|max:10240',
+            'attachment'          => 'nullable|file|mimes:jpeg,png,jpg,pdf,webp|max:10240',
+            'save_in_vat'         => 'nullable',
+            'vat_included'        => 'nullable',
+            'vendor_name'         => 'nullable|string|max:255',
+            'supplier_tin'        => 'nullable|string|max:20',
+            'seller_tin'          => 'nullable|string|max:20',
+            'fs_no'               => 'nullable|string|max:30',
+            'receipt_no'          => 'nullable|string|max:30',
+            'receipt_date'        => 'nullable|string|max:30',
+            'mrc'                 => 'nullable|string|max:30',
+            'mrc_no'              => 'nullable|string|max:30',
+            'subtotal'            => 'nullable|numeric|min:0',
+            'vat_amount'          => 'nullable|numeric|min:0',
+            'total_amount'        => 'nullable|numeric|min:0',
+            'amount'              => 'nullable|numeric|min:0',
+            'purc_type'           => 'nullable|string|max:10',
+            'purchase_type'       => 'nullable|string|max:10',
+            'encoded_by'          => 'nullable|string|max:50',
+            'ocr_items_json'      => 'nullable|string',
+            'notes'               => 'nullable|string|max:1000',
+        ]);
+
+        DB::beginTransaction();
+        try {
+            $attachmentUrl = $expenseRequest->attachment;
+            if ($request->hasFile('receipt_file')) {
+                try {
+                    $cloudinary = app(CloudinaryService::class);
+                    $attachmentUrl = $cloudinary->upload($request->file('receipt_file'), 'expense_receipts');
+                } catch (\Throwable $e) {
+                    Log::error('Expense attach receipt upload error: ' . $e->getMessage());
+                    $attachmentUrl = $request->file('receipt_file')->store('uploads/expense_receipts', 'public');
+                }
+            } elseif ($request->hasFile('attachment')) {
+                try {
+                    $cloudinary = app(CloudinaryService::class);
+                    $attachmentUrl = $cloudinary->upload($request->file('attachment'), 'expense_receipts');
+                } catch (\Throwable $e) {
+                    Log::error('Expense attach receipt upload error: ' . $e->getMessage());
+                    $attachmentUrl = $request->file('attachment')->store('uploads/expense_receipts', 'public');
+                }
+            }
+
+            if (empty($attachmentUrl)) {
+                return back()->with('error', 'Please select or upload a receipt file (Image or PDF).');
+            }
+
+            // Determine if Save in VAT is ON or OFF
+            $saveInVat = $request->boolean('save_in_vat')
+                || $request->input('save_in_vat') === '1'
+                || $request->input('save_in_vat') === 'on'
+                || ($request->has('vat_included') && ($request->input('vat_included') === '1' || $request->input('vat_included') === 'true' || $request->boolean('vat_included')));
+
+            if ($request->has('save_in_vat') && ($request->input('save_in_vat') === '0' || $request->input('save_in_vat') === 'false')) {
+                $saveInVat = false;
+            }
+
+            $totalAmount = (float)($request->input('total_amount') ?: ($request->input('amount') ?: ($expenseRequest->gross_amount ?? $expenseRequest->amount)));
+            $vendorName  = trim((string)($request->input('vendor_name') ?: ($expenseRequest->applicant_name ?: 'Vendor')));
+            $supplierTin = trim((string)($request->input('supplier_tin') ?: ($request->input('seller_tin') ?: '')));
+            $fsNo        = trim((string)($request->input('fs_no') ?: ($request->input('receipt_no') ?: '')));
+            $mrcNo       = trim((string)($request->input('mrc_no') ?: ($request->input('mrc') ?: '')));
+            $receiptDate = trim((string)($request->input('receipt_date') ?: now()->toDateString()));
+
+            if ($saveInVat) {
+                // Calculate VAT (15%)
+                $subtotal = (float)$request->input('subtotal', 0);
+                $vatAmount = (float)$request->input('vat_amount', 0);
+
+                if ($vatAmount <= 0 && $totalAmount > 0) {
+                    $base = round($totalAmount / 1.15, 2);
+                    $vatAmount = round($totalAmount - $base, 2);
+                    $subtotal = $base;
+                } elseif ($subtotal <= 0 && $totalAmount > 0 && $vatAmount > 0) {
+                    $subtotal = round($totalAmount - $vatAmount, 2);
+                }
+
+                // Update Expense Request record
+                $expenseRequest->update([
+                    'attachment'   => $attachmentUrl,
+                    'vat_type'     => 'inclusive',
+                    'vat_rate'     => 15.00,
+                    'vat_amount'   => $vatAmount,
+                    'gross_amount' => $totalAmount,
+                ]);
+
+                // Create or update record in receipts table (for ERCA Line 100 VAT declaration & VAT reports)
+                $ocrService = app(ReceiptOcrService::class);
+                $rawItems   = json_decode($request->input('ocr_items_json'), true) ?: [];
+                $ocrItems   = [];
+
+                if (!empty($rawItems) && is_array($rawItems)) {
+                    foreach ($rawItems as $it) {
+                        $qty      = (float)($it['qty'] ?? 1);
+                        $price    = (float)($it['unit_price'] ?? 0);
+                        $totVal   = (float)($it['total_value'] ?? round($qty * $price, 2));
+                        $vatVal   = (float)($it['vat'] ?? round($totVal * 0.15, 2));
+                        $afterVat = (float)($it['value_after_vat'] ?? round($totVal + $vatVal, 2));
+
+                        $ocrItems[] = [
+                            'item_description' => $it['item_description'] ?? ($it['name'] ?? $expenseRequest->description),
+                            'uom'              => (string)($it['uom'] ?? '9'),
+                            'qty'              => $qty,
+                            'unit_price'       => $price,
+                            'total_value'      => $totVal,
+                            'vat'              => $vatVal,
+                            'value_after_vat'  => $afterVat,
+                        ];
+                    }
+                }
+
+                if (empty($ocrItems)) {
+                    $ocrItems[] = [
+                        'item_description' => $expenseRequest->description ?: "Expense Request #{$expenseRequest->request_number}",
+                        'uom'              => '9',
+                        'qty'              => 1.0,
+                        'unit_price'       => $subtotal,
+                        'total_value'      => $subtotal,
+                        'vat'              => $vatAmount,
+                        'value_after_vat'  => $totalAmount,
+                    ];
+                }
+
+                $scanData = [
+                    'vendor_name'       => $vendorName,
+                    'supplier_tin'      => $supplierTin,
+                    'tin_valid'         => !empty($supplierTin) && strlen($supplierTin) === 10,
+                    'buyer_tin'         => '0038480010',
+                    'fs_no'             => $fsNo,
+                    'fs_no_raw'         => $fsNo,
+                    'fs_no_valid'       => !empty($fsNo) && strlen($fsNo) === 8,
+                    'mrc_no'            => $mrcNo,
+                    'receipt_date_ymd'  => $receiptDate,
+                    'subtotal'          => $subtotal,
+                    'vat_amount'        => $vatAmount,
+                    'total_amount'      => $totalAmount,
+                    'currency'          => 'ETB',
+                    'description'       => "Expense Request #{$expenseRequest->request_number}: " . ($expenseRequest->description ?: $expenseRequest->category),
+                    'engine'            => $request->input('ocr_engine') ?: 'Receipt OCR Studio',
+                    'engine_slug'       => 'expense_request',
+                    'confidence'        => 'high',
+                    'confidence_score'  => 100,
+                    'qc_notes'          => "Saved into ERCA Line 100 VAT Section (+ETB {$vatAmount}) from Expense Details (#{$expenseRequest->request_number})",
+                    'items'             => $ocrItems,
+                    'is_verified'       => true,
+                ];
+
+                $existingReceipt = Receipt::where('purchasable_type', ExpenseRequest::class)
+                    ->where('purchasable_id', $expenseRequest->id)
+                    ->first();
+
+                if ($existingReceipt) {
+                    $existingReceipt->update([
+                        'vendor_name'      => $vendorName,
+                        'vendor_tin'       => $supplierTin,
+                        'tin_valid'        => !empty($supplierTin) && strlen($supplierTin) === 10,
+                        'fs_no'            => $fsNo,
+                        'fs_no_raw'        => $fsNo,
+                        'fs_no_valid'      => !empty($fsNo) && strlen($fsNo) === 8,
+                        'mrc_no'           => $mrcNo,
+                        'receipt_date'     => $receiptDate,
+                        'subtotal'         => $subtotal,
+                        'vat_amount'       => $vatAmount,
+                        'total_amount'     => $totalAmount,
+                        'file_path'        => $attachmentUrl,
+                        'qc_notes'         => "Saved into ERCA Line 100 VAT Section (+ETB {$vatAmount}) from Expense Details",
+                        'status'           => 'verified',
+                    ]);
+
+                    $existingReceipt->items()->delete();
+                    foreach ($ocrItems as $it) {
+                        $existingReceipt->items()->create($it);
+                    }
+                } else {
+                    $ocrService->saveReceipt(
+                        $scanData,
+                        $attachmentUrl,
+                        $expenseRequest,
+                        $user->id,
+                        $expenseRequest->project_id ?? null,
+                        $expenseRequest->category ?: 'service',
+                        $receiptDate
+                    );
+                }
+
+                $msg = "✅ Receipt attached successfully and saved into ERCA VAT Line 100 Report (+ETB " . number_format($vatAmount, 2) . " VAT)!";
+            } else {
+                // Save in VAT is OFF!
+                $expenseRequest->update([
+                    'attachment' => $attachmentUrl,
+                    'vat_type'   => 'none',
+                    'vat_amount' => 0.00,
+                ]);
+
+                // Delete any linked record in receipts table so it leaves no trace in VAT report
+                $existingReceipt = Receipt::where('purchasable_type', ExpenseRequest::class)
+                    ->where('purchasable_id', $expenseRequest->id)
+                    ->first();
+
+                if ($existingReceipt) {
+                    $existingReceipt->items()->delete();
+                    $existingReceipt->delete();
+                }
+
+                $msg = "⚪ Receipt attached as standard expense proof (VAT claim turned OFF — not saved in VAT report).";
+            }
+
+            DB::commit();
+
+            if ($request->wantsJson() || $request->ajax()) {
+                return response()->json([
+                    'success'     => true,
+                    'message'     => $msg,
+                    'save_in_vat' => $saveInVat,
+                    'vat_amount'  => $saveInVat ? ($expenseRequest->fresh()->vat_amount ?? 0) : 0,
+                    'attachment'  => $attachmentUrl,
+                    'request'     => $expenseRequest->fresh(),
+                ]);
+            }
+
+            return back()->with('success', $msg);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error("ExpenseRequest attachReceipt error: " . $e->getMessage());
+
+            if ($request->wantsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Error attaching receipt: ' . $e->getMessage()
+                ], 500);
+            }
+
+            return back()->with('error', 'Error attaching receipt: ' . $e->getMessage());
+        }
     }
 }

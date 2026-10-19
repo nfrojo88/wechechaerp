@@ -2564,6 +2564,7 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/{expenseRequest}/gm-review',      [App\Http\Controllers\ExpenseRequestController::class, 'gmReview'])->name('gm-review');
         Route::post('/{expenseRequest}/finance-assign', [App\Http\Controllers\ExpenseRequestController::class, 'financeAssign'])->name('finance-assign');
         Route::post('/{expenseRequest}/mark-paid',      [App\Http\Controllers\ExpenseRequestController::class, 'markPaid'])->name('mark-paid');
+        Route::post('/{expenseRequest}/attach-receipt', [App\Http\Controllers\ExpenseRequestController::class, 'attachReceipt'])->name('attach-receipt');
     });
 
     // ─── Correspondence (Letter) Management System ──────────────────────────────────

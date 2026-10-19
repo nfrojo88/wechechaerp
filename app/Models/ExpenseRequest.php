@@ -583,6 +583,30 @@ class ExpenseRequest extends Model
     }
 
     /**
+     * Linked fiscal receipts (for ERCA VAT Line 100 & VAT Reports).
+     */
+    public function receipts()
+    {
+        return $this->morphMany(Receipt::class, 'purchasable');
+    }
+
+    /**
+     * Latest linked fiscal receipt.
+     */
+    public function receipt()
+    {
+        return $this->morphOne(Receipt::class, 'purchasable')->latestOfMany();
+    }
+
+    /**
+     * Check if this request is registered/saved in the VAT report.
+     */
+    public function getIsSavedInVatAttribute(): bool
+    {
+        return (float)($this->vat_amount ?? 0) > 0 && ($this->vat_type ?? 'none') !== 'none';
+    }
+
+    /**
      * Get the name of the person who submitted/asked the request.
      */
     public function getAskerNameAttribute(): string

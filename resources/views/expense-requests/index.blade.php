@@ -1482,16 +1482,147 @@
                         </ul>
                     </div>
 
-                    @if($req->attachment)
-                    <div class="mb-3">
-                        <label class="fw-bold mb-1">Receipt Attachment:</label>
-                        <div>
-                            <a href="{{ route('expense-requests.attachment', $req->id) }}" target="_blank" class="btn btn-outline-primary btn-sm">
-                                <i class="fa-solid fa-paperclip me-1"></i>View Receipt / Document
-                            </a>
+                    {{-- ── 4. Fiscal Receipt & OCR Studio with ON/OFF VAT Switch ── --}}
+                    @php
+                        $isVatActive = ($req->vat_amount > 0 && $req->vat_type !== 'none') || (!$req->attachment && ($req->vat_type ?? '') !== 'none');
+                        $linkedRcp = $req->receipt;
+                    @endphp
+                    <div class="card border border-2 rounded-4 mb-3 overflow-hidden shadow-sm" style="border-color: #10b981 !important;">
+                        <div class="card-header bg-dark text-white py-2.5 px-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="badge bg-success text-white p-1.5 rounded-circle">
+                                    <i class="fa-solid fa-wand-magic-sparkles"></i>
+                                </span>
+                                <div>
+                                    <h6 class="fw-bold mb-0 text-white small text-uppercase">
+                                        Receipt OCR Studio &amp; Fiscal Proof (ደረሰኝ እና የቫት ማረጋገጫ)
+                                    </h6>
+                                    <span class="text-white-50" style="font-size:0.72rem;">
+                                        AI Vision Fiscal Receipt Scanner &bull; Multi-Engine Extraction &bull; ERCA Verification
+                                    </span>
+                                </div>
+                            </div>
+                            <div id="vatStatusBadgeContainer_{{ $req->id }}">
+                                @if($req->attachment)
+                                    @if($req->vat_amount > 0 && $req->vat_type !== 'none')
+                                        <span class="badge bg-success-subtle text-success border border-success font-monospace" style="font-size:0.72rem;">
+                                            <i class="fa-solid fa-circle-check me-1"></i>Saved in VAT (+ETB {{ number_format($req->vat_amount, 2) }})
+                                        </span>
+                                    @else
+                                        <span class="badge bg-secondary-subtle text-secondary border border-secondary font-monospace" style="font-size:0.72rem;">
+                                            <i class="fa-solid fa-ban me-1"></i>Non-VAT Expense Proof
+                                        </span>
+                                    @endif
+                                @else
+                                    <span class="badge bg-warning-subtle text-warning-emphasis border border-warning font-monospace" style="font-size:0.72rem;">
+                                        <i class="fa-solid fa-circle-exclamation me-1"></i>No Receipt Attached Yet
+                                    </span>
+                                @endif
+                            </div>
+                        </div>
+
+                        <div class="card-body p-3 bg-white">
+                            {{-- Existing Receipt Status & View Link --}}
+                            <div id="existingReceiptBox_{{ $req->id }}" class="{{ $req->attachment ? '' : 'd-none' }}">
+                                <div class="alert alert-light border d-flex justify-content-between align-items-center py-2 px-3 mb-3 rounded-3 shadow-xs">
+                                    <div class="d-flex align-items-center gap-2.5">
+                                        <i class="fa-solid fa-file-invoice text-success fs-4"></i>
+                                        <div>
+                                            <strong class="text-dark d-block small">Existing Receipt Document on File</strong>
+                                            <div class="text-muted" style="font-size:0.74rem;" id="existingReceiptInfo_{{ $req->id }}">
+                                                @if($req->vat_amount > 0 && $req->vat_type !== 'none')
+                                                    <span class="text-success fw-bold"><i class="fa-solid fa-check-double me-1"></i>ERCA VAT Line 100 Active (VAT: ETB {{ number_format($req->vat_amount, 2) }})</span>
+                                                @else
+                                                    <span class="text-secondary fw-semibold"><i class="fa-solid fa-circle-info me-1"></i>Non-VAT Proof (Excluded from ERCA VAT Reports)</span>
+                                                @endif
+                                                @if($linkedRcp && $linkedRcp->fs_no)
+                                                    &bull; FS: <span class="font-monospace text-dark fw-bold">{{ $linkedRcp->fs_no }}</span>
+                                                @endif
+                                                @if($linkedRcp && $linkedRcp->vendor_tin)
+                                                    &bull; TIN: <span class="font-monospace text-dark fw-bold">{{ $linkedRcp->vendor_tin }}</span>
+                                                @endif
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <a href="{{ route('expense-requests.attachment', $req->id) }}" id="btnViewReceipt_{{ $req->id }}" target="_blank" class="btn btn-sm btn-outline-success px-3 shadow-xs fw-semibold">
+                                            <i class="fa-solid fa-arrow-up-right-from-square me-1"></i> View Receipt
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {{-- MASTER ON / OFF SWITCH: Save in VAT --}}
+                            <div class="card p-3 mb-3 border shadow-xs transition-all {{ $isVatActive ? 'border-success bg-success bg-opacity-10' : 'border-secondary-subtle bg-light' }}" id="vatCard_{{ $req->id }}">
+                                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                    <div class="me-3">
+                                        <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
+                                            <h6 class="mb-0 fw-bold text-dark">
+                                                <i class="fa-solid fa-receipt text-primary me-1"></i> Save to VAT Report (በቫት መዝገብ ላይ ይግባ)?
+                                            </h6>
+                                            <span class="badge {{ $isVatActive ? 'bg-success' : 'bg-secondary' }}" id="vatStatusBadge_{{ $req->id }}">
+                                                {{ $isVatActive ? '✅ Save to VAT (ERCA Line 100)' : '⚪ Do NOT Save to VAT (Non-VAT)' }}
+                                            </span>
+                                        </div>
+                                        <small class="text-muted d-block" id="vatHelpText_{{ $req->id }}">
+                                            {{ $isVatActive
+                                                ? 'ON: Scanned receipt will be declared in ERCA VAT Line 100 & VAT Reports (+15% input tax claim).'
+                                                : 'OFF: Non-VAT expense proof only. Receipt is saved for records but will NOT be saved or declared in VAT reports.' }}
+                                        </small>
+                                    </div>
+                                    <div class="form-check form-switch fs-4 mb-0">
+                                        <input class="form-check-input ms-0 cursor-pointer" type="checkbox" role="switch" name="save_in_vat_toggle" id="vatSwitch_{{ $req->id }}"
+                                               value="1" {{ $isVatActive ? 'checked' : '' }}
+                                               onchange="onVatSwitchChanged({{ $req->id }}, this.checked)">
+                                        <label class="form-check-label visually-hidden" for="vatSwitch_{{ $req->id }}">Save in VAT</label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {{-- Feedback Alert Box for AJAX --}}
+                            <div id="ocrSaveAlert_{{ $req->id }}" style="display:none;" class="mb-3"></div>
+
+                            {{-- Receipt Attachment Form & OCR Studio Container --}}
+                            <form action="{{ route('expense-requests.attach-receipt', $req->id) }}" method="POST" enctype="multipart/form-data" id="attachReceiptForm_{{ $req->id }}" data-req-id="{{ $req->id }}" data-has-existing="{{ !empty($req->attachment) ? '1' : '0' }}">
+                                @csrf
+                                <input type="hidden" name="save_in_vat" id="hiddenSaveInVat_{{ $req->id }}" value="{{ $isVatActive ? '1' : '0' }}">
+                                <input type="hidden" name="vendor_name" id="ocrVendor_{{ $req->id }}" value="{{ $linkedRcp->vendor_name ?? '' }}">
+                                <input type="hidden" name="supplier_tin" id="ocrTin_{{ $req->id }}" value="{{ $linkedRcp->vendor_tin ?? '' }}">
+                                <input type="hidden" name="fs_no" id="ocrFs_{{ $req->id }}" value="{{ $linkedRcp->fs_no ?? '' }}">
+                                <input type="hidden" name="receipt_date" id="ocrDate_{{ $req->id }}" value="{{ optional($linkedRcp?->receipt_date)->format('Y-m-d') ?? '' }}">
+                                <input type="hidden" name="mrc" id="ocrMrc_{{ $req->id }}" value="{{ $linkedRcp->mrc_no ?? '' }}">
+                                <input type="hidden" name="subtotal" id="ocrSubtotal_{{ $req->id }}" value="{{ $req->gross_amount ?? $req->amount }}">
+                                <input type="hidden" name="vat_amount" id="ocrVat_{{ $req->id }}" value="{{ $req->vat_amount ?? '0.00' }}">
+                                <input type="hidden" name="total_amount" id="ocrTotal_{{ $req->id }}" value="{{ $req->gross_amount ?? $req->amount }}">
+                                <input type="hidden" name="ocr_items_json" id="ocrItemsJson_{{ $req->id }}">
+
+                                {{-- Drag & Drop Upload Trigger --}}
+                                <div class="border border-2 border-dashed rounded-3 p-3 text-center bg-light cursor-pointer mb-2"
+                                     style="border-color:#10b981 !important;"
+                                     onclick="document.getElementById('receiptFileInput_{{ $req->id }}').click()">
+                                    <input type="file" name="receipt_file" id="receiptFileInput_{{ $req->id }}" class="d-none" accept=".pdf,.jpg,.jpeg,.png,.webp">
+                                    <i class="fa-solid fa-cloud-arrow-up fa-2x text-success mb-1.5"></i>
+                                    <div class="fw-bold small text-dark">
+                                        {{ $req->attachment ? 'Click or Drop File to Replace / Re-Scan Receipt' : 'Click to Browse or Drag & Drop Fiscal Receipt / Slip' }}
+                                    </div>
+                                    <div class="text-muted" style="font-size:0.72rem;">JPG, PNG, WEBP, PDF up to 10MB &bull; Automatic AI Vision Extraction</div>
+                                </div>
+
+                                {{-- Studio Feedback Container --}}
+                                <div id="ocrFeedbackArea_{{ $req->id }}" class="mt-2"></div>
+
+                                {{-- Submit Button --}}
+                                <div class="mt-3">
+                                    <button type="submit" id="btnSaveReceipt_{{ $req->id }}" class="btn btn-success fw-bold w-100 py-2.5 shadow-sm">
+                                        <i class="fa-solid fa-cloud-arrow-up me-1"></i>
+                                        <span id="btnSaveReceiptText_{{ $req->id }}">
+                                            {{ $isVatActive ? 'Save Receipt & Save to VAT (+15% Tax Claim)' : 'Save Receipt Only (Do NOT Save in VAT)' }}
+                                        </span>
+                                    </button>
+                                </div>
+                            </form>
                         </div>
                     </div>
-                    @endif
 
                     @if($req->withholding_receipt)
                     <div class="mb-3">
@@ -2264,6 +2395,212 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 });
+</script>
+
+<script src="{{ asset('js/receipt-ocr-scanner.js') }}"></script>
+<script>
+    // ─── Master ON/OFF Switch Handler for Expense Request Details VAT ───
+    window.onVatSwitchChanged = function(reqId, isChecked) {
+        const card = document.getElementById('vatCard_' + reqId);
+        const badge = document.getElementById('vatStatusBadge_' + reqId);
+        const help = document.getElementById('vatHelpText_' + reqId);
+        const hidden = document.getElementById('hiddenSaveInVat_' + reqId);
+        const btnText = document.getElementById('btnSaveReceiptText_' + reqId);
+
+        if (hidden) hidden.value = isChecked ? '1' : '0';
+
+        if (isChecked) {
+            if (card) {
+                card.classList.remove('border-secondary-subtle', 'bg-light');
+                card.classList.add('border-success', 'bg-success', 'bg-opacity-10');
+            }
+            if (badge) {
+                badge.className = 'badge bg-success';
+                badge.innerText = '✅ Save to VAT (ERCA Line 100)';
+            }
+            if (help) {
+                help.innerText = 'ON: Scanned receipt will be declared in ERCA VAT Line 100 & VAT Reports (+15% input tax claim).';
+            }
+            if (btnText) {
+                btnText.innerText = 'Save Receipt & Save to VAT (+15% Tax Claim)';
+            }
+        } else {
+            if (card) {
+                card.classList.remove('border-success', 'bg-success', 'bg-opacity-10');
+                card.classList.add('border-secondary-subtle', 'bg-light');
+            }
+            if (badge) {
+                badge.className = 'badge bg-secondary';
+                badge.innerText = '⚪ Do NOT Save to VAT (Non-VAT)';
+            }
+            if (help) {
+                help.innerText = 'OFF: Non-VAT expense proof only. Receipt is saved for records but will NOT be saved or declared in VAT reports.';
+            }
+            if (btnText) {
+                btnText.innerText = 'Save Receipt Only (Do NOT Save in VAT)';
+            }
+        }
+
+        // Auto-synchronize with rendered OCR Studio VAT selector if active
+        const form = document.getElementById('attachReceiptForm_' + reqId);
+        if (form) {
+            const optIncluded = form.querySelector('.ocr-vat-opt-included');
+            const optNoVat = form.querySelector('.ocr-vat-opt-none');
+            if (isChecked && optIncluded) {
+                optIncluded.checked = true;
+                optIncluded.dispatchEvent(new Event('change', { bubbles: true }));
+            } else if (!isChecked && optNoVat) {
+                optNoVat.checked = true;
+                optNoVat.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+        }
+    };
+
+    // Initialize OCR Studio on details modals
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('[id^="detailsModal"]').forEach(function (modal) {
+            modal.addEventListener('shown.bs.modal', function () {
+                const reqId = modal.id.replace('detailsModal', '');
+                if (!reqId) return;
+
+                const fileInput = document.getElementById('receiptFileInput_' + reqId);
+                if (fileInput && !fileInput.dataset.ocrInitialized && window.ReceiptOcrScanner) {
+                    fileInput.dataset.ocrInitialized = 'true';
+                    ReceiptOcrScanner.init({
+                        fileInput: fileInput,
+                        form: '#attachReceiptForm_' + reqId,
+                        submitBtn: '#btnSaveReceipt_' + reqId,
+                        statusContainer: '#ocrFeedbackArea_' + reqId,
+                        studioMode: true,
+                        purchaserTin: '0038480010',
+                        encodedBy: '{{ strtolower(preg_replace("/[^a-zA-Z0-9_]/", "", Auth::user()->name ?? "wechacha")) }}',
+                        fields: {
+                            vendor_name: '#ocrVendor_' + reqId,
+                            supplier_tin: '#ocrTin_' + reqId,
+                            fs_no: '#ocrFs_' + reqId,
+                            receipt_date: '#ocrDate_' + reqId,
+                            subtotal: '#ocrSubtotal_' + reqId,
+                            vat_amount: '#ocrVat_' + reqId,
+                            total_amount: '#ocrTotal_' + reqId,
+                            mrc: '#ocrMrc_' + reqId
+                        },
+                        onScanComplete: function(scanData) {
+                            const isVatOn = document.getElementById('vatSwitch_' + reqId)?.checked;
+                            const hiddenSave = document.getElementById('hiddenSaveInVat_' + reqId);
+                            if (hiddenSave) hiddenSave.value = isVatOn ? '1' : '0';
+                            if (!isVatOn) {
+                                const hiddenVat = document.getElementById('ocrVat_' + reqId);
+                                if (hiddenVat) hiddenVat.value = '0.00';
+                            }
+                        }
+                    });
+                }
+            });
+        });
+
+        // AJAX submit with live visual updates for attachReceiptForm
+        document.querySelectorAll('[id^="attachReceiptForm_"]').forEach(function (form) {
+            form.addEventListener('submit', function (e) {
+                e.preventDefault();
+                const reqId = form.dataset.reqId;
+                const fileInput = document.getElementById('receiptFileInput_' + reqId);
+                const hasExisting = form.dataset.hasExisting === '1';
+
+                if (!hasExisting && (!fileInput || !fileInput.files || fileInput.files.length === 0)) {
+                    alert('Please select or upload a receipt file (Image or PDF).');
+                    return;
+                }
+
+                const submitBtn = document.getElementById('btnSaveReceipt_' + reqId);
+                const origHtml = submitBtn ? submitBtn.innerHTML : '';
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span> Saving Receipt & Updating VAT...';
+                }
+
+                const alertBox = document.getElementById('ocrSaveAlert_' + reqId);
+                if (alertBox) alertBox.style.display = 'none';
+
+                const formData = new FormData(form);
+
+                fetch(form.action, {
+                    method: 'POST',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json'
+                    },
+                    body: formData
+                })
+                .then(res => res.json().then(data => ({ ok: res.ok, status: res.status, data })))
+                .then(res => {
+                    if (submitBtn) {
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = origHtml;
+                    }
+
+                    if (res.ok && res.data && res.data.success) {
+                        if (alertBox) {
+                            alertBox.className = 'alert alert-success py-2 px-3 small border-0 mb-3 shadow-xs';
+                            alertBox.innerHTML = '<i class="fa-solid fa-circle-check me-1"></i> ' + res.data.message;
+                            alertBox.style.display = 'block';
+                        }
+
+                        // Update existing receipt box
+                        const existingBox = document.getElementById('existingReceiptBox_' + reqId);
+                        const existingInfo = document.getElementById('existingReceiptInfo_' + reqId);
+                        const btnView = document.getElementById('btnViewReceipt_' + reqId);
+                        const headerBadge = document.getElementById('vatStatusBadgeContainer_' + reqId);
+
+                        if (existingBox) existingBox.classList.remove('d-none');
+                        form.dataset.hasExisting = '1';
+
+                        if (res.data.save_in_vat) {
+                            const vatFmt = Number(res.data.vat_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 });
+                            if (existingInfo) {
+                                existingInfo.innerHTML = `<span class="text-success fw-bold"><i class="fa-solid fa-check-double me-1"></i>ERCA VAT Line 100 Active (VAT: ETB ${vatFmt})</span>`;
+                            }
+                            if (headerBadge) {
+                                headerBadge.innerHTML = `<span class="badge bg-success-subtle text-success border border-success font-monospace" style="font-size:0.72rem;"><i class="fa-solid fa-circle-check me-1"></i>Saved in VAT (+ETB ${vatFmt})</span>`;
+                            }
+                        } else {
+                            if (existingInfo) {
+                                existingInfo.innerHTML = `<span class="text-secondary fw-semibold"><i class="fa-solid fa-circle-info me-1"></i>Non-VAT Proof (Excluded from ERCA VAT Reports)</span>`;
+                            }
+                            if (headerBadge) {
+                                headerBadge.innerHTML = `<span class="badge bg-secondary-subtle text-secondary border border-secondary font-monospace" style="font-size:0.72rem;"><i class="fa-solid fa-ban me-1"></i>Non-VAT Expense Proof</span>`;
+                            }
+                        }
+
+                        if (res.data.attachment && btnView) {
+                            btnView.href = res.data.attachment.startsWith('http') ? res.data.attachment : ('/uploads/' + res.data.attachment.replace(/^uploads\//, ''));
+                        }
+                    } else {
+                        const errMsg = (res.data && res.data.message) || 'Error saving receipt.';
+                        if (alertBox) {
+                            alertBox.className = 'alert alert-danger py-2 px-3 small border-0 mb-3 shadow-xs';
+                            alertBox.innerHTML = '<i class="fa-solid fa-triangle-exclamation me-1"></i> ' + errMsg;
+                            alertBox.style.display = 'block';
+                        } else {
+                            alert(errMsg);
+                        }
+                    }
+                })
+                .catch(err => {
+                    if (submitBtn) {
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = origHtml;
+                    }
+                    if (alertBox) {
+                        alertBox.className = 'alert alert-danger py-2 px-3 small border-0 mb-3 shadow-xs';
+                        alertBox.innerHTML = '<i class="fa-solid fa-triangle-exclamation me-1"></i> Network error: ' + err.message;
+                        alertBox.style.display = 'block';
+                    } else {
+                        alert('Network error: ' + err.message);
+                    }
+                });
+            });
+        });
+    });
 </script>
 
 @endsection
