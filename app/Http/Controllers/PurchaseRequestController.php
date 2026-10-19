@@ -1848,6 +1848,15 @@ class PurchaseRequestController extends Controller
             'withholding_receipt'        => 'nullable|file|mimes:pdf,jpg,jpeg,png,webp|max:5120',
             'withholding_receipt_number' => 'nullable|string|max:100',
             'net_amount'                 => 'nullable|numeric|min:0.01',
+            'receipt_file'               => 'nullable|file|mimes:pdf,jpg,jpeg,png,webp|max:10240',
+            'vendor_name'                => 'nullable|string|max:255',
+            'supplier_tin'               => 'nullable|string|max:20',
+            'fs_no'                      => 'nullable|string|max:20',
+            'receipt_date'               => 'nullable|string|max:30',
+            'ocr_subtotal'               => 'nullable|numeric|min:0',
+            'ocr_vat_amount'             => 'nullable|numeric|min:0',
+            'ocr_total_amount'           => 'nullable|numeric|min:0',
+            'ocr_items_json'             => 'nullable|string',
         ]);
 
         $ref = trim((string)($request->input('transaction_reference') ?: $request->input('notes')));
@@ -1864,6 +1873,12 @@ class PurchaseRequestController extends Controller
             $withholdingReceiptPath = \App\Services\FileUploadService::upload($request->file('withholding_receipt'), 'procurement_receipts');
         }
 
+        // Upload payment receipt / vendor invoice if provided during disbursement
+        $receiptFilePath = null;
+        if ($request->hasFile('receipt_file')) {
+            $receiptFilePath = \App\Services\FileUploadService::upload($request->file('receipt_file'), 'procurement_receipts');
+        }
+
         $taxData = [
             'gross_amount'               => $request->filled('gross_amount') ? (float)$request->gross_amount : null,
             'vat_type'                   => $request->input('vat_type', 'none'),
@@ -1878,6 +1893,93 @@ class PurchaseRequestController extends Controller
         ];
 
         $this->lifecycle->financeStaffPay($purchaseRequest, $combinedNotes, $taxData);
+
+        // If official receipt uploaded at payout, persist to central Receipt and advance procurement receipt
+        if ($receiptFilePath) {
+            try {
+                $originalName = $request->file('receipt_file')->getClientOriginalName();
+                $this->lifecycle->uploadReceipt($purchaseRequest, $receiptFilePath, $originalName, $combinedNotes, true);
+
+                $ocrService = app(\App\Services\ReceiptOcrService::class);
+                $rawItems   = json_decode($request->input('ocr_items_json'), true) ?: [];
+                $ocrItems   = [];
+
+                if (!empty($rawItems) && is_array($rawItems)) {
+                    foreach ($rawItems as $it) {
+                        $qty      = (float)($it['qty'] ?? 1);
+                        $price    = (float)($it['unit_price'] ?? 0);
+                        $totVal   = (float)($it['total_value'] ?? round($qty * $price, 2));
+                        $vatVal   = (float)($it['vat'] ?? round($totVal * 0.15, 2));
+                        $afterVat = (float)($it['value_after_vat'] ?? round($totVal + $vatVal, 2));
+
+                        $ocrItems[] = [
+                            'item_description' => $it['item_description'] ?? ($it['name'] ?? 'Procurement Material'),
+                            'uom'              => (string)($it['uom'] ?? '9'),
+                            'qty'              => $qty,
+                            'unit_price'       => $price,
+                            'total_value'      => $totVal,
+                            'vat'              => $vatVal,
+                            'value_after_vat'  => $afterVat,
+                        ];
+                    }
+                }
+
+                if (empty($ocrItems)) {
+                    $subtot   = (float)($request->input('ocr_subtotal') ?: ($taxData['gross_amount'] ?: 0));
+                    $vatVal   = (float)($request->input('ocr_vat_amount') ?: ($taxData['vat_amount'] ?: 0));
+                    $totalVal = (float)($request->input('ocr_total_amount') ?: ($subtot + $vatVal));
+
+                    $ocrItems[] = [
+                        'item_description' => "Purchase Request #{$purchaseRequest->pr_number} - Disbursed Materials",
+                        'uom'              => '9',
+                        'qty'              => 1.0,
+                        'unit_price'       => $subtot,
+                        'total_value'      => $subtot,
+                        'vat'              => $vatVal,
+                        'value_after_vat'  => $totalVal,
+                    ];
+                }
+
+                $fsNoScanned = trim((string)($request->input('fs_no') ?: ''));
+                $tinScanned  = trim((string)($request->input('supplier_tin') ?: ''));
+                $vendorScanned = trim((string)($request->input('vendor_name') ?: ''));
+
+                $scanData = [
+                    'vendor_name'       => $vendorScanned ?: ($purchaseRequest->supplier_name ?: 'Vendor'),
+                    'supplier_tin'      => $tinScanned,
+                    'tin_valid'         => !empty($tinScanned) && strlen($tinScanned) === 10,
+                    'buyer_tin'         => '0038480010',
+                    'fs_no'             => $fsNoScanned,
+                    'fs_no_raw'         => $fsNoScanned,
+                    'fs_no_valid'       => !empty($fsNoScanned) && strlen($fsNoScanned) === 8,
+                    'receipt_date_ymd'  => $request->input('receipt_date') ?: now()->toDateString(),
+                    'subtotal'          => (float)($request->input('ocr_subtotal') ?: ($taxData['gross_amount'] ?: 0)),
+                    'vat_amount'        => (float)($request->input('ocr_vat_amount') ?: ($taxData['vat_amount'] ?: 0)),
+                    'total_amount'      => (float)($request->input('ocr_total_amount') ?: (($taxData['gross_amount'] ?: 0) + ($taxData['vat_amount'] ?: 0))),
+                    'currency'          => 'ETB',
+                    'description'       => "Disbursed PR #{$purchaseRequest->pr_number}",
+                    'engine'            => 'OCR / Disburse Payment',
+                    'engine_slug'       => 'purchase_request_disbursement',
+                    'confidence'        => 'high',
+                    'confidence_score'  => 95,
+                    'qc_notes'          => "Auto-synced from PR Disburse Payment (#{$purchaseRequest->pr_number})",
+                    'items'             => $ocrItems,
+                    'is_verified'       => true,
+                ];
+
+                $ocrService->saveReceipt(
+                    $scanData,
+                    $receiptFilePath,
+                    $purchaseRequest,
+                    \Illuminate\Support\Facades\Auth::id(),
+                    $purchaseRequest->project_id ?? null,
+                    'material'
+                );
+            } catch (\Throwable $oe) {
+                \Illuminate\Support\Facades\Log::warning("Could not persist linked Receipt for PR payout #{$purchaseRequest->pr_number}: " . $oe->getMessage());
+            }
+        }
+
         return back()->with('success', 'Payment executed. Transaction ref: ' . $ref . '. COA balance updated.');
     }
 

@@ -333,7 +333,7 @@
     {{-- Step 4 Modal: Disburse Payment --}}
     <div class="modal fade" id="markPaidModal{{ $req->id }}" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
-            <form method="POST" action="{{ route('office-requests.mark-paid', $req->id) }}" class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+            <form method="POST" action="{{ route('office-requests.mark-paid', $req->id) }}" class="modal-content border-0 shadow-lg rounded-4 overflow-hidden" enctype="multipart/form-data">
                 @csrf
                 <div class="modal-header bg-success text-white py-3 px-4">
                     <h5 class="modal-title fw-bold mb-0">
@@ -353,18 +353,45 @@
                         <label class="form-label fw-bold text-dark small text-uppercase">Actual Disbursed Amount (ETB)</label>
                         <div class="input-group">
                             <span class="input-group-text bg-light border-0 fw-bold">ETB</span>
-                            <input type="number" name="paid_amount" class="form-control bg-light border-0 fw-bold fs-5 text-success" step="0.01" min="0.01" value="{{ $req->amount }}">
+                            <input type="number" name="paid_amount" id="markPaidAmount{{ $req->id }}" class="form-control bg-light border-0 fw-bold fs-5 text-success" step="0.01" min="0.01" value="{{ $req->amount }}">
                         </div>
+                    </div>
+
+                    <!-- Receipt / Payment Voucher Upload Section with OCR -->
+                    <div class="p-3 bg-light rounded-3 border border-success-subtle mb-3">
+                        <div class="d-flex align-items-center justify-content-between mb-2">
+                            <label class="form-label fw-bold text-dark small text-uppercase mb-0">
+                                <i class="fa-solid fa-receipt text-success me-1"></i>Receipt / Cash Voucher Upload
+                            </label>
+                            <span class="badge bg-primary text-white border border-primary px-2 py-0.5 shadow-xs">
+                                <i class="fa-solid fa-wand-magic-sparkles me-1"></i> AI Vision OCR Enabled
+                            </span>
+                        </div>
+                        <input type="file" name="attachment" id="markPaidReceipt{{ $req->id }}" 
+                               class="form-control form-control-sm disburse-ocr-input" 
+                               data-type="office_proc"
+                               data-req-id="{{ $req->id }}"
+                               data-feedback-id="markPaidOcrFeedback{{ $req->id }}"
+                               accept="image/jpeg,image/png,image/jpg,application/pdf,image/webp">
+                        <small class="text-muted" style="font-size:0.75rem;">Upload receipt or disbursement slip. AI OCR auto-extracts amount and voucher reference.</small>
+                        <div id="markPaidOcrFeedback{{ $req->id }}" class="mt-2"></div>
+                        <input type="hidden" name="vendor_name" id="markPaidOcrVendor{{ $req->id }}">
+                        <input type="hidden" name="supplier_tin" id="markPaidOcrTin{{ $req->id }}">
+                        <input type="hidden" name="fs_no" id="markPaidOcrFs{{ $req->id }}">
+                        <input type="hidden" name="receipt_date" id="markPaidOcrDate{{ $req->id }}">
+                        <input type="hidden" name="ocr_subtotal" id="markPaidOcrSubtotal{{ $req->id }}">
+                        <input type="hidden" name="ocr_vat_amount" id="markPaidOcrVat{{ $req->id }}">
+                        <input type="hidden" name="ocr_total_amount" id="markPaidOcrTotal{{ $req->id }}">
                     </div>
 
                     <div class="mb-3">
                         <label class="form-label fw-bold text-dark small text-uppercase">Voucher / Transaction Reference No.</label>
-                        <input type="text" name="payment_reference" class="form-control bg-light border-0" placeholder="e.g. VC-2026-08-001 or FT26081234">
+                        <input type="text" name="payment_reference" id="markPaidRef{{ $req->id }}" class="form-control bg-light border-0" placeholder="e.g. VC-2026-08-001 or FT26081234">
                     </div>
 
                     <div class="mb-0">
                         <label class="form-label fw-bold text-dark small text-uppercase">Disbursement Notes</label>
-                        <textarea name="payment_notes" rows="2" class="form-control bg-light border-0" placeholder="e.g. Cash disbursed to secretary from Petty Cash..."></textarea>
+                        <textarea name="payment_notes" id="markPaidNotes{{ $req->id }}" rows="2" class="form-control bg-light border-0" placeholder="e.g. Cash disbursed to secretary from Petty Cash..."></textarea>
                     </div>
                 </div>
                 <div class="modal-footer bg-light border-0 py-3 px-4">
@@ -401,6 +428,111 @@ function syncModalCoaToStaff(reqId) {
         staffSelect.value = staffId;
     }
 }
+
+// Disburse Payment OCR Listener for Office Requests
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.disburse-ocr-input').forEach(function (input) {
+        input.addEventListener('change', function (e) {
+            const file = e.target.files && e.target.files[0];
+            const reqId = input.dataset.reqId;
+            const feedbackEl = document.getElementById('markPaidOcrFeedback' + reqId);
+            const form = input.closest('form');
+            const submitBtn = form ? form.querySelector('button[type="submit"]') : null;
+
+            if (!file) {
+                if (feedbackEl) feedbackEl.innerHTML = '';
+                return;
+            }
+
+            if (file.size > 10 * 1024 * 1024) {
+                if (feedbackEl) {
+                    feedbackEl.innerHTML = '<div class="alert alert-danger py-1.5 px-2.5 small rounded-2 mt-2">File exceeds 10MB limit.</div>';
+                }
+                return;
+            }
+
+            if (feedbackEl) {
+                feedbackEl.innerHTML = `
+                    <div class="card border border-success border-opacity-25 bg-success bg-opacity-10 p-2 rounded-2 mt-2">
+                        <div class="d-flex align-items-center gap-2 small text-dark">
+                            <div class="spinner-border spinner-border-sm text-success" role="status"></div>
+                            <strong><i class="fa-solid fa-wand-magic-sparkles text-success me-1"></i> AI Vision Scanning Receipt...</strong>
+                        </div>
+                    </div>`;
+            }
+
+            if (submitBtn) submitBtn.disabled = true;
+
+            const formData = new FormData();
+            formData.append('receipt_file', file);
+            const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') 
+                || form?.querySelector('input[name="_token"]')?.value;
+
+            fetch('{{ route("purchases.receipt-scan") }}', {
+                method: 'POST',
+                headers: {
+                    'X-CSRF-TOKEN': token || '',
+                    'Accept': 'application/json'
+                },
+                body: formData
+            })
+            .then(res => res.json())
+            .then(res => {
+                if (submitBtn) submitBtn.disabled = false;
+                if (!res.success || !res.data) {
+                    if (feedbackEl) {
+                        feedbackEl.innerHTML = '<div class="alert alert-warning py-1 px-2 small mt-2 rounded-2">Receipt attached. (Manual entry available)</div>';
+                    }
+                    return;
+                }
+
+                const ext = res.data;
+                const scannedTotal = parseFloat(ext.total_amount) || 0;
+
+                if (feedbackEl) {
+                    feedbackEl.innerHTML = `
+                        <div class="alert alert-success py-1.5 px-2.5 small mt-2 rounded-2 border-0">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <i class="fa-solid fa-circle-check text-success me-1"></i>
+                                    <strong>OCR Scanned:</strong> ${ext.vendor_name || 'Vendor'} | FS: <strong>${ext.fs_no || 'N/A'}</strong> | Total: <strong>ETB ${Number(scannedTotal).toLocaleString('en-US', {minimumFractionDigits: 2})}</strong>
+                                </div>
+                                <span class="badge bg-success small">Verified</span>
+                            </div>
+                        </div>`;
+                }
+
+                const amtInput = document.getElementById('markPaidAmount' + reqId);
+                if (amtInput && scannedTotal > 0) {
+                    amtInput.value = scannedTotal.toFixed(2);
+                }
+
+                const refInput = document.getElementById('markPaidRef' + reqId);
+                if (refInput && (!refInput.value || refInput.value.startsWith('VC-') || refInput.value.startsWith('FT-'))) {
+                    if (ext.fs_no) refInput.value = 'FS-' + ext.fs_no;
+                }
+
+                const notesInput = document.getElementById('markPaidNotes' + reqId);
+                if (notesInput && !notesInput.value) {
+                    notesInput.value = `[OCR Verified: ${ext.vendor_name || 'Vendor'} | FS: ${ext.fs_no || '-'}]`;
+                }
+
+                const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
+                setVal('markPaidOcrVendor' + reqId, ext.vendor_name);
+                setVal('markPaidOcrTin' + reqId, ext.supplier_tin);
+                setVal('markPaidOcrFs' + reqId, ext.fs_no);
+                setVal('markPaidOcrDate' + reqId, ext.receipt_date_ymd || ext.receipt_date);
+                setVal('markPaidOcrSubtotal' + reqId, ext.subtotal);
+                setVal('markPaidOcrVat' + reqId, ext.vat_amount);
+                setVal('markPaidOcrTotal' + reqId, ext.total_amount);
+            })
+            .catch(() => {
+                if (submitBtn) submitBtn.disabled = false;
+                if (feedbackEl) feedbackEl.innerHTML = '';
+            });
+        });
+    });
+});
 </script>
 @endpush
 

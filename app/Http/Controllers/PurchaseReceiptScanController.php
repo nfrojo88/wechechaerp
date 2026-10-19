@@ -121,6 +121,10 @@ class PurchaseReceiptScanController extends Controller
             abort(401, 'Unauthenticated.');
         }
 
+        if (!empty($user->is_admin)) {
+            return;
+        }
+
         $allowedRoles = [
             'admin',
             'global_admin',
@@ -136,6 +140,12 @@ class PurchaseReceiptScanController extends Controller
             'finance_officer',
             'finance_manager',
             'finance_head',
+            'Finance head',
+            'finance_staff',
+            'Finance staff',
+            'cashier',
+            'accountant',
+            'auditor',
         ];
 
         if (method_exists($user, 'hasAnyRole')) {

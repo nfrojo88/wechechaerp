@@ -509,6 +509,16 @@ class OfficeSupplyRequestController extends Controller
             'payment_reference' => 'nullable|string|max:100',
             'payment_notes'     => 'nullable|string|max:1000',
             'paid_amount'       => 'nullable|numeric|min:0.01',
+            'attachment'        => 'nullable|file|mimes:jpeg,png,jpg,pdf,webp|max:10240',
+            'receipt_file'      => 'nullable|file|mimes:jpeg,png,jpg,pdf,webp|max:10240',
+            'vendor_name'       => 'nullable|string|max:255',
+            'supplier_tin'      => 'nullable|string|max:20',
+            'fs_no'             => 'nullable|string|max:20',
+            'receipt_date'      => 'nullable|string|max:30',
+            'ocr_subtotal'      => 'nullable|numeric|min:0',
+            'ocr_vat_amount'    => 'nullable|numeric|min:0',
+            'ocr_total_amount'  => 'nullable|numeric|min:0',
+            'ocr_items_json'    => 'nullable|string',
         ]);
 
         DB::beginTransaction();
@@ -517,6 +527,17 @@ class OfficeSupplyRequestController extends Controller
             $paymentRef = $validated['payment_reference'] ?? ('PAY-OFF-' . strtoupper(Str::random(6)));
             $finalAmount = $validated['paid_amount'] ?? $officeRequest->amount;
 
+            $file = $request->file('attachment') ?: $request->file('receipt_file');
+            $attachmentUrl = $officeRequest->attachment;
+            if ($file) {
+                try {
+                    $cloudinary = app(\App\Services\CloudinaryService::class);
+                    $attachmentUrl = $cloudinary->upload($file, 'office_receipts');
+                } catch (\Throwable $e) {
+                    $attachmentUrl = $file->store('uploads/office_receipts', 'public');
+                }
+            }
+
             $officeRequest->update([
                 'amount'            => $finalAmount,
                 'status'            => OfficeMaterialRequest::STATUS_PAID,
@@ -524,6 +545,7 @@ class OfficeSupplyRequestController extends Controller
                 'paid_at'           => now(),
                 'payment_reference' => $paymentRef,
                 'payment_notes'     => $validated['payment_notes'] ?? null,
+                'attachment'        => $attachmentUrl,
             ]);
 
             // Deduct from bank account if set
@@ -549,6 +571,60 @@ class OfficeSupplyRequestController extends Controller
             }
 
             DB::commit();
+
+            // Sync to central Receipt if attachment receipt uploaded
+            if (!empty($attachmentUrl)) {
+                try {
+                    $ocrService = app(\App\Services\ReceiptOcrService::class);
+                    $fsNoScanned = trim((string)($request->input('fs_no') ?: ''));
+                    $tinScanned  = trim((string)($request->input('supplier_tin') ?: ''));
+                    $vendorScanned = trim((string)($request->input('vendor_name') ?: ''));
+
+                    $scanData = [
+                        'vendor_name'       => $vendorScanned ?: 'Office Supplies Merchant',
+                        'supplier_tin'      => $tinScanned,
+                        'tin_valid'         => !empty($tinScanned) && strlen($tinScanned) === 10,
+                        'buyer_tin'         => '0038480010',
+                        'fs_no'             => $fsNoScanned,
+                        'fs_no_raw'         => $fsNoScanned,
+                        'fs_no_valid'       => !empty($fsNoScanned) && strlen($fsNoScanned) === 8,
+                        'receipt_date_ymd'  => $request->input('receipt_date') ?: now()->toDateString(),
+                        'subtotal'          => (float)($request->input('ocr_subtotal') ?: $finalAmount),
+                        'vat_amount'        => (float)($request->input('ocr_vat_amount') ?: 0),
+                        'total_amount'      => (float)($request->input('ocr_total_amount') ?: $finalAmount),
+                        'currency'          => 'ETB',
+                        'description'       => "Office Material Request #{$officeRequest->request_no}: {$officeRequest->office_purpose}",
+                        'engine'            => 'OCR / Disburse Payment',
+                        'engine_slug'       => 'office_request_disbursement',
+                        'confidence'        => 'high',
+                        'confidence_score'  => 95,
+                        'qc_notes'          => "Auto-synced from Office Request Disburse Payment (#{$officeRequest->request_no})",
+                        'items'             => [
+                            [
+                                'item_description' => $officeRequest->office_purpose ?: "Office Supplies - #{$officeRequest->request_no}",
+                                'uom'              => '9',
+                                'qty'              => 1.0,
+                                'unit_price'       => (float)$finalAmount,
+                                'total_value'      => (float)$finalAmount,
+                                'vat'              => (float)($request->input('ocr_vat_amount') ?: 0),
+                                'value_after_vat'  => (float)$finalAmount,
+                            ]
+                        ],
+                        'is_verified'       => true,
+                    ];
+
+                    $ocrService->saveReceipt(
+                        $scanData,
+                        $attachmentUrl,
+                        $officeRequest,
+                        $user->id,
+                        null,
+                        'material'
+                    );
+                } catch (\Throwable $oe) {
+                    \Illuminate\Support\Facades\Log::warning("Could not persist linked Receipt for Office Request #{$officeRequest->request_no}: " . $oe->getMessage());
+                }
+            }
 
             return back()->with('success', "Office Request #{$officeRequest->request_no} payment of ETB " . number_format($finalAmount, 2) . " disbursed successfully. Request is now COMPLETED.");
         } catch (\Throwable $e) {

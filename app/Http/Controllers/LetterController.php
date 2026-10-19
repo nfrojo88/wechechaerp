@@ -479,7 +479,15 @@ class LetterController extends Controller
             'bank_account_id'            => 'nullable|exists:bank_accounts,id',
             'expense_category'           => 'nullable|string|max:100',
             'project_id'                 => 'nullable|exists:projects,id',
-            'payment_voucher'            => 'nullable|file|mimes:pdf,jpg,jpeg,png,doc,docx|max:10240',
+            'payment_voucher'            => 'nullable|file|mimes:pdf,jpg,jpeg,png,webp,doc,docx|max:10240',
+            'vendor_name'                => 'nullable|string|max:255',
+            'supplier_tin'               => 'nullable|string|max:20',
+            'fs_no'                      => 'nullable|string|max:20',
+            'receipt_date'               => 'nullable|string|max:30',
+            'ocr_subtotal'               => 'nullable|numeric|min:0',
+            'ocr_vat_amount'             => 'nullable|numeric|min:0',
+            'ocr_total_amount'           => 'nullable|numeric|min:0',
+            'ocr_items_json'             => 'nullable|string',
         ]);
 
         $hasPayment = !empty($request->boolean('record_payment')) && (!empty($validated['payment_amount']) || !empty($validated['gross_amount']));
@@ -700,8 +708,55 @@ class LetterController extends Controller
 
             DB::commit();
 
+            // If payment voucher receipt uploaded, auto-sync to central Receipt & ReceiptItem table
+            if ($hasPayment && !empty($voucherPath)) {
+                try {
+                    $ocrService = app(\App\Services\ReceiptOcrService::class);
+                    $rawItems   = json_decode($request->input('ocr_items_json'), true) ?: [];
+                    $ocrItems   = [];
+
+                    if (!empty($rawItems) && is_array($rawItems)) {
+                        foreach ($rawItems as $it) {
+                            $qty      = (float)($it['qty'] ?? 1);
+                            $price    = (float)($it['unit_price'] ?? 0);
+                            $totVal   = (float)($it['total_value'] ?? round($qty * $price, 2));
+                            $vatVal   = (float)($it['vat'] ?? round($totVal * 0.15, 2));
+                            $afterVat = (float)($it['value_after_vat'] ?? round($totVal + $vatVal, 2));
+
+                            $ocrItems[] = [
+                                'item_name'       => $it['item_name'] ?? 'Letter Expense Item',
+                                'description'     => $it['description'] ?? null,
+                                'quantity'        => $qty > 0 ? $qty : 1,
+                                'unit_price'      => $price,
+                                'total_price'     => $totVal,
+                                'vat_amount'      => $vatVal,
+                                'total_with_vat'  => $afterVat,
+                            ];
+                        }
+                    }
+
+                    $ocrService->saveReceipt([
+                        'vendor_name'        => $validated['vendor_name'] ?? ('Letter #' . $letter->letter_number),
+                        'supplier_tin'       => $validated['supplier_tin'] ?? null,
+                        'fs_no'              => $validated['fs_no'] ?? null,
+                        'receipt_date'       => $validated['receipt_date'] ?? now()->toDateString(),
+                        'subtotal'           => (float)($validated['ocr_subtotal'] ?? $baseAmount ?? $gross),
+                        'vat_amount'         => (float)($validated['ocr_vat_amount'] ?? $vatAmount),
+                        'total_amount'       => (float)($validated['ocr_total_amount'] ?? $disbursedAmount ?? $gross),
+                        'currency'           => 'ETB',
+                        'receipt_image_path' => $voucherPath,
+                        'source'             => 'letter_disbursement',
+                        'expense_request_id' => $expenseRequestId,
+                        'recorded_by'        => $user->id,
+                        'items'              => $ocrItems,
+                    ]);
+                } catch (\Throwable $ocrSyncErr) {
+                    \Illuminate\Support\Facades\Log::warning("Letter receipt OCR sync non-blocking error: " . $ocrSyncErr->getMessage());
+                }
+            }
+
             $successMsg = $hasPayment
-                ? "Payment of ETB " . number_format($paymentAmount, 2) . " disbursed and letter closed successfully! Expense recorded in Company Expenses."
+                ? "Payment of ETB " . number_format($disbursedAmount ?? $gross, 2) . " disbursed and letter closed successfully! Expense recorded in Company Expenses."
                 : 'Letter decision recorded and marked as Reviewed & Closed.';
 
             return back()->with('success', $successMsg);

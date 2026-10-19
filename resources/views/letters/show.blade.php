@@ -671,6 +671,7 @@
                                                         class="form-control form-control-sm"
                                                         accept="image/jpeg,image/png,image/jpg,application/pdf,image/webp">
                                                     <small class="text-muted" style="font-size:0.75rem;">Upload official Withholding receipt image or PDF.</small>
+                                                    <div id="letterWhtFeedback" class="mt-1"></div>
                                                 </div>
                                                 <div class="col-md-5">
                                                     <input type="text" name="withholding_receipt_number" id="modalWithholdingReceiptNo"
@@ -685,6 +686,16 @@
 
                                 <input type="hidden" name="payment_amount" id="modalPaymentAmount" value="0.00">
                                 <input type="hidden" name="net_amount" id="modalNetAmount" value="0.00">
+
+                                {{-- Hidden OCR extraction sync fields --}}
+                                <input type="hidden" name="vendor_name" id="letterOcrVendor">
+                                <input type="hidden" name="supplier_tin" id="letterOcrTin">
+                                <input type="hidden" name="fs_no" id="letterOcrFsNo">
+                                <input type="hidden" name="receipt_date" id="letterOcrDate">
+                                <input type="hidden" name="ocr_subtotal" id="letterOcrSubtotal">
+                                <input type="hidden" name="ocr_vat_amount" id="letterOcrVat">
+                                <input type="hidden" name="ocr_total_amount" id="letterOcrTotal">
+                                <input type="hidden" name="ocr_items_json" id="letterOcrItems">
 
                                 <div class="col-md-6">
                                     <label class="form-label fw-semibold text-dark">Expense Category</label>
@@ -707,12 +718,19 @@
 
                                 <div class="col-md-6">
                                     <label class="form-label fw-semibold text-dark">Payment Reference / Cheque #</label>
-                                    <input type="text" name="payment_reference" class="form-control font-monospace" placeholder="e.g. CHQ-10492 or FT-88219">
+                                    <input type="text" name="payment_reference" id="letterPaymentRef" class="form-control font-monospace" placeholder="e.g. CHQ-10492 or FT-88219">
                                 </div>
 
                                 <div class="col-md-6">
-                                    <label class="form-label fw-semibold text-dark">Payment Voucher / Receipt Attachment</label>
-                                    <input type="file" name="payment_voucher" class="form-control" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx">
+                                    <div class="d-flex align-items-center justify-content-between mb-1">
+                                        <label class="form-label fw-semibold text-dark mb-0">Payment Voucher / Receipt Attachment</label>
+                                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-0" style="font-size:0.75rem;">
+                                            <i class="fa-solid fa-wand-magic-sparkles me-1"></i>AI Vision OCR
+                                        </span>
+                                    </div>
+                                    <input type="file" name="payment_voucher" id="letterPaymentVoucher" class="form-control" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx">
+                                    <small class="text-muted" style="font-size:0.75rem;">Upload receipt or voucher image/PDF for automatic OCR analysis &amp; field prefill.</small>
+                                    <div id="letterOcrFeedback" class="mt-2" style="display:none;"></div>
                                 </div>
                             </div>
                         </div>
@@ -856,6 +874,196 @@
     document.addEventListener('DOMContentLoaded', function() {
         if (document.getElementById('recordPaymentSwitch')) {
             togglePaymentFields();
+        }
+
+        // Voucher / Receipt OCR Auto-Scanning
+        const voucherInput = document.getElementById('letterPaymentVoucher');
+        if (voucherInput) {
+            voucherInput.addEventListener('change', function(e) {
+                const file = e.target.files && e.target.files[0];
+                const feedbackEl = document.getElementById('letterOcrFeedback');
+                const submitBtn = document.getElementById('btnLetterSettle');
+
+                if (!file) {
+                    if (feedbackEl) {
+                        feedbackEl.style.display = 'none';
+                        feedbackEl.innerHTML = '';
+                    }
+                    return;
+                }
+
+                if (feedbackEl) {
+                    feedbackEl.style.display = 'block';
+                    feedbackEl.innerHTML = `
+                        <div class="p-2 bg-primary bg-opacity-10 border border-primary border-opacity-25 rounded-3 d-flex align-items-center gap-2 small">
+                            <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                            <div class="text-primary fw-semibold">
+                                <i class="fa-solid fa-wand-magic-sparkles me-1"></i> Scanning Receipt with AI Vision OCR...
+                                <div class="text-muted fw-normal" style="font-size: 0.72rem;">Analyzing vendor, TIN, FS Number, VAT, and invoice totals</div>
+                            </div>
+                        </div>`;
+                }
+
+                const formData = new FormData();
+                formData.append('receipt_file', file);
+
+                const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') 
+                    || voucherInput.closest('form')?.querySelector('input[name="_token"]')?.value;
+
+                fetch('{{ route("purchases.receipt-scan") }}', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': token || '',
+                        'Accept': 'application/json'
+                    },
+                    body: formData
+                })
+                .then(res => res.json())
+                .then(res => {
+                    if (!res.success || !res.data) {
+                        throw new Error(res.message || 'Unable to parse receipt details');
+                    }
+
+                    const ext = res.data;
+                    const scannedTotal = parseFloat(ext.total_amount) || parseFloat(ext.subtotal) || 0;
+                    const scannedVat = parseFloat(ext.vat_amount) || 0;
+
+                    let filePreviewHtml = '';
+                    if (file.type && file.type.startsWith('image/')) {
+                        const blobUrl = URL.createObjectURL(file);
+                        filePreviewHtml = `
+                            <div class="mt-2 text-center p-1 bg-white rounded border">
+                                <img src="${blobUrl}" style="max-height: 120px; object-fit: contain; cursor: pointer;" 
+                                    class="rounded shadow-xs" title="Click to view full image" onclick="window.open('${blobUrl}', '_blank')">
+                                <div class="text-muted small mt-1" style="font-size:0.7rem;"><i class="fa-solid fa-expand me-1"></i>Click image to expand</div>
+                            </div>`;
+                    }
+
+                    if (feedbackEl) {
+                        feedbackEl.innerHTML = `
+                            <div class="alert alert-success py-2 px-3 small border-0 mb-1 rounded-3">
+                                <div class="d-flex align-items-center justify-content-between">
+                                    <strong class="text-success"><i class="fa-solid fa-circle-check me-1"></i> Receipt Scanned Successfully!</strong>
+                                    <span class="badge bg-success font-monospace">Confidence: ${ext.confidence_score ? ext.confidence_score + '%' : 'Verified'}</span>
+                                </div>
+                                <div class="row g-1 mt-1 text-dark" style="font-size:0.78rem;">
+                                    <div class="col-6"><strong>Vendor:</strong> ${ext.vendor_name || 'N/A'}</div>
+                                    <div class="col-6"><strong>TIN:</strong> <span class="font-monospace">${ext.supplier_tin || 'N/A'}</span></div>
+                                    <div class="col-6"><strong>FS No:</strong> <span class="font-monospace">${ext.fs_no || 'N/A'}</span></div>
+                                    <div class="col-6"><strong>Date:</strong> ${ext.receipt_date_ymd || ext.receipt_date || 'N/A'}</div>
+                                    <div class="col-12 mt-1 pt-1 border-top d-flex justify-content-between">
+                                        <span>Subtotal: <strong>ETB ${parseFloat(ext.subtotal || 0).toLocaleString()}</strong></span>
+                                        <span>VAT: <strong class="text-primary">ETB ${scannedVat.toLocaleString()}</strong></span>
+                                        <span>Total: <strong class="text-success">ETB ${scannedTotal.toLocaleString()}</strong></span>
+                                    </div>
+                                </div>
+                                ${filePreviewHtml}
+                            </div>`;
+                    }
+
+                    // Prefill gross amount
+                    const grossInput = document.getElementById('modalGrossAmount');
+                    if (grossInput && scannedTotal > 0) {
+                        grossInput.value = scannedTotal.toFixed(2);
+                    }
+
+                    // Auto-select VAT B if VAT detected
+                    const vatSelect = document.getElementById('modalVatType');
+                    if (vatSelect && scannedVat > 0) {
+                        vatSelect.value = 'vat_b';
+                    }
+
+                    // Prefill payment reference
+                    const refInput = document.getElementById('letterPaymentRef');
+                    if (refInput && (!refInput.value || refInput.value.startsWith('CHQ-') || refInput.value.startsWith('FT-'))) {
+                        if (ext.fs_no) refInput.value = 'FS-' + ext.fs_no;
+                    }
+
+                    // Hidden fields sync
+                    const setVal = (id, val) => {
+                        const el = document.getElementById(id);
+                        if (el) el.value = val || '';
+                    };
+                    setVal('letterOcrVendor', ext.vendor_name);
+                    setVal('letterOcrTin', ext.supplier_tin);
+                    setVal('letterOcrFsNo', ext.fs_no);
+                    setVal('letterOcrDate', ext.receipt_date_ymd || ext.receipt_date);
+                    setVal('letterOcrSubtotal', ext.subtotal);
+                    setVal('letterOcrVat', ext.vat_amount);
+                    setVal('letterOcrTotal', ext.total_amount);
+                    setVal('letterOcrItems', JSON.stringify(ext.items || []));
+
+                    // Recalculate net disbursement live
+                    recalculateLetterTax();
+                })
+                .catch(err => {
+                    console.error('OCR Scanning Error:', err);
+                    if (feedbackEl) {
+                        feedbackEl.innerHTML = `
+                            <div class="alert alert-warning py-2 px-3 small border-0 mb-1 rounded-3">
+                                <i class="fa-solid fa-triangle-exclamation text-warning me-1"></i> OCR scan request could not be processed. Form remains fully editable for manual entry.
+                            </div>`;
+                    }
+                });
+            });
+        }
+
+        // Withholding Receipt OCR
+        const whtInput = document.getElementById('modalWithholdingReceipt');
+        if (whtInput) {
+            whtInput.addEventListener('change', function(e) {
+                const file = e.target.files && e.target.files[0];
+                const feedbackEl = document.getElementById('letterWhtFeedback');
+                const targetInput = document.getElementById('modalWithholdingReceiptNo');
+
+                if (!file) {
+                    if (feedbackEl) feedbackEl.innerHTML = '';
+                    return;
+                }
+
+                if (feedbackEl) {
+                    feedbackEl.innerHTML = `
+                        <div class="p-1.5 bg-light rounded text-muted small d-flex align-items-center gap-1.5" style="font-size:0.75rem;">
+                            <div class="spinner-border spinner-border-sm text-danger" style="width: 12px; height: 12px;" role="status"></div>
+                            <span>Scanning Withholding slip for voucher serial number...</span>
+                        </div>`;
+                }
+
+                const formData = new FormData();
+                formData.append('receipt_file', file);
+
+                const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') 
+                    || whtInput.closest('form')?.querySelector('input[name="_token"]')?.value;
+
+                fetch('{{ route("purchases.receipt-scan") }}', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': token || '',
+                        'Accept': 'application/json'
+                    },
+                    body: formData
+                })
+                .then(res => res.json())
+                .then(res => {
+                    if (res.success && res.data) {
+                        const vNo = res.data.fs_no || res.data.receipt_no || res.data.mrc_no;
+                        if (vNo && targetInput) {
+                            targetInput.value = vNo;
+                        }
+                        if (feedbackEl) {
+                            feedbackEl.innerHTML = `
+                                <div class="text-success small mt-1" style="font-size:0.75rem;">
+                                    <i class="fa-solid fa-circle-check me-1"></i> Withholding Slip OCR: Scanned ${vNo ? 'Voucher #' + vNo : 'Document verified'}
+                                </div>`;
+                        }
+                    } else if (feedbackEl) {
+                        feedbackEl.innerHTML = '';
+                    }
+                })
+                .catch(() => {
+                    if (feedbackEl) feedbackEl.innerHTML = '';
+                });
+            });
         }
     });
 </script>
