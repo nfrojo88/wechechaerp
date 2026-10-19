@@ -998,6 +998,9 @@ class FinanceTaxReportController extends Controller
 
         $activeTab = $request->input('tab', 'income');
 
+        $ocrProjects = \App\Models\Project::orderBy('name')->get();
+        $ocrCategories = \App\Models\Receipt::CATEGORIES;
+
         return view('finance.tax-deductions.movements', compact(
             'selectedEthYear',
             'selectedEthMonth',
@@ -1008,7 +1011,9 @@ class FinanceTaxReportController extends Controller
             'prevMonth',
             'nextYear',
             'nextMonth',
-            'activeTab'
+            'activeTab',
+            'ocrProjects',
+            'ocrCategories'
         ));
     }
 
@@ -1429,9 +1434,15 @@ class FinanceTaxReportController extends Controller
                 'buyer_tin'        => $r?->buyer_tin ?: '0038480010',
                 'date_ec'          => $date ? EthiopianDate::formatDateEc($date, 'DD/MM/YYYY EC') : '-',
                 'date_gc'          => $date ? Carbon::parse($date)->format('M d, Y') : '-',
+                'receipt_date_ymd' => $date ? Carbon::parse($date)->format('Y-m-d') : '',
+                'project_id'       => $r?->project_id,
                 'project_name'     => $r?->project?->name ?: 'General',
                 'category'         => $r?->category ?: ($ocr->vat_category ?: 'General'),
                 'item_description' => $ocr->item_description ?: ($r?->description ?: 'Purchased Goods/Services'),
+                'vat_category'     => $ocr->vat_category ?: 'G',
+                'purchase_type'    => (int)($ocr->purchase_type ?: 3),
+                'tin_valid'        => (bool)($r?->tin_valid ?? (strlen(preg_replace('/\D/', '', $r?->vendor_tin ?? '')) === 10)),
+                'fs_no_valid'      => (bool)($r?->fs_no_valid ?? (strlen(preg_replace('/\D/', '', $r?->fs_no ?? '')) === 8)),
                 'base_value'       => $baseVal,
                 'vat_amount'       => $vatVal,
                 'value_after_vat'  => $afterVal,
@@ -3434,7 +3445,8 @@ class FinanceTaxReportController extends Controller
         $this->ensureSchema();
 
         $request->validate([
-            'id'               => 'required|exists:receipt_items,id',
+            'id'               => 'nullable',
+            'receipt_id'       => 'nullable',
             'seller_name'      => 'nullable|string|max:255',
             'supplier_tin'     => 'nullable|string|max:50',
             'receipt_date'     => 'nullable|string',
@@ -3453,7 +3465,42 @@ class FinanceTaxReportController extends Controller
         ]);
 
         try {
-            $item = \App\Models\ReceiptItem::with('receipt')->findOrFail($request->id);
+            $item = null;
+            if ($request->filled('id')) {
+                $item = \App\Models\ReceiptItem::with('receipt')->find($request->id);
+            }
+            if (!$item) {
+                $receiptId = $request->receipt_id ?: $request->id;
+                $receipt = \App\Models\Receipt::find($receiptId);
+                if ($receipt) {
+                    $item = $receipt->items()->first();
+                    if (!$item) {
+                        $item = new \App\Models\ReceiptItem([
+                            'receipt_id'       => $receipt->id,
+                            'item_description' => $request->item_description,
+                            'vat_category'     => $request->vat_category ?: 'G',
+                            'calendar_type'    => 'G',
+                            'purchase_type'    => (int)($request->purchase_type ?: 3),
+                            'uom'              => '9',
+                            'qty'              => (float)($request->qty ?: 1),
+                            'unit_price'       => (float)($request->unit_price ?: $request->total_value),
+                            'total_value'      => (float)$request->total_value,
+                            'vat_amount'       => (float)$request->vat_amount,
+                            'value_after_vat'  => (float)$request->value_after_vat,
+                        ]);
+                        $item->save();
+                    }
+                    $item->setRelation('receipt', $receipt);
+                }
+            }
+
+            if (!$item) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invoice or receipt record not found for update.',
+                ], 404);
+            }
+
             $receipt = $item->receipt;
 
             $qty       = round((float)($request->qty ?: 1), 2);

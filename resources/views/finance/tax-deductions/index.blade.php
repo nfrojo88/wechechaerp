@@ -4420,33 +4420,96 @@
         }
     }
 
-    function openVatSlipModal(imgUrl, vendor, tin, fs, mrc, date, base, vat, total, studioUrl) {
+    function openVatSlipModal(imgUrlOrObj, vendor, tin, fs, mrc, date, base, vat, total, studioUrl, id, desc, dateEc, projId, cat, vatCat, purcType) {
+        let ocr = {};
+        if (typeof imgUrlOrObj === 'object' && imgUrlOrObj !== null) {
+            ocr = imgUrlOrObj;
+        } else {
+            ocr = {
+                file_url: imgUrlOrObj,
+                vendor_name: vendor,
+                vendor_tin: tin,
+                fs_no: fs,
+                mrc_no: mrc,
+                date_gc: date,
+                base_value: base,
+                vat_amount: vat,
+                value_after_vat: total,
+                studio_url: studioUrl,
+                id: id,
+                item_description: desc,
+                date_ec: dateEc,
+                project_id: projId,
+                category: cat,
+                vat_category: vatCat,
+                purchase_type: purcType
+            };
+        }
+
         const cleanNum = (v) => {
             const n = parseFloat(String(v ?? '0').replace(/[^0-9.-]/g, ''));
             return isNaN(n) ? 0 : n;
         };
 
+        const idInput = document.getElementById('edit_ocr_item_id');
+        if (idInput) idInput.value = ocr.id || '';
+
+        const badgeId = document.getElementById('edit_ocr_badge_id');
+        if (badgeId) badgeId.textContent = ocr.id ? ('Invoice #' + ocr.id) : 'Line Item';
+
         const sellerName = document.getElementById('edit_seller_name');
-        if (sellerName) sellerName.value = vendor || '';
+        if (sellerName) sellerName.value = ocr.vendor_name || '';
 
         const tinInput = document.getElementById('edit_supplier_tin');
         if (tinInput) {
-            tinInput.value = tin || '';
-            validateOcrTin(tin || '');
+            tinInput.value = (ocr.vendor_tin === '-' ? '' : ocr.vendor_tin) || '';
+            validateOcrTin(tinInput.value);
         }
 
         const fsInput = document.getElementById('edit_fs_no');
         if (fsInput) {
-            fsInput.value = fs || '';
-            validateOcrFs(fs || '');
+            fsInput.value = (ocr.fs_no === '-' ? '' : ocr.fs_no) || '';
+            validateOcrFs(fsInput.value);
         }
 
         const mrcInput = document.getElementById('edit_mrc_no');
-        if (mrcInput) mrcInput.value = mrc || '';
+        if (mrcInput) mrcInput.value = (ocr.mrc_no === '-' ? '' : ocr.mrc_no) || '';
 
-        const baseClean = cleanNum(base);
-        const vatClean = cleanNum(vat);
-        const totalClean = cleanNum(total);
+        const dateInput = document.getElementById('edit_receipt_date');
+        if (dateInput) {
+            let ymd = ocr.receipt_date_ymd || '';
+            if (!ymd && ocr.date_gc) {
+                try {
+                    const parsed = new Date(ocr.date_gc);
+                    if (!isNaN(parsed.getTime())) {
+                        ymd = parsed.toISOString().split('T')[0];
+                    }
+                } catch (e) {}
+            }
+            dateInput.value = ymd;
+        }
+
+        const dateEcPreview = document.getElementById('edit_date_ec_preview');
+        if (dateEcPreview) dateEcPreview.textContent = ocr.date_ec ? ('EC: ' + ocr.date_ec) : '';
+
+        const descInput = document.getElementById('edit_item_description');
+        if (descInput) descInput.value = ocr.item_description || '';
+
+        const projSelect = document.getElementById('edit_project_id');
+        if (projSelect) projSelect.value = ocr.project_id || '';
+
+        const catSelect = document.getElementById('edit_category');
+        if (catSelect) catSelect.value = ocr.category || 'materials';
+
+        const vatCatSelect = document.getElementById('edit_vat_category');
+        if (vatCatSelect) vatCatSelect.value = ocr.vat_category || 'G';
+
+        const purcTypeSelect = document.getElementById('edit_purchase_type');
+        if (purcTypeSelect) purcTypeSelect.value = ocr.purchase_type || 3;
+
+        const baseClean = cleanNum(ocr.base_value);
+        const vatClean = cleanNum(ocr.vat_amount);
+        const totalClean = cleanNum(ocr.value_after_vat);
 
         const baseInput = document.getElementById('edit_total_value');
         if (baseInput) baseInput.value = baseClean.toFixed(2);
@@ -4458,14 +4521,19 @@
         if (totalInput) totalInput.value = totalClean.toFixed(2);
 
         const fsDisplay = document.getElementById('modalFsNoDisplay');
-        if (fsDisplay) fsDisplay.textContent = fs ? ('FS #' + fs) : 'Receipt View';
+        if (fsDisplay) fsDisplay.textContent = ocr.fs_no && ocr.fs_no !== '-' ? ('FS #' + ocr.fs_no) : (ocr.id ? ('Invoice #' + ocr.id) : 'Receipt View');
 
-        if (studioUrl) {
-            const studioLink = document.getElementById('modalStudioLink');
-            if (studioLink) studioLink.href = studioUrl;
+        const studioLink = document.getElementById('modalStudioLink');
+        if (studioLink) studioLink.href = ocr.studio_url || '{{ route("admin.ocr.index") }}';
+
+        // Clear alerts
+        const alertBox = document.getElementById('ocrModalAlert');
+        if (alertBox) {
+            alertBox.className = 'alert d-none';
+            alertBox.innerHTML = '';
         }
 
-        _setSlipPreview(imgUrl);
+        _setSlipPreview(ocr.file_url);
 
         const modalEl = document.getElementById('vatReceiptSlipModal');
         if (modalEl) {
@@ -4621,6 +4689,33 @@
                         tr.style.backgroundColor = '';
                     }, 2000);
                 }
+
+                // Also update row in Movements modal table if present
+                const mtr = document.getElementById('m-ocr-row-' + itm.id);
+                if (mtr) {
+                    const mDateEc = mtr.querySelector('.cell-date-ec');
+                    if (mDateEc) mDateEc.textContent = itm.receipt_date_ec || '—';
+                    const mFs = mtr.querySelector('.cell-fs');
+                    if (mFs) mFs.textContent = itm.fs_no || '—';
+                    const mVendor = mtr.querySelector('.cell-vendor');
+                    if (mVendor) mVendor.textContent = itm.vendor_name || '—';
+                    const mTin = mtr.querySelector('.cell-tin');
+                    if (mTin) mTin.textContent = 'TIN: ' + (itm.vendor_tin || '—');
+                    const mDesc = mtr.querySelector('.cell-desc');
+                    if (mDesc) mDesc.textContent = itm.item_description || '—';
+                    const mBase = mtr.querySelector('.cell-base');
+                    if (mBase) mBase.textContent = 'ETB ' + (typeof formatMoney === 'function' ? formatMoney(itm.base_value) : itm.base_value.toFixed(2));
+                    const mVat = mtr.querySelector('.cell-vat');
+                    if (mVat) mVat.textContent = 'ETB ' + (typeof formatMoney === 'function' ? formatMoney(itm.vat_amount) : itm.vat_amount.toFixed(2));
+                    const mTotal = mtr.querySelector('.cell-total');
+                    if (mTotal) mTotal.textContent = 'ETB ' + (typeof formatMoney === 'function' ? formatMoney(itm.total_value) : itm.total_value.toFixed(2));
+
+                    mtr.style.transition = 'background-color 0.4s ease';
+                    mtr.style.backgroundColor = '#d1e7dd';
+                    setTimeout(() => {
+                        mtr.style.backgroundColor = '';
+                    }, 2000);
+                }
             } else {
                 if (alertBox) {
                     alertBox.className = 'alert alert-danger py-2 px-3 small rounded-3 mb-3 d-flex align-items-center gap-2';
@@ -4646,19 +4741,8 @@
     function previewMovementOcrSlip(cacheKey, idx) {
         const list = (window._movementOcrCache && window._movementOcrCache[cacheKey]) || [];
         const ocr = list[idx];
-        if (!ocr || !ocr.file_url) return;
-        openVatSlipModal(
-            ocr.file_url,
-            ocr.vendor_name,
-            ocr.vendor_tin,
-            ocr.fs_no,
-            ocr.mrc_no,
-            ocr.date_gc,
-            formatMoney(ocr.base_value),
-            formatMoney(ocr.vat_amount),
-            formatMoney(ocr.value_after_vat),
-            '{{ route("admin.ocr.index") }}'
-        );
+        if (!ocr) return;
+        openVatSlipModal(ocr);
     }
 
     // ── Delete OCR Row ────────────────────────────────────────────────────────
@@ -5715,44 +5799,39 @@
                 ocrSumVat += ocr.vat_amount;
                 ocrSumAfter += ocr.value_after_vat;
 
-                const slipBtnHtml = ocr.file_url
-                    ? (ocr.is_pdf
-                        ? `<button type="button" class="btn btn-xs btn-outline-danger rounded-pill px-2 py-0.5 d-inline-flex align-items-center gap-1 shadow-xs" onclick="previewMovementOcrSlip('modal', ${idx})" title="View PDF Receipt Slip">
-                             <i class="fa-solid fa-file-pdf text-danger"></i>
-                             <span>PDF Slip</span>
-                           </button>`
-                        : `<button type="button" class="btn btn-xs btn-outline-info rounded-pill px-2 py-0.5 d-inline-flex align-items-center gap-1 shadow-xs" onclick="previewMovementOcrSlip('modal', ${idx})" title="View High-Res Receipt Slip">
-                             <img src="${ocr.file_url}" alt="Slip" class="rounded border" style="width:22px; height:22px; object-fit:cover;" onerror="this.style.display='none'">
-                             <i class="fa-solid fa-receipt"></i>
-                             <span>Slip</span>
-                           </button>`)
-                    : `<span class="badge bg-light text-muted border" style="font-size:0.7rem;"><i class="fa-solid fa-ban me-1"></i>No Slip</span>`;
+                const slipBtnHtml = `<button type="button" class="btn btn-xs ${ocr.file_url ? (ocr.is_pdf ? 'btn-outline-danger' : 'btn-outline-info') : 'btn-outline-primary'} rounded-pill px-2.5 py-1 d-inline-flex align-items-center gap-1.5 shadow-xs" onclick="previewMovementOcrSlip('modal', ${idx})" title="Inspect Slip & Edit Details">
+                    <i class="fa-solid ${ocr.file_url ? (ocr.is_pdf ? 'fa-file-pdf text-danger' : 'fa-receipt text-info') : 'fa-pen-to-square text-primary'}"></i>
+                    <span>${ocr.file_url ? (ocr.is_pdf ? 'PDF Slip' : 'See Slip') : 'Inspect'}</span>
+                    <i class="fa-solid fa-pen-to-square ms-0.5 text-muted" style="font-size:0.65rem;"></i>
+                </button>`;
 
                 const tr = document.createElement('tr');
+                tr.id = 'm-ocr-row-' + ocr.id;
                 tr.innerHTML = `
                     <td class="ps-3 text-muted font-monospace small">${idx + 1}</td>
                     <td>
-                        <span class="fw-bold font-monospace text-dark d-block">${ocr.date_ec}</span>
-                        <small class="text-muted" style="font-size:0.75rem;">${ocr.date_gc}</small>
+                        <span class="fw-bold font-monospace text-dark d-block cell-date-ec">${ocr.date_ec}</span>
+                        <small class="text-muted cell-date-gc" style="font-size:0.75rem;">${ocr.date_gc}</small>
                     </td>
                     <td>
-                        <span class="badge bg-light text-primary border font-monospace">${ocr.fs_no}</span>
-                        <small class="text-muted d-block" style="font-size:0.75rem;">${ocr.receipt_number}</small>
+                        <span class="badge bg-light text-primary border font-monospace cell-fs">${ocr.fs_no}</span>
+                        <small class="text-muted d-block cell-receipt-no" style="font-size:0.75rem;">${ocr.receipt_number}</small>
+                        ${ocr.mrc_no && ocr.mrc_no !== '-' ? `<small class="text-muted font-monospace d-block cell-mrc" style="font-size:0.7rem;">MRC: ${ocr.mrc_no}</small>` : ''}
                     </td>
                     <td>
-                        <span class="fw-semibold text-dark d-block">${ocr.vendor_name}</span>
-                        <small class="text-muted font-monospace" style="font-size:0.75rem;">TIN: ${ocr.vendor_tin}</small>
+                        <span class="fw-semibold text-dark d-block cell-vendor">${ocr.vendor_name}</span>
+                        <small class="text-muted font-monospace cell-tin" style="font-size:0.75rem;">TIN: ${ocr.vendor_tin}</small>
                     </td>
                     <td>
-                        <span class="badge bg-secondary-subtle text-secondary rounded-pill small">${ocr.project_name}</span>
-                        <small class="text-muted d-block" style="font-size:0.75rem;">${ocr.category}</small>
+                        <span class="badge bg-secondary-subtle text-secondary rounded-pill small cell-project">${ocr.project_name}</span>
+                        <small class="text-muted d-block cell-category" style="font-size:0.75rem;">${ocr.category}</small>
                     </td>
                     <td class="small text-dark text-truncate" style="max-width: 220px;" title="${ocr.item_description}">
-                        ${ocr.item_description}
+                        <span class="cell-desc">${ocr.item_description}</span>
                     </td>
-                    <td class="text-end font-monospace">ETB ${formatMoney(ocr.base_value)}</td>
-                    <td class="text-end font-monospace text-success fw-semibold">ETB ${formatMoney(ocr.vat_amount)}</td>
-                    <td class="text-end font-monospace text-dark fw-bold">ETB ${formatMoney(ocr.value_after_vat)}</td>
+                    <td class="text-end font-monospace cell-base">ETB ${formatMoney(ocr.base_value)}</td>
+                    <td class="text-end font-monospace text-success fw-semibold cell-vat">ETB ${formatMoney(ocr.vat_amount)}</td>
+                    <td class="text-end font-monospace text-dark fw-bold cell-total">ETB ${formatMoney(ocr.value_after_vat)}</td>
                     <td class="text-center pe-3">${slipBtnHtml}</td>
                 `;
                 ocrTbody.appendChild(tr);

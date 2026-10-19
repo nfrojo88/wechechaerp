@@ -569,40 +569,45 @@
                                     $hasSlip = !empty($ocr['file_url']);
                                     $isPdf = !empty($ocr['is_pdf']);
                                 @endphp
-                                <tr>
+                                <tr id="page-ocr-row-{{ $ocr['id'] }}"
+                                    data-idx="{{ $idx }}"
+                                    data-id="{{ $ocr['id'] }}"
+                                    data-receipt-id="{{ $ocr['receipt_id'] ?? '' }}">
                                     <td class="ps-3 text-muted font-monospace small">{{ $idx + 1 }}</td>
                                     <td>
-                                        <span class="fw-bold font-monospace text-dark d-block">{{ $ocr['date_ec'] ?? '-' }}</span>
-                                        <small class="text-muted" style="font-size:0.75rem;">{{ $ocr['date_gc'] ?? '-' }}</small>
+                                        <span class="fw-bold font-monospace text-dark d-block cell-date-ec">{{ $ocr['date_ec'] ?? '-' }}</span>
+                                        <small class="text-muted cell-date-gc" style="font-size:0.75rem;">{{ $ocr['date_gc'] ?? '-' }}</small>
                                     </td>
                                     <td>
-                                        <span class="badge bg-light text-primary border font-monospace">{{ $ocr['fs_no'] ?? '-' }}</span>
-                                        <small class="text-muted d-block" style="font-size:0.75rem;">{{ $ocr['receipt_number'] ?? '' }}</small>
+                                        <span class="badge bg-light text-primary border font-monospace cell-fs">{{ $ocr['fs_no'] ?? '-' }}</span>
+                                        <small class="text-muted d-block cell-receipt-no" style="font-size:0.75rem;">{{ $ocr['receipt_number'] ?? '' }}</small>
+                                        @if(!empty($ocr['mrc_no']) && $ocr['mrc_no'] !== '-')
+                                            <small class="text-muted font-monospace d-block cell-mrc" style="font-size:0.7rem;">MRC: {{ $ocr['mrc_no'] }}</small>
+                                        @else
+                                            <small class="text-muted font-monospace d-block cell-mrc" style="font-size:0.7rem; display:none;"></small>
+                                        @endif
                                     </td>
                                     <td>
-                                        <span class="fw-semibold text-dark d-block">{{ $ocr['vendor_name'] ?? 'Vendor' }}</span>
-                                        <small class="text-muted font-monospace" style="font-size:0.75rem;">TIN: {{ $ocr['vendor_tin'] ?? '-' }}</small>
+                                        <span class="fw-semibold text-dark d-block cell-vendor">{{ $ocr['vendor_name'] ?? 'Vendor' }}</span>
+                                        <small class="text-muted font-monospace cell-tin" style="font-size:0.75rem;">TIN: {{ $ocr['vendor_tin'] ?? '-' }}</small>
                                     </td>
                                     <td>
-                                        <span class="badge bg-secondary-subtle text-secondary rounded-pill small">{{ $ocr['project_name'] ?? 'General' }}</span>
-                                        <small class="text-muted d-block" style="font-size:0.75rem;">{{ $ocr['category'] ?? '' }}</small>
+                                        <span class="badge bg-secondary-subtle text-secondary rounded-pill small cell-project">{{ $ocr['project_name'] ?? 'General' }}</span>
+                                        <small class="text-muted d-block cell-category" style="font-size:0.75rem;">{{ $ocr['category'] ?? '' }}</small>
                                     </td>
                                     <td class="small text-dark text-truncate" style="max-width: 220px;" title="{{ $ocr['item_description'] ?? '' }}">
-                                        {{ $ocr['item_description'] ?? '-' }}
+                                        <span class="cell-desc">{{ $ocr['item_description'] ?? '-' }}</span>
                                     </td>
-                                    <td class="text-end font-monospace">ETB {{ number_format($b, 2) }}</td>
-                                    <td class="text-end font-monospace text-success fw-semibold">ETB {{ number_format($v, 2) }}</td>
-                                    <td class="text-end font-monospace text-dark fw-bold">ETB {{ number_format($a, 2) }}</td>
+                                    <td class="text-end font-monospace"><span class="cell-base">ETB {{ number_format($b, 2) }}</span></td>
+                                    <td class="text-end font-monospace text-success fw-semibold"><span class="cell-vat">ETB {{ number_format($v, 2) }}</span></td>
+                                    <td class="text-end font-monospace text-dark fw-bold"><span class="cell-total">ETB {{ number_format($a, 2) }}</span></td>
                                     <td class="text-center pe-3 d-print-none">
-                                        @if($hasSlip)
-                                            <button type="button" class="btn btn-xs {{ $isPdf ? 'btn-outline-danger' : 'btn-outline-info' }} rounded-pill px-2 py-0.5 d-inline-flex align-items-center gap-1 shadow-xs" 
-                                                    onclick="openSlipModal('{{ $ocr['file_url'] }}', '{{ addslashes($ocr['vendor_name'] ?? 'Receipt Slip') }} (FS: {{ $ocr['fs_no'] ?? '' }})', {{ $isPdf ? 'true' : 'false' }})">
-                                                <i class="fa-solid {{ $isPdf ? 'fa-file-pdf text-danger' : 'fa-receipt' }}"></i>
-                                                <span>{{ $isPdf ? 'PDF' : 'Slip' }}</span>
-                                            </button>
-                                        @else
-                                            <span class="badge bg-light text-muted border" style="font-size:0.7rem;"><i class="fa-solid fa-ban me-1"></i>No Slip</span>
-                                        @endif
+                                        <button type="button" class="btn btn-xs {{ $hasSlip ? ($isPdf ? 'btn-outline-danger' : 'btn-outline-info') : 'btn-outline-primary' }} rounded-pill px-2.5 py-1 d-inline-flex align-items-center gap-1.5 shadow-xs" 
+                                                onclick="openPageOcrInspector({{ $idx }})" title="Inspect Receipt Slip & Edit Declaration">
+                                            <i class="fa-solid {{ $isPdf ? 'fa-file-pdf text-danger' : ($hasSlip ? 'fa-receipt text-info' : 'fa-pen-to-square text-primary') }}"></i>
+                                            <span>{{ $hasSlip ? ($isPdf ? 'PDF Slip' : 'See Slip') : 'Inspect' }}</span>
+                                            <i class="fa-solid fa-pen-to-square ms-0.5 text-muted" style="font-size: 0.65rem;"></i>
+                                        </button>
                                     </td>
                                 </tr>
                             @empty
@@ -616,9 +621,9 @@
                         <tfoot class="table-light fw-bold border-top">
                             <tr>
                                 <td colspan="6" class="ps-3 py-2 text-uppercase small text-muted">Total Scanned Invoices</td>
-                                <td class="text-end py-2 font-monospace text-dark">ETB {{ number_format($ocrSumBase, 2) }}</td>
-                                <td class="text-end py-2 font-monospace text-success">ETB {{ number_format($ocrSumVat, 2) }}</td>
-                                <td class="text-end py-2 font-monospace text-dark">ETB {{ number_format($ocrSumAfter, 2) }}</td>
+                                <td class="text-end py-2 font-monospace text-dark" id="pageOcrSumBase">ETB {{ number_format($ocrSumBase, 2) }}</td>
+                                <td class="text-end py-2 font-monospace text-success" id="pageOcrSumVat">ETB {{ number_format($ocrSumVat, 2) }}</td>
+                                <td class="text-end py-2 font-monospace text-dark" id="pageOcrSumAfter">ETB {{ number_format($ocrSumAfter, 2) }}</td>
                                 <td class="pe-3 d-print-none"></td>
                             </tr>
                         </tfoot>
@@ -799,39 +804,267 @@
     </div>
 </div>
 
-{{-- ── High-Res Receipt Slip Viewer Modal ────────────────────────────────────── --}}
+{{-- ── Side-by-Side OCR Inspector & Live Edit Modal ────────────────────────────── --}}
 <div class="modal fade" id="movementSlipModal" tabindex="-1" aria-labelledby="movementSlipModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
-        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
-            <div class="modal-header bg-dark text-white py-2.5 px-4 d-flex justify-content-between align-items-center" style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%) !important;">
-                <div class="d-flex align-items-center gap-2">
-                    <i class="fa-solid fa-receipt text-warning fs-5"></i>
+    <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable my-lg-3" style="max-height: 94vh;">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden d-flex flex-column" style="max-height: 94vh;">
+            
+            {{-- Fixed Modal Header --}}
+            <div class="modal-header bg-dark text-white py-2.5 px-4 flex-shrink-0" style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%) !important;">
+                <div class="d-flex align-items-center gap-2.5">
+                    <div class="bg-primary bg-opacity-25 text-info p-2 rounded-circle d-flex align-items-center justify-content-center" style="width:36px; height:36px;">
+                        <i class="fa-solid fa-receipt fs-5"></i>
+                    </div>
                     <div>
-                        <h6 class="modal-title fw-bold mb-0 text-white" id="movementSlipModalTitle">Receipt Slip Document</h6>
-                        <small class="text-white-50" id="movementSlipModalSubtitle">High-Resolution Document Preview</small>
+                        <h5 class="modal-title fw-bold mb-0 text-white fs-6" id="movementSlipModalLabel">
+                            ERCA Cash Register Invoice &amp; Fiscal Slip Inspector &mdash; <span id="movementModalFsNoDisplay" class="font-monospace text-info"></span>
+                        </h5>
+                        <small class="text-white-50" style="font-size:0.75rem;">
+                            Side-by-side reconciliation: Edit declaration &amp; fiscal details on the left &bull; Inspect scanned receipt on the right
+                        </small>
                     </div>
                 </div>
                 <div class="d-flex align-items-center gap-2">
-                    <div class="btn-group btn-group-sm" role="group">
-                        <button type="button" class="btn btn-outline-light btn-sm py-1 px-2" onclick="zoomPageSlip(0.2)" title="Zoom In"><i class="fa-solid fa-magnifying-glass-plus"></i></button>
-                        <button type="button" class="btn btn-outline-light btn-sm py-1 px-2" onclick="zoomPageSlip(-0.2)" title="Zoom Out"><i class="fa-solid fa-magnifying-glass-minus"></i></button>
-                        <button type="button" class="btn btn-outline-light btn-sm py-1 px-2" onclick="rotatePageSlip()" title="Rotate"><i class="fa-solid fa-rotate-right"></i></button>
-                        <button type="button" class="btn btn-outline-light btn-sm py-1 px-2" onclick="resetPageSlip()" title="Reset"><i class="fa-solid fa-arrows-rotate"></i></button>
-                    </div>
-                    <a id="movementSlipDownloadBtn" href="#" target="_blank" download class="btn btn-sm btn-info text-white rounded-pill px-3">
-                        <i class="fa-solid fa-download me-1"></i>Download
-                    </a>
+                    <span id="movementModalHeaderStatusBadge" class="badge bg-info-subtle text-info border border-info-subtle rounded-pill px-2.5 py-1 small font-monospace">ERCA Invoice</span>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
             </div>
-            <div class="modal-body p-3 bg-light d-flex align-items-center justify-content-center" style="min-height: 480px; max-height: 75vh; overflow: auto;" id="movementSlipViewport">
-                <img id="movementSlipImg" src="" alt="Receipt Slip" class="img-fluid rounded shadow-sm" style="max-height: 65vh; width: auto; object-fit: contain; transition: transform 0.2s ease;">
-                <iframe id="movementSlipPdf" src="" class="w-100 rounded d-none" style="height: 65vh; border: none;"></iframe>
+
+            {{-- Scrollable Modal Body (Side-by-Side) --}}
+            <div class="modal-body p-3 p-lg-4 bg-light bg-opacity-50" style="overflow-y: auto;">
+                <div class="row g-3 g-lg-4 align-items-stretch">
+                    
+                    {{-- LEFT COLUMN: Option to edit details to meet our system --}}
+                    <div class="col-12 col-lg-6">
+                        <div class="card border-0 shadow-xs rounded-3 h-100 bg-white">
+                            <div class="card-header bg-white border-bottom py-2.5 px-3 d-flex align-items-center justify-content-between">
+                                <div class="d-flex align-items-center gap-2">
+                                    <i class="fa-solid fa-pen-to-square text-primary"></i>
+                                    <span class="fw-bold text-dark small text-uppercase">Fiscal Declaration &amp; System Adjustment</span>
+                                </div>
+                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill font-monospace" id="movement_edit_ocr_badge_id">Invoice #</span>
+                            </div>
+                            <div class="card-body p-3">
+                                <div id="movementOcrModalAlert" class="alert d-none py-2 px-3 small rounded-3 mb-3"></div>
+
+                                <form id="movementOcrModalEditForm" onsubmit="saveMovementOcrSlipEdits(event)">
+                                    <input type="hidden" id="movement_edit_ocr_item_id" name="id">
+                                    <input type="hidden" id="movement_edit_receipt_id" name="receipt_id">
+
+                                    {{-- Supplier Name --}}
+                                    <div class="mb-2.5">
+                                        <label class="form-label small fw-bold text-dark mb-1">
+                                            <i class="fa-solid fa-store text-muted me-1"></i>Supplier / Merchant Name <span class="text-danger">*</span>
+                                        </label>
+                                        <input type="text" class="form-control form-control-sm rounded-2" id="movement_edit_seller_name" name="seller_name" required placeholder="e.g. TotalEnergies Marketing Ethiopia">
+                                    </div>
+
+                                    {{-- Row: Supplier TIN & FS # --}}
+                                    <div class="row g-2 mb-2.5">
+                                        <div class="col-6">
+                                            <label class="form-label small fw-bold text-dark mb-1">
+                                                <i class="fa-solid fa-id-card text-muted me-1"></i>Supplier TIN <span class="text-danger">*</span>
+                                            </label>
+                                            <div class="input-group input-group-sm">
+                                                <input type="text" class="form-control font-monospace fw-bold" id="movement_edit_supplier_tin" name="supplier_tin" maxlength="12" placeholder="10 Digits" oninput="validateMovementTin(this.value)">
+                                                <span class="input-group-text p-1 px-2" id="movement_edit_tin_badge" title="TIN Status"><i class="fa-solid fa-minus text-muted"></i></span>
+                                            </div>
+                                            <div class="form-text text-muted" style="font-size:0.68rem;" id="movement_edit_tin_hint">ERCA requires 10 digits</div>
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="form-label small fw-bold text-dark mb-1">
+                                                <i class="fa-solid fa-receipt text-muted me-1"></i>FS / Receipt # <span class="text-danger">*</span>
+                                            </label>
+                                            <div class="input-group input-group-sm">
+                                                <input type="text" class="form-control font-monospace fw-bold text-primary" id="movement_edit_fs_no" name="fs_no" maxlength="15" placeholder="e.g. 00012345" oninput="validateMovementFs(this.value)">
+                                                <span class="input-group-text p-1 px-2" id="movement_edit_fs_badge" title="FS # Status"><i class="fa-solid fa-minus text-muted"></i></span>
+                                            </div>
+                                            <div class="form-text text-muted" style="font-size:0.68rem;" id="movement_edit_fs_hint">Standard 8-digit fiscal slip</div>
+                                        </div>
+                                    </div>
+
+                                    {{-- Row: MRC # & Receipt Date --}}
+                                    <div class="row g-2 mb-2.5">
+                                        <div class="col-6">
+                                            <label class="form-label small fw-bold text-dark mb-1">
+                                                <i class="fa-solid fa-microchip text-muted me-1"></i>MRC # (Machine Registration)
+                                            </label>
+                                            <input type="text" class="form-control form-control-sm font-monospace" id="movement_edit_mrc_no" name="mrc_no" placeholder="e.g. MTR12345678">
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="form-label small fw-bold text-dark mb-1">
+                                                <i class="fa-regular fa-calendar text-muted me-1"></i>Receipt Date
+                                            </label>
+                                            <input type="date" class="form-control form-control-sm font-monospace" id="movement_edit_receipt_date" name="receipt_date" onchange="syncMovementDateToEc(this.value)">
+                                            <div class="form-text text-primary font-monospace fw-semibold" style="font-size:0.68rem;" id="movement_edit_date_ec_preview"></div>
+                                        </div>
+                                    </div>
+
+                                    {{-- Item Description --}}
+                                    <div class="mb-2.5">
+                                        <label class="form-label small fw-bold text-dark mb-1">
+                                            <i class="fa-solid fa-tag text-muted me-1"></i>Item Description / Particulars <span class="text-danger">*</span>
+                                        </label>
+                                        <input type="text" class="form-control form-control-sm rounded-2" id="movement_edit_item_description" name="item_description" required placeholder="e.g. Fuel, Cement, Office stationery">
+                                    </div>
+
+                                    {{-- Project & Category --}}
+                                    <div class="row g-2 mb-2.5">
+                                        <div class="col-6">
+                                            <label class="form-label small fw-bold text-dark mb-1">
+                                                <i class="fa-solid fa-building text-muted me-1"></i>Project Attribution
+                                            </label>
+                                            <select class="form-select form-select-sm" id="movement_edit_project_id" name="project_id">
+                                                <option value="">-- General Company / HQ --</option>
+                                                @foreach($ocrProjects ?? [] as $proj)
+                                                    <option value="{{ $proj->id }}">{{ $proj->name }}</option>
+                                                @endforeach
+                                            </select>
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="form-label small fw-bold text-dark mb-1">
+                                                <i class="fa-solid fa-folder text-muted me-1"></i>Expense Category
+                                            </label>
+                                            <select class="form-select form-select-sm" id="movement_edit_category" name="category">
+                                                @foreach($ocrCategories ?? [] as $catKey => $catLabel)
+                                                    <option value="{{ $catKey }}">{{ $catLabel }}</option>
+                                                @endforeach
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    {{-- VAT Category & Purchase Type --}}
+                                    <div class="row g-2 mb-2.5">
+                                        <div class="col-6">
+                                            <label class="form-label small fw-bold text-dark mb-1">
+                                                <i class="fa-solid fa-shapes text-muted me-1"></i>VAT Category
+                                            </label>
+                                            <select class="form-select form-select-sm" id="movement_edit_vat_category" name="vat_category">
+                                                <option value="G">Goods (G)</option>
+                                                <option value="S">Services (S)</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="form-label small fw-bold text-dark mb-1">
+                                                <i class="fa-solid fa-list-ol text-muted me-1"></i>ERCA Purchase Type
+                                            </label>
+                                            <select class="form-select form-select-sm" id="movement_edit_purchase_type" name="purchase_type">
+                                                <option value="1">1 - Raw Materials / Inputs</option>
+                                                <option value="2">2 - Capital Goods / Equipment</option>
+                                                <option value="3">3 - General Operating &amp; Consumables</option>
+                                                <option value="4">4 - Subcontracting Services</option>
+                                                <option value="5">5 - Utilities &amp; Telecommunications</option>
+                                                <option value="6">6 - Other Taxable Inward Supplies</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    {{-- Financial Amounts & Live Recalculation --}}
+                                    <div class="p-2.5 bg-light rounded-3 border mb-0">
+                                        <div class="d-flex align-items-center justify-content-between mb-2">
+                                            <span class="small fw-bold text-dark">
+                                                <i class="fa-solid fa-calculator text-primary me-1"></i>Financial Reconciliation (15% VAT)
+                                            </span>
+                                            <span class="badge bg-secondary-subtle text-secondary" style="font-size:0.68rem;">Live Synced</span>
+                                        </div>
+                                        <div class="row g-2">
+                                            <div class="col-4">
+                                                <label class="form-label small fw-semibold text-muted mb-0.5" style="font-size:0.7rem;">Taxable Base</label>
+                                                <div class="input-group input-group-sm">
+                                                    <span class="input-group-text px-1 text-muted" style="font-size:0.7rem;">ETB</span>
+                                                    <input type="number" step="0.01" min="0" class="form-control font-monospace fw-semibold" id="movement_edit_total_value" name="total_value" required oninput="recalcMovementFromBase(this.value)">
+                                                </div>
+                                            </div>
+                                            <div class="col-4">
+                                                <label class="form-label small fw-semibold text-info mb-0.5" style="font-size:0.7rem;">15% VAT</label>
+                                                <div class="input-group input-group-sm">
+                                                    <span class="input-group-text px-1 text-info" style="font-size:0.7rem;">+</span>
+                                                    <input type="number" step="0.01" min="0" class="form-control font-monospace fw-bold text-info" id="movement_edit_vat_amount" name="vat_amount" required oninput="recalcMovementFromVat(this.value)">
+                                                </div>
+                                            </div>
+                                            <div class="col-4">
+                                                <label class="form-label small fw-semibold text-success mb-0.5" style="font-size:0.7rem;">Total with VAT</label>
+                                                <div class="input-group input-group-sm">
+                                                    <span class="input-group-text px-1 text-success" style="font-size:0.7rem;">=</span>
+                                                    <input type="number" step="0.01" min="0" class="form-control font-monospace fw-bold text-success" id="movement_edit_value_after_vat" name="value_after_vat" required oninput="recalcMovementFromTotal(this.value)">
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="d-flex justify-content-between align-items-center mt-2 pt-1 border-top" style="font-size:0.72rem;">
+                                            <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none text-muted" onclick="autoCalcMovementVatFromBase()">
+                                                <i class="fa-solid fa-wand-magic-sparkles me-1 text-primary"></i>Base &rarr; Auto VAT (15%)
+                                            </button>
+                                            <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none text-muted" onclick="autoExtractMovementBaseFromTotal()">
+                                                <i class="fa-solid fa-wand-magic-sparkles me-1 text-success"></i>Total &rarr; Extract Base (/1.15)
+                                            </button>
+                                        </div>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
+                    {{-- RIGHT COLUMN: Receipt Slip Preview --}}
+                    <div class="col-12 col-lg-6">
+                        <div class="card border-0 shadow-xs rounded-3 h-100 bg-white d-flex flex-column">
+                            <div class="card-header bg-white border-bottom py-2.5 px-3 d-flex align-items-center justify-content-between flex-shrink-0">
+                                <div class="d-flex align-items-center gap-2">
+                                    <i class="fa-solid fa-image text-info"></i>
+                                    <span class="fw-bold text-dark small text-uppercase">Original Scanned Receipt Slip</span>
+                                </div>
+                                <div class="btn-group btn-group-sm shadow-xs" role="group">
+                                    <button type="button" class="btn btn-outline-secondary btn-sm py-1 px-2" onclick="zoomPageSlip(0.15)" title="Zoom In"><i class="fa-solid fa-magnifying-glass-plus"></i></button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm py-1 px-2" onclick="zoomPageSlip(-0.15)" title="Zoom Out"><i class="fa-solid fa-magnifying-glass-minus"></i></button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm py-1 px-2" onclick="rotatePageSlip()" title="Rotate 90°"><i class="fa-solid fa-rotate-right"></i></button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm py-1 px-2" onclick="resetPageSlip()" title="Reset View"><i class="fa-solid fa-arrows-rotate"></i></button>
+                                    <a id="movementModalSlipOpenNewTab" href="#" target="_blank" class="btn btn-outline-secondary btn-sm py-1 px-2" title="Open in New Tab"><i class="fa-solid fa-up-right-from-square"></i></a>
+                                </div>
+                            </div>
+                            <div class="card-body p-2 flex-grow-1 d-flex flex-column">
+                                <div class="flex-grow-1 position-relative border rounded-3 bg-light d-flex align-items-center justify-content-center p-2" style="min-height: 420px; max-height: 520px; overflow: auto;" id="movementSlipViewport">
+                                    <img id="movementSlipImg" src="" alt="Receipt Slip" class="img-fluid rounded shadow-sm" style="max-height: 480px; width: auto; object-fit: contain; transition: transform 0.2s ease;">
+                                    <iframe id="movementSlipPdf" src="" class="w-100 rounded d-none" style="height: 480px; border: none;"></iframe>
+                                    <div id="movementSlipEmpty" class="text-center p-4 d-none">
+                                        <div class="p-3 bg-white bg-opacity-75 rounded-circle d-inline-block text-muted mb-2 shadow-xs">
+                                            <i class="fa-solid fa-file-invoice text-secondary fs-2"></i>
+                                        </div>
+                                        <div class="fw-semibold text-muted small">No Scanned Slip File Attached</div>
+                                        <div class="text-muted" style="font-size:0.75rem;">You can still edit and save all fiscal declaration fields on the left.</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="card-footer bg-light border-top py-2 px-3 d-flex align-items-center justify-content-between flex-shrink-0">
+                                <span class="small text-muted font-monospace" id="movementSlipFilename" style="font-size:0.75rem;">Document: Receipt Slip</span>
+                                <div class="d-flex gap-2">
+                                    <a id="movementSlipDownloadBtn" href="#" target="_blank" download class="btn btn-outline-info btn-sm rounded-pill px-3 shadow-xs">
+                                        <i class="fa-solid fa-download me-1"></i>Download
+                                    </a>
+                                    <a id="movementModalStudioLink" href="{{ route('admin.ocr.index') }}" target="_blank" class="btn btn-outline-primary btn-sm rounded-pill px-3">
+                                        <i class="fa-solid fa-wand-magic-sparkles me-1"></i>OCR Studio
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div class="modal-footer bg-white border-top py-2 px-4 d-flex justify-content-between align-items-center">
-                <span class="text-muted small font-monospace" id="movementSlipMeta">Official Fiscal Documentation</span>
-                <button type="button" class="btn btn-secondary btn-sm rounded-pill px-3.5" data-bs-dismiss="modal">Close</button>
+
+            {{-- Fixed Modal Footer --}}
+            <div class="modal-footer bg-white border-top py-2.5 px-4 d-flex justify-content-between align-items-center flex-shrink-0">
+                <div class="d-flex align-items-center gap-2 text-muted small">
+                    <i class="fa-solid fa-shield-halved text-success"></i>
+                    <span class="d-none d-sm-inline">Reconciles ERCA VAT Cash Register Invoices with System Financial Ledgers</span>
+                </div>
+                <div class="d-flex gap-2 align-items-center">
+                    <button type="button" class="btn btn-outline-secondary rounded-pill px-3.5 py-1.5" data-bs-dismiss="modal">
+                        Close
+                    </button>
+                    <button type="submit" form="movementOcrModalEditForm" id="movement_edit_submit_btn" class="btn btn-primary rounded-pill px-4 py-1.5 shadow-sm fw-semibold">
+                        <i class="fa-solid fa-floppy-disk me-1.5"></i>Save Changes &amp; Update System
+                    </button>
+                </div>
             </div>
+
         </div>
     </div>
 </div>
@@ -839,6 +1072,9 @@
 {{-- ── Client Scripts & Filtering ────────────────────────────────────────────── --}}
 @push('scripts')
 <script>
+    // Cached items for live inspector and table sync
+    window._pageOcrItems = @json($movementsData['ocr_items'] ?? []);
+
     // Live table filtering
     function filterLocalTable(tableId, query) {
         const table = document.getElementById(tableId);
@@ -881,49 +1117,405 @@
         _updatePageSlipTransform();
     }
 
-    function openSlipModal(url, title, isPdf = false) {
-        if (!url) return;
-        const modalEl = document.getElementById('movementSlipModal');
-        if (!modalEl) return;
-
-        const titleEl = document.getElementById('movementSlipModalTitle');
+    // Set preview file in inspector modal
+    function _setPageSlipPreview(url) {
         const imgEl = document.getElementById('movementSlipImg');
         const pdfEl = document.getElementById('movementSlipPdf');
-        const downloadBtn = document.getElementById('movementSlipDownloadBtn');
-        const metaEl = document.getElementById('movementSlipMeta');
-
-        if (titleEl) titleEl.innerText = title || 'Receipt Slip Document';
-        if (downloadBtn) downloadBtn.href = url;
-        if (metaEl) {
-            const parts = url.split('/');
-            metaEl.innerText = 'Document: ' + decodeURIComponent(parts[parts.length - 1] || 'slip');
-        }
+        const emptyEl = document.getElementById('movementSlipEmpty');
+        const dlBtn = document.getElementById('movementSlipDownloadBtn');
+        const newTabBtn = document.getElementById('movementModalSlipOpenNewTab');
+        const fnLabel = document.getElementById('movementSlipFilename');
 
         resetPageSlip();
 
-        const isDocPdf = isPdf || url.toLowerCase().includes('.pdf') || url.toLowerCase().includes('pdf');
-
-        if (isDocPdf) {
-            if (imgEl) imgEl.classList.add('d-none');
-            if (pdfEl) {
-                pdfEl.src = url;
-                pdfEl.classList.remove('d-none');
-            }
-        } else {
-            if (pdfEl) {
-                pdfEl.classList.add('d-none');
-                pdfEl.src = '';
-            }
-            if (imgEl) {
-                imgEl.src = url;
-                imgEl.classList.remove('d-none');
-            }
+        if (!url) {
+            if (imgEl) { imgEl.classList.add('d-none'); imgEl.src = ''; }
+            if (pdfEl) { pdfEl.classList.add('d-none'); pdfEl.src = ''; }
+            if (emptyEl) emptyEl.classList.remove('d-none');
+            if (dlBtn) dlBtn.classList.add('d-none');
+            if (newTabBtn) newTabBtn.classList.add('d-none');
+            if (fnLabel) fnLabel.textContent = 'No document attached';
+            return;
         }
 
+        if (emptyEl) emptyEl.classList.add('d-none');
+        if (dlBtn) { dlBtn.classList.remove('d-none'); dlBtn.href = url; }
+        if (newTabBtn) { newTabBtn.classList.remove('d-none'); newTabBtn.href = url; }
+        if (fnLabel) {
+            const parts = url.split('/');
+            fnLabel.textContent = 'Document: ' + decodeURIComponent(parts[parts.length - 1] || 'receipt-slip');
+        }
+
+        const isPdf = url.toLowerCase().includes('.pdf');
+        if (isPdf) {
+            if (imgEl) { imgEl.classList.add('d-none'); imgEl.src = ''; }
+            if (pdfEl) { pdfEl.src = url; pdfEl.classList.remove('d-none'); }
+        } else {
+            if (pdfEl) { pdfEl.classList.add('d-none'); pdfEl.src = ''; }
+            if (imgEl) { imgEl.src = url; imgEl.classList.remove('d-none'); }
+        }
+    }
+
+    // Open Inspector and populate form with details
+    function openPageOcrInspector(idx) {
+        const ocr = (window._pageOcrItems && window._pageOcrItems[idx]) || {};
+        const modalEl = document.getElementById('movementSlipModal');
+        if (!modalEl) return;
+
+        const cleanNum = (v) => {
+            const n = parseFloat(String(v ?? '0').replace(/[^0-9.-]/g, ''));
+            return isNaN(n) ? 0 : n;
+        };
+
+        // Form elements
+        const idInput = document.getElementById('movement_edit_ocr_item_id');
+        if (idInput) idInput.value = ocr.id || '';
+
+        const rcptIdInput = document.getElementById('movement_edit_receipt_id');
+        if (rcptIdInput) rcptIdInput.value = ocr.receipt_id || '';
+
+        const badgeId = document.getElementById('movement_edit_ocr_badge_id');
+        if (badgeId) badgeId.textContent = ocr.id ? ('Invoice #' + ocr.id) : ('Item #' + (idx + 1));
+
+        const fsDisplay = document.getElementById('movementModalFsNoDisplay');
+        if (fsDisplay) fsDisplay.textContent = ocr.fs_no && ocr.fs_no !== '-' ? ('FS #' + ocr.fs_no) : (ocr.id ? ('Invoice #' + ocr.id) : 'Receipt Inspector');
+
+        const sellerName = document.getElementById('movement_edit_seller_name');
+        if (sellerName) sellerName.value = ocr.vendor_name || '';
+
+        const tinInput = document.getElementById('movement_edit_supplier_tin');
+        if (tinInput) {
+            tinInput.value = (ocr.vendor_tin === '-' ? '' : ocr.vendor_tin) || '';
+            validateMovementTin(tinInput.value);
+        }
+
+        const fsInput = document.getElementById('movement_edit_fs_no');
+        if (fsInput) {
+            fsInput.value = (ocr.fs_no === '-' ? '' : ocr.fs_no) || '';
+            validateMovementFs(fsInput.value);
+        }
+
+        const mrcInput = document.getElementById('movement_edit_mrc_no');
+        if (mrcInput) mrcInput.value = (ocr.mrc_no === '-' ? '' : ocr.mrc_no) || '';
+
+        const dateInput = document.getElementById('movement_edit_receipt_date');
+        if (dateInput) {
+            let ymd = ocr.receipt_date_ymd || '';
+            if (!ymd && ocr.date_gc) {
+                try {
+                    const parsed = new Date(ocr.date_gc);
+                    if (!isNaN(parsed.getTime())) {
+                        ymd = parsed.toISOString().split('T')[0];
+                    }
+                } catch (e) {}
+            }
+            dateInput.value = ymd;
+        }
+
+        const dateEcPreview = document.getElementById('movement_edit_date_ec_preview');
+        if (dateEcPreview) dateEcPreview.textContent = ocr.date_ec ? ('EC: ' + ocr.date_ec) : '';
+
+        const descInput = document.getElementById('movement_edit_item_description');
+        if (descInput) descInput.value = ocr.item_description || '';
+
+        const projSelect = document.getElementById('movement_edit_project_id');
+        if (projSelect) projSelect.value = ocr.project_id || '';
+
+        const catSelect = document.getElementById('movement_edit_category');
+        if (catSelect) catSelect.value = ocr.category || 'materials';
+
+        const vatCatSelect = document.getElementById('movement_edit_vat_category');
+        if (vatCatSelect) vatCatSelect.value = ocr.vat_category || 'G';
+
+        const purcTypeSelect = document.getElementById('movement_edit_purchase_type');
+        if (purcTypeSelect) purcTypeSelect.value = ocr.purchase_type || 3;
+
+        const baseInput = document.getElementById('movement_edit_total_value');
+        if (baseInput) baseInput.value = cleanNum(ocr.base_value).toFixed(2);
+
+        const vatInput = document.getElementById('movement_edit_vat_amount');
+        if (vatInput) vatInput.value = cleanNum(ocr.vat_amount).toFixed(2);
+
+        const totalInput = document.getElementById('movement_edit_value_after_vat');
+        if (totalInput) totalInput.value = cleanNum(ocr.value_after_vat).toFixed(2);
+
+        // Clear alerts
+        const alertBox = document.getElementById('movementOcrModalAlert');
+        if (alertBox) {
+            alertBox.className = 'alert d-none';
+            alertBox.innerHTML = '';
+        }
+
+        // Set right column preview
+        _setPageSlipPreview(ocr.file_url);
+
+        // Show modal
         if (window.bootstrap && bootstrap.Modal) {
             bootstrap.Modal.getOrCreateInstance(modalEl).show();
         } else if (window.$ && typeof $(modalEl).modal === 'function') {
             $(modalEl).modal('show');
+        }
+    }
+
+    // Validation functions
+    function validateMovementTin(val) {
+        const clean = (val || '').replace(/\D/g, '');
+        const badge = document.getElementById('movement_edit_tin_badge');
+        const hint = document.getElementById('movement_edit_tin_hint');
+        if (!badge) return;
+
+        if (clean.length === 10) {
+            badge.innerHTML = '<i class="fa-solid fa-circle-check text-success"></i>';
+            if (hint) hint.innerHTML = '<span class="text-success"><i class="fa-solid fa-check me-1"></i>Valid 10-Digit ERCA TIN</span>';
+        } else if (clean.length === 0) {
+            badge.innerHTML = '<i class="fa-solid fa-minus text-muted"></i>';
+            if (hint) hint.innerText = 'ERCA requires 10 digits';
+        } else {
+            badge.innerHTML = '<i class="fa-solid fa-triangle-exclamation text-warning"></i>';
+            if (hint) hint.innerHTML = `<span class="text-warning">${clean.length}/10 digits</span>`;
+        }
+    }
+
+    function validateMovementFs(val) {
+        const clean = (val || '').replace(/\D/g, '');
+        const badge = document.getElementById('movement_edit_fs_badge');
+        const hint = document.getElementById('movement_edit_fs_hint');
+        if (!badge) return;
+
+        if (clean.length === 8) {
+            badge.innerHTML = '<i class="fa-solid fa-circle-check text-success"></i>';
+            if (hint) hint.innerHTML = '<span class="text-success"><i class="fa-solid fa-check me-1"></i>Valid 8-Digit FS #</span>';
+        } else if (clean.length === 0) {
+            badge.innerHTML = '<i class="fa-solid fa-minus text-muted"></i>';
+            if (hint) hint.innerText = 'Standard 8-digit fiscal slip';
+        } else {
+            badge.innerHTML = '<i class="fa-solid fa-info-circle text-info"></i>';
+            if (hint) hint.innerHTML = `<span class="text-info">${clean.length} digits</span>`;
+        }
+    }
+
+    // Simple Ethiopian Date conversion for date input preview
+    function syncMovementDateToEc(ymd) {
+        const preview = document.getElementById('movement_edit_date_ec_preview');
+        if (!preview) return;
+        if (!ymd) {
+            preview.textContent = '';
+            return;
+        }
+
+        try {
+            const parts = ymd.split('-');
+            const year = parseInt(parts[0], 10);
+            const month = parseInt(parts[1], 10);
+            const day = parseInt(parts[2], 10);
+
+            const a = Math.floor((14 - month) / 12);
+            const y = year + 4800 - a;
+            const m = month + 12 * a - 3;
+            const jdn = day + Math.floor((153 * m + 2) / 5) + 365 * y + Math.floor(y / 4) - Math.floor(y / 100) + Math.floor(y / 400) - 32045;
+
+            const ethiopianEpoch = 1723856;
+            const r = (jdn - ethiopianEpoch) % 1461;
+            const n = (r % 365) + 365 * Math.floor(r / 1460);
+
+            const ethYear = 4 * Math.floor((jdn - ethiopianEpoch) / 1461) + Math.floor(r / 365) - Math.floor(r / 1460);
+            const ethMonth = Math.floor(n / 30) + 1;
+            const ethDay = (n % 30) + 1;
+
+            const dPad = String(ethDay).padStart(2, '0');
+            const mPad = String(ethMonth).padStart(2, '0');
+            preview.textContent = `EC: ${dPad}/${mPad}/${ethYear} EC`;
+        } catch (e) {
+            preview.textContent = '';
+        }
+    }
+
+    // Financial live calculations
+    function recalcMovementFromBase(val) {
+        const base = parseFloat(val) || 0;
+        const vat = Math.round(base * 0.15 * 100) / 100;
+        const total = Math.round((base + vat) * 100) / 100;
+
+        const vatInput = document.getElementById('movement_edit_vat_amount');
+        const totalInput = document.getElementById('movement_edit_value_after_vat');
+        if (vatInput) vatInput.value = vat.toFixed(2);
+        if (totalInput) totalInput.value = total.toFixed(2);
+    }
+
+    function recalcMovementFromVat(val) {
+        const vat = parseFloat(val) || 0;
+        const base = Math.round((vat / 0.15) * 100) / 100;
+        const total = Math.round((base + vat) * 100) / 100;
+
+        const baseInput = document.getElementById('movement_edit_total_value');
+        const totalInput = document.getElementById('movement_edit_value_after_vat');
+        if (baseInput) baseInput.value = base.toFixed(2);
+        if (totalInput) totalInput.value = total.toFixed(2);
+    }
+
+    function recalcMovementFromTotal(val) {
+        const total = parseFloat(val) || 0;
+        const base = Math.round((total / 1.15) * 100) / 100;
+        const vat = Math.round((total - base) * 100) / 100;
+
+        const baseInput = document.getElementById('movement_edit_total_value');
+        const vatInput = document.getElementById('movement_edit_vat_amount');
+        if (baseInput) baseInput.value = base.toFixed(2);
+        if (vatInput) vatInput.value = vat.toFixed(2);
+    }
+
+    function autoCalcMovementVatFromBase() {
+        const baseInput = document.getElementById('movement_edit_total_value');
+        if (baseInput) recalcMovementFromBase(baseInput.value);
+    }
+
+    function autoExtractMovementBaseFromTotal() {
+        const totalInput = document.getElementById('movement_edit_value_after_vat');
+        if (totalInput) recalcMovementFromTotal(totalInput.value);
+    }
+
+    // Save edits via AJAX
+    function saveMovementOcrSlipEdits(e) {
+        e.preventDefault();
+        const form = document.getElementById('movementOcrModalEditForm');
+        if (!form) return;
+
+        const submitBtn = document.getElementById('movement_edit_submit_btn');
+        const alertBox = document.getElementById('movementOcrModalAlert');
+        const origBtnHtml = submitBtn ? submitBtn.innerHTML : '';
+
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1.5"></i>Updating System...';
+        }
+        if (alertBox) {
+            alertBox.className = 'alert alert-info py-2 px-3 small rounded-3 mb-3 d-flex align-items-center gap-2';
+            alertBox.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving changes and reconciling system tax records...';
+            alertBox.classList.remove('d-none');
+        }
+
+        const formData = new FormData(form);
+
+        fetch('{{ route("finance.tax-deductions.update-ocr-item") }}', {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = origBtnHtml;
+            }
+
+            if (data.success && data.item) {
+                const itm = data.item;
+                if (alertBox) {
+                    alertBox.className = 'alert alert-success py-2 px-3 small rounded-3 mb-3 d-flex align-items-center gap-2';
+                    alertBox.innerHTML = '<i class="fa-solid fa-circle-check fs-6 text-success"></i> ' + (data.message || 'Invoice successfully updated & reconciled with system.');
+                }
+
+                // Update cache
+                const cacheIdx = (window._pageOcrItems || []).findIndex(it => it.id == itm.id || (itm.receipt_id && it.receipt_id == itm.receipt_id));
+                if (cacheIdx !== -1) {
+                    window._pageOcrItems[cacheIdx] = Object.assign(window._pageOcrItems[cacheIdx], itm);
+                }
+
+                // Update table row in DOM
+                const tr = document.getElementById('page-ocr-row-' + itm.id) || (itm.receipt_id ? document.querySelector(`tr[data-receipt-id="${itm.receipt_id}"]`) : null);
+                if (tr) {
+                    const cellDateEc = tr.querySelector('.cell-date-ec');
+                    if (cellDateEc) cellDateEc.textContent = itm.receipt_date_ec || '—';
+
+                    const cellDateGc = tr.querySelector('.cell-date-gc');
+                    if (cellDateGc) cellDateGc.textContent = itm.receipt_date_ymd || '—';
+
+                    const cellFs = tr.querySelector('.cell-fs');
+                    if (cellFs) cellFs.textContent = itm.fs_no || '—';
+
+                    const cellMrc = tr.querySelector('.cell-mrc');
+                    if (cellMrc) {
+                        if (itm.mrc_no && itm.mrc_no !== '-') {
+                            cellMrc.textContent = 'MRC: ' + itm.mrc_no;
+                            cellMrc.style.display = '';
+                        } else {
+                            cellMrc.style.display = 'none';
+                        }
+                    }
+
+                    const cellVendor = tr.querySelector('.cell-vendor');
+                    if (cellVendor) cellVendor.textContent = itm.vendor_name || '—';
+
+                    const cellTin = tr.querySelector('.cell-tin');
+                    if (cellTin) cellTin.textContent = 'TIN: ' + (itm.vendor_tin || '—');
+
+                    const cellProject = tr.querySelector('.cell-project');
+                    if (cellProject) cellProject.textContent = itm.project_name || 'General';
+
+                    const cellCategory = tr.querySelector('.cell-category');
+                    if (cellCategory) cellCategory.textContent = itm.category || '';
+
+                    const cellDesc = tr.querySelector('.cell-desc');
+                    if (cellDesc) cellDesc.textContent = itm.item_description || '—';
+
+                    const cellBase = tr.querySelector('.cell-base');
+                    if (cellBase) cellBase.textContent = 'ETB ' + parseFloat(itm.base_value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+                    const cellVat = tr.querySelector('.cell-vat');
+                    if (cellVat) cellVat.textContent = 'ETB ' + parseFloat(itm.vat_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+                    const cellTotal = tr.querySelector('.cell-total');
+                    if (cellTotal) cellTotal.textContent = 'ETB ' + parseFloat(itm.total_value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+                    tr.style.transition = 'background-color 0.4s ease';
+                    tr.style.backgroundColor = '#d1e7dd';
+                    setTimeout(() => { tr.style.backgroundColor = ''; }, 2000);
+                }
+
+                // Recompute totals in table footer
+                let totalBase = 0, totalVat = 0, totalAfter = 0;
+                (window._pageOcrItems || []).forEach(it => {
+                    totalBase += parseFloat(it.base_value || 0);
+                    totalVat += parseFloat(it.vat_amount || 0);
+                    totalAfter += parseFloat(it.value_after_vat || it.total_value || 0);
+                });
+                const sumBaseEl = document.getElementById('pageOcrSumBase');
+                const sumVatEl = document.getElementById('pageOcrSumVat');
+                const sumAfterEl = document.getElementById('pageOcrSumAfter');
+                if (sumBaseEl) sumBaseEl.textContent = 'ETB ' + totalBase.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                if (sumVatEl) sumVatEl.textContent = 'ETB ' + totalVat.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                if (sumAfterEl) sumAfterEl.textContent = 'ETB ' + totalAfter.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            } else {
+                if (alertBox) {
+                    alertBox.className = 'alert alert-danger py-2 px-3 small rounded-3 mb-3 d-flex align-items-center gap-2';
+                    alertBox.innerHTML = '<i class="fa-solid fa-triangle-exclamation text-danger fs-6"></i> ' + (data.message || 'Failed to update record.');
+                }
+            }
+        })
+        .catch(err => {
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = origBtnHtml;
+            }
+            if (alertBox) {
+                alertBox.className = 'alert alert-danger py-2 px-3 small rounded-3 mb-3 d-flex align-items-center gap-2';
+                alertBox.innerHTML = '<i class="fa-solid fa-triangle-exclamation text-danger fs-6"></i> Error saving changes: ' + err.message;
+            }
+        });
+    }
+
+    // Backward compatibility helper
+    function openSlipModal(url, title, isPdf = false) {
+        const foundIdx = (window._pageOcrItems || []).findIndex(it => it.file_url === url);
+        if (foundIdx !== -1) {
+            openPageOcrInspector(foundIdx);
+        } else {
+            openPageOcrInspector(0);
+            _setPageSlipPreview(url);
         }
     }
 </script>
