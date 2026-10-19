@@ -277,8 +277,8 @@
             <li><a href="{{ route('finance.payroll.index') }}" class="sidebar-nav-link {{ request()->routeIs('finance.payroll.*') ? 'active' : '' }}"><i class="fa-solid fa-money-bill-wave text-success"></i><span>Payroll Management</span></a></li>
             <li><a href="{{ route('payroll.advances') }}" class="sidebar-nav-link {{ request()->routeIs('payroll.advances*') ? 'active' : '' }}"><i class="fa-solid fa-hand-holding-dollar text-warning"></i><span>Salary Advance Loans</span></a></li>
             <li><a href="{{ route('bank-accounts.index') }}" class="sidebar-nav-link {{ request()->routeIs('bank-accounts.*') ? 'active' : '' }}"><i class="fa-solid fa-building-columns"></i><span>Bank Accounts</span></a></li>
-            <li><a href="{{ route('payments.index') }}" class="sidebar-nav-link {{ request()->routeIs('payments.*') ? 'active' : '' }}"><i class="fa-solid fa-chart-pie"></i><span>Payments</span></a></li>
-            <li><a href="{{ route('finance.tax-deductions.index') }}" class="sidebar-nav-link {{ request()->routeIs('finance.tax-deductions.*') ? 'active' : '' }}"><i class="fa-solid fa-receipt text-danger"></i><span>VAT & Withholding Tax</span></a></li>
+            <li><a href="{{ route('finance.tax-deductions.index') }}" class="sidebar-nav-link {{ request()->routeIs('finance.tax-deductions.index') ? 'active' : '' }}"><i class="fa-solid fa-receipt text-danger"></i><span>VAT & Withholding Tax</span></a></li>
+            <li><a href="{{ route('finance.tax-deductions.movements') }}" class="sidebar-nav-link {{ request()->routeIs('finance.tax-deductions.movements') || request()->routeIs('finance.tax-movements') ? 'active' : '' }}"><i class="fa-solid fa-scale-balanced text-primary"></i><span>Financial Movements &amp; Audit</span></a></li>
             <li><a href="{{ \Illuminate\Support\Facades\Route::has('finance.replenishments.index') ? route('finance.replenishments.index') : url('/finance/replenishments') }}" class="sidebar-nav-link {{ request()->is('finance/replenishments*') ? 'active' : '' }}"><i class="fa-solid fa-hand-holding-dollar text-warning"></i><span>Petty Cash Approvals</span></a></li>
             <li><a href="{{ \Illuminate\Support\Facades\Route::has('finance.credit-store.index') ? route('finance.credit-store.index') : url('/finance/credit-store') }}" class="sidebar-nav-link {{ request()->is('finance/credit-store*') ? 'active' : '' }}"><i class="fa-solid fa-credit-card text-info"></i><span>Credit Store Ledger</span></a></li>
             <li><a href="{{ route('reports.index') }}" class="sidebar-nav-link {{ request()->is('finance/reports*') ? 'active' : '' }}"><i class="fa-solid fa-file-lines text-primary"></i><span>Finance Reports</span></a></li>
@@ -975,9 +975,15 @@
             </a>
         </li>
         <li class="sidebar-nav-item">
-            <a href="{{ route('finance.tax-deductions.index') }}" class="sidebar-nav-link {{ request()->routeIs('finance.tax-deductions.*') ? 'active' : '' }}">
+            <a href="{{ route('finance.tax-deductions.index') }}" class="sidebar-nav-link {{ request()->routeIs('finance.tax-deductions.index') ? 'active' : '' }}">
                 <i class="fa-solid fa-receipt text-danger"></i>
                 <span>VAT &amp; Withholding Tax</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('finance.tax-deductions.movements') }}" class="sidebar-nav-link {{ request()->routeIs('finance.tax-deductions.movements') || request()->routeIs('finance.tax-movements') ? 'active' : '' }}">
+                <i class="fa-solid fa-scale-balanced text-primary"></i>
+                <span>Financial Movements &amp; Audit</span>
             </a>
         </li>
         @if(auth()->check() && auth()->user()->hasAnyPermission(['manage-receipts','view-receipts']))
@@ -2354,9 +2360,15 @@
         <!-- VAT & Withholding Tax Deductions Ledger -->
         @if(auth()->check() && auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'finance', 'Finance', 'finance_manager', 'admin', 'global_admin', 'gm', 'general_manager', 'auditor', 'audit']))
         <li class="sidebar-nav-item">
-            <a href="{{ route('finance.tax-deductions.index') }}" class="sidebar-nav-link {{ request()->routeIs('finance.tax-deductions.*') ? 'active' : '' }}">
+            <a href="{{ route('finance.tax-deductions.index') }}" class="sidebar-nav-link {{ request()->routeIs('finance.tax-deductions.index') ? 'active' : '' }}">
                 <i class="fa-solid fa-receipt text-danger"></i>
                 <span>VAT &amp; Withholding Tax</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('finance.tax-deductions.movements') }}" class="sidebar-nav-link {{ request()->routeIs('finance.tax-deductions.movements') || request()->routeIs('finance.tax-movements') ? 'active' : '' }}">
+                <i class="fa-solid fa-scale-balanced text-primary"></i>
+                <span>Financial Movements &amp; Audit</span>
             </a>
         </li>
         @endif

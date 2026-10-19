@@ -2304,6 +2304,8 @@ Route::middleware(['auth'])->group(function () {
 
     // VAT & Withholding Tax Deductions Ledger & Report
     Route::get('finance/tax-deductions', [App\Http\Controllers\Finance\FinanceTaxReportController::class, 'index'])->name('finance.tax-deductions.index');
+    Route::get('finance/tax-deductions/movements', [App\Http\Controllers\Finance\FinanceTaxReportController::class, 'movementsPage'])->name('finance.tax-deductions.movements');
+    Route::get('finance/tax-movements', [App\Http\Controllers\Finance\FinanceTaxReportController::class, 'movementsPage'])->name('finance.tax-movements');
     Route::get('finance/tax-deductions/month-movements', [App\Http\Controllers\Finance\FinanceTaxReportController::class, 'monthMovements'])->name('finance.tax-deductions.month-movements');
     Route::get('finance/tax-deductions/export-excel', [App\Http\Controllers\Finance\FinanceTaxReportController::class, 'exportExcel'])->name('finance.tax-deductions.export-excel');
     Route::get('finance/tax-deductions/export-csv', [App\Http\Controllers\Finance\FinanceTaxReportController::class, 'exportCsv'])->name('finance.tax-deductions.export-csv');

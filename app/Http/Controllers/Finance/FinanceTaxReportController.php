@@ -973,6 +973,46 @@ class FinanceTaxReportController extends Controller
     }
 
     /**
+     * Dedicated Page: View Financial Movements & Tax Audit with full tables, audit sheet, and filters.
+     */
+    public function movementsPage(Request $request)
+    {
+        $this->ensureSchema();
+
+        $curEth = EthiopianDate::toEthiopian(now());
+        $selectedEthYear  = (int)($request->input('ethiopian_year') ?: ($request->input('year') ?: $curEth['year']));
+        $selectedEthMonth = (int)($request->input('ethiopian_month') ?: ($request->input('month') ?: $curEth['month']));
+        if ($selectedEthMonth < 1 || $selectedEthMonth > 13) {
+            $selectedEthMonth = $curEth['month'];
+        }
+
+        $availableEthYears  = EthiopianDate::getYears();
+        $availableEthMonths = EthiopianDate::getMonths();
+        $movementsData = $this->calculateMonthMovementsData($selectedEthYear, $selectedEthMonth);
+
+        // Previous and Next month navigation
+        $prevYear  = ($selectedEthMonth === 1) ? $selectedEthYear - 1 : $selectedEthYear;
+        $prevMonth = ($selectedEthMonth === 1) ? 13 : $selectedEthMonth - 1;
+        $nextYear  = ($selectedEthMonth === 13) ? $selectedEthYear + 1 : $selectedEthYear;
+        $nextMonth = ($selectedEthMonth === 13) ? 1 : $selectedEthMonth + 1;
+
+        $activeTab = $request->input('tab', 'income');
+
+        return view('finance.tax-deductions.movements', compact(
+            'selectedEthYear',
+            'selectedEthMonth',
+            'availableEthYears',
+            'availableEthMonths',
+            'movementsData',
+            'prevYear',
+            'prevMonth',
+            'nextYear',
+            'nextMonth',
+            'activeTab'
+        ));
+    }
+
+    /**
      * AJAX endpoint: Retrieve all itemized financial movements for a specific Ethiopian month.
      * Returns detailed transactions: Incomes (Sales), Expenses/Purchases, OCR Receipts, and Signed Net VAT reconciliation.
      */
@@ -985,6 +1025,76 @@ class FinanceTaxReportController extends Controller
             $year  = (int)($request->query('ethiopian_year') ?: $curEth['year']);
             $month = (int)($request->query('ethiopian_month') ?: $curEth['month']);
 
+            $data = $this->calculateMonthMovementsData($year, $month);
+            return response()->json($data);
+        } catch (\Throwable $e) {
+            Log::error("FinanceTaxReportController monthMovements error: " . $e->getMessage() . "\n" . $e->getTraceAsString());
+            return response()->json([
+                'success' => false,
+                'message' => 'Movements error: ' . $e->getMessage(),
+                'error'   => 'Movements error: ' . $e->getMessage(),
+                'month'   => [
+                    'year'             => (int)($request->query('ethiopian_year') ?: 2017),
+                    'month'            => (int)($request->query('ethiopian_month') ?: 1),
+                    'month_name'       => 'Month',
+                    'month_am'         => 'ወር',
+                    'title'            => 'Movements',
+                    'gregorian_window' => 'N/A',
+                    'start_date'       => now()->toDateString(),
+                    'end_date'         => now()->toDateString(),
+                    'days'             => 30,
+                ],
+                'summary' => [
+                    'sales_base'             => 0,
+                    'output_vat'             => 0,
+                    'gross_income'           => 0,
+                    'purchases_base'         => 0,
+                    'input_vat'              => 0,
+                    'opening_credit'         => 0,
+                    'total_creditable_input' => 0,
+                    'net_vat'                => 0,
+                    'signed_net_formatted'   => 'ETB 0.00',
+                    'status'                 => 'neutral',
+                    'label'                  => 'Neutral',
+                    'badge_class'            => 'bg-secondary',
+                    'text_class'             => 'text-dark',
+                    'is_payable'             => false,
+                    'is_credit'              => false,
+                    'payable_amount'         => 0,
+                    'credit_carry_forward'   => 0,
+                    'is_cleared'             => false,
+                    'is_fresh_start'         => false,
+                    'settlement_number'      => null,
+                    'withholding_tax'        => 0,
+                    'income_wht'             => 0,
+                    'income_net'             => 0,
+                    'net_disbursed'          => 0,
+                    'ocr_base'               => 0,
+                    'ocr_vat'                => 0,
+                    'ocr_total'              => 0,
+                    'income_count'           => 0,
+                    'expense_count'          => 0,
+                    'ocr_count'              => 0,
+                    'total_count'            => 0,
+                ],
+                'incomes'   => [],
+                'expenses'  => [],
+                'ocr_items' => [],
+            ], 200);
+        }
+    }
+
+    /**
+     * Reusable computation logic for Ethiopian Month Financial Movements & Tax Audit.
+     */
+    public function calculateMonthMovementsData(int $year, int $month): array
+    {
+        $this->ensureSchema();
+
+        $curEth = EthiopianDate::toEthiopian(now());
+        if ($year <= 0) {
+            $year = $curEth['year'];
+        }
         if ($month < 1 || $month > 13) {
             $month = $curEth['month'];
         }
@@ -1459,7 +1569,7 @@ class FinanceTaxReportController extends Controller
         $totalCreditableInput = $isCleared ? 0.0 : round($dispInputVat + $dispOpeningCredit, 2);
         $summaryNet['total_creditable_input'] = $totalCreditableInput;
 
-        return response()->json([
+        return [
             'success' => true,
             'month' => [
                 'year'             => $year,
@@ -1508,63 +1618,8 @@ class FinanceTaxReportController extends Controller
             'incomes'   => $formattedIncomes->values(),
             'expenses'  => $formattedExpenses->values(),
             'ocr_items' => $formattedOcrItems->values(),
-        ]);
-    } catch (\Throwable $e) {
-        Log::error("FinanceTaxReportController monthMovements error: " . $e->getMessage() . "\n" . $e->getTraceAsString());
-        return response()->json([
-            'success' => false,
-            'message' => 'Movements error: ' . $e->getMessage(),
-            'error'   => 'Movements error: ' . $e->getMessage(),
-            'month'   => [
-                'year'             => (int)($request->query('ethiopian_year') ?: 2017),
-                'month'            => (int)($request->query('ethiopian_month') ?: 1),
-                'month_name'       => 'Month',
-                'month_am'         => 'ወር',
-                'title'            => 'Movements',
-                'gregorian_window' => 'N/A',
-                'start_date'       => now()->toDateString(),
-                'end_date'         => now()->toDateString(),
-                'days'             => 30,
-            ],
-            'summary' => [
-                'sales_base'             => 0,
-                'output_vat'             => 0,
-                'gross_income'           => 0,
-                'purchases_base'         => 0,
-                'input_vat'              => 0,
-                'opening_credit'         => 0,
-                'total_creditable_input' => 0,
-                'net_vat'                => 0,
-                'signed_net_formatted'   => 'ETB 0.00',
-                'status'                 => 'neutral',
-                'label'                  => 'Neutral',
-                'badge_class'            => 'bg-secondary',
-                'text_class'             => 'text-dark',
-                'is_payable'             => false,
-                'is_credit'              => false,
-                'payable_amount'         => 0,
-                'credit_carry_forward'   => 0,
-                'is_cleared'             => false,
-                'is_fresh_start'         => false,
-                'settlement_number'      => null,
-                'withholding_tax'        => 0,
-                'income_wht'             => 0,
-                'income_net'             => 0,
-                'net_disbursed'          => 0,
-                'ocr_base'               => 0,
-                'ocr_vat'                => 0,
-                'ocr_total'              => 0,
-                'income_count'           => 0,
-                'expense_count'          => 0,
-                'ocr_count'              => 0,
-                'total_count'            => 0,
-            ],
-            'incomes'   => [],
-            'expenses'  => [],
-            'ocr_items' => [],
-        ], 200);
+        ];
     }
-}
 
     /**
      * Initiate a Tax Payment / Remittance for VAT or Withholding (Finance Head assigns Finance Staff or pays immediately).

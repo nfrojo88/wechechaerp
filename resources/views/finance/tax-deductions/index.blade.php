@@ -149,6 +149,10 @@
 
                     {{-- Utilities Group --}}
                     <div class="d-flex align-items-center gap-2">
+                        <a href="{{ route('finance.tax-deductions.movements', ['ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}" class="btn btn-outline-primary btn-sm rounded-pill px-3 py-2 shadow-xs fw-semibold d-inline-flex align-items-center gap-1.5" title="Open dedicated Financial Movements & Tax Audit page">
+                            <i class="fa-solid fa-scale-balanced"></i>
+                            <span>Movements &amp; Audit Page</span>
+                        </a>
                         <button type="button" class="btn btn-primary btn-sm rounded-pill px-3 py-2 shadow-xs fw-semibold d-inline-flex align-items-center gap-1.5" data-bs-toggle="modal" data-bs-target="#addReceiptModal">
                             <i class="fa-solid fa-cloud-arrow-up"></i>
                             <span>+ Add Receipt (OCR)</span>
@@ -527,16 +531,11 @@
                                         <i class="fa-solid fa-receipt" id="icon-drawer-{{ $mNum }}"></i>
                                         <span id="text-drawer-{{ $mNum }}">Movements</span>
                                     </button>
-                                    <button type="button" 
-                                            class="btn btn-sm btn-outline-secondary rounded-pill px-2 py-1 small"
-                                            data-year="{{ $selectedEthYear }}"
-                                            data-month="{{ $mNum }}"
-                                            data-name-en="{{ $mTrend['month_name'] }}"
-                                            data-name-am="{{ $mTrend['month_am'] }}"
-                                            onclick="openMonthMovementsModal(this.dataset.year, this.dataset.month, this.dataset.nameEn, this.dataset.nameAm)"
-                                            title="Open in Fullscreen Dialog">
+                                    <a href="{{ route('finance.tax-deductions.movements', ['ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $mNum]) }}" 
+                                       class="btn btn-sm btn-outline-primary rounded-pill px-2 py-1 small"
+                                       title="Open dedicated Financial Movements & Tax Audit page for {{ $mTrend['month_name'] }}">
                                         <i class="fa-solid fa-up-right-from-square"></i>
-                                    </button>
+                                    </a>
                                     <a href="{{ route('finance.tax-deductions.index', array_merge(request()->query(), ['ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $mNum])) }}" 
                                        class="btn btn-sm {{ $mTrend['is_current'] ? 'btn-outline-primary active' : 'btn-outline-secondary' }} rounded-pill px-2.5 py-1 small" 
                                        title="Filter whole page to this month">
@@ -3003,6 +3002,9 @@
                             </li>
                         </ul>
                     </div>
+                    <a id="mMovementsFullPageBtn" href="{{ route('finance.tax-deductions.movements') }}" class="btn btn-sm btn-primary text-white rounded-pill px-3 fw-semibold shadow-xs">
+                        <i class="fa-solid fa-arrow-up-right-from-square me-1"></i>Open Full Page
+                    </a>
                     <button type="button" class="btn btn-sm btn-light text-primary rounded-pill px-3 fw-semibold shadow-xs" onclick="printMonthMovements()">
                         <i class="fa-solid fa-print me-1"></i>Print Report
                     </button>
@@ -5178,8 +5180,11 @@
                                 <li><a class="dropdown-item py-1.5 px-3 rounded-2" href="${getExportExcelUrl('purchase_vat', m.year, m.month)}"><i class="fa-solid fa-percent text-danger me-2"></i>3. Purchase VAT Excel</a></li>
                             </ul>
                         </div>
+                        <a href="{{ route('finance.tax-deductions.movements') }}?ethiopian_year=${m.year}&ethiopian_month=${m.month}" class="btn btn-sm btn-primary text-white rounded-pill px-3 py-1 fw-semibold shadow-xs">
+                            <i class="fa-solid fa-up-right-from-square me-1"></i>Audit Page
+                        </a>
                         <button type="button" class="btn btn-sm btn-light text-dark rounded-pill px-3 py-1 fw-semibold shadow-xs" onclick="openMonthMovementsModal(${m.year}, ${m.month}, '${m.month_name}', '${m.month_am}')">
-                            <i class="fa-solid fa-up-right-from-square me-1 text-primary"></i>Fullscreen Dialog
+                            <i class="fa-solid fa-window-maximize me-1 text-primary"></i>Dialog View
                         </button>
                         <a href="{{ route('finance.tax-deductions.index') }}?ethiopian_year=${m.year}&ethiopian_month=${m.month}" class="btn btn-sm btn-outline-light rounded-pill px-3 py-1 fw-semibold">
                             <i class="fa-solid fa-filter me-1"></i>Filter Page
@@ -5449,6 +5454,11 @@
         if (filterBtn) {
             const baseUrl = "{{ route('finance.tax-deductions.index') }}";
             filterBtn.href = `${baseUrl}?ethiopian_year=${ethYear}&ethiopian_month=${ethMonth}`;
+        }
+        const fullPageBtn = document.getElementById('mMovementsFullPageBtn');
+        if (fullPageBtn) {
+            const movementsUrl = "{{ route('finance.tax-deductions.movements') }}";
+            fullPageBtn.href = `${movementsUrl}?ethiopian_year=${ethYear}&ethiopian_month=${ethMonth}`;
         }
 
         // Display spinner, hide content & error
