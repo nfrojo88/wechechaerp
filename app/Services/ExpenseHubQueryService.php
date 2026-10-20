@@ -192,8 +192,15 @@ class ExpenseHubQueryService
 
     protected function loadProcurementPayments(Collection $items, Collection $decisions, ?array $scopedProjectIds): void
     {
-        $query = ProcurementPayment::with(['purchaseRequest.supplier', 'purchaseRequest.project', 'paidByUser'])
-            ->where('status', 'paid');
+        $query = ProcurementPayment::with([
+            'purchaseRequest.supplier',
+            'purchaseRequest.project',
+            'purchaseRequest.requestedBy',
+            'purchaseRequest.approvedBy',
+            'purchaseRequest.items.product',
+            'paidByUser',
+            'createdBy',
+        ])->where('status', 'paid');
 
         if ($scopedProjectIds !== null) {
             $query->whereHas('purchaseRequest', fn($q) => $q->whereIn('project_id', $scopedProjectIds));
@@ -214,6 +221,33 @@ class ExpenseHubQueryService
 
             $defaultStatus = $vatAmt > 0 ? ExpenseHubVatDecision::STATUS_VAT_APPLIES : ExpenseHubVatDecision::STATUS_PENDING_DECISION;
 
+            $lineItems = [];
+            if ($pr && $pr->items) {
+                foreach ($pr->items as $it) {
+                    $itName = $it->product?->name ?: ($it->specifications ?: 'Procured Material');
+                    $qty = (float)($it->purchased_quantity > 0 ? $it->purchased_quantity : $it->quantity);
+                    $rate = (float)($it->estimated_unit_cost ?? 0);
+                    $lineItems[] = [
+                        'name'     => $itName,
+                        'quantity' => $qty,
+                        'unit'     => $it->unit ?: 'pcs',
+                        'rate'     => $rate,
+                        'total'    => (float)($it->estimated_total ?? ($qty * $rate)),
+                    ];
+                }
+            }
+
+            $createdByName = $pr?->requestedBy?->name ?: ($payment->createdBy?->name ?: 'Procurement Staff');
+            $createdAt = $pr?->created_at ? $pr->created_at->format('d M Y, h:i A') : ($payment->created_at ? $payment->created_at->format('d M Y, h:i A') : null);
+            $approvedByName = $pr?->approvedBy?->name ?: 'Management / Planning Approval';
+            $approvedAt = $pr?->approved_at ? Carbon::parse($pr->approved_at)->format('d M Y, h:i A') : null;
+            $paidByName = $payment->paidByUser?->name ?: 'Finance Staff';
+            $paidAt = $payment->paid_at ? $payment->paid_at->format('d M Y, h:i A') : ($payment->created_at ? $payment->created_at->format('d M Y, h:i A') : null);
+
+            $purpose = !empty($lineItems)
+                ? ("Procurement of " . implode(', ', array_slice(array_column($lineItems, 'name'), 0, 3)) . (count($lineItems) > 3 ? ' +' . (count($lineItems) - 3) . ' more items' : '') . " from {$supplierName}")
+                : ("Procurement Material Purchase: PR #{$pr?->pr_no} (" . ($supplierName) . ")");
+
             $items->push($this->buildHubItem([
                 'source_type'          => 'procurement_payment',
                 'source_module_label'  => 'Procurement Payment',
@@ -224,16 +258,23 @@ class ExpenseHubQueryService
                 'project_name'         => $pr?->project?->name ?: 'General / Head Office',
                 'payee_supplier'       => $supplierName,
                 'tin'                  => $tin,
-                'description'          => "Procurement Material Purchase: PR #{$pr?->pr_no} (" . ($supplierName) . ")",
+                'description'          => $purpose,
+                'purpose_detail'       => $purpose,
                 'amount'               => $gross,
                 'source_vat_amount'    => $vatAmt,
                 'payment_method'       => $payment->method ?: 'cash',
-                'paid_by_name'         => $payment->paidByUser?->name ?: 'Finance Staff',
+                'created_by_name'      => $createdByName,
+                'created_at_formatted' => $createdAt,
+                'approved_by_name'     => $approvedByName,
+                'approved_at_formatted'=> $approvedAt,
+                'paid_by_name'         => $paidByName,
+                'paid_at_formatted'    => $paidAt,
                 'disbursement_date'    => $payment->paid_at ? $payment->paid_at->toDateString() : ($payment->created_at ? $payment->created_at->toDateString() : null),
                 'receipt_url'          => $attachment,
                 'category'             => 'material',
                 'category_label'       => 'Material',
                 'is_capex'             => false,
+                'line_items'           => $lineItems,
                 'decision'             => $decision,
                 'default_status'       => $defaultStatus,
             ]));
@@ -242,7 +283,14 @@ class ExpenseHubQueryService
 
     protected function loadCreditStorePayments(Collection $items, Collection $decisions, ?array $scopedProjectIds): void
     {
-        $query = CreditStorePayment::with(['ledger.project', 'ledger.purchaseRequest.supplier', 'recordedByUser']);
+        $query = CreditStorePayment::with([
+            'ledger.project',
+            'ledger.purchaseRequest.supplier',
+            'ledger.purchaseRequest.items.product',
+            'ledger.createdByUser',
+            'ledger.authorizedByUser',
+            'recordedByUser',
+        ]);
 
         if ($scopedProjectIds !== null) {
             $query->whereHas('ledger', fn($q) => $q->whereIn('project_id', $scopedProjectIds));
@@ -260,6 +308,31 @@ class ExpenseHubQueryService
 
             $defaultStatus = $vatAmt > 0 ? ExpenseHubVatDecision::STATUS_VAT_APPLIES : ExpenseHubVatDecision::STATUS_PENDING_DECISION;
 
+            $lineItems = [];
+            if ($ledger && $ledger->purchaseRequest && $ledger->purchaseRequest->items) {
+                foreach ($ledger->purchaseRequest->items as $it) {
+                    $itName = $it->product?->name ?: ($it->specifications ?: 'Credit Material');
+                    $qty = (float)($it->purchased_quantity > 0 ? $it->purchased_quantity : $it->quantity);
+                    $rate = (float)($it->estimated_unit_cost ?? 0);
+                    $lineItems[] = [
+                        'name'     => $itName,
+                        'quantity' => $qty,
+                        'unit'     => $it->unit ?: 'pcs',
+                        'rate'     => $rate,
+                        'total'    => (float)($it->estimated_total ?? ($qty * $rate)),
+                    ];
+                }
+            }
+
+            $createdByName = $ledger?->createdByUser?->name ?: 'Store / Procurement Staff';
+            $createdAt = $payment->created_at ? $payment->created_at->format('d M Y, h:i A') : null;
+            $approvedByName = $ledger?->authorizedByUser?->name ?: 'Authorized by Finance Head';
+            $approvedAt = $ledger?->authorized_at ? Carbon::parse($ledger->authorized_at)->format('d M Y, h:i A') : null;
+            $paidByName = $payment->recordedByUser?->name ?: 'Finance Staff';
+            $paidAt = $payment->payment_date ? Carbon::parse($payment->payment_date)->format('d M Y') : ($payment->created_at ? $payment->created_at->format('d M Y, h:i A') : null);
+
+            $purpose = "Credit store invoice settlement for {$supplierName}" . ($ledger?->pr_no ? " (PR #{$ledger->pr_no})" : "") . ($ledger?->notes ? ": " . $ledger->notes : "");
+
             $items->push($this->buildHubItem([
                 'source_type'          => 'credit_store_payment',
                 'source_module_label'  => 'Credit Store Settlement',
@@ -270,16 +343,23 @@ class ExpenseHubQueryService
                 'project_name'         => $ledger?->project?->name ?: 'General / Head Office',
                 'payee_supplier'       => $supplierName,
                 'tin'                  => $tin,
-                'description'          => "Credit Store Settlement: " . ($ledger?->pr_no ? "PR #{$ledger->pr_no}" : "") . " ({$supplierName})",
+                'description'          => $purpose,
+                'purpose_detail'       => $purpose,
                 'amount'               => $gross,
                 'source_vat_amount'    => $vatAmt,
                 'payment_method'       => $payment->payment_method ?: 'bank_transfer',
-                'paid_by_name'         => $payment->recordedByUser?->name ?: 'Finance Staff',
+                'created_by_name'      => $createdByName,
+                'created_at_formatted' => $createdAt,
+                'approved_by_name'     => $approvedByName,
+                'approved_at_formatted'=> $approvedAt,
+                'paid_by_name'         => $paidByName,
+                'paid_at_formatted'    => $paidAt,
                 'disbursement_date'    => $payment->payment_date ? $payment->payment_date->toDateString() : ($payment->created_at ? $payment->created_at->toDateString() : null),
                 'receipt_url'          => $payment->receipt_path,
                 'category'             => 'material',
                 'category_label'       => 'Credit Settlement',
                 'is_capex'             => false,
+                'line_items'           => $lineItems,
                 'decision'             => $decision,
                 'default_status'       => $defaultStatus,
             ]));
@@ -288,7 +368,14 @@ class ExpenseHubQueryService
 
     protected function loadExpenseRequests(Collection $items, Collection $decisions, ?array $scopedProjectIds): void
     {
-        $query = ExpenseRequest::with(['project', 'employee', 'user', 'paidBy'])
+        $query = ExpenseRequest::with([
+            'project',
+            'employee',
+            'user',
+            'paidBy',
+            'hrReviewer',
+            'gmReviewer',
+        ])
             ->where('status', ExpenseRequest::STATUS_PAID)
             ->whereNull('purchase_request_id')
             ->whereNull('credit_store_ledger_id')
@@ -313,6 +400,25 @@ class ExpenseHubQueryService
 
             $defaultStatus = $vatAmt > 0 ? ExpenseHubVatDecision::STATUS_VAT_APPLIES : ExpenseHubVatDecision::STATUS_PENDING_DECISION;
 
+            $createdByName = $req->employee?->full_name ?: ($req->user?->name ?: 'Employee Applicant');
+            $createdAt = $req->created_at ? $req->created_at->format('d M Y, h:i A') : null;
+            $approvedByName = $req->gmReviewer?->name ?: ($req->hrReviewer?->name ?: 'Approved by HR / GM');
+            $approvedAt = $req->gm_approved_at ? Carbon::parse($req->gm_approved_at)->format('d M Y, h:i A') : ($req->hr_reviewed_at ? Carbon::parse($req->hr_reviewed_at)->format('d M Y, h:i A') : null);
+            $paidByName = $req->paidBy?->name ?: 'Cashier';
+            $paidAt = $req->paid_at ? Carbon::parse($req->paid_at)->format('d M Y, h:i A') : null;
+
+            $purpose = "Expense Request (" . ($req->category ?: 'General') . "): " . ($req->description ?: ($req->other_reason ?: 'Operational Expense'));
+
+            $lineItems = [
+                [
+                    'name'     => $req->category ?: 'General Expense',
+                    'quantity' => 1.0,
+                    'unit'     => 'item',
+                    'rate'     => $gross,
+                    'total'    => $gross,
+                ]
+            ];
+
             $items->push($this->buildHubItem([
                 'source_type'          => 'expense_request',
                 'source_module_label'  => 'Expense Request / Voucher',
@@ -323,16 +429,23 @@ class ExpenseHubQueryService
                 'project_name'         => $req->project?->name ?: 'General / Head Office',
                 'payee_supplier'       => $payee,
                 'tin'                  => null,
-                'description'          => $req->description ?: "Expense Request ({$req->category})",
+                'description'          => $purpose,
+                'purpose_detail'       => $purpose,
                 'amount'               => $gross,
                 'source_vat_amount'    => $vatAmt,
                 'payment_method'       => $req->is_bank_payment ? 'bank_transfer' : 'cash',
-                'paid_by_name'         => $req->paidBy?->name ?: 'Cashier',
+                'created_by_name'      => $createdByName,
+                'created_at_formatted' => $createdAt,
+                'approved_by_name'     => $approvedByName,
+                'approved_at_formatted'=> $approvedAt,
+                'paid_by_name'         => $paidByName,
+                'paid_at_formatted'    => $paidAt,
                 'disbursement_date'    => $req->paid_at ? $req->paid_at->toDateString() : ($req->created_at ? $req->created_at->toDateString() : null),
                 'receipt_url'          => $req->attachment ?: $req->withholding_receipt,
                 'category'             => strtolower($req->category ?: 'overhead'),
                 'category_label'       => $req->category ?: 'General Expense',
                 'is_capex'             => false,
+                'line_items'           => $lineItems,
                 'decision'             => $decision,
                 'default_status'       => $defaultStatus,
             ]));
@@ -341,7 +454,11 @@ class ExpenseHubQueryService
 
     protected function loadPettyCashPurchases(Collection $items, Collection $decisions, ?array $scopedProjectIds): void
     {
-        $query = PettyCashMaterialPurchase::with(['store.project', 'purchaser'])
+        $query = PettyCashMaterialPurchase::with([
+            'store.project',
+            'purchaser',
+            'items.product',
+        ])
             ->whereNotIn('status', ['rejected', 'cancelled']);
 
         if ($scopedProjectIds !== null) {
@@ -351,6 +468,33 @@ class ExpenseHubQueryService
         foreach ($query->get() as $p) {
             $key = 'petty_cash_purchase:' . $p->id;
             $decision = $decisions->get($key);
+
+            $lineItems = [];
+            if ($p->items) {
+                foreach ($p->items as $it) {
+                    $itName = $it->product?->name ?: ($it->remarks ?: 'Site Material');
+                    $qty = (float)$it->quantity;
+                    $rate = (float)$it->unit_price;
+                    $lineItems[] = [
+                        'name'     => $itName,
+                        'quantity' => $qty,
+                        'unit'     => $it->unit ?: 'pcs',
+                        'rate'     => $rate,
+                        'total'    => (float)($it->total_price ?? ($qty * $rate)),
+                    ];
+                }
+            }
+
+            $createdByName = $p->purchaser?->name ?: 'Store Keeper';
+            $createdAt = $p->created_at ? $p->created_at->format('d M Y, h:i A') : null;
+            $approvedByName = 'Site Store / Approved Spot Intake';
+            $approvedAt = $p->purchase_date ? Carbon::parse($p->purchase_date)->format('d M Y') : null;
+            $paidByName = $p->purchaser?->name ?: 'Store Keeper (Petty Cash)';
+            $paidAt = $p->purchase_date ? Carbon::parse($p->purchase_date)->format('d M Y') : null;
+
+            $purpose = !empty($lineItems)
+                ? ("Petty Cash Material Intake: " . implode(', ', array_slice(array_column($lineItems, 'name'), 0, 3)) . (count($lineItems) > 3 ? ' +' . (count($lineItems) - 3) . ' more' : '') . " from {$p->supplier_name}")
+                : ("Petty Cash Material: #{$p->purchase_no} ({$p->supplier_name})");
 
             $items->push($this->buildHubItem([
                 'source_type'          => 'petty_cash_purchase',
@@ -362,16 +506,23 @@ class ExpenseHubQueryService
                 'project_name'         => $p->store?->project?->name ?: ($p->store?->name ?: 'General Site'),
                 'payee_supplier'       => $p->supplier_name ?: 'Petty Cash Vendor',
                 'tin'                  => $p->supplier_tin,
-                'description'          => "Petty Cash Material: #{$p->purchase_no} ({$p->supplier_name})",
+                'description'          => $purpose,
+                'purpose_detail'       => $purpose,
                 'amount'               => (float) $p->total_amount,
                 'source_vat_amount'    => 0,
                 'payment_method'       => 'petty_cash',
-                'paid_by_name'         => $p->purchaser?->name ?: 'Store Keeper',
+                'created_by_name'      => $createdByName,
+                'created_at_formatted' => $createdAt,
+                'approved_by_name'     => $approvedByName,
+                'approved_at_formatted'=> $approvedAt,
+                'paid_by_name'         => $paidByName,
+                'paid_at_formatted'    => $paidAt,
                 'disbursement_date'    => $p->purchase_date ? $p->purchase_date->toDateString() : ($p->created_at ? $p->created_at->toDateString() : null),
                 'receipt_url'          => $p->attachment_path,
                 'category'             => 'material',
                 'category_label'       => 'Site Material',
                 'is_capex'             => false,
+                'line_items'           => $lineItems,
                 'decision'             => $decision,
                 'default_status'       => ExpenseHubVatDecision::STATUS_PENDING_DECISION,
             ]));
@@ -380,7 +531,12 @@ class ExpenseHubQueryService
 
     protected function loadPayrolls(Collection $items, Collection $decisions, ?array $scopedProjectIds): void
     {
-        $query = Payroll::with(['employee.project'])
+        $query = Payroll::with([
+            'employee.project',
+            'creator',
+            'gmApprover',
+            'processedBy',
+        ])
             ->where(function ($q) {
                 $q->where('status', 'paid');
                 if (Schema::hasColumn('payrolls', 'gm_status')) {
@@ -400,6 +556,20 @@ class ExpenseHubQueryService
             $key = 'payroll:' . $pay->id;
             $decision = $decisions->get($key);
 
+            $createdByName = $pay->creator?->name ?: 'HR Payroll Officer';
+            $createdAt = $pay->created_at ? $pay->created_at->format('d M Y, h:i A') : null;
+            $approvedByName = $pay->gmApprover?->name ?: ($pay->processedBy?->name ?: 'General Manager Approval');
+            $approvedAt = $pay->gm_approved_at ? Carbon::parse($pay->gm_approved_at)->format('d M Y, h:i A') : null;
+            $paidByName = 'Finance Disbursement';
+            $paidAt = $pay->paid_at ? Carbon::parse($pay->paid_at)->format('d M Y, h:i A') : null;
+
+            $purpose = "Monthly Payroll Disbursement for {$name} (" . ($pay->month . '/' . $pay->year) . ") - Gross Salary: " . number_format($pay->gross_salary, 2) . " ETB";
+
+            $lineItems = [
+                ['name' => 'Monthly Gross Salary', 'quantity' => 1.0, 'unit' => 'month', 'rate' => (float)$pay->gross_salary, 'total' => (float)$pay->gross_salary],
+                ['name' => 'Company Pension Contribution (11%)', 'quantity' => 1.0, 'unit' => 'month', 'rate' => (float)($pay->company_pension ?? 0), 'total' => (float)($pay->company_pension ?? 0)],
+            ];
+
             $items->push($this->buildHubItem([
                 'source_type'          => 'payroll',
                 'source_module_label'  => 'Payroll Disbursement',
@@ -410,16 +580,23 @@ class ExpenseHubQueryService
                 'project_name'         => $employee?->project?->name ?: 'General Staff',
                 'payee_supplier'       => $name,
                 'tin'                  => $employee?->tin_number,
-                'description'          => "Payroll: {$name} (" . ($pay->month . '/' . $pay->year) . ")",
+                'description'          => $purpose,
+                'purpose_detail'       => $purpose,
                 'amount'               => $grossCost,
                 'source_vat_amount'    => 0,
                 'payment_method'       => $pay->payment_method ?: 'bank_transfer',
-                'paid_by_name'         => 'Finance / GM',
+                'created_by_name'      => $createdByName,
+                'created_at_formatted' => $createdAt,
+                'approved_by_name'     => $approvedByName,
+                'approved_at_formatted'=> $approvedAt,
+                'paid_by_name'         => $paidByName,
+                'paid_at_formatted'    => $paidAt,
                 'disbursement_date'    => $pay->paid_at ? $pay->paid_at->toDateString() : ($pay->gm_approved_at ? $pay->gm_approved_at->toDateString() : ($pay->created_at ? $pay->created_at->toDateString() : null)),
                 'receipt_url'          => null,
                 'category'             => 'labour',
                 'category_label'       => 'Salary / Wages',
                 'is_capex'             => false,
+                'line_items'           => $lineItems,
                 'decision'             => $decision,
                 'default_status'       => ExpenseHubVatDecision::STATUS_NO_VAT,
                 'default_reason_code'  => 'salary_payroll',
@@ -434,7 +611,10 @@ class ExpenseHubQueryService
             return;
         }
 
-        $query = EmployeeAdvance::with(['employee.project'])
+        $query = EmployeeAdvance::with([
+            'employee.project',
+            'approvedByUser',
+        ])
             ->whereIn('status', ['disbursed', 'recovered']);
 
         if ($scopedProjectIds !== null) {
@@ -448,6 +628,18 @@ class ExpenseHubQueryService
             $key = 'employee_advance:' . $adv->id;
             $decision = $decisions->get($key);
 
+            $createdByName = $name . ' (Employee Applicant)';
+            $createdAt = $adv->created_at ? $adv->created_at->format('d M Y, h:i A') : null;
+            $approvedByName = $adv->approvedByUser?->name ?: 'HR / GM Approval';
+            $approvedAt = $adv->approved_at ? Carbon::parse($adv->approved_at)->format('d M Y, h:i A') : null;
+            $paidByName = 'Finance Staff';
+            $paidAt = $adv->disbursed_at ? Carbon::parse($adv->disbursed_at)->format('d M Y, h:i A') : null;
+
+            $purpose = "Salary Advance Disbursed to {$name} (Reason: {$adv->reason})";
+            $lineItems = [
+                ['name' => 'Salary Advance (' . ($adv->reason ?: 'Personal Advance') . ')', 'quantity' => 1.0, 'unit' => 'advance', 'rate' => (float)$adv->amount, 'total' => (float)$adv->amount],
+            ];
+
             $items->push($this->buildHubItem([
                 'source_type'          => 'employee_advance',
                 'source_module_label'  => 'Salary Advance',
@@ -458,16 +650,23 @@ class ExpenseHubQueryService
                 'project_name'         => $employee?->project?->name ?: 'General Staff',
                 'payee_supplier'       => $name,
                 'tin'                  => $employee?->tin_number,
-                'description'          => "Salary Advance: {$name} ({$adv->reason})",
+                'description'          => $purpose,
+                'purpose_detail'       => $purpose,
                 'amount'               => (float) $adv->amount,
                 'source_vat_amount'    => 0,
                 'payment_method'       => 'bank_transfer',
-                'paid_by_name'         => 'Finance Staff',
+                'created_by_name'      => $createdByName,
+                'created_at_formatted' => $createdAt,
+                'approved_by_name'     => $approvedByName,
+                'approved_at_formatted'=> $approvedAt,
+                'paid_by_name'         => $paidByName,
+                'paid_at_formatted'    => $paidAt,
                 'disbursement_date'    => $adv->disbursed_at ? $adv->disbursed_at->toDateString() : ($adv->advance_date ? $adv->advance_date->toDateString() : null),
                 'receipt_url'          => null,
                 'category'             => 'labour',
                 'category_label'       => 'Salary Advance',
                 'is_capex'             => false,
+                'line_items'           => $lineItems,
                 'decision'             => $decision,
                 'default_status'       => ExpenseHubVatDecision::STATUS_NO_VAT,
                 'default_reason_code'  => 'salary_payroll',
@@ -482,7 +681,14 @@ class ExpenseHubQueryService
             return;
         }
 
-        $query = IpcRecord::with(['agreement.subcontractor', 'agreement.supplier', 'project'])
+        $query = IpcRecord::with([
+            'agreement.subcontractor',
+            'agreement.supplier',
+            'project',
+            'createdBy',
+            'approvedBy',
+            'items',
+        ])
             ->where(function ($q) {
                 $q->whereIn('status', ['paid', 'approved']);
                 if (Schema::hasColumn('ipc_records', 'paid_amount')) {
@@ -517,6 +723,30 @@ class ExpenseHubQueryService
             $key = 'ipc_record:' . $ipc->id;
             $decision = $decisions->get($key);
 
+            $createdByName = $ipc->createdBy?->name ?: 'Site Engineer';
+            $createdAt = $ipc->created_at ? $ipc->created_at->format('d M Y, h:i A') : null;
+            $approvedByName = $ipc->approvedBy?->name ?: 'Project Manager / GM Approval';
+            $approvedAt = $ipc->approved_at ? Carbon::parse($ipc->approved_at)->format('d M Y, h:i A') : null;
+            $paidByName = 'Finance Disbursement';
+            $paidAt = $ipc->approved_at ? Carbon::parse($ipc->approved_at)->format('d M Y, h:i A') : null;
+
+            $lineItems = [];
+            if ($ipc->items) {
+                foreach ($ipc->items as $it) {
+                    $qty = (float)$it->quantity;
+                    $rate = (float)$it->unit_rate;
+                    $lineItems[] = [
+                        'name'     => $it->description,
+                        'quantity' => $qty,
+                        'unit'     => $it->unit ?: 'item',
+                        'rate'     => $rate,
+                        'total'    => (float)($it->total_amount ?? ($qty * $rate)),
+                    ];
+                }
+            }
+
+            $purpose = "Subcontractor Certified Payment: {$ipc->ipc_no} ({$subcon})" . ($ipc->period_from && $ipc->period_to ? " [Period: " . $ipc->period_from->format('d M Y') . " - " . $ipc->period_to->format('d M Y') . "]" : "");
+
             $items->push($this->buildHubItem([
                 'source_type'          => 'ipc_record',
                 'source_module_label'  => 'Subcontractor IPC',
@@ -527,11 +757,17 @@ class ExpenseHubQueryService
                 'project_name'         => $ipc->project?->name ?: 'Project Site',
                 'payee_supplier'       => $subcon,
                 'tin'                  => $tin,
-                'description'          => "Subcontractor Payment: {$ipc->ipc_no} ({$subcon})",
+                'description'          => $purpose,
+                'purpose_detail'       => $purpose,
                 'amount'               => $paidAmt,
                 'source_vat_amount'    => 0,
                 'payment_method'       => 'bank_transfer',
-                'paid_by_name'         => 'Finance',
+                'created_by_name'      => $createdByName,
+                'created_at_formatted' => $createdAt,
+                'approved_by_name'     => $approvedByName,
+                'approved_at_formatted'=> $approvedAt,
+                'paid_by_name'         => $paidByName,
+                'paid_at_formatted'    => $paidAt,
                 'disbursement_date'    => $ipc->approved_at 
                     ? $ipc->approved_at->toDateString() 
                     : ($ipc->period_to 
@@ -541,6 +777,7 @@ class ExpenseHubQueryService
                 'category'             => 'subcontractor',
                 'category_label'       => 'Subcontractor',
                 'is_capex'             => false,
+                'line_items'           => $lineItems,
                 'decision'             => $decision,
                 'default_status'       => ExpenseHubVatDecision::STATUS_PENDING_DECISION,
             ]));
@@ -553,11 +790,26 @@ class ExpenseHubQueryService
             return;
         }
 
-        $query = TaxSettlement::where('status', 'paid');
+        $query = TaxSettlement::with([
+            'financeHead',
+            'payer',
+        ])->where('status', 'paid');
 
         foreach ($query->get() as $settle) {
             $key = 'tax_settlement:' . $settle->id;
             $decision = $decisions->get($key);
+
+            $createdByName = $settle->financeHead?->name ?: 'Finance Head';
+            $createdAt = $settle->created_at ? $settle->created_at->format('d M Y, h:i A') : null;
+            $approvedByName = $settle->financeHead?->name ?: 'Finance Head Authorization';
+            $approvedAt = $settle->created_at ? $settle->created_at->format('d M Y, h:i A') : null;
+            $paidByName = $settle->payer?->name ?: 'Finance Head';
+            $paidAt = $settle->paid_at ? Carbon::parse($settle->paid_at)->format('d M Y, h:i A') : null;
+
+            $purpose = "Tax Remittance to Ministry of Revenue (MOR/ERCA): {$settle->settlement_number} (" . strtoupper($settle->tax_type) . ")";
+            $lineItems = [
+                ['name' => 'Tax Remittance to MOR (' . strtoupper($settle->tax_type) . ')', 'quantity' => 1.0, 'unit' => 'settlement', 'rate' => (float)$settle->total_tax_paid, 'total' => (float)$settle->total_tax_paid],
+            ];
 
             $items->push($this->buildHubItem([
                 'source_type'          => 'tax_settlement',
@@ -569,16 +821,23 @@ class ExpenseHubQueryService
                 'project_name'         => 'Head Office / Tax Authority',
                 'payee_supplier'       => 'Ministry of Revenue (MOR) / ERCA',
                 'tin'                  => 'MOR-GOV',
-                'description'          => "Tax Remittance to MOR: {$settle->settlement_number} ({$settle->tax_type})",
+                'description'          => $purpose,
+                'purpose_detail'       => $purpose,
                 'amount'               => (float) $settle->total_tax_paid,
                 'source_vat_amount'    => 0,
                 'payment_method'       => $settle->payment_method ?: 'bank_transfer',
-                'paid_by_name'         => 'Finance Head',
+                'created_by_name'      => $createdByName,
+                'created_at_formatted' => $createdAt,
+                'approved_by_name'     => $approvedByName,
+                'approved_at_formatted'=> $approvedAt,
+                'paid_by_name'         => $paidByName,
+                'paid_at_formatted'    => $paidAt,
                 'disbursement_date'    => $settle->paid_at ? $settle->paid_at->toDateString() : ($settle->created_at ? $settle->created_at->toDateString() : null),
                 'receipt_url'          => $settle->attachment,
                 'category'             => 'overhead',
                 'category_label'       => 'Tax Settlement',
                 'is_capex'             => false,
+                'line_items'           => $lineItems,
                 'decision'             => $decision,
                 'default_status'       => ExpenseHubVatDecision::STATUS_NO_VAT,
                 'default_reason_code'  => 'tax_settlement',
@@ -589,7 +848,10 @@ class ExpenseHubQueryService
 
     protected function loadFixedAssets(Collection $items, Collection $decisions, ?array $scopedProjectIds): void
     {
-        $query = FixedAsset::with(['store.project']);
+        $query = FixedAsset::with([
+            'store.project',
+            'creator',
+        ]);
 
         if ($scopedProjectIds !== null) {
             $query->whereHas('store', fn($q) => $q->whereIn('project_id', $scopedProjectIds));
@@ -604,6 +866,25 @@ class ExpenseHubQueryService
             $key = 'fixed_asset:' . $asset->id;
             $decision = $decisions->get($key);
 
+            $createdByName = $asset->creator?->name ?: 'Store / Procurement Staff';
+            $createdAt = $asset->created_at ? $asset->created_at->format('d M Y, h:i A') : null;
+            $approvedByName = 'Store Manager / Fixed Asset Verification';
+            $approvedAt = $asset->purchase_date ? Carbon::parse($asset->purchase_date)->format('d M Y') : null;
+            $paidByName = 'Finance / Procurement';
+            $paidAt = $asset->purchase_date ? Carbon::parse($asset->purchase_date)->format('d M Y') : null;
+
+            $purpose = "CapEx Fixed Asset Acquisition: {$asset->name} ({$asset->total_quantity} units @ " . number_format($asset->unit_cost, 2) . " ETB) - Supplier: " . ($asset->supplier ?: 'Asset Vendor');
+
+            $lineItems = [
+                [
+                    'name'     => $asset->name . ' (' . ($asset->category ?: 'Asset') . ')',
+                    'quantity' => (float)($asset->total_quantity ?? 1),
+                    'unit'     => 'unit',
+                    'rate'     => (float)$asset->unit_cost,
+                    'total'    => (float)$cost,
+                ]
+            ];
+
             $items->push($this->buildHubItem([
                 'source_type'          => 'fixed_asset',
                 'source_module_label'  => 'Fixed Asset Acquisition',
@@ -614,16 +895,23 @@ class ExpenseHubQueryService
                 'project_name'         => $asset->store?->project?->name ?: 'General Company',
                 'payee_supplier'       => $asset->supplier ?: 'Asset Vendor',
                 'tin'                  => null,
-                'description'          => "Fixed Asset (CapEx): {$asset->name}",
+                'description'          => $purpose,
+                'purpose_detail'       => $purpose,
                 'amount'               => $cost,
                 'source_vat_amount'    => 0,
                 'payment_method'       => 'bank_transfer',
-                'paid_by_name'         => 'Finance / Procurement',
+                'created_by_name'      => $createdByName,
+                'created_at_formatted' => $createdAt,
+                'approved_by_name'     => $approvedByName,
+                'approved_at_formatted'=> $approvedAt,
+                'paid_by_name'         => $paidByName,
+                'paid_at_formatted'    => $paidAt,
                 'disbursement_date'    => $asset->purchase_date ? $asset->purchase_date->toDateString() : ($asset->created_at ? $asset->created_at->toDateString() : null),
                 'receipt_url'          => null,
                 'category'             => 'capex',
                 'category_label'       => 'CapEx (Fixed Asset)',
                 'is_capex'             => true,
+                'line_items'           => $lineItems,
                 'decision'             => $decision,
                 'default_status'       => ExpenseHubVatDecision::STATUS_VAT_APPLIES,
                 'default_purchase_type'=> 1, // 1 = Local Capital Asset Line 65

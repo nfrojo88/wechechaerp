@@ -244,16 +244,16 @@
                     <tr>
                         <th width="35" class="text-center">#</th>
                         <th style="min-width: 85px;">Date</th>
-                        <th style="min-width: 140px;">Source & Ref #</th>
-                        <th style="min-width: 130px;">Project / Site</th>
-                        <th style="min-width: 160px;">Payee / Supplier</th>
-                        <th style="min-width: 100px;">Vendor TIN</th>
+                        <th style="min-width: 250px;">Expense Details &amp; Audit Trail</th>
+                        <th style="min-width: 120px;">Project / Site</th>
+                        <th style="min-width: 150px;">Payee / Supplier</th>
+                        <th style="min-width: 95px;">Vendor TIN</th>
                         <th class="text-end" style="min-width: 105px;">Amount (ETB)</th>
                         <th class="text-center" style="min-width: 130px;">VAT Decision</th>
                         <th class="text-end" style="min-width: 95px;">Base (ETB)</th>
                         <th class="text-end" style="min-width: 95px;">VAT (15%)</th>
                         <th class="text-center" style="min-width: 60px;">Receipt</th>
-                        <th class="text-end" style="min-width: 110px;">Actions</th>
+                        <th class="text-end" style="min-width: 140px;">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -283,20 +283,40 @@
                             {{ $item->disbursement_date ? \Carbon\Carbon::parse($item->disbursement_date)->format('d M Y') : '—' }}
                         </td>
 
-                        <!-- Source Module & Ref -->
+                        <!-- Source Module, Purpose & Audit Trail -->
                         <td>
-                            <div class="fw-semibold text-dark text-xs text-truncate" style="max-width: 170px;">
-                                @if($item->view_url)
-                                    <a href="{{ $item->view_url }}" target="_blank" class="text-decoration-none text-dark" title="Open source record">
-                                        {{ $item->reference_no }} <i class="fa-solid fa-arrow-up-right-from-square text-muted text-xxs ms-1"></i>
-                                    </a>
-                                @else
-                                    {{ $item->reference_no }}
-                                @endif
+                            <div class="d-flex align-items-center gap-1.5 flex-wrap">
+                                <div class="fw-semibold text-dark text-xs text-truncate" style="max-width: 170px;">
+                                    @if($item->view_url)
+                                        <a href="{{ $item->view_url }}" target="_blank" class="text-decoration-none text-dark" title="Open source record">
+                                            {{ $item->reference_no }} <i class="fa-solid fa-arrow-up-right-from-square text-muted text-xxs ms-1"></i>
+                                        </a>
+                                    @else
+                                        {{ $item->reference_no }}
+                                    @endif
+                                </div>
+                                <span class="badge bg-light text-muted border text-xxs py-0.5 px-1.5">
+                                    {{ $item->source_module_label }}
+                                </span>
                             </div>
-                            <span class="badge bg-light text-muted border text-xxs py-0.5 px-1.5">
-                                {{ $item->source_module_label }}
-                            </span>
+
+                            <!-- What the expense was for -->
+                            <div class="text-xs text-secondary mt-1 text-truncate" style="max-width: 280px;" title="{{ $item->purpose_detail ?? $item->description }}">
+                                <i class="fa-solid fa-tag text-muted me-1"></i><strong>For:</strong> {{ Str::limit($item->purpose_detail ?? $item->description, 50) }}
+                            </div>
+
+                            <!-- Complete 3-step Audit Badges -->
+                            <div class="d-flex flex-wrap gap-1 mt-1 text-xxs">
+                                <span class="badge bg-white text-dark border py-0.5 px-1.5" title="Initiated / Created By: {{ $item->created_by_name ?? '—' }} ({{ $item->created_at_formatted ?? '' }})">
+                                    <i class="fa-solid fa-user-pen text-primary me-0.5"></i>{{ Str::limit($item->created_by_name ?? '—', 15) }}
+                                </span>
+                                <span class="badge bg-white text-dark border py-0.5 px-1.5" title="Approved By: {{ $item->approved_by_name ?? '—' }} ({{ $item->approved_at_formatted ?? '' }})">
+                                    <i class="fa-solid fa-circle-check text-success me-0.5"></i>{{ Str::limit($item->approved_by_name ?? '—', 15) }}
+                                </span>
+                                <span class="badge bg-white text-dark border py-0.5 px-1.5" title="Paid By: {{ $item->paid_by_name ?? '—' }} on {{ $item->disbursement_date ? \Carbon\Carbon::parse($item->disbursement_date)->format('d M Y') : '—' }}">
+                                    <i class="fa-solid fa-money-bill-wave text-secondary me-0.5"></i>{{ Str::limit($item->paid_by_name ?? '—', 15) }}
+                                </span>
+                            </div>
                         </td>
 
                         <!-- Project -->
@@ -374,9 +394,13 @@
 
                         <!-- Action -->
                         <td class="text-end text-nowrap">
+                            <button type="button" class="btn btn-xs btn-outline-info rounded-pill px-2 py-1 text-xs fw-semibold me-1"
+                                    onclick="openExpenseDetailModal({{ json_encode($item) }})" title="View Full Expense Purpose, Line Items &amp; Operational Audit Trail">
+                                <i class="fa-solid fa-circle-info"></i> Details
+                            </button>
                             @if($canDecideVat)
                             <button type="button" class="btn btn-xs btn-outline-primary rounded-pill px-2 py-1 text-xs fw-semibold me-1"
-                                    onclick="openDecisionModalWithOcr({{ json_encode($item) }})" title="Scan Receipt with AI OCR & Record VAT Decision">
+                                    onclick="openDecisionModalWithOcr({{ json_encode($item) }})" title="Scan Receipt with AI OCR &amp; Record VAT Decision">
                                 <i class="fa-solid fa-wand-magic-sparkles"></i> OCR
                             </button>
                             <button type="button" class="btn btn-xs btn-light border rounded-pill px-2 py-1 text-xs text-dark"
@@ -572,6 +596,190 @@
 
 </div>
 
+<!-- ── MODAL: COMPREHENSIVE EXPENDITURE & AUDIT BREAKDOWN ──────────────────── -->
+<div class="modal fade" id="expenseDetailModal" tabindex="-1" aria-labelledby="expenseDetailModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-light py-2.5 d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-primary px-2.5 py-1 text-xs" id="dModalModuleBadge">Module</span>
+                    <h6 class="modal-title fw-bold text-dark mb-0" id="expenseDetailModalLabel">
+                        Expenditure Audit &amp; Details: <span id="dRefNo" class="text-primary font-monospace"></span>
+                    </h6>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <!-- Top Summary Alert / Card -->
+                <div class="p-3 bg-light rounded-3 border mb-3">
+                    <div class="row g-3 align-items-center">
+                        <div class="col-md-6">
+                            <span class="text-muted text-xxs text-uppercase fw-bold d-block">Payee / Beneficiary / Vendor</span>
+                            <div class="fw-bold text-dark fs-6" id="dPayee">—</div>
+                            <div class="text-muted text-xs mt-1">
+                                TIN: <span class="font-monospace fw-semibold text-dark" id="dTin">—</span>
+                                &bull; Project: <span class="fw-semibold text-dark" id="dProject">—</span>
+                            </div>
+                        </div>
+                        <div class="col-md-6 text-md-end">
+                            <span class="text-muted text-xxs text-uppercase fw-bold d-block">Disbursed Amount</span>
+                            <div class="fs-4 fw-bold text-primary"><span id="dAmount">0.00</span> <span class="fs-6 text-muted">ETB</span></div>
+                            <span class="badge" id="dVatBadge">Pending</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 1: What was this expense for? (Purpose & Scope) -->
+                <div class="card border rounded-3 mb-3 shadow-none">
+                    <div class="card-header bg-white py-2 border-bottom d-flex align-items-center gap-1.5">
+                        <i class="fa-solid fa-clipboard-list text-primary"></i>
+                        <span class="fw-bold text-xs text-dark">What Was This Expense For? (Purpose &amp; Scope Breakdown)</span>
+                    </div>
+                    <div class="card-body p-3">
+                        <div class="p-2.5 bg-light rounded-2 border text-dark fw-medium text-xs mb-3" id="dPurposeDetail">
+                            —
+                        </div>
+
+                        <!-- Itemized Materials / Line Items Table -->
+                        <div id="dLineItemsContainer" class="d-none">
+                            <h6 class="text-xxs text-uppercase text-muted fw-bold mb-2 d-flex align-items-center gap-1">
+                                <i class="fa-solid fa-list-check text-secondary"></i> Itemized Scope / Materials Breakdown:
+                            </h6>
+                            <div class="table-responsive rounded-2 border">
+                                <table class="table table-sm table-hover align-middle mb-0 text-xs">
+                                    <thead class="table-light text-xxs text-muted text-uppercase">
+                                        <tr>
+                                            <th>Item / Specification</th>
+                                            <th class="text-center">Qty</th>
+                                            <th class="text-center">Unit</th>
+                                            <th class="text-end">Unit Rate (ETB)</th>
+                                            <th class="text-end">Total Amount (ETB)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="dLineItemsTableBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 2: Complete Operational Audit Trail (Created By, Approved By, Paid By) -->
+                <div class="card border rounded-3 mb-3 shadow-none">
+                    <div class="card-header bg-white py-2 border-bottom d-flex align-items-center gap-1.5">
+                        <i class="fa-solid fa-shield-halved text-success"></i>
+                        <span class="fw-bold text-xs text-dark">Operational &amp; Approval Audit Trail</span>
+                    </div>
+                    <div class="card-body p-3">
+                        <div class="row g-3">
+                            <!-- Step 1: Created By -->
+                            <div class="col-md-4">
+                                <div class="p-2.5 rounded-3 bg-light border h-100">
+                                    <div class="d-flex align-items-center gap-1.5 mb-1.5">
+                                        <span class="badge bg-primary bg-opacity-10 text-primary rounded-circle p-1">
+                                            <i class="fa-solid fa-user-pen"></i>
+                                        </span>
+                                        <span class="fw-bold text-xs text-dark">1. Initiated / Created By</span>
+                                    </div>
+                                    <div class="fw-semibold text-dark text-xs" id="dCreatedBy">—</div>
+                                    <div class="text-xxs text-muted mt-1" id="dCreatedAt"><i class="fa-regular fa-clock me-1"></i>—</div>
+                                </div>
+                            </div>
+
+                            <!-- Step 2: Approved By -->
+                            <div class="col-md-4">
+                                <div class="p-2.5 rounded-3 bg-light border h-100">
+                                    <div class="d-flex align-items-center gap-1.5 mb-1.5">
+                                        <span class="badge bg-success bg-opacity-10 text-success rounded-circle p-1">
+                                            <i class="fa-solid fa-circle-check"></i>
+                                        </span>
+                                        <span class="fw-bold text-xs text-dark">2. Approved By</span>
+                                    </div>
+                                    <div class="fw-semibold text-dark text-xs" id="dApprovedBy">—</div>
+                                    <div class="text-xxs text-muted mt-1" id="dApprovedAt"><i class="fa-regular fa-clock me-1"></i>—</div>
+                                </div>
+                            </div>
+
+                            <!-- Step 3: Paid / Disbursed By -->
+                            <div class="col-md-4">
+                                <div class="p-2.5 rounded-3 bg-light border h-100">
+                                    <div class="d-flex align-items-center gap-1.5 mb-1.5">
+                                        <span class="badge bg-info bg-opacity-10 text-info rounded-circle p-1">
+                                            <i class="fa-solid fa-money-bill-wave"></i>
+                                        </span>
+                                        <span class="fw-bold text-xs text-dark">3. Paid &amp; Disbursed By</span>
+                                    </div>
+                                    <div class="fw-semibold text-dark text-xs" id="dPaidBy">—</div>
+                                    <div class="text-xxs text-muted mt-1" id="dPaidAt"><i class="fa-regular fa-calendar-check me-1"></i>—</div>
+                                    <div class="text-xxs text-muted mt-0.5" id="dPaymentMethod">Method: —</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 3: VAT Classification & MOR 15-Column Status -->
+                <div class="card border rounded-3 mb-0 shadow-none">
+                    <div class="card-header bg-white py-2 border-bottom d-flex justify-content-between align-items-center">
+                        <span class="fw-bold text-xs text-dark d-flex align-items-center gap-1.5">
+                            <i class="fa-solid fa-stamp text-warning"></i> VAT Classification &amp; MOR ERCA Compliance
+                        </span>
+                    </div>
+                    <div class="card-body p-3">
+                        <div class="row g-2 text-xs">
+                            <div class="col-md-3">
+                                <span class="text-muted d-block text-xxs">VAT Status:</span>
+                                <strong id="dVatStatusLabel" class="text-dark"></strong>
+                            </div>
+                            <div class="col-md-3">
+                                <span class="text-muted d-block text-xxs">Taxable Base Subtotal:</span>
+                                <strong id="dBaseAmount" class="text-dark">0.00</strong> ETB
+                            </div>
+                            <div class="col-md-3">
+                                <span class="text-muted d-block text-xxs">VAT Amount (15%):</span>
+                                <strong id="dVatAmount" class="text-success">0.00</strong> ETB
+                            </div>
+                            <div class="col-md-3">
+                                <span class="text-muted d-block text-xxs">Total Value:</span>
+                                <strong id="dTotalAmount" class="text-dark">0.00</strong> ETB
+                            </div>
+                            <div class="col-md-4 mt-2">
+                                <span class="text-muted d-block text-xxs">Fiscal Receipt # (FS):</span>
+                                <span id="dFsNo" class="font-monospace fw-bold text-dark">—</span>
+                            </div>
+                            <div class="col-md-4 mt-2">
+                                <span class="text-muted d-block text-xxs">Machine Registration # (MRC):</span>
+                                <span id="dMrcNo" class="font-monospace text-dark">—</span>
+                            </div>
+                            <div class="col-md-4 mt-2">
+                                <span class="text-muted d-block text-xxs">Exemption / Reason:</span>
+                                <span id="dExemptionReason" class="text-muted">—</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer bg-light py-2 px-4 d-flex justify-content-between align-items-center">
+                <div>
+                    <a id="dViewRecordBtn" href="#" target="_blank" class="btn btn-sm btn-outline-dark rounded-pill px-3 text-xs d-none">
+                        <i class="fa-solid fa-arrow-up-right-from-square me-1"></i> View Source Record
+                    </a>
+                    <a id="dReceiptBtn" href="#" target="_blank" class="btn btn-sm btn-outline-info rounded-pill px-3 text-xs d-none ms-1">
+                        <i class="fa-solid fa-paperclip me-1"></i> View Receipt File
+                    </a>
+                </div>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-sm btn-secondary rounded-pill px-3 text-xs" data-bs-dismiss="modal">Close</button>
+                    @if($canDecideVat)
+                    <button type="button" id="dBtnOpenDecision" class="btn btn-sm btn-primary rounded-pill px-3 text-xs fw-semibold">
+                        <i class="fa-solid fa-sliders me-1"></i> Record / Edit VAT Decision
+                    </button>
+                    @endif
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- ── MODAL: SINGLE ROW VAT DECISION STUDIO ───────────────────────────────── -->
 <div class="modal fade" id="decisionModal" tabindex="-1" aria-labelledby="decisionModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg">
@@ -589,21 +797,44 @@
                 <input type="hidden" name="amount" id="mAmount">
 
                 <div class="modal-body p-4">
-                    <!-- Item Overview Row -->
+                    <!-- Item Overview Row with Full Purpose & Audit Trail -->
                     <div class="p-3 bg-light rounded-3 mb-3 border">
                         <div class="row g-2 text-xs">
                             <div class="col-md-4">
-                                <span class="text-muted d-block">Payee / Supplier:</span>
+                                <span class="text-muted d-block text-xxs">Payee / Supplier:</span>
                                 <strong id="mPayee" class="text-dark"></strong>
                             </div>
                             <div class="col-md-4">
-                                <span class="text-muted d-block">Source Module:</span>
+                                <span class="text-muted d-block text-xxs">Source Module:</span>
                                 <strong id="mSourceModule" class="text-dark"></strong>
                             </div>
                             <div class="col-md-4">
-                                <span class="text-muted d-block">Disbursed Amount:</span>
+                                <span class="text-muted d-block text-xxs">Disbursed Amount:</span>
                                 <strong id="mAmountDisplay" class="text-dark fs-6"></strong> ETB
                             </div>
+                        </div>
+                        <div class="mt-2 pt-2 border-top">
+                            <span class="text-muted text-xxs d-block fw-bold text-uppercase"><i class="fa-solid fa-tag me-1 text-primary"></i> Expense Purpose / What for:</span>
+                            <div id="mPurpose" class="text-dark fw-semibold text-xs mt-0.5"></div>
+                        </div>
+                        <div class="row g-2 mt-2 pt-2 border-top text-xxs">
+                            <div class="col-md-4">
+                                <span class="text-muted d-block"><i class="fa-solid fa-user-pen text-primary me-1"></i> Initiated By:</span>
+                                <strong id="mCreatedBy" class="text-dark">—</strong>
+                            </div>
+                            <div class="col-md-4">
+                                <span class="text-muted d-block"><i class="fa-solid fa-circle-check text-success me-1"></i> Approved By:</span>
+                                <strong id="mApprovedBy" class="text-dark">—</strong>
+                            </div>
+                            <div class="col-md-4">
+                                <span class="text-muted d-block"><i class="fa-solid fa-money-bill-wave text-secondary me-1"></i> Paid By:</span>
+                                <strong id="mPaidBy" class="text-dark">—</strong>
+                            </div>
+                        </div>
+                        <div class="mt-2.5 text-end">
+                            <button type="button" onclick="openDetailFromDecision()" class="btn btn-xs btn-outline-secondary rounded-pill px-2.5 py-1 text-xxs">
+                                <i class="fa-solid fa-layer-group me-1 text-info"></i> View Full Scope &amp; Line Items Breakdown
+                            </button>
                         </div>
                     </div>
 
@@ -868,7 +1099,134 @@
 
 <script>
 let currentEditingItem = null;
+let currentDetailItem = null;
 let lastOcrResult = null;
+
+function escapeHtml(text) {
+    if (text === null || text === undefined) return '';
+    return text.toString()
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+function openDetailFromDecision() {
+    if (!currentEditingItem) return;
+    const modalEl = document.getElementById('decisionModal');
+    const modalInstance = bootstrap.Modal.getInstance(modalEl);
+    if (modalInstance) {
+        modalInstance.hide();
+    }
+    setTimeout(() => {
+        openExpenseDetailModal(currentEditingItem);
+    }, 350);
+}
+
+function openExpenseDetailModal(item) {
+    currentDetailItem = item;
+
+    // Header & Basic Info
+    document.getElementById('dModalModuleBadge').textContent = item.source_module_label || 'Expense';
+    document.getElementById('dRefNo').textContent = item.reference_no || '—';
+    document.getElementById('dPayee').textContent = item.payee_supplier || '—';
+    document.getElementById('dTin').textContent = item.tin || '—';
+    document.getElementById('dProject').textContent = item.project_name || 'General';
+    document.getElementById('dAmount').textContent = parseFloat(item.amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2});
+
+    // VAT Badge
+    const vatBadge = document.getElementById('dVatBadge');
+    let badgeClass = 'bg-warning text-dark';
+    let badgeText = 'Pending Decision';
+    if (item.vat_status === 'vat_applies') {
+        badgeClass = 'bg-success text-white';
+        badgeText = 'VAT Applies (Input VAT)';
+    } else if (item.vat_status === 'no_vat') {
+        badgeClass = 'bg-secondary text-white';
+        badgeText = 'No VAT (Exempt/Salary)';
+    }
+    vatBadge.className = 'badge rounded-pill px-2.5 py-1 text-xs ' + badgeClass;
+    vatBadge.textContent = badgeText;
+
+    // Section 1: Purpose & Line Items
+    document.getElementById('dPurposeDetail').textContent = item.purpose_detail || item.description || 'No description provided';
+    
+    const lineItemsContainer = document.getElementById('dLineItemsContainer');
+    const lineItemsTbody = document.getElementById('dLineItemsTableBody');
+    lineItemsTbody.innerHTML = '';
+    
+    if (item.line_items && Array.isArray(item.line_items) && item.line_items.length > 0) {
+        lineItemsContainer.classList.remove('d-none');
+        item.line_items.forEach(li => {
+            const tr = document.createElement('tr');
+            const qty = parseFloat(li.quantity || 1).toLocaleString('en-US');
+            const unit = li.unit || 'pcs';
+            const rate = parseFloat(li.rate || 0).toLocaleString('en-US', {minimumFractionDigits: 2});
+            const total = parseFloat(li.total || (li.quantity * li.rate) || 0).toLocaleString('en-US', {minimumFractionDigits: 2});
+            tr.innerHTML = `
+                <td class="fw-semibold text-dark">${escapeHtml(li.name || 'Item')}</td>
+                <td class="text-center font-monospace">${qty}</td>
+                <td class="text-center text-muted">${escapeHtml(unit)}</td>
+                <td class="text-end font-monospace">${rate}</td>
+                <td class="text-end fw-bold text-dark font-monospace">${total}</td>
+            `;
+            lineItemsTbody.appendChild(tr);
+        });
+    } else {
+        lineItemsContainer.classList.add('d-none');
+    }
+
+    // Section 2: Operational Audit Trail
+    document.getElementById('dCreatedBy').textContent = item.created_by_name || 'System / Staff';
+    document.getElementById('dCreatedAt').innerHTML = '<i class="fa-regular fa-clock me-1"></i> ' + (item.created_at_formatted || '—');
+
+    document.getElementById('dApprovedBy').textContent = item.approved_by_name || '—';
+    document.getElementById('dApprovedAt').innerHTML = '<i class="fa-regular fa-clock me-1"></i> ' + (item.approved_at_formatted || '—');
+
+    document.getElementById('dPaidBy').textContent = item.paid_by_name || 'Finance Staff';
+    const disDate = item.disbursement_date ? item.disbursement_date : (item.paid_at_formatted || '—');
+    document.getElementById('dPaidAt').innerHTML = '<i class="fa-regular fa-calendar-check me-1"></i> ' + disDate;
+    document.getElementById('dPaymentMethod').textContent = 'Method: ' + (item.payment_method ? item.payment_method.toUpperCase() : 'CASH / BANK');
+
+    // Section 3: VAT Decision
+    document.getElementById('dVatStatusLabel').textContent = badgeText;
+    document.getElementById('dBaseAmount').textContent = parseFloat(item.decision_base_amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2});
+    document.getElementById('dVatAmount').textContent = parseFloat(item.decision_vat_amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2});
+    document.getElementById('dTotalAmount').textContent = parseFloat(item.decision_total_amount || item.amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2});
+    document.getElementById('dFsNo').textContent = item.fs_no || '—';
+    document.getElementById('dMrcNo').textContent = item.mrc_no || '—';
+    document.getElementById('dExemptionReason').textContent = item.reason_note || item.reason_code || '—';
+
+    // Footer actions
+    const viewRecBtn = document.getElementById('dViewRecordBtn');
+    if (item.view_url) {
+        viewRecBtn.href = item.view_url;
+        viewRecBtn.classList.remove('d-none');
+    } else {
+        viewRecBtn.classList.add('d-none');
+    }
+
+    const receiptBtn = document.getElementById('dReceiptBtn');
+    if (item.receipt_url) {
+        receiptBtn.href = '{{ asset("storage") }}/' + item.receipt_url.replace(/^\/+/, '');
+        receiptBtn.classList.remove('d-none');
+    } else {
+        receiptBtn.classList.add('d-none');
+    }
+
+    const btnOpenDecision = document.getElementById('dBtnOpenDecision');
+    if (btnOpenDecision) {
+        btnOpenDecision.onclick = function() {
+            const detailModalEl = document.getElementById('expenseDetailModal');
+            const instance = bootstrap.Modal.getInstance(detailModalEl);
+            if (instance) instance.hide();
+            setTimeout(() => openDecisionModal(item), 350);
+        };
+    }
+
+    new bootstrap.Modal(document.getElementById('expenseDetailModal')).show();
+}
 
 function resetOcrState() {
     lastOcrResult = null;
@@ -903,6 +1261,12 @@ function openDecisionModal(item) {
     document.getElementById('mPayee').textContent = item.payee_supplier || '—';
     document.getElementById('mSourceModule').textContent = item.source_module_label;
     document.getElementById('mAmountDisplay').textContent = parseFloat(item.amount).toLocaleString('en-US', {minimumFractionDigits: 2});
+
+    // Populate Purpose & Operational Audit
+    document.getElementById('mPurpose').textContent = item.purpose_detail || item.description || '—';
+    document.getElementById('mCreatedBy').textContent = (item.created_by_name || '—') + (item.created_at_formatted ? (' (' + item.created_at_formatted + ')') : '');
+    document.getElementById('mApprovedBy').textContent = (item.approved_by_name || '—') + (item.approved_at_formatted ? (' (' + item.approved_at_formatted + ')') : '');
+    document.getElementById('mPaidBy').textContent = (item.paid_by_name || '—') + (item.disbursement_date ? (' on ' + item.disbursement_date) : '');
 
     // Populate radio status
     if (item.vat_status === 'vat_applies') {
