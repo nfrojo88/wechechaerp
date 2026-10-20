@@ -2320,6 +2320,7 @@ Route::middleware(['auth'])->group(function () {
 
     // ─── Central Expense Hub & VAT Decision Engine ───────────────────────────
     Route::get('finance/expense-hub', [App\Http\Controllers\Finance\ExpenseHubController::class, 'index'])->name('finance.expense-hub.index');
+    Route::post('finance/expense-hub/scan-receipt', [App\Http\Controllers\Finance\ExpenseHubController::class, 'scanReceipt'])->name('finance.expense-hub.scan-receipt');
     Route::post('finance/expense-hub/decision', [App\Http\Controllers\Finance\ExpenseHubController::class, 'saveDecision'])->name('finance.expense-hub.decision');
     Route::post('finance/expense-hub/bulk-decision', [App\Http\Controllers\Finance\ExpenseHubController::class, 'bulkDecision'])->name('finance.expense-hub.bulk-decision');
     Route::get('finance/expense-hub/export-hub', [App\Http\Controllers\Finance\ExpenseHubController::class, 'exportHubExcel'])->name('finance.expense-hub.export-hub');

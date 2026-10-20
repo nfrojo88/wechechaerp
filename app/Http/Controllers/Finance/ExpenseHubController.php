@@ -10,12 +10,15 @@ use App\Models\Project;
 use App\Models\User;
 use App\Services\ExpenseHubQueryService;
 use App\Services\EthiopianDate;
+use App\Services\ReceiptOcrService;
+use App\Services\QcService;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ExpenseHubController extends Controller
@@ -107,6 +110,129 @@ class ExpenseHubController extends Controller
             'canDecideVat',
             'isFinanceHead'
         ));
+    }
+
+    /**
+     * Scan receipt via AI OCR for Expense Hub VAT Decision Engine
+     */
+    public function scanReceipt(Request $request)
+    {
+        $user = Auth::user();
+        if (!$user->hasAnyRole(['global_admin', 'admin', 'finance_head', 'finance', 'auditor']) && !$user->can('finance.approve')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized to perform OCR scans.',
+            ], 403);
+        }
+
+        $request->validate([
+            'receipt_file' => 'nullable|file|mimes:jpeg,jpg,png,webp,pdf|max:25600',
+            'receipt_path' => 'nullable|string|max:500',
+        ]);
+
+        try {
+            $scanPath = null;
+            $fileUrl  = null;
+
+            if ($request->hasFile('receipt_file')) {
+                $file = $request->file('receipt_file');
+                $ext = strtolower($file->getClientOriginalExtension());
+                $filename = 'hub_rcpt_' . now()->format('Ymd_His') . '_' . uniqid() . '.' . $ext;
+                $savedRelativePath = $file->storeAs('receipts', $filename, 'public');
+                $scanPath = $file->getRealPath();
+                $fileUrl = asset('storage/' . $savedRelativePath);
+            } elseif ($request->filled('receipt_path')) {
+                $rawPath = $request->input('receipt_path');
+                $stripped = ltrim(preg_replace('#^(storage/|/storage/)#i', '', $rawPath), '/');
+
+                if (Storage::disk('public')->exists($stripped)) {
+                    $scanPath = Storage::disk('public')->path($stripped);
+                } elseif (file_exists(public_path('storage/' . $stripped))) {
+                    $scanPath = public_path('storage/' . $stripped);
+                } elseif (file_exists($rawPath)) {
+                    $scanPath = $rawPath;
+                } else {
+                    $scanPath = $stripped;
+                }
+
+                $fileUrl = asset('storage/' . $stripped);
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Please select a receipt file or provide an attached receipt.',
+                ], 422);
+            }
+
+            $ocrService = app(ReceiptOcrService::class);
+            $scan = $ocrService->scan($scanPath);
+
+            // Extract normalized TIN
+            $rawTin      = trim((string)($scan['supplier_tin'] ?? ($scan['extracted']['supplier_tin'] ?? ($scan['extracted']['merchant_tin'] ?? ''))));
+            $tinNorm     = class_exists(QcService::class) ? QcService::normalizeTin($rawTin) : ['value' => $rawTin, 'is_valid' => strlen($rawTin) === 10];
+            $supplierTin = $tinNorm['value'] ?: $rawTin;
+
+            // Extract normalized FS No
+            $rawFs  = trim((string)($scan['fs_no'] ?? ($scan['extracted']['fs_no'] ?? ($scan['extracted']['receipt_no'] ?? ''))));
+            $fsNorm = class_exists(QcService::class) ? QcService::normalizeFsNo($rawFs) : ['value' => $rawFs, 'is_valid' => !empty($rawFs)];
+            $fsNo   = $fsNorm['value'] ?: $rawFs;
+
+            $mrcNo       = trim((string)($scan['mrc_no'] ?? ($scan['extracted']['machine_no'] ?? ($scan['extracted']['mrc_no'] ?? ''))));
+            $vendorName  = trim((string)($scan['vendor_name'] ?? ($scan['extracted']['merchant_name'] ?? '')));
+            $subtotal    = (float)($scan['subtotal'] ?? 0);
+            $vatAmount   = (float)($scan['vat_amount'] ?? 0);
+            $totalAmount = (float)($scan['total_amount'] ?? 0);
+
+            // Cross-calculate 15% VAT if needed
+            if ($totalAmount > 0 && $vatAmount == 0 && $subtotal == 0) {
+                $subtotal  = round($totalAmount / 1.15, 2);
+                $vatAmount = round($totalAmount - $subtotal, 2);
+            } elseif ($subtotal > 0 && $vatAmount == 0 && $totalAmount > $subtotal) {
+                $vatAmount = round($totalAmount - $subtotal, 2);
+            } elseif ($totalAmount == 0 && $subtotal > 0 && $vatAmount > 0) {
+                $totalAmount = round($subtotal + $vatAmount, 2);
+            }
+
+            // Purchase Type: 1 = Capital, 2 = Goods Line 70, 3 = Services Line 75
+            $purchaseType = $scan['purchase_type_int'] ?? 2;
+            if (($scan['purchase_type'] ?? '') === 'PUR_SR') {
+                $purchaseType = 3;
+            }
+
+            // Verified if TIN, FS No, or VAT Amount are extracted
+            $isVerified = (!empty($fsNo) || !empty($supplierTin) || $vatAmount > 0);
+
+            return response()->json([
+                'success'           => true,
+                'is_verified'       => $isVerified,
+                'file_url'          => $fileUrl,
+                'vendor_name'       => $vendorName,
+                'supplier_tin'      => $supplierTin,
+                'tin_valid'         => $tinNorm['is_valid'] ?? (!empty($supplierTin) && strlen($supplierTin) === 10),
+                'fs_no'             => $fsNo,
+                'fs_no_valid'       => $fsNorm['is_valid'] ?? !empty($fsNo),
+                'mrc_no'            => $mrcNo,
+                'receipt_date'      => $scan['receipt_date_ymd'] ?? now()->toDateString(),
+                'subtotal'          => $subtotal,
+                'vat_amount'        => $vatAmount,
+                'total_amount'      => $totalAmount,
+                'vat_rate'          => 15.00,
+                'is_inclusive'      => true,
+                'purchase_type'     => $purchaseType,
+                'description'       => $scan['description'] ?? '',
+                'engine'            => $scan['engine'] ?? 'AI OCR Vision Engine',
+                'confidence'        => $scan['confidence'] ?? 'high',
+                'confidence_score'  => $scan['confidence_score'] ?? 95,
+                'is_duplicate'      => $scan['is_duplicate'] ?? false,
+                'duplicate_message' => $scan['duplicate_message'] ?? null,
+                'warnings'          => $scan['warnings'] ?? [],
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('ExpenseHub OCR failure: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
+            return response()->json([
+                'success' => false,
+                'message' => 'OCR Scan failed: ' . $e->getMessage(),
+            ], 500);
+        }
     }
 
     /**

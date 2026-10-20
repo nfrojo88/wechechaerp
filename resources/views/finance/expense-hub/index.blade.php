@@ -253,7 +253,7 @@
                         <th class="text-end" style="min-width: 95px;">Base (ETB)</th>
                         <th class="text-end" style="min-width: 95px;">VAT (15%)</th>
                         <th class="text-center" style="min-width: 60px;">Receipt</th>
-                        <th class="text-end" style="min-width: 75px;">Actions</th>
+                        <th class="text-end" style="min-width: 110px;">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -373,10 +373,14 @@
                         </td>
 
                         <!-- Action -->
-                        <td class="text-end">
+                        <td class="text-end text-nowrap">
                             @if($canDecideVat)
+                            <button type="button" class="btn btn-xs btn-outline-primary rounded-pill px-2 py-1 text-xs fw-semibold me-1"
+                                    onclick="openDecisionModalWithOcr({{ json_encode($item) }})" title="Scan Receipt with AI OCR & Record VAT Decision">
+                                <i class="fa-solid fa-wand-magic-sparkles"></i> OCR
+                            </button>
                             <button type="button" class="btn btn-xs btn-light border rounded-pill px-2 py-1 text-xs text-dark"
-                                    onclick="openDecisionModal({{ json_encode($item) }})" title="Open Decision Studio">
+                                    onclick="openDecisionModal({{ json_encode($item) }})" title="Record / Edit VAT Decision">
                                 <i class="fa-solid fa-sliders"></i>
                             </button>
                             @endif
@@ -600,6 +604,42 @@
                                 <span class="text-muted d-block">Disbursed Amount:</span>
                                 <strong id="mAmountDisplay" class="text-dark fs-6"></strong> ETB
                             </div>
+                        </div>
+                    </div>
+
+                    <!-- AI OCR Receipt Verification Section -->
+                    <div class="card border border-primary border-opacity-25 bg-primary bg-opacity-10 rounded-3 mb-3 shadow-none">
+                        <div class="card-body p-3">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span class="fw-bold text-xs text-primary d-flex align-items-center gap-1.5">
+                                    <i class="fa-solid fa-wand-magic-sparkles"></i> AI OCR Receipt Verification
+                                </span>
+                                <span id="ocrStatusBadge" class="badge bg-white text-primary border text-xxs shadow-xs">Scan &amp; Verify</span>
+                            </div>
+
+                            <!-- Scan Controls -->
+                            <div class="row g-2 align-items-center">
+                                <div class="col-md-7">
+                                    <input type="file" id="mOcrFileInput" accept="image/*,.pdf" class="form-control form-control-sm text-xs bg-white" placeholder="Choose receipt file">
+                                </div>
+                                <div class="col-md-5 d-flex gap-1.5">
+                                    <button type="button" id="btnUploadOcrScan" class="btn btn-primary btn-sm flex-fill text-xs shadow-xs" onclick="runOcrUpload()">
+                                        <i class="fa-solid fa-cloud-arrow-up me-1"></i> Scan Upload
+                                    </button>
+                                    <button type="button" id="btnAttachedOcrScan" class="btn btn-outline-primary btn-sm flex-fill text-xs d-none" onclick="runOcrAttached()">
+                                        <i class="fa-solid fa-paperclip me-1"></i> Scan Attached
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Progress Spinner -->
+                            <div id="ocrSpinner" class="d-none text-center py-2.5 mt-2">
+                                <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                                <span class="ms-2 text-xs fw-semibold text-primary">Running AI OCR Vision Pipeline &amp; verifying receipt...</span>
+                            </div>
+
+                            <!-- OCR Result Box -->
+                            <div id="ocrResultBox" class="d-none mt-2.5 p-2.5 rounded-3 bg-white border text-xs"></div>
                         </div>
                     </div>
 
@@ -828,9 +868,33 @@
 
 <script>
 let currentEditingItem = null;
+let lastOcrResult = null;
+
+function resetOcrState() {
+    lastOcrResult = null;
+    const fileInput = document.getElementById('mOcrFileInput');
+    if (fileInput) fileInput.value = '';
+    const spinner = document.getElementById('ocrSpinner');
+    if (spinner) spinner.classList.add('d-none');
+    const resultBox = document.getElementById('ocrResultBox');
+    if (resultBox) {
+        resultBox.classList.add('d-none');
+        resultBox.innerHTML = '';
+    }
+    const badge = document.getElementById('ocrStatusBadge');
+    if (badge) {
+        badge.className = 'badge bg-white text-primary border text-xxs shadow-xs';
+        badge.textContent = 'Scan & Verify';
+    }
+    const uploadBtn = document.getElementById('btnUploadOcrScan');
+    if (uploadBtn) uploadBtn.disabled = false;
+    const attachedBtn = document.getElementById('btnAttachedOcrScan');
+    if (attachedBtn) attachedBtn.disabled = false;
+}
 
 function openDecisionModal(item) {
     currentEditingItem = item;
+    resetOcrState();
 
     document.getElementById('mSourceType').value = item.source_type;
     document.getElementById('mSourceId').value = item.source_id;
@@ -864,10 +928,186 @@ function openDecisionModal(item) {
         document.getElementById('modeInclusive').checked = true;
     }
 
+    // Toggle attached scan button
+    const attachedBtn = document.getElementById('btnAttachedOcrScan');
+    if (attachedBtn) {
+        if (item.receipt_url) {
+            attachedBtn.classList.remove('d-none');
+            attachedBtn.setAttribute('title', 'Scan attached: ' + item.receipt_url);
+        } else {
+            attachedBtn.classList.add('d-none');
+        }
+    }
+
     toggleVatFields();
     recalculateVatPreview();
 
     new bootstrap.Modal(document.getElementById('decisionModal')).show();
+}
+
+function openDecisionModalWithOcr(item) {
+    openDecisionModal(item);
+    if (item.receipt_url) {
+        runOcrAttached();
+    } else {
+        const fileInput = document.getElementById('mOcrFileInput');
+        if (fileInput) {
+            fileInput.focus();
+            fileInput.click();
+        }
+    }
+}
+
+function runOcrUpload() {
+    const fileInput = document.getElementById('mOcrFileInput');
+    if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+        alert('Please choose a receipt image or PDF file first.');
+        return;
+    }
+
+    const file = fileInput.files[0];
+    const formData = new FormData();
+    formData.append('receipt_file', file);
+    formData.append('_token', '{{ csrf_token() }}');
+
+    executeOcrRequest(formData);
+}
+
+function runOcrAttached() {
+    if (!currentEditingItem || !currentEditingItem.receipt_url) {
+        alert('No receipt is attached to this expense record.');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('receipt_path', currentEditingItem.receipt_url);
+    formData.append('_token', '{{ csrf_token() }}');
+
+    executeOcrRequest(formData);
+}
+
+function executeOcrRequest(formData) {
+    const spinner = document.getElementById('ocrSpinner');
+    const resultBox = document.getElementById('ocrResultBox');
+    const badge = document.getElementById('ocrStatusBadge');
+    const uploadBtn = document.getElementById('btnUploadOcrScan');
+    const attachedBtn = document.getElementById('btnAttachedOcrScan');
+
+    spinner.classList.remove('d-none');
+    resultBox.classList.add('d-none');
+    badge.className = 'badge bg-warning text-dark text-xxs';
+    badge.textContent = 'Processing OCR...';
+    if (uploadBtn) uploadBtn.disabled = true;
+    if (attachedBtn) attachedBtn.disabled = true;
+
+    fetch("{{ route('finance.expense-hub.scan-receipt') }}", {
+        method: 'POST',
+        headers: {
+            'X-CSRF-TOKEN': '{{ csrf_token() }}',
+            'Accept': 'application/json'
+        },
+        body: formData
+    })
+    .then(res => res.json())
+    .then(data => {
+        spinner.classList.add('d-none');
+        if (uploadBtn) uploadBtn.disabled = false;
+        if (attachedBtn) attachedBtn.disabled = false;
+
+        if (!data.success) {
+            badge.className = 'badge bg-danger text-white text-xxs';
+            badge.textContent = 'OCR Failed';
+            resultBox.className = 'mt-2.5 p-2.5 rounded-3 bg-danger bg-opacity-10 border border-danger text-danger text-xs';
+            resultBox.innerHTML = '<i class="fa-solid fa-circle-exclamation me-1"></i> ' + (data.message || 'Failed to scan receipt with OCR.');
+            resultBox.classList.remove('d-none');
+            return;
+        }
+
+        handleOcrSuccess(data);
+    })
+    .catch(err => {
+        spinner.classList.add('d-none');
+        if (uploadBtn) uploadBtn.disabled = false;
+        if (attachedBtn) attachedBtn.disabled = false;
+        badge.className = 'badge bg-danger text-white text-xxs';
+        badge.textContent = 'OCR Error';
+        resultBox.className = 'mt-2.5 p-2.5 rounded-3 bg-danger bg-opacity-10 border border-danger text-danger text-xs';
+        resultBox.innerHTML = '<i class="fa-solid fa-triangle-exclamation me-1"></i> An error occurred during scan: ' + err.message;
+        resultBox.classList.remove('d-none');
+    });
+}
+
+function handleOcrSuccess(res) {
+    lastOcrResult = res;
+    const badge = document.getElementById('ocrStatusBadge');
+    const resultBox = document.getElementById('ocrResultBox');
+
+    // Auto-populate VAT Decision form as VAT APPLIES
+    document.getElementById('optVatApplies').checked = true;
+    toggleVatFields();
+
+    if (res.supplier_tin) {
+        document.getElementById('mTin').value = res.supplier_tin;
+    }
+    if (res.fs_no) {
+        document.getElementById('mFsNo').value = res.fs_no;
+    }
+    if (res.mrc_no) {
+        document.getElementById('mMrcNo').value = res.mrc_no;
+    }
+    if (res.purchase_type) {
+        document.getElementById('mPurchaseType').value = res.purchase_type;
+    }
+    if (res.vat_rate) {
+        document.getElementById('mVatRate').value = res.vat_rate;
+    }
+    document.getElementById('modeInclusive').checked = true;
+    recalculateVatPreview();
+
+    // Update Status Badge
+    badge.className = 'badge bg-success text-white text-xxs shadow-xs';
+    badge.innerHTML = '<i class="fa-solid fa-circle-check me-1"></i> OCR Verified';
+
+    // Build OCR Result Box HTML
+    let html = `
+        <div class="d-flex align-items-center justify-content-between mb-2">
+            <div class="d-flex align-items-center gap-1.5">
+                <span class="badge bg-success text-white"><i class="fa-solid fa-circle-check me-1"></i> OCR Verified</span>
+                <span class="text-muted text-xxs">Engine: <strong>${res.engine || 'AI Vision'}</strong> (${res.confidence || 'high'})</span>
+            </div>
+            ${res.is_duplicate ? '<span class="badge bg-danger text-white"><i class="fa-solid fa-triangle-exclamation me-1"></i> Duplicate FS</span>' : ''}
+        </div>
+        <div class="row g-2 text-xxs mb-2 border-top border-bottom py-1.5 bg-light rounded">
+            <div class="col-4"><strong>FS No:</strong> <span class="font-monospace fw-bold text-dark">${res.fs_no || '—'}</span></div>
+            <div class="col-4"><strong>Vendor TIN:</strong> <span class="font-monospace fw-bold text-dark">${res.supplier_tin || '—'}</span></div>
+            <div class="col-4"><strong>MRC No:</strong> <span class="font-monospace text-dark">${res.mrc_no || '—'}</span></div>
+            <div class="col-4"><strong>Subtotal:</strong> ${parseFloat(res.subtotal || 0).toLocaleString('en-US', {minimumFractionDigits: 2})} ETB</div>
+            <div class="col-4 text-success"><strong>15% VAT:</strong> ${parseFloat(res.vat_amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2})} ETB</div>
+            <div class="col-4 text-primary"><strong>Grand Total:</strong> ${parseFloat(res.total_amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2})} ETB</div>
+        </div>
+    `;
+
+    if (res.duplicate_message) {
+        html += `<div class="alert alert-warning py-1 px-2 text-xxs mb-2"><i class="fa-solid fa-triangle-exclamation me-1"></i> ${res.duplicate_message}</div>`;
+    }
+
+    html += `
+        <div class="d-flex justify-content-between align-items-center pt-1">
+            <span class="text-success text-xxs fw-semibold"><i class="fa-solid fa-check-double me-1"></i> VAT fields auto-populated below</span>
+            <button type="button" class="btn btn-sm btn-success px-3 shadow-xs fw-semibold" onclick="applyOcrAndSave()">
+                <i class="fa-solid fa-bolt me-1"></i> Save to VAT Now
+            </button>
+        </div>
+    `;
+
+    resultBox.className = 'mt-2.5 p-2.5 rounded-3 bg-white border border-success border-opacity-50 text-xs shadow-xs';
+    resultBox.innerHTML = html;
+    resultBox.classList.remove('d-none');
+}
+
+function applyOcrAndSave() {
+    document.getElementById('optVatApplies').checked = true;
+    document.getElementById('decisionForm').submit();
 }
 
 function toggleVatFields() {
