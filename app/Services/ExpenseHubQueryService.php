@@ -381,7 +381,12 @@ class ExpenseHubQueryService
     protected function loadPayrolls(Collection $items, Collection $decisions, ?array $scopedProjectIds): void
     {
         $query = Payroll::with(['employee.project'])
-            ->where(fn($q) => $q->where('status', 'paid')->orWhere('gm_status', 'approved'));
+            ->where(function ($q) {
+                $q->where('status', 'paid');
+                if (Schema::hasColumn('payrolls', 'gm_status')) {
+                    $q->orWhere('gm_status', 'approved');
+                }
+            });
 
         if ($scopedProjectIds !== null) {
             $query->whereHas('employee', fn($q) => $q->whereIn('project_id', $scopedProjectIds));
@@ -473,16 +478,41 @@ class ExpenseHubQueryService
 
     protected function loadIpcRecords(Collection $items, Collection $decisions, ?array $scopedProjectIds): void
     {
-        $query = IpcRecord::with(['agreement.subcontractor', 'project'])
-            ->where(fn($q) => $q->where('paid_amount', '>', 0)->orWhereIn('status', ['paid', 'approved']));
+        if (!Schema::hasTable('ipc_records')) {
+            return;
+        }
+
+        $query = IpcRecord::with(['agreement.subcontractor', 'agreement.supplier', 'project'])
+            ->where(function ($q) {
+                $q->whereIn('status', ['paid', 'approved']);
+                if (Schema::hasColumn('ipc_records', 'paid_amount')) {
+                    $q->orWhere('paid_amount', '>', 0);
+                }
+            });
 
         if ($scopedProjectIds !== null) {
             $query->whereIn('project_id', $scopedProjectIds);
         }
 
         foreach ($query->get() as $ipc) {
-            $subcon = $ipc->agreement?->subcontractor?->name ?: 'Subcontractor';
-            $paidAmt = (float) ($ipc->paid_amount > 0 ? $ipc->paid_amount : ($ipc->net_amount > 0 ? $ipc->net_amount : $ipc->current_certified));
+            $subcon = $ipc->agreement?->subcontractor_display_name
+                ?: ($ipc->agreement?->subcontractor?->name
+                ?: ($ipc->agreement?->subcontractor_name ?: 'Subcontractor'));
+
+            $tin = $ipc->agreement?->supplier?->tin
+                ?? ($ipc->agreement?->subcontractor?->tin ?? null);
+
+            $paidAmt = (float) (
+                ($ipc->paid_amount ?? 0) > 0
+                    ? $ipc->paid_amount
+                    : (($ipc->current_certified ?? 0) > 0
+                        ? $ipc->current_certified
+                        : ($ipc->current_work_value ?? 0))
+            );
+
+            if ($paidAmt <= 0) {
+                continue;
+            }
 
             $key = 'ipc_record:' . $ipc->id;
             $decision = $decisions->get($key);
@@ -496,14 +526,18 @@ class ExpenseHubQueryService
                 'project_id'           => $ipc->project_id ?: $ipc->agreement?->project_id,
                 'project_name'         => $ipc->project?->name ?: 'Project Site',
                 'payee_supplier'       => $subcon,
-                'tin'                  => $ipc->agreement?->subcontractor?->tin ?? null,
+                'tin'                  => $tin,
                 'description'          => "Subcontractor Payment: {$ipc->ipc_no} ({$subcon})",
                 'amount'               => $paidAmt,
                 'source_vat_amount'    => 0,
                 'payment_method'       => 'bank_transfer',
                 'paid_by_name'         => 'Finance',
-                'disbursement_date'    => $ipc->approved_at ? $ipc->approved_at->toDateString() : ($ipc->created_at ? $ipc->created_at->toDateString() : null),
-                'receipt_url'          => $ipc->attachment_path,
+                'disbursement_date'    => $ipc->approved_at 
+                    ? $ipc->approved_at->toDateString() 
+                    : ($ipc->period_to 
+                        ? $ipc->period_to->toDateString() 
+                        : ($ipc->created_at ? $ipc->created_at->toDateString() : null)),
+                'receipt_url'          => $ipc->attachment_path ?? ($ipc->agreement?->agreement_file ?? null),
                 'category'             => 'subcontractor',
                 'category_label'       => 'Subcontractor',
                 'is_capex'             => false,
