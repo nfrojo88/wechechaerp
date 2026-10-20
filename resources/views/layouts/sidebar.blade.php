@@ -278,6 +278,7 @@
             <li><a href="{{ route('payroll.advances') }}" class="sidebar-nav-link {{ request()->routeIs('payroll.advances*') ? 'active' : '' }}"><i class="fa-solid fa-hand-holding-dollar text-warning"></i><span>Salary Advance Loans</span></a></li>
             <li><a href="{{ route('bank-accounts.index') }}" class="sidebar-nav-link {{ request()->routeIs('bank-accounts.*') ? 'active' : '' }}"><i class="fa-solid fa-building-columns"></i><span>Bank Accounts</span></a></li>
             <li><a href="{{ route('finance.tax-deductions.index') }}" class="sidebar-nav-link {{ request()->routeIs('finance.tax-deductions.index') ? 'active' : '' }}"><i class="fa-solid fa-receipt text-danger"></i><span>VAT & Withholding Tax</span></a></li>
+            <li><a href="{{ route('finance.expense-hub.index') }}" class="sidebar-nav-link {{ request()->routeIs('finance.expense-hub.*') ? 'active' : '' }}"><i class="fa-solid fa-calculator text-primary"></i><span>Expense Hub &amp; VAT</span></a></li>
             <li><a href="{{ route('finance.tax-deductions.movements') }}" class="sidebar-nav-link {{ request()->routeIs('finance.tax-deductions.movements') || request()->routeIs('finance.tax-movements') ? 'active' : '' }}"><i class="fa-solid fa-scale-balanced text-primary"></i><span>Financial Movements &amp; Audit</span></a></li>
             <li><a href="{{ \Illuminate\Support\Facades\Route::has('finance.replenishments.index') ? route('finance.replenishments.index') : url('/finance/replenishments') }}" class="sidebar-nav-link {{ request()->is('finance/replenishments*') ? 'active' : '' }}"><i class="fa-solid fa-hand-holding-dollar text-warning"></i><span>Petty Cash Approvals</span></a></li>
             <li><a href="{{ \Illuminate\Support\Facades\Route::has('finance.credit-store.index') ? route('finance.credit-store.index') : url('/finance/credit-store') }}" class="sidebar-nav-link {{ request()->is('finance/credit-store*') ? 'active' : '' }}"><i class="fa-solid fa-credit-card text-info"></i><span>Credit Store Ledger</span></a></li>
@@ -978,6 +979,12 @@
             <a href="{{ route('finance.tax-deductions.index') }}" class="sidebar-nav-link {{ request()->routeIs('finance.tax-deductions.index') ? 'active' : '' }}">
                 <i class="fa-solid fa-receipt text-danger"></i>
                 <span>VAT &amp; Withholding Tax</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('finance.expense-hub.index') }}" class="sidebar-nav-link {{ request()->routeIs('finance.expense-hub.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-calculator text-primary"></i>
+                <span>Expense Hub &amp; VAT</span>
             </a>
         </li>
         <li class="sidebar-nav-item">
@@ -2389,6 +2396,12 @@
             <a href="{{ route('finance.tax-deductions.index') }}" class="sidebar-nav-link {{ request()->routeIs('finance.tax-deductions.index') ? 'active' : '' }}">
                 <i class="fa-solid fa-receipt text-danger"></i>
                 <span>VAT &amp; Withholding Tax</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('finance.expense-hub.index') }}" class="sidebar-nav-link {{ request()->routeIs('finance.expense-hub.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-calculator text-primary"></i>
+                <span>Expense Hub &amp; VAT</span>
             </a>
         </li>
         <li class="sidebar-nav-item">
