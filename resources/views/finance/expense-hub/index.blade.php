@@ -260,14 +260,14 @@
                     @forelse($paginatedExpenses as $item)
                     @php
                         $statusBadgeClass = match($item->vat_status) {
-                            ExpenseHubVatDecision::STATUS_VAT_APPLIES      => 'bg-success text-white',
-                            ExpenseHubVatDecision::STATUS_NO_VAT           => 'bg-secondary text-white',
-                            default                                        => 'bg-warning text-dark border border-warning',
+                            'vat_applies', \App\Models\ExpenseHubVatDecision::STATUS_VAT_APPLIES => 'bg-success text-white',
+                            'no_vat', \App\Models\ExpenseHubVatDecision::STATUS_NO_VAT           => 'bg-secondary text-white',
+                            default                                                              => 'bg-warning text-dark border border-warning',
                         };
                         $statusLabel = match($item->vat_status) {
-                            ExpenseHubVatDecision::STATUS_VAT_APPLIES      => 'VAT Applies',
-                            ExpenseHubVatDecision::STATUS_NO_VAT           => 'No VAT',
-                            default                                        => 'Pending Decision',
+                            'vat_applies', \App\Models\ExpenseHubVatDecision::STATUS_VAT_APPLIES => 'VAT Applies',
+                            'no_vat', \App\Models\ExpenseHubVatDecision::STATUS_NO_VAT           => 'No VAT',
+                            default                                                              => 'Pending Decision',
                         };
                     @endphp
                     <tr class="{{ !empty($item->warnings) ? 'table-warning bg-opacity-10' : '' }}">
