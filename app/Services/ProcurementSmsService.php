@@ -45,6 +45,11 @@ class ProcurementSmsService
      */
     public function send(int $purchaseRequestId, string $phone, string $recipientRole, string $message): void
     {
+        if (config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', true)) === false) {
+            Log::info("Procurement SMS is globally disabled. Skipping send to {$phone} on PR #{$purchaseRequestId}");
+            return;
+        }
+
         if (empty($phone)) {
             Log::warning("ProcurementSMS: No phone for role [{$recipientRole}] on PR #{$purchaseRequestId}");
             return;
@@ -63,7 +68,7 @@ class ProcurementSmsService
         $status = 'failed';
         $error  = null;
 
-        // 1. Primary gateway: AfroMessage (SmsEthiopiaService)
+        // 1. Primary gateway: AfroMessage (SmsEthiopiaService) - Immediate single attempt
         try {
             $response = $this->ethiopiaSms->sendMessage($formattedPhone, $message);
             if (!empty($response['success'])) {
@@ -73,33 +78,14 @@ class ProcurementSmsService
                 $error = is_array($response['error'] ?? null)
                     ? json_encode($response['error'])
                     : ($response['message'] ?? 'AfroMessage dispatch failed');
-                Log::warning("ProcurementSMS AfroMessage failed for {$formattedPhone}: {$error}");
+                Log::warning("ProcurementSMS AfroMessage failed for {$formattedPhone}: {$error}. Stop sending.");
             }
         } catch (\Throwable $e) {
             $error = 'AfroMessage exception: ' . $e->getMessage();
-            Log::error("ProcurementSMS AfroMessage error: {$error}");
+            Log::error("ProcurementSMS AfroMessage error: {$error}. Stop sending.");
         }
 
-        // 2. Fallback gateway: Africa's Talking (if enabled and AfroMessage didn't succeed)
-        if ($status !== 'sent' && $this->atEnabled) {
-            try {
-                $atResult = $this->dispatchViaAfricasTalking($formattedPhone, $message);
-                if ($atResult) {
-                    $status = 'sent';
-                    $error = null;
-                    Log::info("ProcurementSMS sent via Africa's Talking fallback to {$formattedPhone} [{$recipientRole}]");
-                }
-            } catch (\Throwable $e) {
-                $error = ($error ? $error . ' | ' : '') . 'AT error: ' . $e->getMessage();
-                Log::error("ProcurementSMS AT fallback error: " . $e->getMessage());
-            }
-        }
-
-        // 3. Fallback simulation log if neither gateway succeeded
-        if ($status !== 'sent' && empty($error)) {
-            Log::info("ProcurementSMS [SIMULATED] → {$formattedPhone} | {$recipientRole} | {$message}");
-            $status = 'sent';
-        }
+        // If dispatch did not succeed, stop sending immediately (no retries / no delays)
 
         // 4. Always log to DB for traceability
         try {
@@ -151,6 +137,10 @@ class ProcurementSmsService
     public function notifyRole(int $purchaseRequestId, string $roleName, string $message, ?int $projectId = null, ?int $storeId = null): void
     {
         try {
+            if (config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', true)) === false) {
+                return;
+            }
+
             // 1. First check if an employee is assigned to this role
             $targetPhones = $this->getPhoneNumbersForRole($roleName, $projectId, $storeId);
 

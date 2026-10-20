@@ -648,6 +648,10 @@ class MaterialRequestController extends Controller
             return app(PurchaseRequestController::class)->sendStageSms($request, $linkedPr);
         }
 
+        if (config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', true)) === false) {
+            return back()->with('warning', 'Procurement SMS notifications are currently disabled.');
+        }
+
         $status = $materialRequest->status;
         $targetRole = match ($status) {
             'pending', 'submitted' => 'planning',
@@ -655,64 +659,49 @@ class MaterialRequestController extends Controller
             default                => 'store_manager',
         };
 
-        $handoffKey = match ($status) {
-            'pending', 'submitted' => 'mr_submitted',
-            'planning_approved'    => 'planning_forwarded',
-            default                => 'coordinator_forwarded',
-        };
-
-        try {
-            app(\App\Services\ProcurementHandoffNotificationService::class)->triggerHandoff(
-                $handoffKey,
-                $materialRequest,
-                [
-                    'sender_user'  => auth()->user(),
-                    'sender_role'  => 'admin',
-                    'target_roles' => [$targetRole],
-                    'project_id'   => $materialRequest->project_id,
-                    'store_id'     => $materialRequest->destination_store_id,
-                ]
-            );
-        } catch (\Throwable $e) {}
-
-        $phones = app(\App\Services\ProcurementSmsService::class)->getPhoneNumbersForRole(
-            $targetRole,
-            $materialRequest->project_id,
-            $materialRequest->destination_store_id
-        );
-
         $sentRecipients = [];
         $isEscalatedToAdmin = false;
         $targetRoleTitle = ucfirst(str_replace('_', ' ', $targetRole));
         $message = "ConstructPro: MR #{$materialRequest->reference_number} (" . ($materialRequest->project?->name ?? 'Project') . ") needs your review. Open: " . url("/material-requests/{$materialRequest->id}");
 
-        if (!empty($phones)) {
-            // 1. Employee assigned to that role found -> send to their phone
-            foreach ($phones as $p) {
-                app(\App\Services\ProcurementSmsService::class)->send($materialRequest->id, $p, $targetRole, $message);
-                $sentRecipients[] = $p;
-            }
-        } else {
-            // 2. If NO employee is assigned to that role, route to Global / General Admin
-            $isEscalatedToAdmin = true;
-            $adminPhones = app(\App\Services\ProcurementSmsService::class)->getGlobalAdminPhoneNumbers();
-            $escalatedMessage = "[Role '{$targetRoleTitle}' Unassigned — Global Admin Action Required] " . $message;
+        try {
+            $phones = app(\App\Services\ProcurementSmsService::class)->getPhoneNumbersForRole(
+                $targetRole,
+                $materialRequest->project_id,
+                $materialRequest->destination_store_id
+            );
 
-            foreach ($adminPhones as $p) {
-                app(\App\Services\ProcurementSmsService::class)->send($materialRequest->id, $p, 'global_admin', $escalatedMessage);
-                $sentRecipients[] = "Global Admin ({$p})";
+            if (!empty($phones)) {
+                // 1. Employee assigned to that role found -> send immediately to their phone
+                foreach ($phones as $p) {
+                    app(\App\Services\ProcurementSmsService::class)->send($materialRequest->id, $p, $targetRole, $message);
+                    $sentRecipients[] = $p;
+                }
+            } else {
+                // 2. If NO employee is assigned to that role, route to Global / General Admin
+                $isEscalatedToAdmin = true;
+                $adminPhones = app(\App\Services\ProcurementSmsService::class)->getGlobalAdminPhoneNumbers();
+                $escalatedMessage = "[Role '{$targetRoleTitle}' Unassigned — Global Admin Action Required] " . $message;
+
+                foreach ($adminPhones as $p) {
+                    app(\App\Services\ProcurementSmsService::class)->send($materialRequest->id, $p, 'global_admin', $escalatedMessage);
+                    $sentRecipients[] = "Global Admin ({$p})";
+                }
             }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error("MR sendStageSms dispatch error: " . $e->getMessage());
+            return back()->with('error', "Could not send SMS: " . $e->getMessage() . ". Sending stopped.");
         }
 
         if (!empty($sentRecipients)) {
             $dest = implode(', ', $sentRecipients);
             if ($isEscalatedToAdmin) {
-                return back()->with('info', "No employee assigned to '{$targetRoleTitle}'. SMS alert successfully routed to General Admin: {$dest}");
+                return back()->with('info', "No employee assigned to '{$targetRoleTitle}'. SMS alert routed immediately to General Admin: {$dest}");
             }
-            return back()->with('success', "SMS alert sent for MR #{$materialRequest->reference_number} to assigned {$targetRoleTitle}: {$dest}");
+            return back()->with('success', "SMS alert sent immediately for MR #{$materialRequest->reference_number} to assigned {$targetRoleTitle}: {$dest}");
         }
 
-        return back()->with('warning', "No phone numbers found for role '{$targetRoleTitle}' or Global Admin. Please configure ADMIN_PHONE in .env.");
+        return back()->with('warning', "No phone numbers found for role '{$targetRoleTitle}' or Global Admin. Sending stopped.");
     }
 }
 

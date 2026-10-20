@@ -3,6 +3,15 @@
 return [
     /*
     |--------------------------------------------------------------------------
+    | Global Enable/Disable Switch for Procurement SMS
+    |--------------------------------------------------------------------------
+    | Set to false in .env (PROCUREMENT_SMS_ENABLED=false) to immediately stop
+    | all SMS dispatches across the procurement lifecycle if errors occur.
+    */
+    'enabled' => env('PROCUREMENT_SMS_ENABLED', true),
+
+    /*
+    |--------------------------------------------------------------------------
     | SMS Provider Configuration
     |--------------------------------------------------------------------------
     */

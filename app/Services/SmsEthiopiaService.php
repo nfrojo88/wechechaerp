@@ -43,7 +43,7 @@ class SmsEthiopiaService
             Log::info("Attempting to send SMS via AfroMessage to {$phone}");
 
             $response = Http::withToken($this->token)
-                ->timeout(30)
+                ->timeout(5)
                 ->get($this->baseUrl, [
                     'sender'  => $this->sender,
                     'to'      => $phone,

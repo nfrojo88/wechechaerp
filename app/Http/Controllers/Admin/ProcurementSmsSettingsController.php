@@ -72,6 +72,7 @@ class ProcurementSmsSettingsController extends Controller
         $totalFailed = NotificationLog::where('status', 'failed')->count();
         $totalLogged = NotificationLog::count();
         $activeProvider = class_basename($this->smsProvider);
+        $isGloballyEnabled = config('procurement_handoffs.enabled', true);
 
         return view('admin.procurement.sms-settings', compact(
             'handoffs',
@@ -79,7 +80,8 @@ class ProcurementSmsSettingsController extends Controller
             'totalSent',
             'totalFailed',
             'totalLogged',
-            'activeProvider'
+            'activeProvider',
+            'isGloballyEnabled'
         ));
     }
 

@@ -1108,13 +1108,17 @@ class PurchaseRequestController extends Controller
         });
 
         if ($newPr) {
-            $this->lifecycle->notifyStageRole(
-                $newPr->id,
-                'store_manager',
-                "ConstructPro: PR #{$newPr->pr_no} (" . count($itemIds) . " items) returned by Procurement Manager to Store. Reason: " . $request->reason . ". Open: " . url("/purchase-requests/{$newPr->id}"),
-                $newPr->project_id,
-                $newPr->store_id
-            );
+            try {
+                $this->lifecycle->notifyStageRole(
+                    $newPr->id,
+                    'store_manager',
+                    "ConstructPro: PR #{$newPr->pr_no} (" . count($itemIds) . " items) returned by Procurement Manager to Store. Reason: " . $request->reason . ". Open: " . url("/purchase-requests/{$newPr->id}"),
+                    $newPr->project_id,
+                    $newPr->store_id
+                );
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning("selectiveSendBackToStoreManager notifyStageRole failed: " . $e->getMessage());
+            }
         }
 
         return back()->with('success', "Selected " . count($itemIds) . " item(s) split into PR #{$newPr->pr_no} and returned to Store Manager!");
@@ -1151,7 +1155,8 @@ class PurchaseRequestController extends Controller
             return back()->with('success', 'Routed to Procurement Team for ' . ($method === 'direct_buy' ? 'Direct Buy material pricing.' : 'Proforma quotes collection.'));
         }
 
-        return DB::transaction(function () use ($purchaseRequest, $itemIds, $method, $request) {
+        $newPr = null;
+        DB::transaction(function () use ($purchaseRequest, $itemIds, $method, $request, &$newPr) {
             $newPrNo = PurchaseRequest::generatePrNo();
 
             $newPr = PurchaseRequest::create([
@@ -1204,7 +1209,8 @@ class PurchaseRequestController extends Controller
             ]);
         });
 
-        return back()->with('success', "Selected " . count($itemIds) . " item(s) split into PR #{$newPr->pr_no} and routed to Purchase Team ({$method})! Remaining items stay on PR #{$purchaseRequest->pr_no}.");
+        $assignedPrNo = $newPr?->pr_no ?? 'New PR';
+        return back()->with('success', "Selected " . count($itemIds) . " item(s) split into PR #{$assignedPrNo} and routed to Purchase Team ({$method})! Remaining items stay on PR #{$purchaseRequest->pr_no}.");
     }
 
     public function procTeamSelectiveSubmit(Request $request, PurchaseRequest $purchaseRequest)
@@ -1668,16 +1674,20 @@ class PurchaseRequestController extends Controller
             'rejection_reason' => null,
         ]);
 
-        \App\Models\PrWorkflowLog::create([
-            'purchase_request_id' => $purchaseRequest->id,
-            'from_status'         => $from,
-            'to_status'           => PurchaseRequest::STATUS_PENDING_GM,
-            'action'              => 'reactivated',
-            'performed_by_role'   => 'admin',
-            'notes'               => 'Re-activated by ' . auth()->user()->name . ': ' . ($request->input('notes') ?? 'Override rejection'),
-            'performed_by'        => auth()->id(),
-            'performed_at'        => now(),
-        ]);
+        try {
+            \App\Models\PrWorkflowLog::create([
+                'purchase_request_id' => $purchaseRequest->id,
+                'from_stage'          => $from,
+                'to_stage'            => PurchaseRequest::STATUS_PENDING_GM,
+                'action'              => 'reactivated',
+                'actor_role'          => 'admin',
+                'notes'               => 'Re-activated by ' . auth()->user()->name . ': ' . ($request->input('notes') ?? 'Override rejection'),
+                'actor_id'            => auth()->id(),
+                'created_at'          => now(),
+            ]);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning("reactivate PrWorkflowLog error on PR #{$purchaseRequest->id}: " . $e->getMessage());
+        }
 
         return back()->with('success', "PR #{$purchaseRequest->pr_no} has been re-activated and returned to GM Decision stage. Please make your GM decision (Approve → Pay & Buy) to send it to Finance.");
     }
@@ -1756,25 +1766,33 @@ class PurchaseRequestController extends Controller
             \Illuminate\Support\Facades\Log::warning('sendToFinanceDirect: ExpenseRequest creation failed: ' . $e->getMessage());
         }
 
-        \App\Models\PrWorkflowLog::create([
-            'purchase_request_id' => $purchaseRequest->id,
-            'from_status'         => PurchaseRequest::STATUS_REJECTED,
-            'to_status'           => PurchaseRequest::STATUS_PENDING_PAYMENT,
-            'action'              => 'send_to_finance_direct',
-            'performed_by_role'   => 'admin',
-            'notes'               => 'Sent directly to Finance by ' . auth()->user()->name . '. Amount: ' . number_format($finalAmount, 2) . ' ETB',
-            'performed_by'        => auth()->id(),
-            'performed_at'        => now(),
-        ]);
+        try {
+            \App\Models\PrWorkflowLog::create([
+                'purchase_request_id' => $purchaseRequest->id,
+                'from_stage'          => PurchaseRequest::STATUS_REJECTED,
+                'to_stage'            => PurchaseRequest::STATUS_PENDING_PAYMENT,
+                'action'              => 'send_to_finance_direct',
+                'actor_role'          => 'admin',
+                'notes'               => 'Sent directly to Finance by ' . auth()->user()->name . '. Amount: ' . number_format($finalAmount, 2) . ' ETB',
+                'actor_id'            => auth()->id(),
+                'created_at'          => now(),
+            ]);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning("sendToFinanceDirect PrWorkflowLog error on PR #{$purchaseRequest->id}: " . $e->getMessage());
+        }
 
-        $targetFinanceRole = $this->lifecycle->resolveOwnerRole('finance_head', $purchaseRequest);
-        $this->lifecycle->notifyStageRole(
-            $purchaseRequest->id,
-            $targetFinanceRole,
-            "ConstructPro: PR #{$purchaseRequest->pr_no} (" . number_format($finalAmount, 2) . " ETB) forwarded directly to Finance by " . auth()->user()->name . ". Open: " . url("/purchase-requests/{$purchaseRequest->id}"),
-            $purchaseRequest->project_id,
-            $purchaseRequest->store_id
-        );
+        try {
+            $targetFinanceRole = $this->lifecycle->resolveOwnerRole('finance_head', $purchaseRequest);
+            $this->lifecycle->notifyStageRole(
+                $purchaseRequest->id,
+                $targetFinanceRole,
+                "ConstructPro: PR #{$purchaseRequest->pr_no} (" . number_format($finalAmount, 2) . " ETB) forwarded directly to Finance by " . auth()->user()->name . ". Open: " . url("/purchase-requests/{$purchaseRequest->id}"),
+                $purchaseRequest->project_id,
+                $purchaseRequest->store_id
+            );
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning("sendToFinanceDirect notifyStageRole error on PR #{$purchaseRequest->id}: " . $e->getMessage());
+        }
 
         return back()->with('success', "PR #{$purchaseRequest->pr_no} (ETB " . number_format($finalAmount, 2) . ") sent directly to Finance Head for payment assignment. It now appears in the Expense section.");
     }
@@ -2828,75 +2846,51 @@ class PurchaseRequestController extends Controller
 
         $message = "ConstructPro: PR #{$prNo} ({$projectName}) is in '{$statusLabel}'. Action required by " . ucfirst(str_replace('_', ' ', $ownerRole)) . " ({$actorName}). Open: " . url("/purchase-requests/{$purchaseRequest->id}");
 
-        // 1. Trigger handoff notification with template formatting & logging
-        $handoffMap = [
-            PurchaseRequest::STATUS_PENDING_PLANNING           => 'mr_submitted',
-            PurchaseRequest::STATUS_PENDING_HR_APPROVAL        => 'planning_forwarded',
-            PurchaseRequest::STATUS_PENDING_STORE_REVIEW       => 'coordinator_forwarded',
-            PurchaseRequest::STATUS_PENDING_PROC_MANAGER       => 'store_converted_to_pr',
-            PurchaseRequest::STATUS_PENDING_PROC_TEAM          => 'proc_manager_assigned_sourcing',
-            PurchaseRequest::STATUS_PENDING_MARKETING          => 'store_converted_to_pr',
-            PurchaseRequest::STATUS_PENDING_PROFORMA_SELECTION => 'proc_officer_submitted_proforma',
-            PurchaseRequest::STATUS_PENDING_GM                 => 'market_research_variance',
-            PurchaseRequest::STATUS_PENDING_FINANCE            => 'gm_approved',
-            PurchaseRequest::STATUS_PENDING_PAYMENT            => 'finance_approved_payment',
-            PurchaseRequest::STATUS_PENDING_RECEIPT_UPLOAD     => 'cashier_disbursed_cash',
-            PurchaseRequest::STATUS_PENDING_RECEIPT_VERIFY     => 'purchaser_uploaded_receipt',
-            PurchaseRequest::STATUS_PENDING_DRIVER             => 'purchaser_uploaded_receipt',
-            PurchaseRequest::STATUS_INTAKE_COMPLETE            => 'driver_delivered',
-            PurchaseRequest::STATUS_COMPLETED                  => 'store_keeper_grn',
-        ];
-        $handoffKey = $handoffMap[$purchaseRequest->status] ?? 'store_converted_to_pr';
-
-        try {
-            app(\App\Services\ProcurementHandoffNotificationService::class)->triggerHandoff(
-                $handoffKey,
-                $purchaseRequest,
-                [
-                    'sender_user'  => Auth::user(),
-                    'sender_role'  => 'admin',
-                    'target_roles' => [$ownerRole],
-                    'action_label' => "take action on {$statusLabel}",
-                ]
-            );
-        } catch (\Throwable $e) {}
-
-        // 2. Direct lookup of phone numbers for the role
-        $phones = app(\App\Services\ProcurementSmsService::class)->getPhoneNumbersForRole(
-            $ownerRole,
-            $purchaseRequest->project_id,
-            $purchaseRequest->store_id
-        );
+        if (config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', true)) === false) {
+            return back()->with('warning', 'Procurement SMS notifications are currently disabled.');
+        }
 
         $sentRecipients = [];
         $isEscalatedToAdmin = false;
 
-        if (!empty($phones)) {
-            // 1. Employee assigned to that role found -> send to their phone
-            foreach ($phones as $p) {
-                app(\App\Services\ProcurementSmsService::class)->send($purchaseRequest->id, $p, $ownerRole, $message);
-                $sentRecipients[] = $p;
-            }
-        } else {
-            // 2. If NO employee is assigned to that role (or no phone registered), send to Global Admin
-            $isEscalatedToAdmin = true;
-            $adminPhones = app(\App\Services\ProcurementSmsService::class)->getGlobalAdminPhoneNumbers();
-            $escalatedMessage = "[Role '" . ucfirst(str_replace('_', ' ', $ownerRole)) . "' Unassigned — Global Admin Action Required] " . $message;
+        try {
+            // Direct lookup of phone numbers for the role
+            $phones = app(\App\Services\ProcurementSmsService::class)->getPhoneNumbersForRole(
+                $ownerRole,
+                $purchaseRequest->project_id,
+                $purchaseRequest->store_id
+            );
 
-            foreach ($adminPhones as $p) {
-                app(\App\Services\ProcurementSmsService::class)->send($purchaseRequest->id, $p, 'global_admin', $escalatedMessage);
-                $sentRecipients[] = "Global Admin ({$p})";
+            if (!empty($phones)) {
+                // Send immediately to assigned role holder(s)
+                foreach ($phones as $p) {
+                    app(\App\Services\ProcurementSmsService::class)->send($purchaseRequest->id, $p, $ownerRole, $message);
+                    $sentRecipients[] = $p;
+                }
+            } else {
+                // If NO employee is assigned to that role, route to Global Admin
+                $isEscalatedToAdmin = true;
+                $adminPhones = app(\App\Services\ProcurementSmsService::class)->getGlobalAdminPhoneNumbers();
+                $escalatedMessage = "[Role '" . ucfirst(str_replace('_', ' ', $ownerRole)) . "' Unassigned — Global Admin Action Required] " . $message;
+
+                foreach ($adminPhones as $p) {
+                    app(\App\Services\ProcurementSmsService::class)->send($purchaseRequest->id, $p, 'global_admin', $escalatedMessage);
+                    $sentRecipients[] = "Global Admin ({$p})";
+                }
             }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error("sendStageSms dispatch error: " . $e->getMessage());
+            return back()->with('error', "Could not send SMS: " . $e->getMessage() . ". Sending stopped.");
         }
 
         if (!empty($sentRecipients)) {
             $destStr = implode(', ', $sentRecipients);
             if ($isEscalatedToAdmin) {
-                return back()->with('info', "No employee assigned to '" . ucfirst(str_replace('_', ' ', $ownerRole)) . "'. SMS alert successfully routed to General Admin: {$destStr}");
+                return back()->with('info', "No employee assigned to '" . ucfirst(str_replace('_', ' ', $ownerRole)) . "'. SMS alert routed immediately to General Admin: {$destStr}");
             }
-            return back()->with('success', "SMS alert sent for PR #{$prNo} ({$statusLabel}) to assigned " . ucfirst(str_replace('_', ' ', $ownerRole)) . ": {$destStr}");
+            return back()->with('success', "SMS alert sent immediately for PR #{$prNo} ({$statusLabel}) to assigned " . ucfirst(str_replace('_', ' ', $ownerRole)) . ": {$destStr}");
         }
 
-        return back()->with('warning', "No phone numbers found for role '" . ucfirst(str_replace('_', ' ', $ownerRole)) . "' or Global Admin. Please configure ADMIN_PHONE in .env.");
+        return back()->with('warning', "No phone numbers found for role '" . ucfirst(str_replace('_', ' ', $ownerRole)) . "' or Global Admin. Sending stopped.");
     }
 }

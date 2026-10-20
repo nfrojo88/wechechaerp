@@ -161,6 +161,10 @@ class PurchaseRequest extends Model
         static::created(function (PurchaseRequest $pr) {
             if ($pr->status !== self::STATUS_DRAFT) {
                 try {
+                    if (config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', true)) === false) {
+                        return;
+                    }
+
                     $ownerRole = $pr->current_owner_role ?: static::resolveDefaultOwnerRoleForStatus($pr->status);
                     if ($ownerRole) {
                         $actor = \Illuminate\Support\Facades\Auth::user();
@@ -186,6 +190,10 @@ class PurchaseRequest extends Model
 
             if (($statusChanged || $roleChanged) && !in_array($pr->status, [self::STATUS_DRAFT])) {
                 try {
+                    if (config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', true)) === false) {
+                        return;
+                    }
+
                     $ownerRole = $pr->current_owner_role ?: static::resolveDefaultOwnerRoleForStatus($pr->status);
                     if ($ownerRole) {
                         $actor = \Illuminate\Support\Facades\Auth::user();

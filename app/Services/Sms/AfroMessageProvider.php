@@ -49,7 +49,7 @@ class AfroMessageProvider implements SmsProviderInterface
 
         try {
             $response = Http::withToken($this->token)
-                ->timeout(15)
+                ->timeout(5)
                 ->get($this->baseUrl, [
                     'sender'  => $this->sender,
                     'to'      => $phone,

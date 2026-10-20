@@ -159,12 +159,13 @@ class MaterialRequest extends Model
             try {
                 PrWorkflowLog::create([
                     'purchase_request_id' => $pr->id,
-                    'from_status'         => 'draft',
-                    'to_status'           => $initialStatus,
+                    'from_stage'          => 'draft',
+                    'to_stage'            => $initialStatus,
                     'action'              => 'mr_converted_to_pr',
                     'actor_role'          => 'system',
                     'actor_id'            => $creatorId,
                     'notes'               => "Purchase Request auto-generated from Material Request #{$this->reference_number} to follow complete procurement lifecycle.",
+                    'created_at'          => now(),
                 ]);
             } catch (\Throwable $e) {}
 

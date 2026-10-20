@@ -63,6 +63,11 @@ class ProcurementHandoffNotificationService
      */
     public function executeHandoffNotification(string $handoffKey, Model $requestModel, array $context = []): array
     {
+        if (config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', true)) === false) {
+            Log::info("Procurement SMS handoff is globally disabled. Skipping handoff key [{$handoffKey}].");
+            return [];
+        }
+
         $config = config("procurement_handoffs.handoffs.{$handoffKey}");
         if (!$config) {
             Log::warning("Procurement SMS handoff key [{$handoffKey}] not found in config.");
@@ -136,25 +141,23 @@ class ProcurementHandoffNotificationService
                 continue;
             }
 
-            // Quick retry up to 3 times on gateway failure
+            // Immediate dispatch: 1 attempt. If not successful, stop sending immediately (no retries).
             $status = 'failed';
             $error  = null;
             $retries = 0;
 
-            for ($attempt = 1; $attempt <= 3; $attempt++) {
+            try {
                 $sendResult = $this->smsProvider->send($phone, $message);
                 if (!empty($sendResult['success'])) {
                     $status = 'sent';
                     $error  = null;
-                    break;
+                } else {
+                    $error = $sendResult['error'] ?? 'SMS dispatch error';
+                    Log::warning("Procurement SMS handoff dispatch failed for {$phone} [{$handoffKey}]: {$error}. Stop sending.");
                 }
-
-                $retries = $attempt;
-                $error   = $sendResult['error'] ?? 'SMS dispatch error';
-
-                if ($attempt < 3) {
-                    usleep(150000); // 150ms quick pause before retry
-                }
+            } catch (\Throwable $e) {
+                $error = 'SMS send exception: ' . $e->getMessage();
+                Log::error("Procurement SMS handoff exception for {$phone} [{$handoffKey}]: {$error}. Stop sending.");
             }
 
             // Save to notification_log

@@ -18,6 +18,15 @@
                 <span class="badge bg-success text-white px-2.5 py-1.5 rounded-pill shadow-xs">
                     <i class="fa-solid fa-shield-halved me-1"></i>Provider: {{ $activeProvider }}
                 </span>
+                @if($isGloballyEnabled)
+                    <span class="badge bg-success text-white px-2.5 py-1.5 rounded-pill shadow-xs" title="Single immediate attempt, stops immediately if error">
+                        <i class="fa-solid fa-circle-check me-1"></i>SMS Dispatch: Immediate (Fail-Safe)
+                    </span>
+                @else
+                    <span class="badge bg-danger text-white px-2.5 py-1.5 rounded-pill shadow-xs" title="All procurement lifecycle SMS dispatches stopped">
+                        <i class="fa-solid fa-circle-xmark me-1"></i>SMS Dispatch: Stopped
+                    </span>
+                @endif
             </div>
             <p class="text-muted small mb-0 mt-1">
                 Configure instant SMS alerts triggered automatically on every procurement stage transition from Site Requisition to 3-Way Match & Close.
