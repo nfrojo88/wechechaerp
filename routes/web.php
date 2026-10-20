@@ -2318,6 +2318,15 @@ Route::middleware(['auth'])->group(function () {
     Route::post('finance/tax-deductions/settle/{settlement}/cancel', [App\Http\Controllers\Finance\FinanceTaxReportController::class, 'cancelSettlement'])->name('finance.tax-deductions.settle.cancel');
     Route::post('finance/tax-deductions/admin-clear', [App\Http\Controllers\Finance\FinanceTaxReportController::class, 'adminClearMonth'])->name('finance.tax-deductions.admin-clear');
 
+    // ─── Central Expense Hub & VAT Decision Engine ───────────────────────────
+    Route::get('finance/expense-hub', [App\Http\Controllers\Finance\ExpenseHubController::class, 'index'])->name('finance.expense-hub.index');
+    Route::post('finance/expense-hub/decision', [App\Http\Controllers\Finance\ExpenseHubController::class, 'saveDecision'])->name('finance.expense-hub.decision');
+    Route::post('finance/expense-hub/bulk-decision', [App\Http\Controllers\Finance\ExpenseHubController::class, 'bulkDecision'])->name('finance.expense-hub.bulk-decision');
+    Route::get('finance/expense-hub/export-hub', [App\Http\Controllers\Finance\ExpenseHubController::class, 'exportHubExcel'])->name('finance.expense-hub.export-hub');
+    Route::get('finance/expense-hub/export-vat', [App\Http\Controllers\Finance\ExpenseHubController::class, 'exportVatExcel'])->name('finance.expense-hub.export-vat');
+    Route::post('finance/expense-hub/lock-month', [App\Http\Controllers\Finance\ExpenseHubController::class, 'lockMonth'])->name('finance.expense-hub.lock-month');
+    Route::post('finance/expense-hub/unlock-month', [App\Http\Controllers\Finance\ExpenseHubController::class, 'unlockMonth'])->name('finance.expense-hub.unlock-month');
+
     Route::resource('payments', App\Http\Controllers\PaymentController::class)->only(['index','create','store','show']);
 
 

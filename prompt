@@ -1,0 +1,69 @@
+You are working on my Laravel ERP (Ethiopia, ETB). In the previous step you
+mapped every table where money is spent. Now build STEP 3 with these rules.
+
+GOAL
+Create ONE new page: "Expense Hub". It shows all expenses from all modules in
+one place. On this page, Finance decides for each expense whether VAT applies.
+The page must connect directly to our existing VAT format/report.
+
+STRICT RULES (most important)
+1. DO NOT change, rename, or delete any existing table, column, model,
+   controller, page, route, or SMS/notification logic.
+2. READ-ONLY on all existing tables. Never write to them from the Hub.
+3. All new data goes in NEW tables only (prefix: expense_hub_).
+4. If something existing must be touched, STOP and ask me first.
+
+WHAT THE HUB SHOWS
+- Count only actual paid money, once (cash basis). No double counting.
+- Sources: procurement_payments, credit_store_payments, expense_requests (paid),
+  petty_cash_material_purchases, payrolls, employee_advances, ipc_records
+  (paid), tax_settlements, fixed_assets (as separate CapEx category).
+- Do NOT count: purchase_requests, proformas, receipts, budgets, journal
+  entries (these are estimates or proof only).
+- Petty cash replenishment is a fund transfer, not an expense.
+- Each row: date, source module, source ID (link to the original record),
+  project/site, payee/supplier, TIN, amount, payment method, paid by,
+  receipt link, VAT status.
+
+VAT DECISION (core feature)
+- Each row has a VAT status: "VAT applies", "No VAT", or "Pending decision".
+- Default by source, based on what the source already has:
+  * If the source already has vat_amount > 0 -> "VAT applies" (prefilled)
+  * If vat_amount is empty/0 -> "Pending decision"
+  * Payroll, salary advances, tax settlements -> "No VAT" by default
+- Finance can change the status per row, and in bulk (select many rows).
+- When "VAT applies" and the source has no VAT amount, calculate it with a
+  configurable rate (default 15%) and let the user choose whether the entered
+  amount is VAT-inclusive or VAT-exclusive. Show base, VAT, and total.
+- When "No VAT", require a short reason (dropdown + note), e.g. no TIN on
+  receipt, exempt item, salary, informal vendor.
+- Warn (do not block) if "VAT applies" but there is no vendor TIN or no
+  fiscal receipt.
+- Save all decisions in new tables: expense_hub_vat_decisions
+  (source_type, source_id, vat_status, vat_rate, vat_amount, base_amount,
+  reason, decided_by, decided_at). Keep a full history of changes (audit log).
+- Lock a decision after the month is closed, unless the Finance Head unlocks it.
+
+LINK TO OUR VAT FORMAT
+- FIRST find our existing VAT report/format in the codebase (VAT columns,
+  tax_settlements, any VAT export or page) and show me what you found.
+- The Hub's VAT view and Excel/PDF export must use the SAME columns and layout
+  as our existing VAT format, so it can be submitted directly.
+- Add a "VAT Summary" tab: total input VAT, total No-VAT, total Pending, by month.
+- Pending rows must be clearly visible, because they are not yet in the VAT report.
+
+PAGE FEATURES
+- Filters: date range, project, source module, supplier, VAT status, category
+- Search, sortable columns, pagination, totals row
+- Summary cards: total spent, VAT applies, No VAT, Pending, CapEx separate
+- Export to Excel/PDF (hub view and VAT-format view)
+- Access: finance_head, gm, admin see everything; others see only their project;
+  only finance roles can change VAT status
+
+BUILD ORDER
+1. Show the plan: new tables, queries/service, and how each source is read.
+   Wait for my confirmation.
+2. Build migrations, service, and page.
+3. Add tests: no double counting, VAT calculations (inclusive/exclusive),
+   and a check that existing tables are unchanged.
+4. List every file you created or changed.

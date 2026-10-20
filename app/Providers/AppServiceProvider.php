@@ -77,8 +77,8 @@ class AppServiceProvider extends ServiceProvider
             // Read last migration time from lock file
             $lastRun = file_exists($lockFile) ? (int) file_get_contents($lockFile) : 0;
 
-            // Only run if there are new migration files since last run
-            if ($latestMigration > $lastRun) {
+            // Only run if there are new migration files since last run or core tables missing
+            if ($latestMigration > $lastRun || !Schema::hasTable('expense_hub_vat_decisions')) {
                 Artisan::call('migrate', [
                     '--force' => true,   // required in production
                     '--no-interaction' => true,
