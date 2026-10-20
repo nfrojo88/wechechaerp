@@ -19,6 +19,7 @@ use App\Services\EthiopianDate;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
 
 class ExpenseHubQueryService
@@ -218,7 +219,7 @@ class ExpenseHubQueryService
                 'source_module_label'  => 'Procurement Payment',
                 'source_id'            => $payment->id,
                 'reference_no'         => $pr?->pr_no ? "PR #{$pr->pr_no}" : "PAY-{$payment->id}",
-                'view_url'             => route('procurement.purchase-requests.show', $pr?->id ?? 1),
+                'view_url'             => $this->safeRoute(['purchase-requests.show', 'procurement.purchase-requests.show'], $pr?->id ?? 1, url('/purchase-requests/' . ($pr?->id ?? 1))),
                 'project_id'           => $pr?->project_id,
                 'project_name'         => $pr?->project?->name ?: 'General / Head Office',
                 'payee_supplier'       => $supplierName,
@@ -264,7 +265,7 @@ class ExpenseHubQueryService
                 'source_module_label'  => 'Credit Store Settlement',
                 'source_id'            => $payment->id,
                 'reference_no'         => $payment->reference_no ?: ($ledger?->pr_no ? "CS-PR-{$ledger->pr_no}" : "CS-PAY-{$payment->id}"),
-                'view_url'             => route('finance.credit-store.index'),
+                'view_url'             => $this->safeRoute(['finance.credit-store.index'], [], url('/finance/credit-store')),
                 'project_id'           => $ledger?->project_id,
                 'project_name'         => $ledger?->project?->name ?: 'General / Head Office',
                 'payee_supplier'       => $supplierName,
@@ -317,7 +318,7 @@ class ExpenseHubQueryService
                 'source_module_label'  => 'Expense Request / Voucher',
                 'source_id'            => $req->id,
                 'reference_no'         => $req->request_number ?: "EXP-REQ-{$req->id}",
-                'view_url'             => route('expenses.requests.show', $req->id),
+                'view_url'             => $this->safeRoute(['expense-requests.show', 'expenses.requests.show'], $req->id, url('/expense-requests/' . $req->id)),
                 'project_id'           => $req->project_id,
                 'project_name'         => $req->project?->name ?: 'General / Head Office',
                 'payee_supplier'       => $payee,
@@ -356,7 +357,7 @@ class ExpenseHubQueryService
                 'source_module_label'  => 'Petty Cash Purchase',
                 'source_id'            => $p->id,
                 'reference_no'         => $p->purchase_no ?: "PC-{$p->id}",
-                'view_url'             => route('store-keeper.petty-cash-purchases.show', $p->id),
+                'view_url'             => $this->safeRoute(['store-keeper.petty-cash-purchases.show', 'petty-cash-purchases.show'], $p->id, url('/store-keeper/petty-cash-purchases/' . $p->id)),
                 'project_id'           => $p->store?->project_id,
                 'project_name'         => $p->store?->project?->name ?: ($p->store?->name ?: 'General Site'),
                 'payee_supplier'       => $p->supplier_name ?: 'Petty Cash Vendor',
@@ -399,7 +400,7 @@ class ExpenseHubQueryService
                 'source_module_label'  => 'Payroll Disbursement',
                 'source_id'            => $pay->id,
                 'reference_no'         => $pay->payroll_ref ?: ('PAYROLL-' . $pay->year . '-' . $pay->month . "-{$pay->id}"),
-                'view_url'             => route('payrolls.show', $pay->id),
+                'view_url'             => $this->safeRoute(['payrolls.show'], $pay->id, url('/payrolls/' . $pay->id)),
                 'project_id'           => $employee?->project_id,
                 'project_name'         => $employee?->project?->name ?: 'General Staff',
                 'payee_supplier'       => $name,
@@ -447,7 +448,7 @@ class ExpenseHubQueryService
                 'source_module_label'  => 'Salary Advance',
                 'source_id'            => $adv->id,
                 'reference_no'         => "ADV-{$adv->id}",
-                'view_url'             => route('payrolls.index'),
+                'view_url'             => $this->safeRoute(['payrolls.index'], [], url('/payrolls')),
                 'project_id'           => $employee?->project_id,
                 'project_name'         => $employee?->project?->name ?: 'General Staff',
                 'payee_supplier'       => $name,
@@ -491,7 +492,7 @@ class ExpenseHubQueryService
                 'source_module_label'  => 'Subcontractor IPC',
                 'source_id'            => $ipc->id,
                 'reference_no'         => $ipc->ipc_no ?: "IPC-{$ipc->id}",
-                'view_url'             => route('ipcs.show', $ipc->id),
+                'view_url'             => $this->safeRoute(['ipcs.show'], $ipc->id, url('/ipcs/' . $ipc->id)),
                 'project_id'           => $ipc->project_id ?: $ipc->agreement?->project_id,
                 'project_name'         => $ipc->project?->name ?: 'Project Site',
                 'payee_supplier'       => $subcon,
@@ -529,7 +530,7 @@ class ExpenseHubQueryService
                 'source_module_label'  => 'Tax Settlement',
                 'source_id'            => $settle->id,
                 'reference_no'         => $settle->settlement_number ?: "SETTLE-{$settle->id}",
-                'view_url'             => route('finance.tax-deductions.index'),
+                'view_url'             => $this->safeRoute(['finance.tax-deductions.index'], [], url('/finance/tax-deductions')),
                 'project_id'           => null,
                 'project_name'         => 'Head Office / Tax Authority',
                 'payee_supplier'       => 'Ministry of Revenue (MOR) / ERCA',
@@ -574,7 +575,7 @@ class ExpenseHubQueryService
                 'source_module_label'  => 'Fixed Asset Acquisition',
                 'source_id'            => $asset->id,
                 'reference_no'         => $asset->code_prefix ? "AST-{$asset->code_prefix}-{$asset->id}" : "AST-{$asset->id}",
-                'view_url'             => route('fixed-assets.show', $asset->id),
+                'view_url'             => $this->safeRoute(['store-manager.fixed-assets.show', 'fixed-assets.show'], $asset->id, url('/store-manager/fixed-assets/' . $asset->id)),
                 'project_id'           => $asset->store?->project_id,
                 'project_name'         => $asset->store?->project?->name ?: 'General Company',
                 'payee_supplier'       => $asset->supplier ?: 'Asset Vendor',
@@ -780,5 +781,28 @@ class ExpenseHubQueryService
         }
 
         return $projectIds;
+    }
+
+    /**
+     * Safely resolve a route by checking candidate route names in order, with fallback to URL.
+     * Prevents RouteNotFoundException from crashing the Expense Hub page.
+     *
+     * @param string|array $routes Single route name or array of candidate names in priority order
+     * @param mixed $parameters Route parameter(s)
+     * @param string $fallbackUrl Fallback URL if route resolution fails
+     */
+    protected function safeRoute(string|array $routes, $parameters = [], string $fallbackUrl = '#'): string
+    {
+        $candidateNames = is_array($routes) ? $routes : [$routes];
+        foreach ($candidateNames as $name) {
+            try {
+                if (Route::has($name)) {
+                    return route($name, $parameters);
+                }
+            } catch (\Throwable $e) {
+                // Ignore route parameter binding exception and continue to next or fallback
+            }
+        }
+        return $fallbackUrl;
     }
 }
