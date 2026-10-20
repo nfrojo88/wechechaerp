@@ -242,7 +242,7 @@ class ExpenseHubQueryService
 
     protected function loadCreditStorePayments(Collection $items, Collection $decisions, ?array $scopedProjectIds): void
     {
-        $query = CreditStorePayment::with(['ledger.project', 'ledger.purchaseRequest', 'recordedBy']);
+        $query = CreditStorePayment::with(['ledger.project', 'ledger.purchaseRequest.supplier', 'recordedByUser']);
 
         if ($scopedProjectIds !== null) {
             $query->whereHas('ledger', fn($q) => $q->whereIn('project_id', $scopedProjectIds));
@@ -251,7 +251,7 @@ class ExpenseHubQueryService
         foreach ($query->get() as $payment) {
             $ledger = $payment->ledger;
             $supplierName = $ledger?->supplier_name ?: 'Credit Store';
-            $tin = $ledger?->store?->tin ?? null;
+            $tin = $ledger?->purchaseRequest?->supplier?->tin ?? null;
             $gross = (float) ($payment->gross_amount > 0 ? $payment->gross_amount : $payment->amount);
             $vatAmt = (float) ($payment->vat_amount ?? 0);
 
@@ -274,7 +274,7 @@ class ExpenseHubQueryService
                 'amount'               => $gross,
                 'source_vat_amount'    => $vatAmt,
                 'payment_method'       => $payment->payment_method ?: 'bank_transfer',
-                'paid_by_name'         => $payment->recordedBy?->name ?: 'Finance Staff',
+                'paid_by_name'         => $payment->recordedByUser?->name ?: 'Finance Staff',
                 'disbursement_date'    => $payment->payment_date ? $payment->payment_date->toDateString() : ($payment->created_at ? $payment->created_at->toDateString() : null),
                 'receipt_url'          => $payment->receipt_path,
                 'category'             => 'material',
