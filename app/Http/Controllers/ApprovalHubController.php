@@ -41,6 +41,7 @@ class ApprovalHubController extends Controller
             'maintenanceRequest.reportedBy.employee',
             'maintenanceRequest.reportedBy',
             'pettyCashOwner.employee',
+            'receipt',
         ])
         ->where(function ($q) {
             $q->where(function ($sub) {
@@ -77,6 +78,22 @@ class ApprovalHubController extends Controller
                 $categoryName .= ' [Ticket #' . $req->maintenanceRequest->request_no . ']';
             }
 
+            $vatType = $req->vat_type ?? 'none';
+            $vatAmount = (float) ($req->vat_amount ?? 0);
+            if ($vatAmount <= 0 && $req->receipt && (float) ($req->receipt->vat_amount ?? 0) > 0) {
+                $vatAmount = (float) $req->receipt->vat_amount;
+            }
+            if ($vatAmount <= 0 && in_array(strtolower($vatType), ['inclusive', 'vat_b'])) {
+                $gross = (float) ($req->gross_amount > 0 ? $req->gross_amount : $req->amount);
+                $rate = (float) ($req->vat_rate > 0 ? $req->vat_rate : 15.0);
+                $base = round($gross / (1 + ($rate / 100)), 2);
+                $vatAmount = round($gross - $base, 2);
+            }
+            $hasVat = ($vatAmount > 0) || in_array(strtolower($vatType), ['inclusive', 'exclusive', 'vat_b', 'with_vat', 'standard']);
+
+            $baseAmount = (float) ($req->gross_amount > 0 ? $req->gross_amount : $req->amount);
+            $netAmount = (float) ($req->net_amount > 0 ? $req->net_amount : $req->amount);
+
             return (object) [
                 'id_raw'          => $req->id,
                 'id_formatted'    => $req->request_number ?? ('REQ-' . $req->id),
@@ -86,9 +103,11 @@ class ApprovalHubController extends Controller
                 'category'        => $categoryName,
                 'description'     => $req->description,
                 'applicant_name'  => $applicantName,
-                'base_amount'     => (float) $req->amount,
-                'vat_amount'      => 0,
-                'net_amount'      => (float) $req->amount,
+                'base_amount'     => $baseAmount,
+                'vat_amount'      => $vatAmount,
+                'vat_type'        => $vatType,
+                'has_vat'         => $hasVat,
+                'net_amount'      => $netAmount,
                 'status'          => $statusLabel,
                 'status_raw'      => $statusRaw,
                 'status_key'      => $statusKey,
@@ -143,6 +162,8 @@ class ApprovalHubController extends Controller
                 'applicant_name'  => 'Direct Entry',
                 'base_amount'     => (float) $exp->amount,
                 'vat_amount'      => 0,
+                'vat_type'        => 'none',
+                'has_vat'         => false,
                 'net_amount'      => (float) $exp->amount,
                 'status'          => ucfirst($exp->status ?? 'Pending'),
                 'status_raw'      => $exp->status ?? 'pending',
@@ -191,6 +212,8 @@ class ApprovalHubController extends Controller
                 'applicant_name'  => $po->supplier_name ?? 'Purchasing',
                 'base_amount'     => (float) $po->total_amount,
                 'vat_amount'      => 0,
+                'vat_type'        => 'none',
+                'has_vat'         => false,
                 'net_amount'      => (float) $po->total_amount,
                 'status'          => ucfirst($po->status ?? 'Draft'),
                 'status_raw'      => $po->status ?? 'draft',
@@ -238,6 +261,8 @@ class ApprovalHubController extends Controller
                     'applicant_name'  => 'Site / Operations',
                     'base_amount'     => (float) $ef->requested_amount,
                     'vat_amount'      => 0,
+                    'vat_type'        => 'none',
+                    'has_vat'         => false,
                     'net_amount'      => (float) $ef->requested_amount,
                     'status'          => ucfirst($ef->status ?? 'Pending'),
                     'status_raw'      => $ef->status ?? 'pending',
@@ -294,6 +319,18 @@ class ApprovalHubController extends Controller
                     };
 
                     $amount = (float)($payment?->amount ?? $pr->direct_buy_amount ?? 0);
+                    $vatType = $payment?->vat_type ?? 'none';
+                    $vatAmount = (float)($payment?->vat_amount ?? 0);
+                    if ($vatAmount <= 0 && in_array(strtolower($vatType), ['inclusive', 'vat_b'])) {
+                        $gross = (float)($payment?->gross_amount > 0 ? $payment->gross_amount : $amount);
+                        $rate = (float)($payment?->vat_rate > 0 ? $payment->vat_rate : 15.0);
+                        $base = round($gross / (1 + ($rate / 100)), 2);
+                        $vatAmount = round($gross - $base, 2);
+                    }
+                    $hasVat = ($vatAmount > 0) || in_array(strtolower($vatType), ['inclusive', 'exclusive', 'vat_b', 'with_vat', 'standard']);
+
+                    $baseAmount = (float)($payment?->gross_amount > 0 ? $payment->gross_amount : $amount);
+                    $netAmount = (float)($payment?->net_amount > 0 ? $payment->net_amount : $amount);
 
                     return (object) [
                         'id_raw'           => $pr->id,
@@ -304,9 +341,11 @@ class ApprovalHubController extends Controller
                         'category'         => 'Material Purchase',
                         'description'      => 'Purchase Request #' . $pr->pr_no . ($pr->justification ? ' - ' . $pr->justification : ''),
                         'applicant_name'   => $pr->requestedBy?->name ?? 'Procurement',
-                        'base_amount'      => $amount,
-                        'vat_amount'       => 0,
-                        'net_amount'       => $amount,
+                        'base_amount'      => $baseAmount,
+                        'vat_amount'       => $vatAmount,
+                        'vat_type'         => $vatType,
+                        'has_vat'          => $hasVat,
+                        'net_amount'       => $netAmount,
                         'status'           => $isPaid ? 'Paid (Pending Intake)' : 'Payment Queue',
                         'status_raw'       => $pr->status,
                         'status_key'       => $statusKey,
@@ -370,6 +409,8 @@ class ApprovalHubController extends Controller
                         'applicant_name'    => $req->requestedBy?->name ?? 'Secretary',
                         'base_amount'       => $amount,
                         'vat_amount'        => 0,
+                        'vat_type'          => 'none',
+                        'has_vat'           => false,
                         'net_amount'        => $amount,
                         'status'            => $statusLabel,
                         'status_raw'        => $req->status,
@@ -392,6 +433,40 @@ class ApprovalHubController extends Controller
                     ];
                 });
                 $items = $items->concat($officeRequests);
+            }
+        } catch (\Throwable $e) {}
+
+        // Enrich items with official Expense Hub VAT Decisions if available
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasTable('expense_hub_vat_decisions')) {
+                $decisions = \App\Models\ExpenseHubVatDecision::all();
+                if ($decisions->isNotEmpty()) {
+                    $keyed = [];
+                    foreach ($decisions as $d) {
+                        $keyed[$d->source_type . ':' . $d->source_id] = $d;
+                    }
+                    $items = $items->map(function ($item) use ($keyed) {
+                        $lookupKey = null;
+                        if ($item->type === 'expense_request') {
+                            $lookupKey = 'expense_request:' . $item->id_raw;
+                        } elseif ($item->type === 'purchase_request' && isset($item->raw_model->payment->id)) {
+                            $lookupKey = 'procurement_payment:' . $item->raw_model->payment->id;
+                        }
+                        if ($lookupKey && isset($keyed[$lookupKey])) {
+                            $dec = $keyed[$lookupKey];
+                            if ($dec->vat_status === \App\Models\ExpenseHubVatDecision::STATUS_VAT_APPLIES) {
+                                $item->has_vat = true;
+                                if ((float)$dec->vat_amount > 0) {
+                                    $item->vat_amount = (float)$dec->vat_amount;
+                                }
+                            } elseif ($dec->vat_status === \App\Models\ExpenseHubVatDecision::STATUS_NO_VAT) {
+                                $item->has_vat = false;
+                                $item->vat_amount = 0;
+                            }
+                        }
+                        return $item;
+                    });
+                }
             }
         } catch (\Throwable $e) {}
 
@@ -525,6 +600,20 @@ class ApprovalHubController extends Controller
             $items = $items->filter(function ($item) use ($catFilter) {
                 return str_contains(strtolower($item->category), $catFilter);
             });
+        }
+
+        // Apply VAT Filter (With VAT / Non-VAT)
+        if ($request->filled('vat') && $request->vat !== 'all') {
+            $vatFilter = strtolower($request->vat);
+            if (in_array($vatFilter, ['with_vat', 'yes', 'vat', 'has_vat'])) {
+                $items = $items->filter(function ($item) {
+                    return !empty($item->has_vat) || ((float)($item->vat_amount ?? 0) > 0);
+                });
+            } elseif (in_array($vatFilter, ['without_vat', 'no', 'non_vat', 'none'])) {
+                $items = $items->filter(function ($item) {
+                    return empty($item->has_vat) && ((float)($item->vat_amount ?? 0) <= 0);
+                });
+            }
         }
 
         // Apply Date Range Filter

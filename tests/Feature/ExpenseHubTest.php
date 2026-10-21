@@ -39,7 +39,7 @@ class ExpenseHubTest extends TestCase
 
         $this->project = Project::firstOrCreate(
             ['name' => 'Test Site Kazanchis'],
-            ['code' => 'TK-01', 'status' => 'active']
+            ['code' => 'TK-01', 'status' => 'active', 'created_by' => $this->financeUser->id]
         );
 
         $this->service = app(ExpenseHubQueryService::class);

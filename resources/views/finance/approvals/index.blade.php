@@ -97,7 +97,7 @@
             <form method="GET" action="{{ url('/expenses') }}" class="row g-2 align-items-end">
                 <input type="hidden" name="tab" value="{{ $activeTab }}">
                 
-                <div class="col-md-3">
+                <div class="col-md-2">
                     <label class="form-label small text-muted mb-1 fw-bold">Search</label>
                     <div class="input-group input-group-sm">
                         <span class="input-group-text bg-light border-end-0"><i class="fa-solid fa-magnifying-glass text-muted"></i></span>
@@ -137,12 +137,20 @@
                     </select>
                 </div>
 
+                <div class="col-md-2">
+                    <label class="form-label small text-muted mb-1 fw-bold">VAT Option (ቫት)</label>
+                    <select name="vat" class="form-select form-select-sm">
+                        <option value="all">All VAT Status</option>
+                        <option value="with_vat" {{ request('vat') === 'with_vat' ? 'selected' : '' }}>With VAT (ቫት ያለው)</option>
+                        <option value="without_vat" {{ request('vat') === 'without_vat' ? 'selected' : '' }}>Non-VAT (ያለ ቫት)</option>
+                    </select>
+                </div>
 
-                <div class="col-md-3">
+                <div class="col-md-2">
                     <label class="form-label small text-muted mb-1 fw-bold">Date Range</label>
                     <div class="d-flex gap-1">
-                        <input type="date" name="date_from" class="form-control form-control-sm" value="{{ request('date_from') }}">
-                        <input type="date" name="date_to" class="form-control form-control-sm" value="{{ request('date_to') }}">
+                        <input type="date" name="date_from" class="form-control form-control-sm px-1" value="{{ request('date_from') }}" title="Start Date">
+                        <input type="date" name="date_to" class="form-control form-control-sm px-1" value="{{ request('date_to') }}" title="End Date">
                     </div>
                 </div>
 
@@ -150,7 +158,7 @@
                     <button type="submit" class="btn btn-sm btn-dark w-100 rounded-3">
                         <i class="fa-solid fa-filter me-1"></i> Filter
                     </button>
-                    @if(request()->hasAny(['search', 'project', 'category', 'date_from', 'date_to']))
+                    @if(request()->hasAny(['search', 'project', 'category', 'vat', 'date_from', 'date_to']))
                         <a href="{{ url('/expenses?tab=' . $activeTab) }}" class="btn btn-sm btn-outline-danger rounded-3" title="Clear Filters">
                             <i class="fa-solid fa-rotate-left"></i>
                         </a>
@@ -247,6 +255,11 @@
                                 </td>
                                 <td class="text-end">
                                     <div class="fw-bold text-success" style="font-size: .95rem;">ETB {{ number_format($item->net_amount, 2) }}</div>
+                                    @if(!empty($item->has_vat) || (isset($item->vat_amount) && (float)$item->vat_amount > 0))
+                                        <span class="badge bg-info-subtle text-info border border-info-subtle d-inline-block mt-1" style="font-size: 0.65rem;" title="VAT ({{ ucfirst($item->vat_type ?? 'VAT') }}): ETB {{ number_format($item->vat_amount ?? 0, 2) }}">
+                                            <i class="fa-solid fa-receipt me-1"></i>VAT {{ (float)($item->vat_amount ?? 0) > 0 ? '+ETB ' . number_format($item->vat_amount, 2) : '15%' }}
+                                        </span>
+                                    @endif
                                 </td>
                                 <td class="text-center">
                                     <span class="badge bg-{{ $item->color }} rounded-pill px-2 py-1" style="font-size: .75rem;">
@@ -464,25 +477,29 @@
                                 <div class="small text-muted text-uppercase fw-bold mb-1">Amount & Category</div>
                                 <div class="fw-bold text-success fs-5">ETB {{ number_format($item->net_amount, 2) }}</div>
                                 <div class="small text-muted"><i class="fa-solid fa-tag me-1"></i>Category: <strong>{{ $item->category }}</strong></div>
-                                @if(isset($item->raw_model) && ($item->raw_model->vat_amount > 0 || $item->raw_model->withholding_amount > 0 || ($item->raw_model->gross_amount && $item->raw_model->gross_amount != $item->net_amount)))
+                                @php
+                                    $itemVat = (float)($item->vat_amount ?? ($item->raw_model->vat_amount ?? ($item->raw_model->payment->vat_amount ?? 0)));
+                                    $itemWht = (float)($item->raw_model->withholding_amount ?? ($item->raw_model->payment->withholding_amount ?? 0));
+                                    $itemGross = (float)($item->base_amount ?? ($item->raw_model->gross_amount ?? $item->net_amount));
+                                @endphp
+                                @if($itemVat > 0 || $itemWht > 0 || ($itemGross > 0 && abs($itemGross - $item->net_amount) > 0.01))
                                     <div class="mt-2 pt-2 border-top small">
                                         <div class="d-flex justify-content-between text-muted">
                                             <span>Base/Invoice:</span>
-                                            <span>ETB {{ number_format($item->raw_model->gross_amount ?? $item->net_amount, 2) }}</span>
+                                            <span>ETB {{ number_format($itemGross, 2) }}</span>
                                         </div>
-                                        @if($item->raw_model->vat_amount > 0)
+                                        @if($itemVat > 0)
                                         <div class="d-flex justify-content-between text-info">
-                                            <span>VAT ({{ $item->raw_model->vat_type === 'vat_b' ? 'VAT B Incl.' : '15%' }}):</span>
-                                            <span>+ ETB {{ number_format($item->raw_model->vat_amount, 2) }}</span>
+                                            <span>VAT ({{ ($item->vat_type ?? ($item->raw_model->vat_type ?? '')) === 'vat_b' ? 'VAT B Incl.' : '15%' }}):</span>
+                                            <span>+ ETB {{ number_format($itemVat, 2) }}</span>
                                         </div>
                                         @endif
-                                        @if($item->raw_model->withholding_amount > 0)
+                                        @if($itemWht > 0)
                                         <div class="d-flex justify-content-between text-danger">
-                                            <span>Withholding Tax ({{ $item->raw_model->withholding_rate ?? 3 }}%):</span>
-                                            <span>- ETB {{ number_format($item->raw_model->withholding_amount, 2) }}</span>
+                                            <span>Withholding Tax ({{ $item->raw_model->withholding_rate ?? ($item->raw_model->payment->withholding_rate ?? 3) }}%):</span>
+                                            <span>- ETB {{ number_format($itemWht, 2) }}</span>
                                         </div>
                                         @endif
-
                                     </div>
                                 @endif
                             </div>
