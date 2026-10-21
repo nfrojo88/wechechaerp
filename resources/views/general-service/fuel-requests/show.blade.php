@@ -77,7 +77,7 @@
                             <div class="p-3 bg-light rounded-3 text-center">
                                 <span class="text-muted small d-block mb-1">Volume Requested</span>
                                 <strong class="fs-4 text-dark font-monospace">{{ number_format($fuelRequest->liters_requested, 1) }}</strong>
-                                <small class="text-muted d-block">Liters</small>
+                                <small class="text-muted d-block">Liters @if($fuelRequest->price_per_liter) (@ {{ number_format($fuelRequest->price_per_liter, 2) }} ETB/L) @endif</small>
                             </div>
                         </div>
                         <div class="col-sm-4">
@@ -90,8 +90,13 @@
                         <div class="col-sm-4">
                             <div class="p-3 bg-light rounded-3 text-center">
                                 <span class="text-muted small d-block mb-1">Odometer at Request</span>
-                                <strong class="fs-4 text-primary font-monospace">{{ number_format($fuelRequest->current_odometer_km) }}</strong>
-                                <small class="text-muted d-block">KM</small>
+                                @if(!empty($fuelRequest->is_km_skipped))
+                                    <strong class="fs-5 text-secondary font-monospace d-block my-1"><i class="fa-solid fa-forward text-warning me-1"></i>Skipped</strong>
+                                    <small class="text-muted d-block">General Admin Request</small>
+                                @else
+                                    <strong class="fs-4 text-primary font-monospace">{{ number_format($fuelRequest->current_odometer_km) }}</strong>
+                                    <small class="text-muted d-block">KM</small>
+                                @endif
                             </div>
                         </div>
 

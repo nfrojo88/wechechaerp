@@ -74,9 +74,30 @@
     <div class="row g-4">
         {{-- Main Form Column --}}
         <div class="col-lg-8">
+            @if(!empty($isGeneralAdmin))
+                {{-- Mode Switcher for General Admin --}}
+                <div class="card border-0 shadow-sm rounded-4 mb-3 bg-light p-2">
+                    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 px-2 py-1">
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="badge bg-warning text-dark fw-bold px-2.5 py-1.5"><i class="fa-solid fa-user-shield me-1"></i>General Admin</span>
+                            <span class="small fw-bold text-dark">Requesting Option:</span>
+                        </div>
+                        <div class="btn-group rounded-pill p-1 bg-white border" role="group">
+                            <button type="button" class="btn btn-sm rounded-pill px-3 fw-semibold active" id="btnModeStandard" onclick="setAdminRequestMode('standard')">
+                                <i class="fa-solid fa-gauge-high me-1"></i>Standard (With Odometer KM)
+                            </button>
+                            <button type="button" class="btn btn-sm rounded-pill px-3 fw-bold text-dark" id="btnModeAdminQuick" onclick="setAdminRequestMode('admin_quick')">
+                                <i class="fa-solid fa-bolt text-danger me-1"></i>Admin Quick (Money &amp; Price/L — Skip KM)
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            @endif
+
             <div class="card border-0 shadow-sm rounded-4 p-4 bg-white">
                 <form action="{{ route('vehicle-fuel-requests.store') }}" method="POST" enctype="multipart/form-data" id="fuelRequestForm">
                     @csrf
+                    <input type="hidden" name="skip_km" id="skipKmInput" value="{{ old('skip_km', request('mode') === 'admin_direct' ? '1' : '0') }}">
 
                     <div class="row g-3">
                         {{-- 1. Vehicle Selection --}}
@@ -115,8 +136,8 @@
                             @enderror
                         </div>
 
-                        {{-- 3. Current Odometer Reading --}}
-                        <div class="col-md-6">
+                        {{-- 3. Current Odometer Reading (Hidden in Admin Skip-KM mode) --}}
+                        <div class="col-md-6" id="odometerInputContainer">
                             <label for="current_odometer_km" class="form-label fw-semibold text-dark">
                                 Current Dashboard Odometer (KM) <span class="text-danger">*</span>
                             </label>
@@ -135,6 +156,20 @@
                             @enderror
                         </div>
 
+                        @if(!empty($isGeneralAdmin))
+                        {{-- Admin Skip-KM Notice Banner --}}
+                        <div class="col-md-6 d-none" id="adminSkipKmBanner">
+                            <label class="form-label fw-semibold text-muted">Dashboard Odometer (KM)</label>
+                            <div class="p-2.5 rounded-3 border border-warning bg-warning bg-opacity-10 d-flex align-items-center gap-2">
+                                <i class="fa-solid fa-forward text-warning fs-4"></i>
+                                <div>
+                                    <div class="fw-bold text-dark small"><i class="fa-solid fa-circle-check text-success me-1"></i>KM Logging is SKIPPED</div>
+                                    <small class="text-muted text-xxs">No dashboard odometer reading or photo required for General Admin request.</small>
+                                </div>
+                            </div>
+                        </div>
+                        @endif
+
                         {{-- 4. Fuel Type --}}
                         <div class="col-md-6">
                             <label for="fuel_type" class="form-label fw-semibold text-dark">
@@ -149,40 +184,92 @@
                             @enderror
                         </div>
 
-                        {{-- 5. Liters Requested --}}
-                        <div class="col-md-6">
-                            <label for="liters_requested" class="form-label fw-semibold text-dark">
-                                Volume Needed (Liters) <span class="text-danger">*</span>
-                            </label>
-                            <div class="input-group">
-                                <span class="input-group-text bg-light"><i class="fa-solid fa-oil-can"></i></span>
-                                <input type="number" step="0.5" name="liters_requested" id="liters_requested"
-                                       class="form-control font-monospace fw-bold @error('liters_requested') is-invalid @enderror"
-                                       value="{{ old('liters_requested') }}"
-                                       placeholder="e.g. 50" required>
-                                <span class="input-group-text">Liters</span>
-                            </div>
-                            @error('liters_requested')
-                                <div class="invalid-feedback">{{ $message }}</div>
-                            @enderror
-                        </div>
-
-                        {{-- 6. Estimated Amount (ETB) --}}
-                        <div class="col-md-6">
+                        {{-- 5. Total Estimated Amount (ETB) --}}
+                        <div class="col-md-6" id="estimatedAmountContainer">
                             <label for="estimated_amount" class="form-label fw-semibold text-dark">
-                                Estimated Cost (ETB) <span class="text-danger">*</span>
+                                <span id="estimatedAmountLabel">Estimated Cost (ETB)</span> <span class="text-danger">*</span>
                             </label>
                             <div class="input-group">
                                 <span class="input-group-text bg-success text-white fw-bold">ETB</span>
                                 <input type="number" step="0.01" name="estimated_amount" id="estimated_amount"
                                        class="form-control font-monospace fw-bold fs-5 text-success @error('estimated_amount') is-invalid @enderror"
                                        value="{{ old('estimated_amount') }}"
-                                       placeholder="e.g. 5500.00" required>
+                                       placeholder="e.g. 5500.00" required oninput="handleMoneyInput()">
                             </div>
+                            <small class="text-muted text-xxs" id="moneyHelpText">Total money requested for this fuel disbursement.</small>
                             @error('estimated_amount')
                                 <div class="invalid-feedback">{{ $message }}</div>
                             @enderror
                         </div>
+
+                        @if(!empty($isGeneralAdmin))
+                        {{-- 6. Price per 1 Liter (Admin Mode) --}}
+                        <div class="col-md-6 d-none" id="pricePerLiterContainer">
+                            <label for="price_per_liter" class="form-label fw-semibold text-dark">
+                                Price per 1 Liter (How Much?) <span class="text-danger">*</span>
+                            </label>
+                            <div class="input-group">
+                                <input type="number" step="0.01" min="0.01" name="price_per_liter" id="price_per_liter"
+                                       class="form-control font-monospace fw-bold fs-5 text-dark @error('price_per_liter') is-invalid @enderror"
+                                       value="{{ old('price_per_liter') }}"
+                                       placeholder="e.g. 110.50" oninput="handlePriceInput()">
+                                <span class="input-group-text bg-light text-muted fw-semibold">ETB / L</span>
+                            </div>
+                            <small class="text-muted text-xxs">Station pump unit price per 1 liter to calculate fulfill volume.</small>
+                            @error('price_per_liter')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+                        @endif
+
+                        {{-- 7. Liters Requested --}}
+                        <div class="col-md-6" id="litersRequestedContainer">
+                            <label for="liters_requested" class="form-label fw-semibold text-dark">
+                                <span id="litersRequestedLabel">Volume Needed (Liters)</span> <span class="text-danger">*</span>
+                            </label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light"><i class="fa-solid fa-oil-can"></i></span>
+                                <input type="number" step="0.01" min="0.01" name="liters_requested" id="liters_requested"
+                                       class="form-control font-monospace fw-bold @error('liters_requested') is-invalid @enderror"
+                                       value="{{ old('liters_requested') }}"
+                                       placeholder="e.g. 50" required oninput="handleLitersInput()">
+                                <span class="input-group-text">Liters</span>
+                            </div>
+                            <small class="text-muted text-xxs" id="litersHelpText">Calculated or estimated liters.</small>
+                            @error('liters_requested')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+
+                        @if(!empty($isGeneralAdmin))
+                        {{-- Live Calculation Preview Card (Admin Mode) --}}
+                        <div class="col-12 d-none" id="adminFulfillLiveCard">
+                            <div class="card border border-warning border-opacity-50 bg-warning bg-opacity-10 rounded-3 p-3 shadow-none">
+                                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                    <div>
+                                        <span class="text-xxs text-uppercase fw-bold text-muted d-block">
+                                            <i class="fa-solid fa-calculator text-warning me-1"></i>Automatic Volume Calculation
+                                        </span>
+                                        <div class="d-flex align-items-baseline gap-2 mt-1">
+                                            <span class="fs-4 fw-bold text-dark font-monospace" id="liveCalculatedLiters">0.00</span>
+                                            <span class="fs-6 fw-bold text-muted">Liters</span>
+                                        </div>
+                                        <small class="text-muted text-xxs" id="liveCalcFormula">
+                                            Formula: [Total Money] ÷ [Price per 1 Liter] = Fulfill Liters
+                                        </small>
+                                    </div>
+                                    <div class="text-end">
+                                        <span class="badge bg-white text-dark border px-2.5 py-1 text-xxs font-monospace d-block mb-1">
+                                            KM Logging: <strong>SKIPPED</strong>
+                                        </span>
+                                        <span class="badge bg-success text-white px-2.5 py-1 text-xxs font-monospace" id="liveNetPayable">
+                                            Payable: ETB 0.00
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        @endif
 
                         {{-- 7. Project Context (Optional) --}}
                         <div class="col-md-6">
@@ -330,9 +417,149 @@
 </div>
 
 <script>
+let currentAdminMode = 'standard';
+
 function handleVehicleChange(unitId) {
     if (!unitId) return;
-    window.location.href = "{{ route('vehicle-fuel-requests.create') }}?vehicle_id=" + unitId;
+    const modeParam = currentAdminMode === 'admin_quick' ? '&mode=admin_direct' : '';
+    window.location.href = "{{ route('vehicle-fuel-requests.create') }}?vehicle_id=" + unitId + modeParam;
 }
+
+function setAdminRequestMode(mode) {
+    currentAdminMode = mode;
+    const isQuick = (mode === 'admin_quick');
+
+    const btnStandard = document.getElementById('btnModeStandard');
+    const btnQuick = document.getElementById('btnModeAdminQuick');
+    const skipKmInput = document.getElementById('skipKmInput');
+    const odoContainer = document.getElementById('odometerInputContainer');
+    const odoInput = document.getElementById('current_odometer_km');
+    const skipBanner = document.getElementById('adminSkipKmBanner');
+    const priceContainer = document.getElementById('pricePerLiterContainer');
+    const priceInput = document.getElementById('price_per_liter');
+    const liveCard = document.getElementById('adminFulfillLiveCard');
+    const estAmountLabel = document.getElementById('estimatedAmountLabel');
+    const moneyHelpText = document.getElementById('moneyHelpText');
+    const litersLabel = document.getElementById('litersRequestedLabel');
+    const litersHelpText = document.getElementById('litersHelpText');
+
+    if (isQuick) {
+        btnStandard?.classList.remove('active', 'bg-dark', 'text-white');
+        btnStandard?.classList.add('text-muted');
+        btnQuick?.classList.add('active', 'bg-warning', 'text-dark', 'fw-bold');
+        btnQuick?.classList.remove('text-muted');
+
+        if (skipKmInput) skipKmInput.value = '1';
+
+        // Hide odometer input and remove required
+        odoContainer?.classList.add('d-none');
+        odoInput?.removeAttribute('required');
+        skipBanner?.classList.remove('d-none');
+
+        // Show price per liter and live calculation card
+        priceContainer?.classList.remove('d-none');
+        if (priceInput) priceInput.setAttribute('required', 'required');
+        liveCard?.classList.remove('d-none');
+
+        if (estAmountLabel) estAmountLabel.textContent = "Total Amount of Money Asked (ETB)";
+        if (moneyHelpText) moneyHelpText.textContent = "Total money asked for this vehicle fuel allocation.";
+        if (litersLabel) litersLabel.textContent = "Calculated Fulfill Volume (Liters)";
+        if (litersHelpText) litersHelpText.textContent = "Auto-calculated from Total Money ÷ Price per 1 Liter.";
+
+        recalcFromInputs();
+    } else {
+        btnQuick?.classList.remove('active', 'bg-warning', 'text-dark', 'fw-bold');
+        btnQuick?.classList.add('text-muted');
+        btnStandard?.classList.add('active', 'bg-dark', 'text-white', 'fw-semibold');
+        btnStandard?.classList.remove('text-muted');
+
+        if (skipKmInput) skipKmInput.value = '0';
+
+        // Restore odometer input and make required
+        odoContainer?.classList.remove('d-none');
+        odoInput?.setAttribute('required', 'required');
+        skipBanner?.classList.add('d-none');
+
+        // Hide price per liter and live calculation card
+        priceContainer?.classList.add('d-none');
+        priceInput?.removeAttribute('required');
+        liveCard?.classList.add('d-none');
+
+        if (estAmountLabel) estAmountLabel.textContent = "Estimated Cost (ETB)";
+        if (moneyHelpText) moneyHelpText.textContent = "Total estimated refueling cost.";
+        if (litersLabel) litersLabel.textContent = "Volume Needed (Liters)";
+        if (litersHelpText) litersHelpText.textContent = "Fuel volume needed.";
+    }
+}
+
+function handleMoneyInput() {
+    if (currentAdminMode === 'admin_quick') {
+        const money = parseFloat(document.getElementById('estimated_amount')?.value) || 0;
+        const rate = parseFloat(document.getElementById('price_per_liter')?.value) || 0;
+        if (rate > 0 && money > 0) {
+            const liters = (money / rate).toFixed(2);
+            const litersInput = document.getElementById('liters_requested');
+            if (litersInput) litersInput.value = liters;
+        }
+        recalcFromInputs();
+    }
+}
+
+function handlePriceInput() {
+    if (currentAdminMode === 'admin_quick') {
+        const money = parseFloat(document.getElementById('estimated_amount')?.value) || 0;
+        const rate = parseFloat(document.getElementById('price_per_liter')?.value) || 0;
+        if (rate > 0 && money > 0) {
+            const liters = (money / rate).toFixed(2);
+            const litersInput = document.getElementById('liters_requested');
+            if (litersInput) litersInput.value = liters;
+        }
+        recalcFromInputs();
+    }
+}
+
+function handleLitersInput() {
+    if (currentAdminMode === 'admin_quick') {
+        const liters = parseFloat(document.getElementById('liters_requested')?.value) || 0;
+        const rate = parseFloat(document.getElementById('price_per_liter')?.value) || 0;
+        if (rate > 0 && liters > 0) {
+            const money = (liters * rate).toFixed(2);
+            const moneyInput = document.getElementById('estimated_amount');
+            if (moneyInput) moneyInput.value = money;
+        }
+        recalcFromInputs();
+    }
+}
+
+function recalcFromInputs() {
+    const money = parseFloat(document.getElementById('estimated_amount')?.value) || 0;
+    const rate = parseFloat(document.getElementById('price_per_liter')?.value) || 0;
+    const liveLiters = document.getElementById('liveCalculatedLiters');
+    const formulaText = document.getElementById('liveCalcFormula');
+    const netBadge = document.getElementById('liveNetPayable');
+
+    let liters = 0;
+    if (rate > 0 && money > 0) {
+        liters = Math.round((money / rate) * 100) / 100;
+        if (formulaText) {
+            formulaText.innerHTML = `Formula: <strong>ETB ${money.toLocaleString('en-US', {minimumFractionDigits: 2})}</strong> ÷ <strong>${rate.toFixed(2)} ETB/L</strong> = <span class="text-success fw-bold">${liters.toFixed(2)} Liters</span>`;
+        }
+    } else {
+        if (formulaText) {
+            formulaText.textContent = "Enter Total Amount and Price per 1 Liter to calculate fulfill volume.";
+        }
+    }
+
+    if (liveLiters) liveLiters.textContent = liters.toFixed(2);
+    if (netBadge) netBadge.textContent = 'Payable: ETB ' + money.toLocaleString('en-US', {minimumFractionDigits: 2});
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const initialSkipKm = document.getElementById('skipKmInput')?.value;
+    if (urlParams.get('mode') === 'admin_direct' || initialSkipKm === '1') {
+        setAdminRequestMode('admin_quick');
+    }
+});
 </script>
 @endsection

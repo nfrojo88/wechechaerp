@@ -32,8 +32,10 @@ class VehicleFuelRequest extends Model
         'project_id',
         'expense_request_id',
         'current_odometer_km',
+        'is_km_skipped',
         'fuel_type',
         'liters_requested',
+        'price_per_liter',
         'estimated_amount',
         'reason',
         'status',
@@ -52,7 +54,9 @@ class VehicleFuelRequest extends Model
 
     protected $casts = [
         'current_odometer_km' => 'integer',
+        'is_km_skipped'       => 'boolean',
         'liters_requested'    => 'decimal:2',
+        'price_per_liter'     => 'decimal:2',
         'estimated_amount'    => 'decimal:2',
         'service_due_warning' => 'boolean',
         'service_due_km'      => 'integer',

@@ -11,9 +11,12 @@ use App\Models\VehicleFuelRequest;
 use App\Models\VehicleKmLog;
 use App\Models\VehicleReminder;
 use App\Models\VehicleReminderHistory;
+use App\Http\Controllers\VehicleFuelRequestController;
 use App\Services\ProcurementSmsService;
 use App\Services\VehicleFuelService;
 use App\Services\VehicleKmService;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
@@ -30,6 +33,8 @@ class VehicleKmAndFuelTest extends TestCase
 
         DB::statement('PRAGMA foreign_keys = OFF;');
 
+        Schema::dropIfExists('model_has_roles');
+        Schema::dropIfExists('roles');
         Schema::dropIfExists('vehicle_fuel_requests');
         Schema::dropIfExists('vehicle_km_logs');
         Schema::dropIfExists('vehicle_reminder_history');
@@ -40,6 +45,20 @@ class VehicleKmAndFuelTest extends TestCase
         Schema::dropIfExists('employees');
         Schema::dropIfExists('users');
         Schema::dropIfExists('procurement_sms_logs');
+
+        Schema::create('roles', function ($table) {
+            $table->id();
+            $table->string('name');
+            $table->string('guard_name')->default('web');
+            $table->timestamps();
+        });
+
+        Schema::create('model_has_roles', function ($table) {
+            $table->unsignedBigInteger('role_id');
+            $table->string('model_type');
+            $table->unsignedBigInteger('model_id');
+            $table->primary(['role_id', 'model_id', 'model_type']);
+        });
 
         Schema::create('users', function ($table) {
             $table->id();
@@ -170,9 +189,11 @@ class VehicleKmAndFuelTest extends TestCase
             $table->unsignedBigInteger('driver_booking_id')->nullable();
             $table->unsignedBigInteger('project_id')->nullable();
             $table->unsignedBigInteger('expense_request_id')->nullable();
-            $table->integer('current_odometer_km');
+            $table->integer('current_odometer_km')->nullable();
+            $table->boolean('is_km_skipped')->default(false);
             $table->string('fuel_type', 30)->default('diesel');
             $table->decimal('liters_requested', 10, 2);
+            $table->decimal('price_per_liter', 10, 2)->nullable();
             $table->decimal('estimated_amount', 15, 2);
             $table->text('reason')->nullable();
             $table->string('status', 50)->default('pending_finance');
@@ -384,5 +405,135 @@ class VehicleKmAndFuelTest extends TestCase
 
         // Verify updated KM log at 40,150 KM was recorded
         $this->assertEquals(40150, $this->kmService->getLastOdometer($unit->id));
+    }
+
+    public function test_general_admin_can_request_fuel_with_total_money_and_price_per_liter_skipping_km()
+    {
+        $admin = User::create([
+            'name'  => 'General Admin User',
+            'email' => 'admin_fuel_' . uniqid() . '@wechecha.com',
+        ]);
+
+        $asset = FixedAsset::create(['name' => 'Toyota Hilux Double Cab', 'category' => 'Vehicles']);
+        $unit  = FixedAssetUnit::create([
+            'fixed_asset_id' => $asset->id,
+            'unit_code'      => 'VH-ADM-001',
+            'plate_number'   => 'ET-3-88899',
+        ]);
+
+        // Prior odometer reading was 50,000 KM
+        VehicleKmLog::create([
+            'fixed_asset_unit_id' => $unit->id,
+            'odometer_km'         => 50000,
+            'km_date'             => '2026-10-01',
+            'source'              => 'initial',
+        ]);
+
+        $initialLogsCount = VehicleKmLog::where('fixed_asset_unit_id', $unit->id)->count();
+
+        // Admin submits request: Total money = 5,500 ETB, Price per liter = 110.00 ETB.
+        // Expected fulfill liters: 5,500 / 110 = 50.00 Liters. KM is skipped!
+        $totalMoney    = 5500.00;
+        $pricePerLiter = 110.00;
+
+        $fuelReq = $this->fuelService->createFuelRequest([
+            'fixed_asset_unit_id'  => $unit->id,
+            'skip_km'              => true,
+            'price_per_liter'      => $pricePerLiter,
+            'fuel_type'            => 'diesel',
+            'estimated_amount'     => $totalMoney,
+            'reason'               => 'Administrative project supervision fuel allocation',
+            'requested_by_user_id' => $admin->id,
+        ]);
+
+        $this->assertNotNull($fuelReq);
+        $this->assertTrue((bool)$fuelReq->is_km_skipped, 'Request must flag is_km_skipped = true.');
+        $this->assertEquals(110.00, (float)$fuelReq->price_per_liter);
+        $this->assertEquals(5500.00, (float)$fuelReq->estimated_amount);
+        $this->assertEquals(50.00, (float)$fuelReq->liters_requested, 'Fulfill liters must be calculated as total money / price per liter (5500/110 = 50L).');
+        $this->assertEquals(VehicleFuelRequest::STATUS_PENDING_FINANCE, $fuelReq->status);
+
+        // Verify that no new KM log was added (KM was skipped!)
+        $afterLogsCount = VehicleKmLog::where('fixed_asset_unit_id', $unit->id)->count();
+        $this->assertEquals($initialLogsCount, $afterLogsCount, 'No new KM log should be created when KM is skipped.');
+        $this->assertEquals(50000, $this->kmService->getLastOdometer($unit->id), 'Vehicle last odometer reading should remain intact at 50,000 KM.');
+
+        // Verify linked ExpenseRequest was automatically generated for Finance Head
+        $this->assertNotNull($fuelReq->expense_request_id);
+        $expense = ExpenseRequest::find($fuelReq->expense_request_id);
+        $this->assertNotNull($expense);
+        $this->assertEquals(5500.00, (float)$expense->amount);
+        $this->assertEquals(5500.00, (float)$expense->net_amount);
+        $this->assertStringContainsString('50 L diesel', $expense->description);
+        $this->assertStringContainsString('110.00 ETB/L', $expense->description);
+        $this->assertStringContainsString('KM Skipped', $expense->description);
+        $this->assertEquals(ExpenseRequest::STATUS_APPROVED_ASSIGNED, $expense->status);
+    }
+
+    public function test_controller_store_allows_general_admin_to_skip_km_and_denies_regular_user()
+    {
+        $roleAdmin = \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
+        $admin = User::create([
+            'name'  => 'Admin Chief',
+            'email' => 'admin_chief_' . uniqid() . '@wechecha.com',
+        ]);
+        $admin->assignRole($roleAdmin);
+
+        $asset = FixedAsset::create(['name' => 'Isuzu NPR Truck', 'category' => 'Vehicles']);
+        $unit  = FixedAssetUnit::create([
+            'fixed_asset_id' => $asset->id,
+            'unit_code'      => 'VH-TRK-001',
+            'plate_number'   => 'ET-3-99999',
+        ]);
+
+        $controller = new VehicleFuelRequestController($this->fuelService, $this->kmService);
+
+        // 1. General Admin submits request with skip_km = 1, estimated_amount = 6000, price_per_liter = 120 (NO odometer KM)
+        Auth::login($admin);
+        $reqAdmin = Request::create(route('vehicle-fuel-requests.store'), 'POST', [
+            'fixed_asset_unit_id' => $unit->id,
+            'skip_km'             => '1',
+            'estimated_amount'    => 6000.00,
+            'price_per_liter'     => 120.00,
+            'fuel_type'           => 'diesel',
+            'reason'              => 'Emergency logistics dispatch',
+        ]);
+        app()->instance('request', $reqAdmin);
+
+        $response = $controller->store($reqAdmin);
+        $this->assertEquals(302, $response->getStatusCode());
+
+        $created = VehicleFuelRequest::where('fixed_asset_unit_id', $unit->id)->latest('id')->first();
+        $this->assertNotNull($created);
+        $this->assertTrue((bool)$created->is_km_skipped);
+        $this->assertEquals(50.00, (float)$created->liters_requested, '6000 ETB / 120 ETB/L must calculate 50 Liters.');
+        $this->assertEquals(6000.00, (float)$created->estimated_amount);
+        $this->assertEquals(120.00, (float)$created->price_per_liter);
+
+        // 2. Regular user (Driver with no admin role) attempts to submit without odometer KM
+        $driverUser = User::create([
+            'name'  => 'Standard Driver',
+            'email' => 'driver_' . uniqid() . '@wechecha.com',
+        ]);
+        $driverEmp = Employee::create([
+            'user_id'   => $driverUser->id,
+            'full_name' => 'Standard Driver',
+        ]);
+        $unit->update(['assigned_to_employee_id' => $driverEmp->id]);
+
+        Auth::login($driverUser);
+
+        $reqDriver = Request::create(route('vehicle-fuel-requests.store'), 'POST', [
+            'fixed_asset_unit_id' => $unit->id,
+            'skip_km'             => '1', // Even if driver sends skip_km=1, controller must ignore it because driver is not general admin!
+            'estimated_amount'    => 2000.00,
+            'fuel_type'           => 'diesel',
+            'liters_requested'    => 20.0,
+            'reason'              => 'Trip to site',
+        ]);
+        app()->instance('request', $reqDriver);
+
+        $this->expectException(ValidationException::class);
+        $controller->store($reqDriver);
     }
 }

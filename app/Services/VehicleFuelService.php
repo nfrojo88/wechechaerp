@@ -57,11 +57,21 @@ class VehicleFuelService
     public function createFuelRequest(array $data): VehicleFuelRequest
     {
         $unitId           = (int) $data['fixed_asset_unit_id'];
-        $currentKm        = (int) $data['current_odometer_km'];
+        $skipKm           = !empty($data['skip_km']) || !empty($data['is_km_skipped']);
+        $lastOdometer     = $this->kmService->getLastOdometer($unitId);
+        $currentKm        = (!empty($data['current_odometer_km']) && (int)$data['current_odometer_km'] > 0)
+            ? (int) $data['current_odometer_km']
+            : $lastOdometer;
+
         $fuelType         = $data['fuel_type'] ?? VehicleFuelRequest::FUEL_TYPE_DIESEL;
-        $litersRequested  = (float) $data['liters_requested'];
         $estimatedAmount  = (float) $data['estimated_amount'];
-        $reason           = $data['reason'] ?? 'Routine fuel replenishment';
+        $pricePerLiter    = !empty($data['price_per_liter']) ? (float) $data['price_per_liter'] : null;
+
+        $litersRequested  = !empty($data['liters_requested'])
+            ? (float) $data['liters_requested']
+            : (($pricePerLiter && $pricePerLiter > 0 && $estimatedAmount > 0) ? round($estimatedAmount / $pricePerLiter, 2) : 1.0);
+
+        $reason           = $data['reason'] ?? ($skipKm ? 'Administrative fuel allocation (KM skipped)' : 'Routine fuel replenishment');
         $driverEmployeeId = !empty($data['driver_employee_id']) ? (int) $data['driver_employee_id'] : null;
         $driverBookingId  = !empty($data['driver_booking_id']) ? (int) $data['driver_booking_id'] : null;
         $projectId        = !empty($data['project_id']) ? (int) $data['project_id'] : null;
@@ -71,9 +81,9 @@ class VehicleFuelService
         $unit = FixedAssetUnit::with(['parentAsset', 'assignedEmployee'])->findOrFail($unitId);
         $plateNumber = $unit->plate_number ?: ($unit->unit_code ?: 'Vehicle #' . $unit->id);
 
-        // 1. Check Unreceipted Policy
+        // 1. Check Unreceipted Policy (bypass if admin skipped KM or explicitly overridden)
         $unreceipted = $this->hasUnreceiptedFuelRequest($unitId);
-        if ($unreceipted) {
+        if ($unreceipted && !$skipKm) {
             $policy = $this->getUnreceiptedPolicy();
             if ($policy === 'block' && empty($data['override_unreceipted'])) {
                 throw ValidationException::withMessages([
@@ -85,9 +95,9 @@ class VehicleFuelService
         }
 
         // 2. Service reminder snapshot & proximity check
-        $serviceInfo = $this->kmService->getServiceStatus($unitId);
-        $serviceWarning = $serviceInfo['is_due_soon'] || $serviceInfo['is_overdue'];
-        $serviceDueKm   = $serviceInfo['remaining_km'];
+        $serviceInfo    = $this->kmService->getServiceStatus($unitId);
+        $serviceWarning = !$skipKm && ($serviceInfo['is_due_soon'] || $serviceInfo['is_overdue']);
+        $serviceDueKm   = !$skipKm ? $serviceInfo['remaining_km'] : null;
 
         return DB::transaction(function () use (
             $unit,
@@ -95,6 +105,7 @@ class VehicleFuelService
             $currentKm,
             $fuelType,
             $litersRequested,
+            $pricePerLiter,
             $estimatedAmount,
             $reason,
             $driverEmployeeId,
@@ -104,20 +115,23 @@ class VehicleFuelService
             $userId,
             $serviceWarning,
             $serviceDueKm,
-            $plateNumber
+            $plateNumber,
+            $skipKm
         ) {
-            // A. Record KM log
-            $today = date('Y-m-d');
-            $kmLog = $this->kmService->recordKm(
-                unitId: $unitId,
-                newOdometerKm: $currentKm,
-                kmDate: $today,
-                driverEmployeeId: $driverEmployeeId,
-                loggedByUserId: $userId,
-                photoPath: $odometerPhoto,
-                source: VehicleKmLog::SOURCE_FUEL_REQUEST,
-                notes: "Logged via Fuel Request: {$litersRequested} L {$fuelType}"
-            );
+            // A. Record KM log ONLY if KM was not skipped
+            if (!$skipKm) {
+                $today = date('Y-m-d');
+                $this->kmService->recordKm(
+                    unitId: $unitId,
+                    newOdometerKm: $currentKm,
+                    kmDate: $today,
+                    driverEmployeeId: $driverEmployeeId,
+                    loggedByUserId: $userId,
+                    photoPath: $odometerPhoto,
+                    source: VehicleKmLog::SOURCE_FUEL_REQUEST,
+                    notes: "Logged via Fuel Request: {$litersRequested} L {$fuelType}"
+                );
+            }
 
             // B. Create VehicleFuelRequest
             $fuelRequest = VehicleFuelRequest::create([
@@ -127,6 +141,8 @@ class VehicleFuelService
                 'driver_booking_id'    => $driverBookingId,
                 'project_id'           => $projectId,
                 'current_odometer_km'  => $currentKm,
+                'is_km_skipped'        => $skipKm,
+                'price_per_liter'      => $pricePerLiter,
                 'fuel_type'            => $fuelType,
                 'liters_requested'     => $litersRequested,
                 'estimated_amount'     => $estimatedAmount,
@@ -144,7 +160,10 @@ class VehicleFuelService
 
             $submitterUser = User::find($userId);
             $driverEmployee = $driverEmployeeId ? Employee::find($driverEmployeeId) : ($unit->assignedEmployee ?? null);
-            $driverName = $driverEmployee ? $driverEmployee->full_name : ($submitterUser ? $submitterUser->name : 'Driver');
+            $driverName = $driverEmployee ? $driverEmployee->full_name : ($submitterUser ? $submitterUser->name : 'General Admin');
+
+            $kmNote = $skipKm ? "KM Skipped (Admin Request)" : "Odometer: {$currentKm} KM";
+            $rateNote = $pricePerLiter ? " @ " . number_format($pricePerLiter, 2) . " ETB/L" : "";
 
             $expenseRequest = ExpenseRequest::create([
                 'request_number' => $expRequestNumber,
@@ -158,7 +177,7 @@ class VehicleFuelService
                 'gross_amount'   => $estimatedAmount,
                 'net_amount'     => $estimatedAmount,
                 'is_bank_payment'=> false,
-                'description'    => "Vehicle Fuel Request #{$fuelRequest->request_no}: {$litersRequested} L {$fuelType} for vehicle {$plateNumber} (Odometer: {$currentKm} KM). Purpose/Trip: {$reason}",
+                'description'    => "Vehicle Fuel Request #{$fuelRequest->request_no}: {$litersRequested} L {$fuelType}{$rateNote} for vehicle {$plateNumber} ({$kmNote}). Purpose: {$reason}",
                 'attachment'     => $odometerPhoto,
                 'status'         => ExpenseRequest::STATUS_APPROVED_ASSIGNED, // Directly in Finance Head queue!
             ]);

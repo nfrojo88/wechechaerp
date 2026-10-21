@@ -6,12 +6,14 @@ use App\Models\DriverBooking;
 use App\Models\Employee;
 use App\Models\FixedAssetUnit;
 use App\Models\Project;
+use App\Models\User;
 use App\Models\VehicleFuelRequest;
 use App\Services\FileUploadService;
 use App\Services\VehicleFuelService;
 use App\Services\VehicleKmService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Schema;
 
 class VehicleFuelRequestController extends Controller
 {
@@ -23,6 +25,55 @@ class VehicleFuelRequestController extends Controller
         $this->middleware('auth');
         $this->fuelService = $fuelService;
         $this->kmService   = $kmService;
+    }
+
+    /**
+     * Runtime self-healing database schema verification.
+     */
+    public function ensureSchema(): void
+    {
+        try {
+            if (Schema::hasTable('vehicle_fuel_requests')) {
+                Schema::table('vehicle_fuel_requests', function ($table) {
+                    if (!Schema::hasColumn('vehicle_fuel_requests', 'is_km_skipped')) {
+                        $table->boolean('is_km_skipped')->default(false)->after('current_odometer_km')->index();
+                    }
+                    if (!Schema::hasColumn('vehicle_fuel_requests', 'price_per_liter')) {
+                        $table->decimal('price_per_liter', 10, 2)->nullable()->after('liters_requested');
+                    }
+                });
+            }
+        } catch (\Throwable $e) {}
+    }
+
+    /**
+     * Check if the authenticated user has General Admin or Super Admin privileges.
+     */
+    public function isGeneralAdmin(?User $user = null): bool
+    {
+        $user = $user ?: Auth::user();
+        if (!$user) {
+            return false;
+        }
+
+        if (method_exists($user, 'isGlobalAdmin') && $user->isGlobalAdmin()) {
+            return true;
+        }
+
+        return $user->hasAnyRole([
+            'admin',
+            'Admin',
+            'global_admin',
+            'Global Admin',
+            'general_admin',
+            'General Admin',
+            'general_service',
+            'General Service',
+            'gm',
+            'GM',
+            'super_admin',
+            'Super Admin',
+        ]);
     }
 
     /**
@@ -76,7 +127,9 @@ class VehicleFuelRequestController extends Controller
      */
     public function index(Request $request)
     {
+        $this->ensureSchema();
         $user = Auth::user();
+        $isGeneralAdmin = $this->isGeneralAdmin($user);
         $vehicles = $this->getAccessibleVehicles();
         $accessibleIds = $vehicles->pluck('id')->toArray();
 
@@ -114,7 +167,7 @@ class VehicleFuelRequestController extends Controller
 
         $requests = $query->latest('id')->paginate(15)->withQueryString();
 
-        return view('general-service.fuel-requests.index', compact('requests', 'vehicles'));
+        return view('general-service.fuel-requests.index', compact('requests', 'vehicles', 'isGeneralAdmin'));
     }
 
     /**
@@ -122,6 +175,9 @@ class VehicleFuelRequestController extends Controller
      */
     public function create(Request $request)
     {
+        $this->ensureSchema();
+        $user = Auth::user();
+        $isGeneralAdmin = $this->isGeneralAdmin($user);
         $vehicles = $this->getAccessibleVehicles();
         $selectedUnitId = $request->query('vehicle_id', $vehicles->first()?->id);
 
@@ -154,7 +210,8 @@ class VehicleFuelRequestController extends Controller
             'policy',
             'drivers',
             'projects',
-            'recentBookings'
+            'recentBookings',
+            'isGeneralAdmin'
         ));
     }
 
@@ -163,21 +220,43 @@ class VehicleFuelRequestController extends Controller
      */
     public function store(Request $request)
     {
-        $request->validate([
+        $this->ensureSchema();
+        $user = Auth::user();
+        $isGeneralAdmin = $this->isGeneralAdmin($user);
+        $skipKm = $isGeneralAdmin && $request->boolean('skip_km');
+
+        $rules = [
             'fixed_asset_unit_id' => 'required|exists:fixed_asset_units,id',
-            'current_odometer_km' => 'required|integer|min:0',
             'fuel_type'           => 'required|in:diesel,benzine',
-            'liters_requested'    => 'required|numeric|min:0.5',
             'estimated_amount'    => 'required|numeric|min:1',
+            'price_per_liter'     => 'nullable|numeric|min:0.01',
             'reason'              => 'nullable|string|max:1000',
             'driver_employee_id'  => 'nullable|exists:employees,id',
             'driver_booking_id'   => 'nullable|exists:driver_bookings,id',
             'project_id'          => 'nullable|exists:projects,id',
             'odometer_photo'      => 'nullable|file|mimes:jpeg,png,jpg,webp,pdf|max:10240',
-        ]);
+        ];
+
+        if ($skipKm) {
+            $rules['current_odometer_km'] = 'nullable|integer|min:0';
+            $rules['liters_requested']    = 'nullable|numeric|min:0.01';
+        } else {
+            $rules['current_odometer_km'] = 'required|integer|min:0';
+            $rules['liters_requested']    = 'required|numeric|min:0.5';
+        }
+
+        $request->validate($rules);
 
         $unitId = (int) $request->fixed_asset_unit_id;
         $this->authorizeVehicleAccess($unitId);
+
+        $pricePerLiter = $request->filled('price_per_liter') ? (float) $request->price_per_liter : null;
+        $estimatedAmount = (float) $request->estimated_amount;
+        $litersRequested = (float) $request->liters_requested;
+
+        if ($litersRequested <= 0 && $pricePerLiter && $pricePerLiter > 0 && $estimatedAmount > 0) {
+            $litersRequested = round($estimatedAmount / $pricePerLiter, 2);
+        }
 
         $photoPath = null;
         if ($request->hasFile('odometer_photo')) {
@@ -191,17 +270,20 @@ class VehicleFuelRequestController extends Controller
 
         $fuelRequest = $this->fuelService->createFuelRequest([
             'fixed_asset_unit_id'  => $unitId,
-            'current_odometer_km'  => (int) $request->current_odometer_km,
+            'current_odometer_km'  => $request->filled('current_odometer_km') ? (int) $request->current_odometer_km : null,
+            'skip_km'              => $skipKm,
+            'is_km_skipped'        => $skipKm,
+            'price_per_liter'      => $pricePerLiter,
             'fuel_type'            => $request->fuel_type,
-            'liters_requested'     => (float) $request->liters_requested,
-            'estimated_amount'     => (float) $request->estimated_amount,
+            'liters_requested'     => $litersRequested,
+            'estimated_amount'     => $estimatedAmount,
             'reason'               => $request->reason,
             'driver_employee_id'   => $driverEmployeeId,
             'driver_booking_id'    => $request->driver_booking_id,
             'project_id'           => $request->project_id,
             'odometer_photo'       => $photoPath,
             'requested_by_user_id' => Auth::id(),
-            'override_unreceipted' => $request->boolean('override_unreceipted'),
+            'override_unreceipted' => $skipKm ? true : $request->boolean('override_unreceipted'),
         ]);
 
         $warningNote = $fuelRequest->service_due_warning 
@@ -217,6 +299,9 @@ class VehicleFuelRequestController extends Controller
      */
     public function show(VehicleFuelRequest $fuelRequest)
     {
+        $this->ensureSchema();
+        $user = Auth::user();
+        $isGeneralAdmin = $this->isGeneralAdmin($user);
         $fuelRequest->load([
             'assetUnit.parentAsset',
             'driver',
@@ -234,7 +319,7 @@ class VehicleFuelRequestController extends Controller
         $serviceStatus = $this->kmService->getServiceStatus($fuelRequest->fixed_asset_unit_id);
         $consumptionMetrics = $this->fuelService->getVehicleConsumptionMetrics($fuelRequest->fixed_asset_unit_id);
 
-        return view('general-service.fuel-requests.show', compact('fuelRequest', 'serviceStatus', 'consumptionMetrics'));
+        return view('general-service.fuel-requests.show', compact('fuelRequest', 'serviceStatus', 'consumptionMetrics', 'isGeneralAdmin'));
     }
 
     /**
