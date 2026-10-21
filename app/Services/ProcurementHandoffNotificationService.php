@@ -41,7 +41,7 @@ class ProcurementHandoffNotificationService
     public function triggerHandoff(string $handoffKey, Model $requestModel, array $context = []): void
     {
         // When procurement SMS is disabled, do not queue or execute any handoffs
-        if (config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', false)) === false) {
+        if (config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', true)) === false) {
             return;
         }
 
@@ -68,7 +68,7 @@ class ProcurementHandoffNotificationService
      */
     public function executeHandoffNotification(string $handoffKey, Model $requestModel, array $context = []): array
     {
-        if (config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', false)) === false) {
+        if (config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', true)) === false) {
             Log::info("Procurement SMS handoff is globally disabled. Skipping handoff key [{$handoffKey}].");
             return [];
         }
@@ -145,6 +145,14 @@ class ProcurementHandoffNotificationService
             if (empty($phone)) {
                 continue;
             }
+
+            // Deduplication guard: never send duplicate SMS within 60s
+            $cacheKey = "proc_sms_sent_{$requestType}_{$requestId}_{$handoffKey}_{$phone}";
+            if (\Illuminate\Support\Facades\Cache::has($cacheKey)) {
+                Log::info("ProcurementHandoffNotificationService: Duplicate SMS suppressed for {$phone} on {$requestType} #{$requestId} [{$handoffKey}].");
+                continue;
+            }
+            \Illuminate\Support\Facades\Cache::put($cacheKey, true, now()->addSeconds(60));
 
             // Immediate dispatch: 1 attempt. If not successful, stop sending immediately (no retries).
             $status = 'failed';

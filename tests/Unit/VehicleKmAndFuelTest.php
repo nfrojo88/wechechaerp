@@ -60,6 +60,14 @@ class VehicleKmAndFuelTest extends TestCase
             $table->string('role_title')->nullable();
             $table->string('phone')->nullable();
             $table->string('status')->default('active');
+            $table->boolean('is_dead_file')->default(false);
+            $table->boolean('is_approved_by_gm')->default(true);
+            $table->string('gm_approval_status')->default('approved');
+            $table->timestamp('gm_approved_at')->nullable();
+            $table->unsignedBigInteger('gm_approved_by')->nullable();
+            $table->text('gm_rejection_reason')->nullable();
+            $table->timestamp('gm_rejected_at')->nullable();
+            $table->unsignedBigInteger('gm_rejected_by')->nullable();
             $table->timestamps();
             $table->softDeletes();
         });

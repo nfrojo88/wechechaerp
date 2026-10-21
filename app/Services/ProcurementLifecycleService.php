@@ -53,7 +53,7 @@ class ProcurementLifecycleService
     public function notifyStageRole(int $purchaseRequestId, string $roleName, string $message, ?int $projectId = null, ?int $storeId = null): void
     {
         try {
-            if (config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', false)) === false) {
+            if (config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', true)) === false) {
                 return;
             }
             $this->sms->notifyRole($purchaseRequestId, $roleName, $message, $projectId, $storeId);
@@ -85,45 +85,21 @@ class ProcurementLifecycleService
         ?int $assignedEmployeeId = null
     ): void {
         try {
-            if (config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', false)) === false) {
+            if (config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', true)) === false) {
                 return;
             }
 
-            $prNo = $pr->pr_no;
-            $projectName = $pr->project?->name ?? 'General / Head Office';
-            $actorName = Auth::user()?->name ?? 'System';
-
-            $message = "ConstructPro: PR #{$prNo} | Project: {$projectName} | Action: {$actionNeeded} | Actor: {$actorName}. Open: " . url("/purchase-requests/{$pr->id}");
-
-            // 1. Direct routing to assigned Employee (e.g., driver)
-            $driverEmployeeId = $assignedEmployeeId ?: ($pr->driverBooking?->driver_employee_id ?? null);
-            if ($driverEmployeeId) {
-                try {
-                    $driver = Employee::find($driverEmployeeId);
-                    if ($driver && !empty($driver->phone)) {
-                        $this->sms->send($pr->id, $driver->phone, 'driver', $message);
-                    }
-                } catch (\Throwable $e) {
-                    \Illuminate\Support\Facades\Log::error("notifyNextOwner driver SMS error: " . $e->getMessage());
-                }
-            }
-
-            // 2. Direct routing to assigned User (e.g., assigned finance staff)
-            $targetStaffId = $assignedUserId ?: ($pr->payment?->assigned_finance_staff_id ?? null);
-            if ($targetStaffId && in_array($pr->current_owner_role, ['finance', 'finance_staff'])) {
-                $staff = User::with('employee')->find($targetStaffId);
-                $phone = $staff ? $this->sms->resolveUserPhone($staff) : null;
-                if (!empty($phone)) {
-                    $this->sms->send($pr->id, $phone, 'finance', $message);
-                    return;
-                }
-            }
-
-            // 3. Role-based routing to current owner role with automatic fallback to global_admin
-            $targetRole = $pr->current_owner_role ?: 'global_admin';
-            $resolvedRole = $this->resolveOwnerRole($targetRole, $pr);
-
-            $this->sms->notifyRole($pr->id, $resolvedRole, $message, $pr->project_id, $pr->store_id);
+            app(\App\Services\ProcurementStatusOwnerService::class)->dispatchStatusChangeSms(
+                model: $pr,
+                newStatus: $newStatus,
+                oldStatus: null,
+                actor: Auth::user(),
+                extraContext: [
+                    'action_needed'      => $actionNeeded,
+                    'assigned_user_id'   => $assignedUserId,
+                    'driver_employee_id' => $assignedEmployeeId,
+                ]
+            );
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::error("ProcurementLifecycle notifyNextOwner error for PR #{$pr->id}: " . $e->getMessage());
         }
@@ -426,7 +402,7 @@ class ProcurementLifecycleService
                 'current_owner_role' => null,
             ]);
             $this->log($pr, $from, PurchaseRequest::STATUS_REJECTED, 'gm_reject', 'gm', $notes);
-            if (config('procurement_handoffs.enabled', false)) {
+            if (config('procurement_handoffs.enabled', true)) {
                 try {
                     $this->sms->notifyRole($pr->id, 'purchase_manager',
                         "ConstructPro: PR #{$pr->pr_no} was REJECTED by GM. Reason: {$notes}. Open: " . url("/purchase-requests/{$pr->id}"),
@@ -722,7 +698,7 @@ class ProcurementLifecycleService
             $this->notifyNextOwner($pr, $nextStatus, $actionText);
 
             // Also notify coordinator that GM has approved
-            if (config('procurement_handoffs.enabled', false)) {
+            if (config('procurement_handoffs.enabled', true)) {
                 try {
                     $this->sms->notifyRole($pr->id, 'coordinator',
                         "ConstructPro: PR #{$pr->pr_no} (" . ($pr->project?->name ?? 'Project') . ") has been APPROVED by GM (" . number_format($finalAmount, 2) . " ETB). Open: " . url("/purchase-requests/{$pr->id}"),
@@ -1380,7 +1356,7 @@ class ProcurementLifecycleService
         });
 
         // 6. Notify Requester and Coordinator
-        if (config('procurement_handoffs.enabled', false)) {
+        if (config('procurement_handoffs.enabled', true)) {
             try {
                 $requester = $pr->requestedBy;
                 $phone = $requester ? $this->sms->resolveUserPhone($requester) : null;

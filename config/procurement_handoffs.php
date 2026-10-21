@@ -8,7 +8,7 @@ return [
     | Set to false (or PROCUREMENT_SMS_ENABLED=false in .env) to disable
     | all SMS dispatches across the procurement lifecycle.
     */
-    'enabled' => env('PROCUREMENT_SMS_ENABLED', false),
+    'enabled' => env('PROCUREMENT_SMS_ENABLED', true),
 
     /*
     |--------------------------------------------------------------------------

@@ -53,11 +53,15 @@ class AppServiceProvider extends ServiceProvider
         // Auto-run pending migrations on each request in production (cPanel deployment)
         // This ensures the database schema is always up-to-date without manual artisan commands
         $this->runAutoMigrations();
+
+        // Register Procurement Lifecycle Status Transition Observers
+        \App\Models\PurchaseRequest::observe(\App\Observers\PurchaseRequestObserver::class);
+        \App\Models\MaterialRequest::observe(\App\Observers\MaterialRequestObserver::class);
     }
 
     /**
      * Automatically run pending migrations.
-     * Safely checks for a lock file to avoid running on every request.
+     * Safely checks for changes to avoid performance overhead on normal requests.
      */
     protected function runAutoMigrations()
     {
@@ -65,26 +69,36 @@ class AppServiceProvider extends ServiceProvider
             // Only run if connected to DB successfully
             DB::connection()->getPdo();
 
-            // Use a lock file to prevent running on every request
             $lockFile = storage_path('app/migration.lock');
             $migrationsPath = database_path('migrations');
+            $migrationFiles = glob($migrationsPath . '/*.php') ?: [];
 
-            // Get the latest migration file timestamp
-            $latestMigration = collect(glob($migrationsPath . '/*.php'))
-                ->map(fn($f) => filemtime($f))
-                ->max();
+            // Signature based on file count, names, and newest file modification time
+            $latestMigrationTime = 0;
+            foreach ($migrationFiles as $file) {
+                $mtime = filemtime($file);
+                if ($mtime > $latestMigrationTime) {
+                    $latestMigrationTime = $mtime;
+                }
+            }
+            $currentSignature = md5(count($migrationFiles) . '_' . $latestMigrationTime . '_' . implode(',', array_map('basename', $migrationFiles)));
+            $savedSignature = file_exists($lockFile) ? trim(file_get_contents($lockFile)) : '';
 
-            // Read last migration time from lock file
-            $lastRun = file_exists($lockFile) ? (int) file_get_contents($lockFile) : 0;
+            $shouldMigrate = false;
 
-            // Only run if there are new migration files since last run or core tables missing
-            if ($latestMigration > $lastRun || !Schema::hasTable('expense_hub_vat_decisions') || !Schema::hasTable('vehicle_km_logs') || !Schema::hasTable('vehicle_fuel_requests')) {
+            if ($currentSignature !== $savedSignature) {
+                $shouldMigrate = true;
+            } elseif (!Schema::hasTable('migrations') || !Schema::hasTable('expense_hub_vat_decisions') || !Schema::hasTable('vehicle_km_logs') || !Schema::hasTable('vehicle_fuel_requests') || !Schema::hasTable('notification_log') || !Schema::hasTable('procurement_sms_settings')) {
+                $shouldMigrate = true;
+            }
+
+            if ($shouldMigrate) {
                 Artisan::call('migrate', [
-                    '--force' => true,   // required in production
+                    '--force'          => true,   // required in production
                     '--no-interaction' => true,
                 ]);
 
-                // Run seeders automatically to ensure admin user and roles exist
+                // Run seeders automatically to ensure admin user, roles, and settings exist
                 Artisan::call('db:seed', [
                     '--class' => 'Database\Seeders\RolesAndPermissionsSeeder',
                     '--force' => true,
@@ -98,10 +112,10 @@ class AppServiceProvider extends ServiceProvider
                     '--force' => true,
                 ]);
 
-                // Update the lock file with current timestamp
-                file_put_contents($lockFile, time());
+                // Update lock file with the new signature
+                @file_put_contents($lockFile, $currentSignature);
 
-                Log::info('Auto-migration completed at ' . now());
+                Log::info('Auto-migration completed successfully at ' . now());
             }
         } catch (\Exception $e) {
             // Never crash the app due to migration failure — just log it

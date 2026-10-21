@@ -29,8 +29,9 @@ class ProcurementSmsSettingsController extends Controller
 
         $configHandoffs = config('procurement_handoffs.handoffs', []);
         $dbSettings = ProcurementSmsSetting::all()->keyBy('handoff_key');
+        $statusMap = \App\Services\ProcurementStatusOwnerService::getStatusMap();
 
-        // Merge config definitions with DB overrides
+        // Merge config definitions with DB overrides and status map
         $handoffs = [];
         foreach ($configHandoffs as $key => $conf) {
             $db = $dbSettings->get($key);
@@ -45,6 +46,25 @@ class ProcurementSmsSettingsController extends Controller
                 'default_template' => $conf['default_template'] ?? '',
                 'description'      => $db->description ?? ($conf['description'] ?? ''),
             ];
+        }
+
+        // Include any additional transitions from status map
+        foreach ($statusMap as $mapKey => $mapItem) {
+            $hKey = $mapItem['handoff_key'];
+            if (!isset($handoffs[$hKey])) {
+                $db = $dbSettings->get($hKey);
+                $handoffs[$hKey] = [
+                    'key'              => $hKey,
+                    'name'             => $db->name ?? $mapItem['name'],
+                    'sender_role'      => $db->sender_role ?? 'system',
+                    'target_roles'     => [$mapItem['owner_role']],
+                    'target_roles_str' => ucwords(str_replace('_', ' ', $mapItem['owner_role'])),
+                    'is_enabled'       => $db ? (bool)$db->is_enabled : true,
+                    'template'         => $db->template ?? $mapItem['default_template'],
+                    'default_template' => $mapItem['default_template'],
+                    'description'      => $db->description ?? "Triggered on {$mapItem['status_key']}",
+                ];
+            }
         }
 
         // Recent SMS logs
@@ -67,6 +87,13 @@ class ProcurementSmsSettingsController extends Controller
 
         $recentLogs = $logsQuery->paginate(20)->withQueryString();
 
+        // Failed SMS logs for admin inspection
+        $failedLogs = NotificationLog::with(['sender', 'recipient', 'recipientEmployee'])
+            ->where('status', 'failed')
+            ->latest()
+            ->paginate(20, ['*'], 'failed_page')
+            ->withQueryString();
+
         // Statistics
         $totalSent   = NotificationLog::where('status', 'sent')->count();
         $totalFailed = NotificationLog::where('status', 'failed')->count();
@@ -77,6 +104,7 @@ class ProcurementSmsSettingsController extends Controller
         return view('admin.procurement.sms-settings', compact(
             'handoffs',
             'recentLogs',
+            'failedLogs',
             'totalSent',
             'totalFailed',
             'totalLogged',

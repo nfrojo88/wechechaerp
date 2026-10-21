@@ -88,6 +88,20 @@ class PurchaseRequest extends Model
         return self::statusLabels()[$this->status] ?? ucfirst(str_replace('_', ' ', $this->status));
     }
 
+    public function getEstimatedTotalCostAttribute(): float
+    {
+        if (isset($this->attributes['estimated_total_cost'])) {
+            return (float)$this->attributes['estimated_total_cost'];
+        }
+        if (!empty($this->direct_buy_amount) && (float)$this->direct_buy_amount > 0) {
+            return (float)$this->direct_buy_amount;
+        }
+        if ($this->relationLoaded('items')) {
+            return (float)$this->items->sum('estimated_total');
+        }
+        return 0.0;
+    }
+
     public static function statusBadgeClass(string $status): string
     {
         return match ($status) {

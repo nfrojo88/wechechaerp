@@ -119,6 +119,11 @@
                         <i class="fa-solid fa-clock-rotate-left me-2"></i>Live Notification Log
                     </a>
                 </li>
+                <li class="nav-item">
+                    <a class="nav-link fw-semibold text-danger" data-bs-toggle="tab" href="#failedLogsTab" role="tab">
+                        <i class="fa-solid fa-triangle-exclamation me-2"></i>Failed SMS List ({{ $totalFailed }})
+                    </a>
+                </li>
             </ul>
         </div>
 
@@ -323,6 +328,65 @@
                         {{ $recentLogs->links() }}
                     </div>
 
+                </div>
+
+                {{-- TAB 3: FAILED SMS LOG (AUDIT & RECOVERY) --}}
+                <div class="tab-pane fade" id="failedLogsTab" role="tabpanel">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div>
+                            <h5 class="fw-bold text-danger mb-1"><i class="fa-solid fa-triangle-exclamation me-2"></i>Failed SMS Dispatches</h5>
+                            <p class="text-muted small mb-0">Traceable audit of undelivered notifications with gateway error causes for immediate administrator follow-up.</p>
+                        </div>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle border">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width: 140px;">Timestamp</th>
+                                    <th style="width: 130px;">Request</th>
+                                    <th style="width: 160px;">Stage / Action</th>
+                                    <th style="width: 160px;">Target Role & Phone</th>
+                                    <th>Message Payload</th>
+                                    <th style="width: 200px;">Failure Reason</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @forelse($failedLogs as $fLog)
+                                <tr>
+                                    <td class="small text-muted">{{ $fLog->created_at->format('M d, Y H:i:s') }}</td>
+                                    <td>
+                                        <span class="badge bg-secondary text-uppercase">{{ str_replace('_', ' ', $fLog->request_type) }}</span>
+                                        <div class="fw-bold small">#{{ $fLog->request_id ?? 'N/A' }}</div>
+                                    </td>
+                                    <td>
+                                        <code class="small text-dark">{{ $fLog->action }}</code>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-danger bg-opacity-10 text-danger mb-1 d-inline-block">{{ ucfirst(str_replace('_', ' ', $fLog->role)) }}</span>
+                                        <div class="font-monospace small">{{ $fLog->phone }}</div>
+                                    </td>
+                                    <td class="small">{{ $fLog->message }}</td>
+                                    <td>
+                                        <div class="alert alert-danger py-1 px-2 mb-0 small font-monospace">
+                                            {{ $fLog->error ?? 'Delivery failure' }}
+                                        </div>
+                                    </td>
+                                </tr>
+                                @empty
+                                <tr>
+                                    <td colspan="6" class="text-center py-4 text-success fw-semibold">
+                                        <i class="fa-solid fa-circle-check me-2"></i>No failed SMS dispatches recorded. All messages have delivered successfully!
+                                    </td>
+                                </tr>
+                                @endforelse
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="mt-3">
+                        {{ $failedLogs->links() }}
+                    </div>
                 </div>
 
             </div>
