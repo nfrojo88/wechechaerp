@@ -25,7 +25,13 @@
             <p class="text-muted small mb-0">Unit Code: <strong>{{ $unit->unit_code }}</strong> &bull; Complete compliance &amp; service reminders hub</p>
         </div>
         <div class="d-flex flex-wrap gap-2">
-            <a href="{{ route('general-service.vehicle-reminders.create', ['fixed_asset_unit_id' => $unit->id]) }}" class="btn btn-primary rounded-pill px-3 shadow-sm fw-semibold">
+            <a href="{{ route('vehicle-km-logs.create', ['vehicle_id' => $unit->id]) }}" class="btn btn-primary rounded-pill px-3 shadow-sm fw-semibold">
+                <i class="fa-solid fa-gauge-high me-1"></i>Log KM
+            </a>
+            <a href="{{ route('vehicle-fuel-requests.create', ['vehicle_id' => $unit->id]) }}" class="btn btn-warning text-dark rounded-pill px-3 shadow-sm fw-semibold">
+                <i class="fa-solid fa-gas-pump me-1"></i>Request Fuel
+            </a>
+            <a href="{{ route('general-service.vehicle-reminders.create', ['fixed_asset_unit_id' => $unit->id]) }}" class="btn btn-outline-primary rounded-pill px-3 shadow-sm fw-semibold">
                 <i class="fa-solid fa-plus me-1"></i>Add Reminder
             </a>
             <a href="{{ route('general-service.vehicle-reminders.index') }}" class="btn btn-outline-secondary rounded-pill px-3 shadow-sm">
@@ -234,62 +240,294 @@
         </div>
     </div>
 
-    {{-- Reminders History & Activity Log for this Vehicle --}}
-    <div class="card border-0 shadow-sm rounded-4">
-        <div class="card-header bg-white border-bottom border-light py-3 d-flex justify-content-between align-items-center">
-            <h5 class="fw-bold mb-0 text-dark">
-                <i class="fa-solid fa-clock-rotate-left text-primary me-2"></i>Consolidated Renewal &amp; Service History
-            </h5>
-            <span class="text-muted small">All past renewals, inspections, and odometer logs for this vehicle</span>
-        </div>
-        <div class="card-body p-0">
-            @php
-                $allHistory = collect();
-                foreach($reminders as $r) {
-                    foreach($r->history as $h) {
-                        $allHistory->push($h);
-                    }
-                }
-                $allHistory = $allHistory->sortByDesc('performed_at');
-            @endphp
+    @php
+        $unitKmLogs = collect();
+        $unitFuelRequests = collect();
+        $unitServiceStatus = null;
+        $unitMetrics = null;
 
-            @if($allHistory->isEmpty())
-                <div class="text-center py-5 text-muted">
-                    <i class="fa-solid fa-history fs-2 mb-2 opacity-25"></i>
-                    <p class="small mb-0">No past renewals or service records logged yet for this vehicle.</p>
-                </div>
-            @else
-                <div class="table-responsive">
-                    <table class="table table-hover align-middle mb-0 small">
-                        <thead class="table-light text-muted text-uppercase" style="font-size: 0.72rem;">
-                            <tr>
-                                <th class="ps-3">Date</th>
-                                <th>Type</th>
-                                <th>Action</th>
-                                <th>Notes / Description</th>
-                                <th class="pe-3">Recorded By</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach($allHistory as $h)
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasTable('vehicle_km_logs')) {
+                $unitKmLogs = \App\Models\VehicleKmLog::with(['loggedBy', 'driver'])->where('fixed_asset_unit_id', $unit->id)->latestFirst()->take(30)->get();
+            }
+            if (\Illuminate\Support\Facades\Schema::hasTable('vehicle_fuel_requests')) {
+                $unitFuelRequests = \App\Models\VehicleFuelRequest::with(['driver', 'expenseRequest'])->where('fixed_asset_unit_id', $unit->id)->latest('id')->take(30)->get();
+            }
+            $unitServiceStatus = app(\App\Services\VehicleKmService::class)->getServiceStatus($unit->id);
+            $unitMetrics = app(\App\Services\VehicleFuelService::class)->getVehicleConsumptionMetrics($unit->id);
+        } catch (\Throwable $e) {}
+    @endphp
+
+    {{-- Consolidated Multi-Tab Hub (Reminders, KM History, Fuel Requests, Service Health) --}}
+    <div class="card border-0 shadow-sm rounded-4 overflow-hidden mb-4">
+        <div class="card-header bg-white border-bottom border-light p-3">
+            <ul class="nav nav-pills card-header-pills gap-2" id="vehicleDetailTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active rounded-pill px-3 py-2 fw-semibold" id="compliance-tab" data-bs-toggle="tab" data-bs-target="#compliance-pane" type="button" role="tab">
+                        <i class="fa-solid fa-clock-rotate-left me-1"></i>Compliance Reminders &amp; History
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link rounded-pill px-3 py-2 fw-semibold" id="km-tab" data-bs-toggle="tab" data-bs-target="#km-pane" type="button" role="tab">
+                        <i class="fa-solid fa-gauge-high me-1 text-info"></i>KM History ({{ $unitKmLogs->count() }})
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link rounded-pill px-3 py-2 fw-semibold" id="fuel-tab" data-bs-toggle="tab" data-bs-target="#fuel-pane" type="button" role="tab">
+                        <i class="fa-solid fa-gas-pump me-1 text-warning"></i>Fuel History ({{ $unitFuelRequests->count() }})
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link rounded-pill px-3 py-2 fw-semibold" id="service-tab" data-bs-toggle="tab" data-bs-target="#service-pane" type="button" role="tab">
+                        <i class="fa-solid fa-wrench me-1 text-danger"></i>Next Service Due &amp; Efficiency
+                        @if($unitServiceStatus && ($unitServiceStatus['is_due_soon'] || $unitServiceStatus['is_overdue']))
+                            <span class="badge bg-danger rounded-pill ms-1">!</span>
+                        @endif
+                    </button>
+                </li>
+            </ul>
+        </div>
+
+        <div class="card-body p-0 tab-content" id="vehicleDetailTabsContent">
+            {{-- Tab 1: Compliance Reminders & History --}}
+            <div class="tab-pane fade show active" id="compliance-pane" role="tabpanel">
+                @php
+                    $allHistory = collect();
+                    foreach($reminders as $r) {
+                        foreach($r->history as $h) {
+                            $allHistory->push($h);
+                        }
+                    }
+                    $allHistory = $allHistory->sortByDesc('performed_at');
+                @endphp
+
+                @if($allHistory->isEmpty())
+                    <div class="text-center py-5 text-muted">
+                        <i class="fa-solid fa-history fs-2 mb-2 opacity-25"></i>
+                        <p class="small mb-0">No past renewals or service records logged yet for this vehicle.</p>
+                    </div>
+                @else
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0 small">
+                            <thead class="table-light text-muted text-uppercase" style="font-size: 0.72rem;">
                                 <tr>
-                                    <td class="ps-3 text-muted">{{ $h->performed_at?->format('d M Y H:i') }}</td>
-                                    <td>
-                                        <span class="fw-semibold text-dark">{{ ucfirst(str_replace('_', ' ', $h->reminder_type)) }}</span>
-                                    </td>
-                                    <td>
-                                        <span class="badge {{ $h->action === 'renewed' ? 'bg-success' : ($h->action === 'odometer_updated' ? 'bg-info' : 'bg-secondary') }} rounded-pill px-2">
-                                            {{ ucfirst(str_replace('_', ' ', $h->action)) }}
-                                        </span>
-                                    </td>
-                                    <td class="text-dark">{{ $h->notes ?: '—' }}</td>
-                                    <td class="pe-3 text-muted">{{ $h->performer?->name ?? 'System' }}</td>
+                                    <th class="ps-3">Date</th>
+                                    <th>Type</th>
+                                    <th>Action</th>
+                                    <th>Notes / Description</th>
+                                    <th class="pe-3">Recorded By</th>
                                 </tr>
-                            @endforeach
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                @foreach($allHistory as $h)
+                                    <tr>
+                                        <td class="ps-3 text-muted">{{ $h->performed_at?->format('d M Y H:i') }}</td>
+                                        <td>
+                                            <span class="fw-semibold text-dark">{{ ucfirst(str_replace('_', ' ', $h->reminder_type)) }}</span>
+                                        </td>
+                                        <td>
+                                            <span class="badge {{ $h->action === 'renewed' ? 'bg-success' : ($h->action === 'odometer_updated' ? 'bg-info' : 'bg-secondary') }} rounded-pill px-2">
+                                                {{ ucfirst(str_replace('_', ' ', $h->action)) }}
+                                            </span>
+                                        </td>
+                                        <td class="text-dark">{{ $h->notes ?: '—' }}</td>
+                                        <td class="pe-3 text-muted">{{ $h->performer?->name ?? 'System' }}</td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                @endif
+            </div>
+
+            {{-- Tab 2: KM History --}}
+            <div class="tab-pane fade" id="km-pane" role="tabpanel">
+                <div class="p-3 bg-light border-bottom d-flex justify-content-between align-items-center">
+                    <span class="small text-muted">Logged dashboard odometer readings</span>
+                    <a href="{{ route('vehicle-km-logs.create', ['vehicle_id' => $unit->id]) }}" class="btn btn-primary btn-sm rounded-pill px-3 fw-semibold">
+                        <i class="fa-solid fa-plus me-1"></i>Record New KM
+                    </a>
                 </div>
-            @endif
+                @if($unitKmLogs->isEmpty())
+                    <div class="text-center py-5 text-muted">
+                        <i class="fa-solid fa-gauge-high fs-2 mb-2 opacity-25"></i>
+                        <p class="small mb-0">No KM logs recorded for this vehicle yet.</p>
+                    </div>
+                @else
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0 small">
+                            <thead class="table-light text-muted text-uppercase" style="font-size: 0.72rem;">
+                                <tr>
+                                    <th class="ps-3">Date</th>
+                                    <th>Odometer Reading</th>
+                                    <th>KM Jump</th>
+                                    <th>Source</th>
+                                    <th>Logged By</th>
+                                    <th>Notes</th>
+                                    <th class="pe-3">Photo</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach($unitKmLogs as $kLog)
+                                    <tr>
+                                        <td class="ps-3 text-muted">{{ $kLog->km_date?->format('d M Y') }}</td>
+                                        <td>
+                                            <span class="badge bg-dark font-monospace fs-6 px-2 py-1">{{ number_format($kLog->odometer_km) }} KM</span>
+                                        </td>
+                                        <td>
+                                            @if($kLog->km_difference > 0)
+                                                <span class="badge {{ $kLog->is_large_jump ? 'bg-danger' : 'bg-info bg-opacity-25 text-info-emphasis' }}">
+                                                    +{{ number_format($kLog->km_difference) }} KM
+                                                </span>
+                                            @else
+                                                <span class="text-muted">—</span>
+                                            @endif
+                                        </td>
+                                        <td><span class="badge bg-light text-dark border">{{ ucfirst(str_replace('_', ' ', $kLog->source)) }}</span></td>
+                                        <td class="text-muted">{{ $kLog->loggedBy?->name ?? 'System' }}</td>
+                                        <td class="text-dark">{{ $kLog->notes ?: '—' }}</td>
+                                        <td class="pe-3">
+                                            @if($kLog->photo_url)
+                                                <a href="{{ $kLog->photo_url }}" target="_blank" class="btn btn-xs btn-outline-info rounded-pill px-2 py-0"><i class="fa-solid fa-image me-1"></i>View</a>
+                                            @else
+                                                <span class="text-muted">—</span>
+                                            @endif
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                @endif
+            </div>
+
+            {{-- Tab 3: Fuel History --}}
+            <div class="tab-pane fade" id="fuel-pane" role="tabpanel">
+                <div class="p-3 bg-light border-bottom d-flex justify-content-between align-items-center">
+                    <span class="small text-muted">Past gasoline &amp; diesel requests for this vehicle</span>
+                    <a href="{{ route('vehicle-fuel-requests.create', ['vehicle_id' => $unit->id]) }}" class="btn btn-warning text-dark btn-sm rounded-pill px-3 fw-bold">
+                        <i class="fa-solid fa-plus me-1"></i>New Fuel Request
+                    </a>
+                </div>
+                @if($unitFuelRequests->isEmpty())
+                    <div class="text-center py-5 text-muted">
+                        <i class="fa-solid fa-gas-pump fs-2 mb-2 opacity-25"></i>
+                        <p class="small mb-0">No fuel requests submitted for this vehicle yet.</p>
+                    </div>
+                @else
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0 small">
+                            <thead class="table-light text-muted text-uppercase" style="font-size: 0.72rem;">
+                                <tr>
+                                    <th class="ps-3">Request #</th>
+                                    <th>Date</th>
+                                    <th>Type &amp; Liters</th>
+                                    <th>Estimated Cost</th>
+                                    <th>Status</th>
+                                    <th>Station Receipt</th>
+                                    <th class="pe-3 text-end">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach($unitFuelRequests as $fReq)
+                                    @php $fBadge = $fReq->status_badge; @endphp
+                                    <tr>
+                                        <td class="ps-3">
+                                            <a href="{{ route('vehicle-fuel-requests.show', $fReq->id) }}" class="fw-bold font-monospace text-dark text-decoration-none">
+                                                {{ $fReq->request_no }}
+                                            </a>
+                                        </td>
+                                        <td class="text-muted">{{ $fReq->created_at?->format('d M Y') }}</td>
+                                        <td>
+                                            <strong>{{ number_format($fReq->liters_requested, 1) }} L</strong>
+                                            <span class="badge {{ $fReq->fuel_type === 'diesel' ? 'bg-secondary' : 'bg-primary' }} text-capitalize ms-1">{{ $fReq->fuel_type }}</span>
+                                        </td>
+                                        <td class="text-success font-monospace fw-bold">ETB {{ number_format($fReq->actual_amount ?: $fReq->estimated_amount, 2) }}</td>
+                                        <td>
+                                            <span class="badge bg-{{ $fBadge['class'] }}">{{ $fBadge['label'] }}</span>
+                                        </td>
+                                        <td>
+                                            @if($fReq->receipt_photo)
+                                                <span class="badge bg-success bg-opacity-25 text-success-emphasis border border-success border-opacity-25"><i class="fa-solid fa-check me-1"></i>Attached</span>
+                                            @else
+                                                <span class="badge bg-warning bg-opacity-25 text-warning-emphasis border border-warning border-opacity-25"><i class="fa-solid fa-clock me-1"></i>Pending</span>
+                                            @endif
+                                        </td>
+                                        <td class="pe-3 text-end">
+                                            <a href="{{ route('vehicle-fuel-requests.show', $fReq->id) }}" class="btn btn-sm btn-outline-secondary px-2 py-1"><i class="fa-solid fa-eye"></i></a>
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                @endif
+            </div>
+
+            {{-- Tab 4: Next Service Due & Efficiency --}}
+            <div class="tab-pane fade p-4" id="service-pane" role="tabpanel">
+                <div class="row g-4">
+                    <div class="col-md-6">
+                        <div class="p-3 rounded-4 bg-light border">
+                            <h6 class="fw-bold mb-3 text-dark"><i class="fa-solid fa-wrench text-warning me-2"></i>Next Routine Service Interval</h6>
+                            @if($unitServiceStatus && $unitServiceStatus['has_service_reminder'])
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span class="text-muted">Current Odometer:</span>
+                                    <strong class="font-monospace fs-6">{{ number_format($unitServiceStatus['current_odometer_km']) }} KM</strong>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span class="text-muted">Service Due At:</span>
+                                    <strong class="font-monospace fs-6">{{ number_format($unitServiceStatus['next_service_km']) }} KM</strong>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <span class="text-muted">Remaining Distance:</span>
+                                    <strong class="font-monospace fs-5 {{ $unitServiceStatus['is_overdue'] ? 'text-danger' : ($unitServiceStatus['is_due_soon'] ? 'text-warning' : 'text-success') }}">
+                                        {{ $unitServiceStatus['remaining_km'] !== null ? number_format($unitServiceStatus['remaining_km']) . ' KM' : '—' }}
+                                    </strong>
+                                </div>
+                                <div class="text-center">
+                                    <span class="badge bg-{{ $unitServiceStatus['badge']['class'] }} fs-6 rounded-pill px-3 py-1">
+                                        <i class="fa-solid {{ $unitServiceStatus['badge']['icon'] }} me-1"></i>{{ $unitServiceStatus['badge']['label'] }}
+                                    </span>
+                                </div>
+                            @else
+                                <div class="text-muted small">No KM-based service reminder set up for this vehicle.</div>
+                            @endif
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="p-3 rounded-4 bg-light border">
+                            <h6 class="fw-bold mb-3 text-dark"><i class="fa-solid fa-gauge text-primary me-2"></i>Fuel Economy &amp; Efficiency</h6>
+                            @if($unitMetrics && $unitMetrics['has_data'])
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span class="text-muted">Average Mileage:</span>
+                                    <strong class="font-monospace text-dark fs-6">{{ $unitMetrics['avg_km_per_liter'] }} KM / Liter</strong>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span class="text-muted">Average Running Cost:</span>
+                                    <strong class="font-monospace text-dark fs-6">ETB {{ number_format($unitMetrics['avg_cost_per_km'], 2) }} / KM</strong>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <span class="text-muted">Fuel Spent This Month:</span>
+                                    <strong class="font-monospace text-success fs-6">ETB {{ number_format($unitMetrics['monthly_fuel_cost'], 2) }}</strong>
+                                </div>
+                                @if($unitMetrics['is_efficiency_flag'])
+                                    <div class="alert alert-danger border-0 p-2 small mb-0 rounded-3">
+                                        <i class="fa-solid fa-triangle-exclamation me-1"></i><strong>Consumption Anomaly:</strong> Latest mileage dropped by {{ $unitMetrics['efficiency_drop'] }}% compared to its baseline.
+                                    </div>
+                                @else
+                                    <div class="alert alert-success border-0 p-2 small mb-0 rounded-3 text-center">
+                                        <i class="fa-solid fa-circle-check me-1"></i>Fuel consumption is in normal operating range.
+                                    </div>
+                                @endif
+                            @else
+                                <div class="text-muted small">Requires at least one closed fuel receipt with post-fueling odometer to calculate mileage.</div>
+                            @endif
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 

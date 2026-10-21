@@ -1,69 +1,85 @@
-You are working on my Laravel ERP (Ethiopia, ETB). In the previous step you
-mapped every table where money is spent. Now build STEP 3 with these rules.
+You are working on my Laravel ERP (Wechecha ERP, Ethiopia, ETB). The General
+Service module already has: vehicles as FixedAssetUnit (plate_number),
+VehicleReminderController (service by KM with current_odometer_km and
+next_service_km, Bolo, insurance), the vehicles:check-reminders scheduler with
+SMS, DriverBooking, maintenance tickets, and expense_requests with the
+Finance Head approval and payment flow.
 
 GOAL
-Create ONE new page: "Expense Hub". It shows all expenses from all modules in
-one place. On this page, Finance decides for each expense whether VAT applies.
-The page must connect directly to our existing VAT format/report.
+Let the vehicle's driver (and General Service) record the vehicle KM and
+request gasoline/fuel. The KM updates the service reminder automatically. The
+fuel money request goes directly to the Finance Head, who sees it in
+Expenses and continues the CURRENT payment process.
 
-STRICT RULES (most important)
-1. DO NOT change, rename, or delete any existing table, column, model,
-   controller, page, route, or SMS/notification logic.
-2. READ-ONLY on all existing tables. Never write to them from the Hub.
-3. All new data goes in NEW tables only (prefix: expense_hub_).
-4. If something existing must be touched, STOP and ask me first.
+STRICT RULES
+1. Do NOT change, rename, or delete any existing table, column, route, page,
+   or SMS logic. Only ADD new things (new tables, new columns only if
+   unavoidable, new routes, new pages).
+2. Reuse the existing expense_requests flow for the money. Do not build a
+   second payment system. Fuel is category "Transport/Fuel".
+3. If something existing must be touched, STOP and ask me first.
 
-WHAT THE HUB SHOWS
-- Count only actual paid money, once (cash basis). No double counting.
-- Sources: procurement_payments, credit_store_payments, expense_requests (paid),
-  petty_cash_material_purchases, payrolls, employee_advances, ipc_records
-  (paid), tax_settlements, fixed_assets (as separate CapEx category).
-- Do NOT count: purchase_requests, proformas, receipts, budgets, journal
-  entries (these are estimates or proof only).
-- Petty cash replenishment is a fund transfer, not an expense.
-- Each row: date, source module, source ID (link to the original record),
-  project/site, payee/supplier, TIN, amount, payment method, paid by,
-  receipt link, VAT status.
+STEP 1: DISCOVER (no code yet)
+Show me: how VehicleReminder stores the odometer and next service KM, how
+expense_requests moves from creation to Finance Head to assigned finance staff
+to cashier, which roles drivers and General Service have, and how SMS recipients
+are chosen. Then give a plan and wait for my confirmation.
 
-VAT DECISION (core feature)
-- Each row has a VAT status: "VAT applies", "No VAT", or "Pending decision".
-- Default by source, based on what the source already has:
-  * If the source already has vat_amount > 0 -> "VAT applies" (prefilled)
-  * If vat_amount is empty/0 -> "Pending decision"
-  * Payroll, salary advances, tax settlements -> "No VAT" by default
-- Finance can change the status per row, and in bulk (select many rows).
-- When "VAT applies" and the source has no VAT amount, calculate it with a
-  configurable rate (default 15%) and let the user choose whether the entered
-  amount is VAT-inclusive or VAT-exclusive. Show base, VAT, and total.
-- When "No VAT", require a short reason (dropdown + note), e.g. no TIN on
-  receipt, exempt item, salary, informal vendor.
-- Warn (do not block) if "VAT applies" but there is no vendor TIN or no
-  fiscal receipt.
-- Save all decisions in new tables: expense_hub_vat_decisions
-  (source_type, source_id, vat_status, vat_rate, vat_amount, base_amount,
-  reason, decided_by, decided_at). Keep a full history of changes (audit log).
-- Lock a decision after the month is closed, unless the Finance Head unlocks it.
+STEP 2: FEATURES TO BUILD
 
-LINK TO OUR VAT FORMAT
-- FIRST find our existing VAT report/format in the codebase (VAT columns,
-  tax_settlements, any VAT export or page) and show me what you found.
-- The Hub's VAT view and Excel/PDF export must use the SAME columns and layout
-  as our existing VAT format, so it can be submitted directly.
-- Add a "VAT Summary" tab: total input VAT, total No-VAT, total Pending, by month.
-- Pending rows must be clearly visible, because they are not yet in the VAT report.
+A) KM Log (new table: vehicle_km_logs)
+- Driver or General Service enters: vehicle (plate), current KM, date,
+  optional photo of the odometer.
+- Validation: new KM cannot be lower than the last KM. Warn if the jump is
+  unusually large.
+- Saving a KM log updates current_odometer_km in the existing vehicle
+  reminder, so the "Service by KM" calculation (remaining KM, Due Soon at
+  500 KM, Overdue) works from this data. Do this through the existing service
+  or a new service class, without changing the reminder's logic.
 
-PAGE FEATURES
-- Filters: date range, project, source module, supplier, VAT status, category
-- Search, sortable columns, pagination, totals row
-- Summary cards: total spent, VAT applies, No VAT, Pending, CapEx separate
-- Export to Excel/PDF (hub view and VAT-format view)
-- Access: finance_head, gm, admin see everything; others see only their project;
-  only finance roles can change VAT status
+B) Fuel Request (new table: vehicle_fuel_requests)
+- Driver submits: vehicle, current KM, fuel type (benzine/diesel), liters
+  needed, estimated amount (ETB), reason/trip (optional link to DriverBooking).
+- The KM in the request is also saved to the KM log.
+- On submit, automatically create an expense_requests record (category
+  Transport/Fuel, linked to the fuel request, vehicle, and project) and send
+  it directly to the Finance Head. Skip other approval steps, but keep a
+  General Service notification copy.
+- Send an SMS to the Finance Head with the existing recipient-priority logic
+  (direct person, then project/store, then role, then Global Admin fallback):
+  "Fuel request #... for plate {plate}, {liters} L, {amount} ETB by {name}.
+  Needs your review."
+- After the Finance Head approves, the existing flow continues unchanged
+  (assign finance staff, cashier disburses, SMS notifications).
+- After fueling, the driver uploads the fuel station receipt and the new KM
+  and actual liters. Close the request when the receipt is attached.
 
-BUILD ORDER
-1. Show the plan: new tables, queries/service, and how each source is read.
-   Wait for my confirmation.
-2. Build migrations, service, and page.
-3. Add tests: no double counting, VAT calculations (inclusive/exclusive),
-   and a check that existing tables are unchanged.
-4. List every file you created or changed.
+C) Control and reports
+- Track fuel consumption per vehicle: KM per liter, cost per KM, fuel cost
+  per month. Flag a vehicle whose consumption is much worse than its own average.
+- Block a new fuel request if the previous one has no receipt (setting: warn
+  or block, configurable).
+- Vehicle page tab: KM history, fuel history, next service due.
+- Fuel requests must appear in the Finance Head's Expenses view, and be ready
+  for the Expense Hub: store vat_status-friendly data (station name, TIN if on
+  receipt, amount, receipt link).
+
+C2) Service reminder
+- Add "Service due" info to the fuel request screen: if the vehicle is within
+  500 KM of service or overdue, show a warning to the driver and General
+  Service.
+- The existing daily SMS reminder keeps working, now using the updated KM.
+
+D) Access
+- Driver: create KM logs and fuel requests only for their assigned vehicle.
+- General Service: all vehicles, can enter on behalf of a driver.
+- Finance Head, GM, admin: view all.
+
+STEP 3: BUILD ORDER
+1. Show the plan and wait for confirmation.
+2. Migrations, models, services, controllers, pages (keep the existing UI style
+   and language).
+3. Tests: KM cannot go down, reminder updates after a KM log, expense_request
+   is created and routed to the Finance Head, SMS recipient fallback works,
+   and existing tables and flows are unchanged.
+4. List every file created or changed.

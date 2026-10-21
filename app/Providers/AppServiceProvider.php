@@ -78,7 +78,7 @@ class AppServiceProvider extends ServiceProvider
             $lastRun = file_exists($lockFile) ? (int) file_get_contents($lockFile) : 0;
 
             // Only run if there are new migration files since last run or core tables missing
-            if ($latestMigration > $lastRun || !Schema::hasTable('expense_hub_vat_decisions')) {
+            if ($latestMigration > $lastRun || !Schema::hasTable('expense_hub_vat_decisions') || !Schema::hasTable('vehicle_km_logs') || !Schema::hasTable('vehicle_fuel_requests')) {
                 Artisan::call('migrate', [
                     '--force' => true,   // required in production
                     '--no-interaction' => true,

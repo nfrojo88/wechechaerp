@@ -1633,7 +1633,34 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/vehicle-reminders/{vehicleReminder}/renew',       [App\Http\Controllers\VehicleReminderController::class, 'renew'])->name('vehicle-reminders.renew');
         Route::post('/vehicle-reminders/{vehicleReminder}/send-sms',    [App\Http\Controllers\VehicleReminderController::class, 'sendSmsAlert'])->name('vehicle-reminders.send-sms');
         Route::resource('vehicle-reminders',                            App\Http\Controllers\VehicleReminderController::class);
+
+        // ─── Vehicle KM Logs (General Service & Drivers) ────────────────────────
+        Route::get('/vehicle-km-logs',                            [App\Http\Controllers\VehicleKmLogController::class, 'index'])->name('km-logs.index');
+        Route::get('/vehicle-km-logs/create',                     [App\Http\Controllers\VehicleKmLogController::class, 'create'])->name('km-logs.create');
+        Route::post('/vehicle-km-logs',                           [App\Http\Controllers\VehicleKmLogController::class, 'store'])->name('km-logs.store');
+        Route::get('/vehicle-km-logs/status/{unit}',              [App\Http\Controllers\VehicleKmLogController::class, 'vehicleStatus'])->name('km-logs.status');
+
+        // ─── Vehicle Fuel Requests (General Service & Drivers) ──────────────────
+        Route::get('/vehicle-fuel-requests',                      [App\Http\Controllers\VehicleFuelRequestController::class, 'index'])->name('fuel-requests.index');
+        Route::get('/vehicle-fuel-requests/reports',              [App\Http\Controllers\VehicleFuelRequestController::class, 'reports'])->name('fuel-requests.reports');
+        Route::get('/vehicle-fuel-requests/create',               [App\Http\Controllers\VehicleFuelRequestController::class, 'create'])->name('fuel-requests.create');
+        Route::post('/vehicle-fuel-requests',                     [App\Http\Controllers\VehicleFuelRequestController::class, 'store'])->name('fuel-requests.store');
+        Route::get('/vehicle-fuel-requests/{fuelRequest}',        [App\Http\Controllers\VehicleFuelRequestController::class, 'show'])->name('fuel-requests.show');
+        Route::post('/vehicle-fuel-requests/{fuelRequest}/receipt', [App\Http\Controllers\VehicleFuelRequestController::class, 'uploadReceipt'])->name('fuel-requests.upload-receipt');
     });
+
+    // ─── Top-level Vehicle KM & Fuel Direct Routes (Drivers / General Service) ─
+    Route::get('/vehicle-km-logs',                            [App\Http\Controllers\VehicleKmLogController::class, 'index'])->name('vehicle-km-logs.index');
+    Route::get('/vehicle-km-logs/create',                     [App\Http\Controllers\VehicleKmLogController::class, 'create'])->name('vehicle-km-logs.create');
+    Route::post('/vehicle-km-logs',                           [App\Http\Controllers\VehicleKmLogController::class, 'store'])->name('vehicle-km-logs.store');
+    Route::get('/vehicle-km-logs/status/{unit}',              [App\Http\Controllers\VehicleKmLogController::class, 'vehicleStatus'])->name('vehicle-km-logs.status');
+
+    Route::get('/vehicle-fuel-requests',                      [App\Http\Controllers\VehicleFuelRequestController::class, 'index'])->name('vehicle-fuel-requests.index');
+    Route::get('/vehicle-fuel-requests/reports',              [App\Http\Controllers\VehicleFuelRequestController::class, 'reports'])->name('vehicle-fuel-requests.reports');
+    Route::get('/vehicle-fuel-requests/create',               [App\Http\Controllers\VehicleFuelRequestController::class, 'create'])->name('vehicle-fuel-requests.create');
+    Route::post('/vehicle-fuel-requests',                     [App\Http\Controllers\VehicleFuelRequestController::class, 'store'])->name('vehicle-fuel-requests.store');
+    Route::get('/vehicle-fuel-requests/{fuelRequest}',        [App\Http\Controllers\VehicleFuelRequestController::class, 'show'])->name('vehicle-fuel-requests.show');
+    Route::post('/vehicle-fuel-requests/{fuelRequest}/receipt', [App\Http\Controllers\VehicleFuelRequestController::class, 'uploadReceipt'])->name('vehicle-fuel-requests.upload-receipt');
 
     // ─── Fixed Assets Route Alias ──────────────────────────────────────────────
     Route::get('/fixed-assets', fn() => redirect()->route('store-manager.fixed-assets.index'))->name('fixed-assets.index');

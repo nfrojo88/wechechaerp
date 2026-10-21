@@ -444,6 +444,8 @@
         <ul class="sidebar-sub-nav">
             <li><a href="{{ route('dashboard.general_service') }}" class="sidebar-nav-link {{ request()->routeIs('dashboard.general_service') ? 'active' : '' }}"><i class="fa-solid fa-screwdriver-wrench text-warning"></i><span>GS Dashboard</span></a></li>
             <li><a href="{{ route('attendance.index', ['staff_type' => 'driver']) }}" class="sidebar-nav-link {{ request()->routeIs('attendance.*') && request('staff_type') === 'driver' ? 'active' : '' }}"><i class="fa-solid fa-truck text-success"></i><span>Driver Attendance (ሾፌሮች)</span></a></li>
+            <li><a href="{{ route('vehicle-km-logs.index') }}" class="sidebar-nav-link {{ request()->routeIs('vehicle-km-logs.*') || request()->routeIs('general-service.km-logs.*') ? 'active' : '' }}"><i class="fa-solid fa-gauge-high text-info"></i><span>Vehicle KM Logs (ኦዶሜትር)</span></a></li>
+            <li><a href="{{ route('vehicle-fuel-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('vehicle-fuel-requests.*') || request()->routeIs('general-service.fuel-requests.*') ? 'active' : '' }}"><i class="fa-solid fa-gas-pump text-warning"></i><span>Fuel Requests (ነዳጅ)</span></a></li>
             <li><a href="{{ route('general-service.maintenance.index') }}" class="sidebar-nav-link {{ request()->routeIs('general-service.maintenance.*') ? 'active' : '' }}"><i class="fa-solid fa-wrench text-danger"></i><span>Maintenance Requests</span></a></li>
             <li><a href="{{ route('foreman.fixed-assets') }}" class="sidebar-nav-link {{ request()->routeIs('foreman.fixed-assets*') ? 'active' : '' }}"><i class="fa-solid fa-truck-monster text-danger"></i><span>Site Fixed Assets (Foreman)</span></a></li>
             <li><a href="{{ route('foreman.my-maintenance-requests') }}" class="sidebar-nav-link {{ request()->routeIs('foreman.my-maintenance-requests*') ? 'active' : '' }}"><i class="fa-solid fa-wrench text-warning"></i><span>Foreman Maintenance Requests</span></a></li>
@@ -1904,6 +1906,29 @@
                 @endphp
                 @if($adminVehReminderCount > 0)
                     <span class="badge bg-danger rounded-pill ms-auto">{{ $adminVehReminderCount }}</span>
+                @endif
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('vehicle-km-logs.index') }}" class="sidebar-nav-link {{ request()->routeIs('vehicle-km-logs.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-gauge-high text-info"></i>
+                <span>Vehicle KM Logs (ኦዶሜትር)</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('vehicle-fuel-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('vehicle-fuel-requests.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-gas-pump text-warning"></i>
+                <span>Fuel Requests (ነዳጅ)</span>
+                @php
+                    $pendingFuelCount = 0;
+                    try {
+                        if (\Illuminate\Support\Facades\Schema::hasTable('vehicle_fuel_requests')) {
+                            $pendingFuelCount = \App\Models\VehicleFuelRequest::whereIn('status', ['pending_finance', 'paid'])->count();
+                        }
+                    } catch (\Throwable $e) {}
+                @endphp
+                @if($pendingFuelCount > 0)
+                    <span class="badge bg-warning text-dark rounded-pill ms-auto">{{ $pendingFuelCount }}</span>
                 @endif
             </a>
         </li>
