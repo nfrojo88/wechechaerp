@@ -1922,7 +1922,7 @@ class LetterController extends Controller
 
             $message = "Wechacha ERP: New correspondence letter submitted by {$sender->name}. Subject: \"{$subjectSnippet}\". Register in Secretary Inbox: {$directLink}";
 
-            $procurementSms->notifyRole($letter->id, 'secretary', $message);
+            $procurementSms->notifyRole(0, 'secretary', $message);
         } catch (\Throwable $e) {
             Log::error("Failed to send letter dispatch SMS: " . $e->getMessage());
         }
@@ -1941,7 +1941,7 @@ class LetterController extends Controller
 
             $message = "Wechacha ERP: Letter #{$letter->letter_number} [{$letter->category}] has been registered and addressed to you by {$secretaryName}. Subject: \"{$subjectSnippet}\". View: {$directLink}";
 
-            $procurementSms->sendToUser($letter->id, $targetUser, 'assigned_recipient', $message);
+            $procurementSms->sendToUser(0, $targetUser, 'assigned_recipient', $message);
         } catch (\Throwable $e) {
             Log::error("Failed to send registration SMS to user {$targetUser->id}: " . $e->getMessage());
         }

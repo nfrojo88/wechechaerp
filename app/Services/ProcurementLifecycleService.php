@@ -53,7 +53,7 @@ class ProcurementLifecycleService
     public function notifyStageRole(int $purchaseRequestId, string $roleName, string $message, ?int $projectId = null, ?int $storeId = null): void
     {
         try {
-            if (config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', true)) === false) {
+            if (config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', false)) === false) {
                 return;
             }
             $this->sms->notifyRole($purchaseRequestId, $roleName, $message, $projectId, $storeId);
@@ -85,7 +85,7 @@ class ProcurementLifecycleService
         ?int $assignedEmployeeId = null
     ): void {
         try {
-            if (config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', true)) === false) {
+            if (config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', false)) === false) {
                 return;
             }
 
@@ -426,19 +426,21 @@ class ProcurementLifecycleService
                 'current_owner_role' => null,
             ]);
             $this->log($pr, $from, PurchaseRequest::STATUS_REJECTED, 'gm_reject', 'gm', $notes);
-            try {
-                $this->sms->notifyRole($pr->id, 'purchase_manager',
-                    "ConstructPro: PR #{$pr->pr_no} was REJECTED by GM. Reason: {$notes}. Open: " . url("/purchase-requests/{$pr->id}"),
-                    $pr->project_id,
-                    $pr->store_id
-                );
-                $this->sms->notifyRole($pr->id, 'coordinator',
-                    "ConstructPro: PR #{$pr->pr_no} (" . ($pr->project?->name ?? 'Project') . ") was REJECTED by GM. Reason: {$notes}.",
-                    $pr->project_id,
-                    $pr->store_id
-                );
-            } catch (\Throwable $e) {
-                Log::warning("GM Reject notifyRole error on PR #{$pr->id}: " . $e->getMessage());
+            if (config('procurement_handoffs.enabled', false)) {
+                try {
+                    $this->sms->notifyRole($pr->id, 'purchase_manager',
+                        "ConstructPro: PR #{$pr->pr_no} was REJECTED by GM. Reason: {$notes}. Open: " . url("/purchase-requests/{$pr->id}"),
+                        $pr->project_id,
+                        $pr->store_id
+                    );
+                    $this->sms->notifyRole($pr->id, 'coordinator',
+                        "ConstructPro: PR #{$pr->pr_no} (" . ($pr->project?->name ?? 'Project') . ") was REJECTED by GM. Reason: {$notes}.",
+                        $pr->project_id,
+                        $pr->store_id
+                    );
+                } catch (\Throwable $e) {
+                    Log::warning("GM Reject notifyRole error on PR #{$pr->id}: " . $e->getMessage());
+                }
             }
 
             // Instant SMS Handoff: GM -> Procurement Manager (Rejected)
@@ -720,14 +722,16 @@ class ProcurementLifecycleService
             $this->notifyNextOwner($pr, $nextStatus, $actionText);
 
             // Also notify coordinator that GM has approved
-            try {
-                $this->sms->notifyRole($pr->id, 'coordinator',
-                    "ConstructPro: PR #{$pr->pr_no} (" . ($pr->project?->name ?? 'Project') . ") has been APPROVED by GM (" . number_format($finalAmount, 2) . " ETB). Open: " . url("/purchase-requests/{$pr->id}"),
-                    $pr->project_id,
-                    $pr->store_id
-                );
-            } catch (\Throwable $e) {
-                Log::warning("GM Approve coordinator notifyRole error on PR #{$pr->id}: " . $e->getMessage());
+            if (config('procurement_handoffs.enabled', false)) {
+                try {
+                    $this->sms->notifyRole($pr->id, 'coordinator',
+                        "ConstructPro: PR #{$pr->pr_no} (" . ($pr->project?->name ?? 'Project') . ") has been APPROVED by GM (" . number_format($finalAmount, 2) . " ETB). Open: " . url("/purchase-requests/{$pr->id}"),
+                        $pr->project_id,
+                        $pr->store_id
+                    );
+                } catch (\Throwable $e) {
+                    Log::warning("GM Approve coordinator notifyRole error on PR #{$pr->id}: " . $e->getMessage());
+                }
             }
 
             // Instant SMS Handoff: GM -> Finance Head (Approved)
@@ -1376,30 +1380,32 @@ class ProcurementLifecycleService
         });
 
         // 6. Notify Requester and Coordinator
-        try {
-            $requester = $pr->requestedBy;
-            $phone = $requester ? $this->sms->resolveUserPhone($requester) : null;
-            if ($phone) {
-                if ($intakeResult['is_full']) {
-                    $this->sms->send($pr->id, $phone, 'requester',
-                        "ConstructPro: Your PR #{$pr->pr_no} items have been fully received (Slip #{$intakeResult['slip_no']}) and added to store inventory. Project: {$pr->project?->name}.");
-                } else {
-                    $remText = implode(', ', $intakeResult['remaining']);
-                    $this->sms->send($pr->id, $phone, 'requester',
-                        "ConstructPro: Partial delivery received for PR #{$pr->pr_no} under Slip #{$intakeResult['slip_no']}. Remaining balance: {$remText}.");
+        if (config('procurement_handoffs.enabled', false)) {
+            try {
+                $requester = $pr->requestedBy;
+                $phone = $requester ? $this->sms->resolveUserPhone($requester) : null;
+                if ($phone) {
+                    if ($intakeResult['is_full']) {
+                        $this->sms->send($pr->id, $phone, 'requester',
+                            "ConstructPro: Your PR #{$pr->pr_no} items have been fully received (Slip #{$intakeResult['slip_no']}) and added to store inventory. Project: {$pr->project?->name}.");
+                    } else {
+                        $remText = implode(', ', $intakeResult['remaining']);
+                        $this->sms->send($pr->id, $phone, 'requester',
+                            "ConstructPro: Partial delivery received for PR #{$pr->pr_no} under Slip #{$intakeResult['slip_no']}. Remaining balance: {$remText}.");
+                    }
                 }
-            }
 
-            // Also notify coordinator role
-            $this->sms->notifyRole(
-                $pr->id,
-                'coordinator',
-                "ConstructPro: PR #{$pr->pr_no} store intake recorded (Slip #{$intakeResult['slip_no']}). Project: {$pr->project?->name}. Status: " . ($intakeResult['is_full'] ? 'Full Delivery' : 'Partial Delivery'),
-                $pr->project_id,
-                $storeId
-            );
-        } catch (\Throwable $e) {
-            Log::warning("Store intake SMS notification error on PR #{$pr->id}: " . $e->getMessage());
+                // Also notify coordinator role
+                $this->sms->notifyRole(
+                    $pr->id,
+                    'coordinator',
+                    "ConstructPro: PR #{$pr->pr_no} store intake recorded (Slip #{$intakeResult['slip_no']}). Project: {$pr->project?->name}. Status: " . ($intakeResult['is_full'] ? 'Full Delivery' : 'Partial Delivery'),
+                    $pr->project_id,
+                    $storeId
+                );
+            } catch (\Throwable $e) {
+                Log::warning("Store intake SMS notification error on PR #{$pr->id}: " . $e->getMessage());
+            }
         }
 
         // Instant SMS Handoff: Store Keeper -> Procurement Officer + Finance Head (GRN Completed)

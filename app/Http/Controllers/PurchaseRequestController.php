@@ -2222,21 +2222,6 @@ class PurchaseRequestController extends Controller
             );
         } catch (\Throwable $e) {}
 
-        // Instant SMS Handoff: Planning -> Coordinator
-        try {
-            app(\App\Services\ProcurementHandoffNotificationService::class)->triggerHandoff(
-                'planning_forwarded',
-                $purchaseRequest,
-                [
-                    'sender_user' => Auth::user(),
-                    'sender_role' => 'planning',
-                    'project_id'  => $purchaseRequest->project_id,
-                ]
-            );
-        } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::error("PR Planning Forwarded SMS trigger failed: " . $e->getMessage());
-        }
-
         return back()->with('success', 'Purchase Request approved by Planning and sent to Coordinator.');
     }
 
@@ -2272,21 +2257,6 @@ class PurchaseRequestController extends Controller
                 'created_at'          => now(),
             ]);
         } catch (\Throwable $e) {}
-
-        // Instant SMS Handoff: Planning Rejects -> Requester (Site Engineer)
-        try {
-            app(\App\Services\ProcurementHandoffNotificationService::class)->triggerHandoff(
-                'planning_rejected',
-                $purchaseRequest,
-                [
-                    'sender_user' => Auth::user(),
-                    'sender_role' => 'planning',
-                    'project_id'  => $purchaseRequest->project_id,
-                ]
-            );
-        } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::error("PR Planning Rejected SMS trigger failed: " . $e->getMessage());
-        }
 
         return back()->with('success', 'Purchase Request rejected by Planning.');
     }
@@ -2332,22 +2302,6 @@ class PurchaseRequestController extends Controller
                 $purchaseRequest->store_id
             );
         } catch (\Throwable $e) {}
-
-        // Instant SMS Handoff: Coordinator -> Store Manager
-        try {
-            app(\App\Services\ProcurementHandoffNotificationService::class)->triggerHandoff(
-                'coordinator_forwarded',
-                $purchaseRequest,
-                [
-                    'sender_user' => Auth::user(),
-                    'sender_role' => 'coordinator',
-                    'project_id'  => $purchaseRequest->project_id,
-                    'store_id'    => $purchaseRequest->store_id,
-                ]
-            );
-        } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::error("PR Coordinator Forwarded SMS trigger failed: " . $e->getMessage());
-        }
 
         return back()->with('success', 'Purchase Request approved by Coordinator and dispatched to Store Manager.');
     }
@@ -2785,7 +2739,6 @@ class PurchaseRequestController extends Controller
 
     /**
      * Driver Marks Materials Delivered (Driver / Logistics Coordinator action).
-     * Triggers instant SMS handoff: Driver -> Site Store Keeper.
      */
     public function markDriverDelivered(Request $request, PurchaseRequest $purchaseRequest)
     {
@@ -2797,12 +2750,11 @@ class PurchaseRequestController extends Controller
 
         $this->lifecycle->markDriverDelivered($purchaseRequest, $request->input('notes'));
 
-        return back()->with('success', 'Delivery arrival confirmed! Store Keeper has been notified via instant SMS for inspection & intake.');
+        return back()->with('success', 'Delivery arrival confirmed! Store Keeper has been notified for inspection & intake.');
     }
 
     /**
      * Confirm 3-Way Match & Close Purchase Request (Finance Head action).
-     * Triggers instant SMS handoff: Finance Head -> Requester (Site Engineer) + Procurement Manager.
      */
     public function confirmThreeWayMatch(Request $request, PurchaseRequest $purchaseRequest)
     {
@@ -2810,87 +2762,14 @@ class PurchaseRequestController extends Controller
 
         $this->lifecycle->closeThreeWayMatch($purchaseRequest, $request->input('notes'));
 
-        return back()->with('success', '3-Way Match verified and PR closed! Requester and Procurement Manager have been notified via instant SMS.');
+        return back()->with('success', '3-Way Match verified and PR closed! Requester and Procurement Manager have been notified.');
     }
 
     /**
-     * Send Instant SMS notification to the person assigned to the Current Stage / Status.
+     * Send Instant SMS notification for PR current stage (Disabled/Removed).
      */
     public function sendStageSms(Request $request, PurchaseRequest $purchaseRequest)
     {
-        $ownerRole = $purchaseRequest->current_owner_role;
-        if (empty($ownerRole)) {
-            $ownerRole = match ($purchaseRequest->status) {
-                PurchaseRequest::STATUS_PENDING_PLANNING           => 'planning',
-                PurchaseRequest::STATUS_PENDING_HR_APPROVAL        => 'coordinator',
-                PurchaseRequest::STATUS_PENDING_STORE_REVIEW       => 'store_manager',
-                PurchaseRequest::STATUS_PENDING_PROC_MANAGER       => 'purchase_manager',
-                PurchaseRequest::STATUS_PENDING_PROC_TEAM          => 'purchase',
-                PurchaseRequest::STATUS_PENDING_MARKETING          => 'purchase_manager',
-                PurchaseRequest::STATUS_PENDING_PROFORMA_SELECTION => 'purchase_manager',
-                PurchaseRequest::STATUS_PENDING_GM                 => 'gm',
-                PurchaseRequest::STATUS_PENDING_FINANCE            => 'finance_head',
-                PurchaseRequest::STATUS_PENDING_PAYMENT            => 'finance',
-                PurchaseRequest::STATUS_PENDING_RECEIPT_UPLOAD     => 'purchase',
-                PurchaseRequest::STATUS_PENDING_RECEIPT_VERIFY     => 'store_keeper',
-                PurchaseRequest::STATUS_PENDING_DRIVER             => 'general_service',
-                PurchaseRequest::STATUS_INTAKE_COMPLETE            => 'store_keeper',
-                default                                            => 'purchase_manager',
-            };
-        }
-
-        $statusLabel = $purchaseRequest->status_label;
-        $prNo        = $purchaseRequest->pr_no;
-        $projectName = $purchaseRequest->project?->name ?? 'General / Head Office';
-        $actorName   = Auth::user()?->name ?? 'Management';
-
-        $message = "ConstructPro: PR #{$prNo} ({$projectName}) is in '{$statusLabel}'. Action required by " . ucfirst(str_replace('_', ' ', $ownerRole)) . " ({$actorName}). Open: " . url("/purchase-requests/{$purchaseRequest->id}");
-
-        if (config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', true)) === false) {
-            return back()->with('warning', 'Procurement SMS notifications are currently disabled.');
-        }
-
-        $sentRecipients = [];
-        $isEscalatedToAdmin = false;
-
-        try {
-            // Direct lookup of phone numbers for the role
-            $phones = app(\App\Services\ProcurementSmsService::class)->getPhoneNumbersForRole(
-                $ownerRole,
-                $purchaseRequest->project_id,
-                $purchaseRequest->store_id
-            );
-
-            if (!empty($phones)) {
-                // Send immediately to assigned role holder(s)
-                foreach ($phones as $p) {
-                    app(\App\Services\ProcurementSmsService::class)->send($purchaseRequest->id, $p, $ownerRole, $message);
-                    $sentRecipients[] = $p;
-                }
-            } else {
-                // If NO employee is assigned to that role, route to Global Admin
-                $isEscalatedToAdmin = true;
-                $adminPhones = app(\App\Services\ProcurementSmsService::class)->getGlobalAdminPhoneNumbers();
-                $escalatedMessage = "[Role '" . ucfirst(str_replace('_', ' ', $ownerRole)) . "' Unassigned — Global Admin Action Required] " . $message;
-
-                foreach ($adminPhones as $p) {
-                    app(\App\Services\ProcurementSmsService::class)->send($purchaseRequest->id, $p, 'global_admin', $escalatedMessage);
-                    $sentRecipients[] = "Global Admin ({$p})";
-                }
-            }
-        } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::error("sendStageSms dispatch error: " . $e->getMessage());
-            return back()->with('error', "Could not send SMS: " . $e->getMessage() . ". Sending stopped.");
-        }
-
-        if (!empty($sentRecipients)) {
-            $destStr = implode(', ', $sentRecipients);
-            if ($isEscalatedToAdmin) {
-                return back()->with('info', "No employee assigned to '" . ucfirst(str_replace('_', ' ', $ownerRole)) . "'. SMS alert routed immediately to General Admin: {$destStr}");
-            }
-            return back()->with('success', "SMS alert sent immediately for PR #{$prNo} ({$statusLabel}) to assigned " . ucfirst(str_replace('_', ' ', $ownerRole)) . ": {$destStr}");
-        }
-
-        return back()->with('warning', "No phone numbers found for role '" . ucfirst(str_replace('_', ' ', $ownerRole)) . "' or Global Admin. Sending stopped.");
+        return back()->with('info', 'SMS notifications for procurement are disabled.');
     }
 }

@@ -157,61 +157,6 @@ class PurchaseRequest extends Model
                 }
             }
         });
-
-        static::created(function (PurchaseRequest $pr) {
-            if ($pr->status !== self::STATUS_DRAFT) {
-                try {
-                    if (config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', true)) === false) {
-                        return;
-                    }
-
-                    $ownerRole = $pr->current_owner_role ?: static::resolveDefaultOwnerRoleForStatus($pr->status);
-                    if ($ownerRole) {
-                        $actor = \Illuminate\Support\Facades\Auth::user();
-                        $actorName = $actor ? $actor->name : 'System';
-                        $statusLabel = $pr->status_label;
-                        $actionDesc = "New request entered '{$statusLabel}' by {$actorName}";
-
-                        app(\App\Services\ProcurementLifecycleService::class)->notifyNextOwner(
-                            $pr,
-                            $pr->status,
-                            $actionDesc
-                        );
-                    }
-                } catch (\Throwable $e) {
-                    \Illuminate\Support\Facades\Log::error("PurchaseRequest auto initial-owner SMS failed on PR #{$pr->id}: " . $e->getMessage());
-                }
-            }
-        });
-
-        static::updated(function (PurchaseRequest $pr) {
-            $statusChanged = $pr->wasChanged('status');
-            $roleChanged   = $pr->wasChanged('current_owner_role');
-
-            if (($statusChanged || $roleChanged) && !in_array($pr->status, [self::STATUS_DRAFT])) {
-                try {
-                    if (config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', true)) === false) {
-                        return;
-                    }
-
-                    $ownerRole = $pr->current_owner_role ?: static::resolveDefaultOwnerRoleForStatus($pr->status);
-                    if ($ownerRole) {
-                        $actor = \Illuminate\Support\Facades\Auth::user();
-                        $actorName = $actor ? $actor->name : 'System';
-                        $statusLabel = $pr->status_label;
-                        $actionDesc = "Stage updated to '{$statusLabel}' by {$actorName}";
-
-                        app(\App\Services\ProcurementLifecycleService::class)->notifyNextOwner(
-                            $pr,
-                            $pr->status,
-                            $actionDesc
-                        );
-                    }
-                } catch (\Throwable $e) {
-                    \Illuminate\Support\Facades\Log::error("PurchaseRequest auto next-owner SMS failed on PR #{$pr->id}: " . $e->getMessage());
-                }
-            }
-        });
     }
 
     /**

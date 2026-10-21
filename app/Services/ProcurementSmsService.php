@@ -45,8 +45,9 @@ class ProcurementSmsService
      */
     public function send(int $purchaseRequestId, string $phone, string $recipientRole, string $message): void
     {
-        if (config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', true)) === false) {
-            Log::info("Procurement SMS is globally disabled. Skipping send to {$phone} on PR #{$purchaseRequestId}");
+        // Disable SMS for purchase requests / procurement section
+        if ($purchaseRequestId > 0 && config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', false)) === false) {
+            Log::info("Procurement SMS is disabled. Skipping send to {$phone} on PR #{$purchaseRequestId}");
             return;
         }
 
@@ -137,7 +138,7 @@ class ProcurementSmsService
     public function notifyRole(int $purchaseRequestId, string $roleName, string $message, ?int $projectId = null, ?int $storeId = null): void
     {
         try {
-            if (config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', true)) === false) {
+            if ($purchaseRequestId > 0 && config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', false)) === false) {
                 return;
             }
 
