@@ -212,9 +212,16 @@ class FinanceTaxReportController extends Controller
                 }
             }
 
-            // Sync all ExpenseHubVatDecisions with vat_status = vat_applies so they appear in VAT & Withholding Tax Deductions Ledger
+            // Sync all ExpenseHubVatDecisions with vat_status = vat_applies or has_withholding = true so they appear in VAT & Withholding Tax Deductions Ledger
             if (Schema::hasTable('expense_hub_vat_decisions') && Schema::hasTable('receipts')) {
-                $decisions = \App\Models\ExpenseHubVatDecision::where('vat_status', \App\Models\ExpenseHubVatDecision::STATUS_VAT_APPLIES)->get();
+                $decQuery = \App\Models\ExpenseHubVatDecision::query();
+                $decQuery->where(function ($q) {
+                    $q->where('vat_status', \App\Models\ExpenseHubVatDecision::STATUS_VAT_APPLIES);
+                    if (Schema::hasColumn('expense_hub_vat_decisions', 'has_withholding')) {
+                        $q->orWhere('has_withholding', true);
+                    }
+                });
+                $decisions = $decQuery->get();
                 foreach ($decisions as $dec) {
                     \App\Http\Controllers\Finance\ExpenseHubController::syncVatDecisionToLedger($dec);
                 }

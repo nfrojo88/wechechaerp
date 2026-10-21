@@ -37,6 +37,11 @@ class ExpenseHubTest extends TestCase
             ['name' => 'Finance Hub Tester', 'password' => bcrypt('password')]
         );
 
+        try {
+            $role = \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
+            $this->financeUser->assignRole($role);
+        } catch (\Throwable $e) {}
+
         $this->project = Project::firstOrCreate(
             ['name' => 'Test Site Kazanchis'],
             ['code' => 'TK-01', 'status' => 'active', 'created_by' => $this->financeUser->id]
@@ -70,11 +75,12 @@ class ExpenseHubTest extends TestCase
     {
         // 1. Create a paid PR payment (Must be included)
         $pr = PurchaseRequest::create([
-            'pr_no'       => 'PR-HUB-TEST-' . rand(1000, 9999),
-            'project_id'  => $this->project->id,
-            'vendor_name' => 'Cement Factory',
-            'status'      => 'paid',
-            'created_by'  => $this->financeUser->id,
+            'pr_no'        => 'PR-HUB-TEST-' . rand(1000, 9999),
+            'project_id'   => $this->project->id,
+            'vendor_name'  => 'Cement Factory',
+            'status'       => 'paid',
+            'requested_by' => $this->financeUser->id,
+            'created_by'   => $this->financeUser->id,
         ]);
 
         $payment = ProcurementPayment::create([

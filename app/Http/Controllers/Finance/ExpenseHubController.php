@@ -19,6 +19,7 @@ use App\Services\ExpenseHubQueryService;
 use App\Services\EthiopianDate;
 use App\Services\ReceiptOcrService;
 use App\Services\QcService;
+use App\Services\FileUploadService;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Carbon;
@@ -39,10 +40,42 @@ class ExpenseHubController extends Controller
     }
 
     /**
+     * Runtime self-healing database schema verification.
+     */
+    public function ensureSchema(): void
+    {
+        try {
+            if (Schema::hasTable('expense_hub_vat_decisions')) {
+                Schema::table('expense_hub_vat_decisions', function ($table) {
+                    if (!Schema::hasColumn('expense_hub_vat_decisions', 'has_withholding')) {
+                        $table->boolean('has_withholding')->default(false)->after('vat_status')->index();
+                    }
+                    if (!Schema::hasColumn('expense_hub_vat_decisions', 'withholding_rate')) {
+                        $table->decimal('withholding_rate', 5, 2)->default(3.00)->after('has_withholding');
+                    }
+                    if (!Schema::hasColumn('expense_hub_vat_decisions', 'withholding_amount')) {
+                        $table->decimal('withholding_amount', 18, 2)->default(0.00)->after('withholding_rate');
+                    }
+                    if (!Schema::hasColumn('expense_hub_vat_decisions', 'withholding_receipt')) {
+                        $table->string('withholding_receipt', 500)->nullable()->after('withholding_amount');
+                    }
+                    if (!Schema::hasColumn('expense_hub_vat_decisions', 'withholding_receipt_number')) {
+                        $table->string('withholding_receipt_number', 100)->nullable()->after('withholding_receipt');
+                    }
+                    if (!Schema::hasColumn('expense_hub_vat_decisions', 'net_payable_amount')) {
+                        $table->decimal('net_payable_amount', 18, 2)->nullable()->after('withholding_receipt_number');
+                    }
+                });
+            }
+        } catch (\Throwable $e) {}
+    }
+
+    /**
      * Display the Expense Hub Dashboard
      */
     public function index(Request $request)
     {
+        $this->ensureSchema();
         $user = Auth::user();
 
         // 1. Parse active tab & filters
@@ -54,6 +87,7 @@ class ExpenseHubController extends Controller
             'project_id'    => $request->input('project_id'),
             'source_module' => $request->input('source_module'),
             'vat_status'    => $request->input('vat_status'),
+            'withholding'   => $request->input('withholding'),
             'category'      => $request->input('category'),
             'supplier'      => $request->input('supplier'),
             'search'        => $request->input('search'),
@@ -250,32 +284,39 @@ class ExpenseHubController extends Controller
      */
     public function saveDecision(Request $request)
     {
+        $this->ensureSchema();
         $user = Auth::user();
         if (!$user->hasAnyRole(['global_admin', 'admin', 'finance_head', 'finance', 'auditor']) && !$user->can('finance.approve')) {
             abort(403, 'Unauthorized to record VAT decisions.');
         }
 
         $validated = $request->validate([
-            'source_type'             => 'required|string|max:60',
-            'source_id'               => 'required|integer',
-            'vat_status'              => 'required|in:vat_applies,no_vat,pending_decision',
-            'amount'                  => 'required|numeric|min:0',
-            'vat_rate'                => 'nullable|numeric|min:0|max:100',
-            'is_inclusive'            => 'nullable|boolean',
-            'no_vat_reason_code'      => 'nullable|string|max:50',
-            'no_vat_reason_note'      => 'nullable|string|max:500',
-            'vat_category'            => 'nullable|in:G,S',
-            'purchase_type'           => 'nullable|integer|between:1,6',
-            'custom_seller_tin'       => 'nullable|string|max:30',
-            'custom_fs_no'            => 'nullable|string|max:50',
-            'custom_mrc_no'           => 'nullable|string|max:50',
-            'custom_item_description' => 'nullable|string|max:255',
-            'custom_receipt_date'     => 'nullable|string|max:30',
-            'custom_seller_name'      => 'nullable|string|max:255',
-            'receipt_path'            => 'nullable|string|max:500',
-            'uom'                     => 'nullable|string|max:20',
-            'quantity'                => 'nullable|numeric|min:0.01',
-            'unit_price'              => 'nullable|numeric|min:0',
+            'source_type'                => 'required|string|max:60',
+            'source_id'                  => 'required|integer',
+            'vat_status'                 => 'required|in:vat_applies,no_vat,pending_decision',
+            'amount'                     => 'required|numeric|min:0',
+            'vat_rate'                   => 'nullable|numeric|min:0|max:100',
+            'is_inclusive'               => 'nullable|boolean',
+            'has_withholding'            => 'nullable|boolean',
+            'withholding_rate'           => 'nullable|numeric|min:0|max:100',
+            'withholding_amount'         => 'nullable|numeric|min:0',
+            'withholding_receipt'        => 'nullable|string|max:500',
+            'withholding_receipt_number' => 'nullable|string|max:100',
+            'withholding_receipt_file'   => 'nullable|file|mimes:jpeg,jpg,png,webp,pdf|max:25600',
+            'no_vat_reason_code'         => 'nullable|string|max:50',
+            'no_vat_reason_note'         => 'nullable|string|max:500',
+            'vat_category'               => 'nullable|in:G,S',
+            'purchase_type'              => 'nullable|integer|between:1,6',
+            'custom_seller_tin'          => 'nullable|string|max:30',
+            'custom_fs_no'               => 'nullable|string|max:50',
+            'custom_mrc_no'              => 'nullable|string|max:50',
+            'custom_item_description'    => 'nullable|string|max:255',
+            'custom_receipt_date'        => 'nullable|string|max:30',
+            'custom_seller_name'         => 'nullable|string|max:255',
+            'receipt_path'               => 'nullable|string|max:500',
+            'uom'                        => 'nullable|string|max:20',
+            'quantity'                   => 'nullable|numeric|min:0.01',
+            'unit_price'                 => 'nullable|numeric|min:0',
         ]);
 
         $vatStatus = $validated['vat_status'];
@@ -295,6 +336,15 @@ class ExpenseHubController extends Controller
             ], 422);
         }
 
+        // Handle Withholding Tax Receipt upload
+        $withholdingReceiptPath = $request->input('withholding_receipt') ?: ($existing?->withholding_receipt ?: null);
+        if ($request->hasFile('withholding_receipt_file')) {
+            $withholdingReceiptPath = FileUploadService::upload(
+                $request->file('withholding_receipt_file'),
+                'withholding_receipts'
+            );
+        }
+
         // Compute Base & VAT amounts
         if ($vatStatus === ExpenseHubVatDecision::STATUS_VAT_APPLIES) {
             $calc = ExpenseHubVatDecision::computeVatAmounts($amount, $vatRate, $isInclusive);
@@ -307,27 +357,48 @@ class ExpenseHubController extends Controller
             $totalAmount = $amount;
         }
 
+        // Compute Withholding Tax (Standard 3% in Ethiopia calculated on Base/Subtotal)
+        $hasWithholding = $request->boolean('has_withholding') || !empty($withholdingReceiptPath) || !empty($request->input('withholding_receipt_number'));
+        $withholdingRate = $hasWithholding ? (float)($request->input('withholding_rate') ?: 3.00) : 0.00;
+        if ($hasWithholding) {
+            if ($request->filled('withholding_amount')) {
+                $withholdingAmount = (float)$request->input('withholding_amount');
+            } else {
+                $withholdingAmount = round($baseAmount * ($withholdingRate / 100), 2);
+            }
+        } else {
+            $withholdingAmount = 0.00;
+        }
+        $netPayableAmount = max(0, $totalAmount - $withholdingAmount);
+        $withholdingReceiptNo = $hasWithholding ? $request->input('withholding_receipt_number') : null;
+
         $decisionData = [
-            'vat_status'              => $vatStatus,
-            'vat_rate'                => $vatRate,
-            'is_inclusive'            => $isInclusive,
-            'base_amount'             => $baseAmount,
-            'vat_amount'              => $vatAmount,
-            'total_amount'            => $totalAmount,
-            'no_vat_reason_code'      => $vatStatus === 'no_vat' ? ($validated['no_vat_reason_code'] ?? null) : null,
-            'no_vat_reason_note'      => $vatStatus === 'no_vat' ? ($validated['no_vat_reason_note'] ?? null) : null,
-            'vat_category'            => $validated['vat_category'] ?? 'G',
-            'calendar_type'           => 'E',
-            'purchase_type'           => $validated['purchase_type'] ?? 3,
-            'custom_seller_tin'       => $validated['custom_seller_tin'] ?? null,
-            'custom_fs_no'            => $validated['custom_fs_no'] ?? null,
-            'custom_mrc_no'           => $validated['custom_mrc_no'] ?? null,
-            'custom_item_description' => $validated['custom_item_description'] ?? null,
-            'uom'                     => $validated['uom'] ?? '9',
-            'quantity'                => $validated['quantity'] ?? 1.0,
-            'unit_price'              => $validated['unit_price'] ?? ($baseAmount / max((float)($validated['quantity'] ?? 1), 1)),
-            'decided_by'              => $user->id,
-            'decided_at'              => now(),
+            'vat_status'                 => $vatStatus,
+            'vat_rate'                   => $vatRate,
+            'is_inclusive'               => $isInclusive,
+            'has_withholding'            => $hasWithholding,
+            'withholding_rate'           => $withholdingRate,
+            'withholding_amount'         => $withholdingAmount,
+            'withholding_receipt'        => $withholdingReceiptPath,
+            'withholding_receipt_number' => $withholdingReceiptNo,
+            'net_payable_amount'         => $netPayableAmount,
+            'base_amount'                => $baseAmount,
+            'vat_amount'                 => $vatAmount,
+            'total_amount'               => $totalAmount,
+            'no_vat_reason_code'         => $vatStatus === 'no_vat' ? ($validated['no_vat_reason_code'] ?? null) : null,
+            'no_vat_reason_note'         => $vatStatus === 'no_vat' ? ($validated['no_vat_reason_note'] ?? null) : null,
+            'vat_category'               => $validated['vat_category'] ?? 'G',
+            'calendar_type'              => 'E',
+            'purchase_type'              => $validated['purchase_type'] ?? 3,
+            'custom_seller_tin'          => $validated['custom_seller_tin'] ?? null,
+            'custom_fs_no'               => $validated['custom_fs_no'] ?? null,
+            'custom_mrc_no'              => $validated['custom_mrc_no'] ?? null,
+            'custom_item_description'    => $validated['custom_item_description'] ?? null,
+            'uom'                        => $validated['uom'] ?? '9',
+            'quantity'                   => $validated['quantity'] ?? 1.0,
+            'unit_price'                 => $validated['unit_price'] ?? ($baseAmount / max((float)($validated['quantity'] ?? 1), 1)),
+            'decided_by'                 => $user->id,
+            'decided_at'                 => now(),
         ];
 
         $decision = null;
@@ -388,6 +459,8 @@ class ExpenseHubController extends Controller
             'vat_status'         => 'required|in:vat_applies,no_vat,pending_decision',
             'vat_rate'           => 'nullable|numeric|min:0|max:100',
             'is_inclusive'       => 'nullable|boolean',
+            'has_withholding'    => 'nullable|boolean',
+            'withholding_rate'   => 'nullable|numeric|min:0|max:100',
             'no_vat_reason_code' => 'nullable|string|max:50',
             'no_vat_reason_note' => 'nullable|string|max:500',
         ]);
@@ -397,7 +470,7 @@ class ExpenseHubController extends Controller
         $isInclusive = $request->boolean('is_inclusive', true);
         $count = 0;
 
-        DB::transaction(function () use ($validated, $vatStatus, $vatRate, $isInclusive, $user, &$count) {
+        DB::transaction(function () use ($validated, $vatStatus, $vatRate, $isInclusive, $user, $request, &$count) {
             foreach ($validated['selected_items'] as $itemStr) {
                 $parts = explode(':', $itemStr);
                 if (count($parts) < 3) continue;
@@ -438,6 +511,16 @@ class ExpenseHubController extends Controller
                     'decided_by'         => $user->id,
                     'decided_at'         => now(),
                 ];
+
+                if ($request->has('has_withholding')) {
+                    $hasWht = $request->boolean('has_withholding');
+                    $whtRate = (float)($request->input('withholding_rate') ?: 3.00);
+                    $whtAmt = $hasWht ? round($baseAmount * ($whtRate / 100), 2) : 0.00;
+                    $decisionData['has_withholding']    = $hasWht;
+                    $decisionData['withholding_rate']   = $whtRate;
+                    $decisionData['withholding_amount'] = $whtAmt;
+                    $decisionData['net_payable_amount'] = max(0, $totalAmount - $whtAmt);
+                }
 
                 $decision = ExpenseHubVatDecision::updateOrCreate(
                     [
@@ -708,6 +791,12 @@ class ExpenseHubController extends Controller
                 default                 => null,
             };
 
+            $hasWht       = (bool)$decision->has_withholding;
+            $whtRate      = (float)($decision->withholding_rate ?: 3.00);
+            $whtAmount    = (float)($decision->withholding_amount ?: 0.00);
+            $whtReceipt   = $decision->withholding_receipt ?: null;
+            $whtReceiptNo = $decision->withholding_receipt_number ?: null;
+
             if ($vatStatus === ExpenseHubVatDecision::STATUS_VAT_APPLIES) {
                 $targetDate  = $customReceiptDate;
                 $projectId   = null;
@@ -727,6 +816,16 @@ class ExpenseHubController extends Controller
                         if (!empty($decision->custom_fs_no) && empty($req->payment_reference)) {
                             $req->payment_reference = 'FS: ' . $decision->custom_fs_no . ($decision->custom_mrc_no ? ' | MRC: ' . $decision->custom_mrc_no : '');
                         }
+                        $req->has_withholding    = $hasWht;
+                        $req->withholding_rate   = $whtRate;
+                        $req->withholding_amount = $whtAmount;
+                        if ($whtReceipt) {
+                            $req->withholding_receipt = $whtReceipt;
+                        }
+                        if ($whtReceiptNo) {
+                            $req->withholding_receipt_number = $whtReceiptNo;
+                        }
+                        $req->net_amount = max(0, ($req->gross_amount ?: $req->amount) - $whtAmount);
                         $req->save();
 
                         $targetDate  = $targetDate ?: ($req->paid_at ? Carbon::parse($req->paid_at)->toDateString() : ($req->created_at ? Carbon::parse($req->created_at)->toDateString() : null));
@@ -744,15 +843,31 @@ class ExpenseHubController extends Controller
                         if ($totalAmount > 0) {
                             $payment->gross_amount = $totalAmount;
                         }
+                        $payment->has_withholding    = $hasWht;
+                        $payment->withholding_rate   = $whtRate;
+                        $payment->withholding_amount = $whtAmount;
+                        if ($whtReceipt) {
+                            $payment->withholding_receipt = $whtReceipt;
+                        }
+                        if ($whtReceiptNo) {
+                            $payment->withholding_receipt_number = $whtReceiptNo;
+                        }
+                        $payment->net_amount = max(0, ($payment->gross_amount ?: $payment->amount) - $whtAmount);
                         $payment->save();
 
                         // Also update linked PR ExpenseRequest if one exists
                         if ($payment->purchase_request_id) {
-                            ExpenseRequest::where('purchase_request_id', $payment->purchase_request_id)->update([
-                                'vat_amount' => $vatAmount,
-                                'vat_type'   => $isInclusive ? 'inclusive' : 'exclusive',
-                                'vat_rate'   => $vatRate,
-                            ]);
+                            $prExpUpdate = [
+                                'vat_amount'         => $vatAmount,
+                                'vat_type'           => $isInclusive ? 'inclusive' : 'exclusive',
+                                'vat_rate'           => $vatRate,
+                                'has_withholding'    => $hasWht,
+                                'withholding_rate'   => $whtRate,
+                                'withholding_amount' => $whtAmount,
+                            ];
+                            if ($whtReceipt) $prExpUpdate['withholding_receipt'] = $whtReceipt;
+                            if ($whtReceiptNo) $prExpUpdate['withholding_receipt_number'] = $whtReceiptNo;
+                            ExpenseRequest::where('purchase_request_id', $payment->purchase_request_id)->update($prExpUpdate);
                         }
 
                         $targetDate  = $targetDate ?: ($payment->paid_at ? Carbon::parse($payment->paid_at)->toDateString() : ($payment->created_at ? Carbon::parse($payment->created_at)->toDateString() : null));
@@ -766,6 +881,16 @@ class ExpenseHubController extends Controller
                         $p->vat_amount = $vatAmount;
                         $p->vat_type   = $isInclusive ? 'inclusive' : 'exclusive';
                         $p->vat_rate   = $vatRate;
+                        $p->has_withholding    = $hasWht;
+                        $p->withholding_rate   = $whtRate;
+                        $p->withholding_amount = $whtAmount;
+                        if ($whtReceipt) {
+                            $p->withholding_receipt = $whtReceipt;
+                        }
+                        if ($whtReceiptNo) {
+                            $p->withholding_receipt_number = $whtReceiptNo;
+                        }
+                        $p->net_amount = max(0, ($p->gross_amount ?: $p->amount) - $whtAmount);
                         $p->save();
 
                         $targetDate  = $targetDate ?: ($p->payment_date ? Carbon::parse($p->payment_date)->toDateString() : ($p->created_at ? Carbon::parse($p->created_at)->toDateString() : null));
@@ -868,17 +993,59 @@ class ExpenseHubController extends Controller
                     }
                 }
             } elseif ($vatStatus === ExpenseHubVatDecision::STATUS_NO_VAT) {
-                // If marked No-VAT, clear VAT from source model and zero out receipt VAT
+                // If marked No-VAT, clear VAT from source model and zero out receipt VAT, while syncing Withholding Tax
                 if ($sourceType === 'expense_request') {
-                    ExpenseRequest::where('id', $sourceId)->update([
-                        'vat_amount' => 0,
-                        'vat_type'   => 'none',
-                    ]);
+                    $req = ExpenseRequest::find($sourceId);
+                    if ($req) {
+                        $req->vat_amount = 0;
+                        $req->vat_type   = 'none';
+                        $req->has_withholding    = $hasWht;
+                        $req->withholding_rate   = $whtRate;
+                        $req->withholding_amount = $whtAmount;
+                        if ($whtReceipt) $req->withholding_receipt = $whtReceipt;
+                        if ($whtReceiptNo) $req->withholding_receipt_number = $whtReceiptNo;
+                        $req->net_amount = max(0, ($req->gross_amount ?: $req->amount) - $whtAmount);
+                        $req->save();
+                    }
                 } elseif ($sourceType === 'procurement_payment') {
-                    ProcurementPayment::where('id', $sourceId)->update([
-                        'vat_amount' => 0,
-                        'vat_type'   => 'none',
-                    ]);
+                    $payment = ProcurementPayment::find($sourceId);
+                    if ($payment) {
+                        $payment->vat_amount = 0;
+                        $payment->vat_type   = 'none';
+                        $payment->has_withholding    = $hasWht;
+                        $payment->withholding_rate   = $whtRate;
+                        $payment->withholding_amount = $whtAmount;
+                        if ($whtReceipt) $payment->withholding_receipt = $whtReceipt;
+                        if ($whtReceiptNo) $payment->withholding_receipt_number = $whtReceiptNo;
+                        $payment->net_amount = max(0, ($payment->gross_amount ?: $payment->amount) - $whtAmount);
+                        $payment->save();
+
+                        if ($payment->purchase_request_id) {
+                            $prExpUpdate = [
+                                'vat_amount'         => 0,
+                                'vat_type'           => 'none',
+                                'has_withholding'    => $hasWht,
+                                'withholding_rate'   => $whtRate,
+                                'withholding_amount' => $whtAmount,
+                            ];
+                            if ($whtReceipt) $prExpUpdate['withholding_receipt'] = $whtReceipt;
+                            if ($whtReceiptNo) $prExpUpdate['withholding_receipt_number'] = $whtReceiptNo;
+                            ExpenseRequest::where('purchase_request_id', $payment->purchase_request_id)->update($prExpUpdate);
+                        }
+                    }
+                } elseif ($sourceType === 'credit_store_payment') {
+                    $p = CreditStorePayment::find($sourceId);
+                    if ($p) {
+                        $p->vat_amount = 0;
+                        $p->vat_type   = 'none';
+                        $p->has_withholding    = $hasWht;
+                        $p->withholding_rate   = $whtRate;
+                        $p->withholding_amount = $whtAmount;
+                        if ($whtReceipt) $p->withholding_receipt = $whtReceipt;
+                        if ($whtReceiptNo) $p->withholding_receipt_number = $whtReceiptNo;
+                        $p->net_amount = max(0, ($p->gross_amount ?: $p->amount) - $whtAmount);
+                        $p->save();
+                    }
                 }
                 if ($purchasableClass && Schema::hasTable('receipts') && Schema::hasColumn('receipts', 'purchasable_type')) {
                     $receipt = Receipt::where('purchasable_type', $purchasableClass)

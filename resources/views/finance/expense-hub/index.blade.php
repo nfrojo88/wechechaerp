@@ -42,7 +42,7 @@
         </div>
 
         <!-- 2. VAT Applies -->
-        <div class="col-xl-3 col-md-4 col-sm-6">
+        <div class="col-xl-2 col-md-4 col-sm-6">
             <div class="card border-0 shadow-sm h-100 rounded-3 border-start border-success border-4 bg-success bg-opacity-10">
                 <div class="card-body p-3">
                     <div class="d-flex justify-content-between align-items-center mb-1">
@@ -51,7 +51,7 @@
                     </div>
                     <h5 class="mb-0 fw-bold text-success">{{ number_format($summary['vat_applies_total'], 2) }} <small class="text-xxs">ETB</small></h5>
                     <div class="mt-2 text-xxs text-dark d-flex justify-content-between">
-                        <span>Input VAT (15%):</span>
+                        <span>Input VAT:</span>
                         <strong class="text-success">{{ number_format($summary['total_input_vat'], 2) }} ETB</strong>
                     </div>
                 </div>
@@ -71,27 +71,47 @@
             </div>
         </div>
 
-        <!-- 4. Pending Decision (Highlighted clearly per prompt) -->
-        <div class="col-xl-3 col-md-6 col-sm-6">
+        <!-- 4. Withholding Tax (3%) -->
+        <div class="col-xl-2 col-md-4 col-sm-6">
             <div class="card border-0 shadow-sm h-100 rounded-3 border-start border-warning border-4 bg-warning bg-opacity-10">
                 <div class="card-body p-3">
                     <div class="d-flex justify-content-between align-items-center mb-1">
                         <span class="text-warning-emphasis text-uppercase fw-bold text-xxs">
-                            <i class="fa-solid fa-triangle-exclamation me-1"></i> Pending Decision
+                            <i class="fa-solid fa-stamp me-1"></i> Withholding (3%)
                         </span>
                         <span class="badge bg-warning text-dark fw-bold rounded-pill px-2 py-0.5 text-xxs">
-                            {{ $summary['pending_count'] }} Unclassified
+                            {{ $summary['withholding_count'] ?? 0 }} Items
                         </span>
                     </div>
-                    <h5 class="mb-0 fw-bold text-warning-emphasis">{{ number_format($summary['pending_total'], 2) }} <small class="text-xxs">ETB</small></h5>
+                    <h5 class="mb-0 fw-bold text-warning-emphasis">{{ number_format($summary['withholding_total'] ?? 0, 2) }} <small class="text-xxs">ETB</small></h5>
                     <div class="mt-2 text-xxs text-muted">
-                        <span class="text-danger fw-semibold">Excluded from VAT filing until decided</span>
+                        <span>3% Tax Deductions Ledger</span>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- 5. CapEx Separate -->
+        <!-- 5. Pending Decision -->
+        <div class="col-xl-2 col-md-6 col-sm-6">
+            <div class="card border-0 shadow-sm h-100 rounded-3 border-start border-danger border-4 bg-danger bg-opacity-10">
+                <div class="card-body p-3">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="text-danger text-uppercase fw-bold text-xxs">
+                            <i class="fa-solid fa-triangle-exclamation me-1"></i> Pending
+                        </span>
+                        <span class="badge bg-danger text-white fw-bold rounded-pill px-2 py-0.5 text-xxs">
+                            {{ $summary['pending_count'] }} Unclassified
+                        </span>
+                    </div>
+                    <h5 class="mb-0 fw-bold text-danger">{{ number_format($summary['pending_total'], 2) }} <small class="text-xxs">ETB</small></h5>
+                    <div class="mt-2 text-xxs text-muted">
+                        <span>Needs VAT/Tax classification</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 6. CapEx Separate -->
         <div class="col-xl-2 col-md-6 col-sm-6">
             <div class="card border-0 shadow-sm h-100 rounded-3 border-start border-info border-4">
                 <div class="card-body p-3">
@@ -145,11 +165,11 @@
                 <input type="hidden" name="tab" value="{{ $activeTab }}">
 
                 <!-- Search term -->
-                <div class="col-md-3 col-sm-6">
+                <div class="col-md-2 col-sm-6">
                     <label class="form-label text-xxs fw-semibold text-muted mb-1">Search Keyword / Ref / TIN</label>
                     <div class="input-group input-group-sm">
                         <span class="input-group-text bg-white"><i class="fa-solid fa-magnifying-glass text-muted"></i></span>
-                        <input type="text" name="search" class="form-control" placeholder="Ref #, supplier, TIN, desc..." value="{{ request('search') }}">
+                        <input type="text" name="search" class="form-control" placeholder="Ref #, supplier, TIN..." value="{{ request('search') }}">
                     </div>
                 </div>
 
@@ -186,6 +206,16 @@
                     </select>
                 </div>
 
+                <!-- Withholding Tax Filter -->
+                <div class="col-md-2 col-sm-6">
+                    <label class="form-label text-xxs fw-semibold text-muted mb-1">Withholding Tax</label>
+                    <select name="withholding" class="form-select form-select-sm">
+                        <option value="">All Withholding</option>
+                        <option value="yes" @selected(request('withholding') === 'yes')>3% WHT Deducted</option>
+                        <option value="no" @selected(request('withholding') === 'no')>No Withholding</option>
+                    </select>
+                </div>
+
                 <!-- Date Range -->
                 <div class="col-md-2 col-sm-6">
                     <label class="form-label text-xxs fw-semibold text-muted mb-1">Date Range</label>
@@ -197,13 +227,13 @@
                 </div>
 
                 <!-- Submit / Clear -->
-                <div class="col-md-1 col-sm-6 d-flex gap-1">
-                    <button type="submit" class="btn btn-sm btn-primary w-100" title="Apply Filters">
-                        <i class="fa-solid fa-filter"></i>
+                <div class="col-12 text-end d-flex justify-content-end gap-1 mt-1">
+                    <button type="submit" class="btn btn-sm btn-primary px-3 shadow-xs" title="Apply Filters">
+                        <i class="fa-solid fa-filter me-1"></i> Filter
                     </button>
-                    @if(request()->hasAny(['search', 'project_id', 'source_module', 'vat_status', 'date_from', 'date_to', 'supplier', 'category']))
-                    <a href="{{ route('finance.expense-hub.index', ['tab' => $activeTab]) }}" class="btn btn-sm btn-outline-secondary" title="Reset Filters">
-                        <i class="fa-solid fa-rotate-left"></i>
+                    @if(request()->hasAny(['search', 'project_id', 'source_module', 'vat_status', 'withholding', 'date_from', 'date_to', 'supplier', 'category']))
+                    <a href="{{ route('finance.expense-hub.index', ['tab' => $activeTab]) }}" class="btn btn-sm btn-outline-secondary px-3" title="Reset Filters">
+                        <i class="fa-solid fa-rotate-left me-1"></i> Reset
                     </a>
                     @endif
                 </div>
@@ -370,6 +400,14 @@
                                     {{ $reasons[$item->reason_code] ?? $item->reason_code }}
                                 </div>
                             @endif
+
+                            @if(!empty($item->has_withholding) || (float)($item->withholding_amount ?? 0) > 0)
+                                <div class="mt-0.5">
+                                    <span class="badge bg-warning bg-opacity-20 text-dark border border-warning text-xxs" title="3% Withholding Deducted: {{ number_format($item->withholding_amount, 2) }} ETB">
+                                        <i class="fa-solid fa-stamp text-warning me-0.5"></i> 3% WHT ({{ number_format($item->withholding_amount, 2) }})
+                                    </span>
+                                </div>
+                            @endif
                         </td>
 
                         <!-- Base & VAT -->
@@ -381,14 +419,21 @@
                         </td>
 
                         <!-- Receipt Link -->
-                        <td class="text-center">
+                        <td class="text-center text-nowrap">
                             @if($item->receipt_url)
-                                <a href="{{ asset('storage/' . ltrim($item->receipt_url, '/')) }}" target="_blank" 
+                                <a href="{{ Str::startsWith($item->receipt_url, ['http://', 'https://']) ? $item->receipt_url : asset('storage/' . ltrim($item->receipt_url, '/')) }}" target="_blank" 
                                    class="btn btn-xs btn-outline-info rounded-pill px-2 py-0.5" title="View attached receipt / voucher">
                                     <i class="fa-solid fa-paperclip"></i>
                                 </a>
                             @else
                                 <span class="text-muted text-xxs">—</span>
+                            @endif
+
+                            @if(!empty($item->withholding_receipt))
+                                <a href="{{ Str::startsWith($item->withholding_receipt, ['http://', 'https://']) ? $item->withholding_receipt : asset('storage/' . ltrim($item->withholding_receipt, '/')) }}" target="_blank" 
+                                   class="btn btn-xs btn-outline-warning rounded-pill px-1.5 py-0.5 ms-0.5" title="View Withholding Receipt #{{ $item->withholding_receipt_number ?? '' }}">
+                                    <i class="fa-solid fa-stamp"></i> WHT
+                                </a>
                             @endif
                         </td>
 
@@ -754,6 +799,20 @@
                                 <span class="text-muted d-block text-xxs">Exemption / Reason:</span>
                                 <span id="dExemptionReason" class="text-muted">—</span>
                             </div>
+
+                            <!-- Withholding Tax Section in Details -->
+                            <div class="col-md-4 mt-2 pt-2 border-top">
+                                <span class="text-muted d-block text-xxs">Withholding Tax (3%):</span>
+                                <strong id="dWhtAmount" class="text-danger">—</strong>
+                            </div>
+                            <div class="col-md-4 mt-2 pt-2 border-top">
+                                <span class="text-muted d-block text-xxs">Withholding Voucher #:</span>
+                                <span id="dWhtReceiptNo" class="font-monospace text-dark">—</span>
+                            </div>
+                            <div class="col-md-4 mt-2 pt-2 border-top">
+                                <span class="text-muted d-block text-xxs">Net Payable Amount:</span>
+                                <strong id="dNetPayable" class="text-primary font-monospace">—</strong>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -765,6 +824,9 @@
                     </a>
                     <a id="dReceiptBtn" href="#" target="_blank" class="btn btn-sm btn-outline-info rounded-pill px-3 text-xs d-none ms-1">
                         <i class="fa-solid fa-paperclip me-1"></i> View Receipt File
+                    </a>
+                    <a id="dWhtReceiptBtn" href="#" target="_blank" class="btn btn-sm btn-outline-warning rounded-pill px-3 text-xs d-none ms-1">
+                        <i class="fa-solid fa-stamp me-1"></i> View Withholding Receipt
                     </a>
                 </div>
                 <div class="d-flex gap-2">
@@ -790,13 +852,14 @@
                 </h6>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <form id="decisionForm" method="POST" action="{{ route('finance.expense-hub.decision') }}">
+            <form id="decisionForm" method="POST" action="{{ route('finance.expense-hub.decision') }}" enctype="multipart/form-data">
                 @csrf
                 <input type="hidden" name="source_type" id="mSourceType">
                 <input type="hidden" name="source_id" id="mSourceId">
                 <input type="hidden" name="amount" id="mAmount">
                 <input type="hidden" name="custom_receipt_date" id="mReceiptDate">
                 <input type="hidden" name="receipt_path" id="mReceiptPath">
+                <input type="hidden" name="withholding_receipt" id="mWithholdingReceiptPath">
                 <input type="hidden" name="custom_seller_name" id="mSellerName">
                 <input type="hidden" name="custom_item_description" id="mItemDescription">
 
@@ -924,15 +987,6 @@
                                 </select>
                             </div>
 
-                            <!-- Live Calculation Preview Card -->
-                            <div class="col-12">
-                                <div class="p-2.5 bg-light rounded-3 d-flex justify-content-between align-items-center text-xs border">
-                                    <div>Base Subtotal: <strong id="prevBase" class="text-dark">0.00</strong> ETB</div>
-                                    <div>+ 15% VAT: <strong id="prevVat" class="text-success fs-6">0.00</strong> ETB</div>
-                                    <div>= Grand Total: <strong id="prevTotal" class="text-primary">0.00</strong> ETB</div>
-                                </div>
-                            </div>
-
                             <!-- Official VAT Report Metadata -->
                             <div class="col-md-4">
                                 <label class="form-label text-xs">Vendor TIN (10 Digits)</label>
@@ -966,6 +1020,71 @@
                                 <input type="text" name="no_vat_reason_note" id="mReasonNote" class="form-control form-control-sm" placeholder="Additional explanation...">
                             </div>
                         </div>
+                    </div>
+
+                    <!-- Withholding Tax (3%) & Receipt Upload Section -->
+                    <div class="card border border-warning border-opacity-50 bg-warning bg-opacity-10 rounded-3 mb-3 shadow-none">
+                        <div class="card-body p-3">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div class="form-check form-switch mb-0">
+                                    <input class="form-check-input" type="checkbox" name="has_withholding" id="mHasWithholding" value="1" onchange="toggleWithholdingFields()">
+                                    <label class="form-check-label fw-bold text-dark text-xs cursor-pointer" for="mHasWithholding">
+                                        <i class="fa-solid fa-stamp text-warning me-1"></i> Apply Withholding Tax (3%)
+                                    </label>
+                                </div>
+                                <span class="badge bg-white text-dark border text-xxs shadow-xs" id="whtRateBadge">3.00% Standard Rate</span>
+                            </div>
+
+                            <div id="withholdingFieldsSection" class="d-none mt-2.5 pt-2.5 border-top border-warning border-opacity-25">
+                                <div class="row g-2 mb-2">
+                                    <div class="col-md-4">
+                                        <label class="form-label text-xxs fw-semibold text-muted mb-1">Withholding Rate (%)</label>
+                                        <div class="input-group input-group-sm">
+                                            <input type="number" step="0.01" name="withholding_rate" id="mWithholdingRate" class="form-control text-xs bg-white" value="3.00" oninput="recalculateVatPreview()">
+                                            <span class="input-group-text bg-light text-xxs">%</span>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label text-xxs fw-semibold text-muted mb-1">Withholding Tax (ETB)</label>
+                                        <div class="input-group input-group-sm">
+                                            <input type="number" step="0.01" name="withholding_amount" id="mWithholdingAmount" class="form-control text-xs bg-white fw-bold text-danger" placeholder="0.00" oninput="recalculateVatPreview()">
+                                            <span class="input-group-text bg-light text-xxs">ETB</span>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label text-xxs fw-semibold text-muted mb-1">Receipt / Voucher #</label>
+                                        <input type="text" name="withholding_receipt_number" id="mWithholdingReceiptNo" class="form-control form-control-sm text-xs bg-white font-monospace" placeholder="e.g. WHT-00982">
+                                    </div>
+                                </div>
+
+                                <!-- Withholding Receipt File Upload -->
+                                <div class="bg-white p-2.5 rounded-3 border border-warning border-opacity-25">
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <label class="form-label text-xxs fw-bold text-dark mb-0 d-flex align-items-center gap-1">
+                                            <i class="fa-solid fa-cloud-arrow-up text-primary"></i> Upload Withholding Tax Receipt / Slip
+                                        </label>
+                                        <span id="currentWithholdingReceiptWrapper" class="d-none">
+                                            <a id="currentWithholdingReceiptLink" href="#" target="_blank" class="badge bg-success bg-opacity-10 text-success border border-success text-xxs text-decoration-none">
+                                                <i class="fa-solid fa-paperclip me-1"></i> View Current Receipt
+                                            </a>
+                                        </span>
+                                    </div>
+                                    <input type="file" name="withholding_receipt_file" id="mWithholdingFile" accept="image/*,.pdf" class="form-control form-control-sm text-xs">
+                                    <div class="form-text text-xxs text-muted mt-1">
+                                        Attach official ERCA / MOR Withholding Tax Receipt voucher (JPG, PNG, PDF max 25MB).
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Live Calculation Preview Card (Base, VAT, Withholding & Net Payable) -->
+                    <div class="p-2.5 bg-light rounded-3 d-flex justify-content-between align-items-center text-xs border flex-wrap gap-2 mb-2">
+                        <div>Base Subtotal: <strong id="prevBase" class="text-dark">0.00</strong> ETB</div>
+                        <div>+ VAT (15%): <strong id="prevVat" class="text-success fs-6">0.00</strong> ETB</div>
+                        <div id="prevWhtContainer" class="d-none text-danger">- 3% WHT: <strong id="prevWht" class="fs-6">0.00</strong> ETB</div>
+                        <div>Grand Total: <strong id="prevTotal" class="text-primary">0.00</strong> ETB</div>
+                        <div class="border-start ps-2">Payable Net: <strong id="prevNet" class="text-dark fw-bold fs-6">0.00</strong> ETB</div>
                     </div>
 
                 </div>
@@ -1027,6 +1146,20 @@
                             <div class="col-6">
                                 <input type="number" step="0.01" name="vat_rate" class="form-control form-control-sm" value="15.00">
                             </div>
+                        </div>
+                    </div>
+
+                    <!-- Withholding Option in Bulk -->
+                    <div class="mb-3 border-top pt-2">
+                        <div class="form-check form-switch mb-1">
+                            <input class="form-check-input" type="checkbox" name="has_withholding" id="bulkHasWithholding" value="1" onchange="toggleBulkWithholding()">
+                            <label class="form-check-label text-xs fw-bold cursor-pointer" for="bulkHasWithholding">
+                                <i class="fa-solid fa-stamp text-warning me-1"></i> Apply Withholding Tax (3%)
+                            </label>
+                        </div>
+                        <div id="bulkWithholdingGroup" class="d-none mt-1">
+                            <label class="form-label text-xxs text-muted mb-0.5">Withholding Rate (%)</label>
+                            <input type="number" step="0.01" name="withholding_rate" class="form-control form-control-sm" value="3.00">
                         </div>
                     </div>
                 </div>
@@ -1202,6 +1335,25 @@ function openExpenseDetailModal(item) {
     document.getElementById('dMrcNo').textContent = item.mrc_no || '—';
     document.getElementById('dExemptionReason').textContent = item.reason_note || item.reason_code || '—';
 
+    // Withholding Tax fields
+    const whtAmount = parseFloat(item.withholding_amount || 0);
+    const hasWht = Boolean(item.has_withholding) || whtAmount > 0;
+    const dWhtAmount = document.getElementById('dWhtAmount');
+    if (dWhtAmount) {
+        dWhtAmount.textContent = hasWht ? (whtAmount.toLocaleString('en-US', {minimumFractionDigits: 2}) + ' ETB') : '—';
+    }
+    const dWhtReceiptNo = document.getElementById('dWhtReceiptNo');
+    if (dWhtReceiptNo) {
+        dWhtReceiptNo.textContent = item.withholding_receipt_number || '—';
+    }
+    const dNetPayable = document.getElementById('dNetPayable');
+    if (dNetPayable) {
+        const netPayable = parseFloat(item.net_payable_amount || (item.amount - whtAmount) || 0);
+        dNetPayable.textContent = hasWht 
+            ? (netPayable.toLocaleString('en-US', {minimumFractionDigits: 2}) + ' ETB') 
+            : (parseFloat(item.amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2}) + ' ETB');
+    }
+
     // Footer actions
     const viewRecBtn = document.getElementById('dViewRecordBtn');
     if (item.view_url) {
@@ -1213,10 +1365,24 @@ function openExpenseDetailModal(item) {
 
     const receiptBtn = document.getElementById('dReceiptBtn');
     if (item.receipt_url) {
-        receiptBtn.href = '{{ asset("storage") }}/' + item.receipt_url.replace(/^\/+/, '');
+        receiptBtn.href = (item.receipt_url.startsWith('http://') || item.receipt_url.startsWith('https://'))
+            ? item.receipt_url
+            : ('{{ asset("storage") }}/' + item.receipt_url.replace(/^\/+/, ''));
         receiptBtn.classList.remove('d-none');
     } else {
         receiptBtn.classList.add('d-none');
+    }
+
+    const whtReceiptBtn = document.getElementById('dWhtReceiptBtn');
+    if (whtReceiptBtn) {
+        if (item.withholding_receipt) {
+            whtReceiptBtn.href = (item.withholding_receipt.startsWith('http://') || item.withholding_receipt.startsWith('https://'))
+                ? item.withholding_receipt
+                : ('{{ asset("storage") }}/' + item.withholding_receipt.replace(/^\/+/, ''));
+            whtReceiptBtn.classList.remove('d-none');
+        } else {
+            whtReceiptBtn.classList.add('d-none');
+        }
     }
 
     const btnOpenDecision = document.getElementById('dBtnOpenDecision');
@@ -1236,6 +1402,10 @@ function resetOcrState() {
     lastOcrResult = null;
     const fileInput = document.getElementById('mOcrFileInput');
     if (fileInput) fileInput.value = '';
+    const whtFileInput = document.getElementById('mWithholdingFile');
+    if (whtFileInput) whtFileInput.value = '';
+    const whtReceiptPath = document.getElementById('mWithholdingReceiptPath');
+    if (whtReceiptPath) whtReceiptPath.value = '';
     const spinner = document.getElementById('ocrSpinner');
     if (spinner) spinner.classList.add('d-none');
     const resultBox = document.getElementById('ocrResultBox');
@@ -1316,6 +1486,46 @@ function openDecisionModal(item) {
     } else {
         document.getElementById('modeInclusive').checked = true;
     }
+
+    // Prefill Withholding Tax & Receipt
+    const hasWht = Boolean(item.has_withholding) || parseFloat(item.withholding_amount || 0) > 0;
+    const whtCheckbox = document.getElementById('mHasWithholding');
+    if (whtCheckbox) {
+        whtCheckbox.checked = hasWht;
+    }
+    const whtRate = document.getElementById('mWithholdingRate');
+    if (whtRate) {
+        whtRate.value = (item.withholding_rate !== null && item.withholding_rate !== undefined && item.withholding_rate !== '') 
+            ? item.withholding_rate 
+            : 3.00;
+    }
+    const whtAmountInput = document.getElementById('mWithholdingAmount');
+    if (whtAmountInput) {
+        whtAmountInput.value = item.withholding_amount ? parseFloat(item.withholding_amount).toFixed(2) : '';
+    }
+    const whtReceiptNo = document.getElementById('mWithholdingReceiptNo');
+    if (whtReceiptNo) {
+        whtReceiptNo.value = item.withholding_receipt_number || '';
+    }
+    const whtReceiptPath = document.getElementById('mWithholdingReceiptPath');
+    if (whtReceiptPath) {
+        whtReceiptPath.value = item.withholding_receipt || '';
+    }
+
+    const currentWhtWrap = document.getElementById('currentWithholdingReceiptWrapper');
+    const currentWhtLink = document.getElementById('currentWithholdingReceiptLink');
+    if (currentWhtWrap && currentWhtLink) {
+        if (item.withholding_receipt) {
+            currentWhtLink.href = (item.withholding_receipt.startsWith('http://') || item.withholding_receipt.startsWith('https://'))
+                ? item.withholding_receipt
+                : ('{{ asset("storage") }}/' + item.withholding_receipt.replace(/^\/+/, ''));
+            currentWhtWrap.classList.remove('d-none');
+        } else {
+            currentWhtWrap.classList.add('d-none');
+        }
+    }
+
+    toggleWithholdingFields();
 
     // Toggle attached scan button
     const attachedBtn = document.getElementById('btnAttachedOcrScan');
@@ -1526,28 +1736,91 @@ function toggleVatFields() {
         vatSec.classList.add('d-none');
         noVatSec.classList.add('d-none');
     }
+
+    recalculateVatPreview();
+}
+
+function toggleWithholdingFields() {
+    const isChecked = document.getElementById('mHasWithholding')?.checked;
+    const sec = document.getElementById('withholdingFieldsSection');
+    const prevWhtContainer = document.getElementById('prevWhtContainer');
+
+    if (isChecked) {
+        sec?.classList.remove('d-none');
+        prevWhtContainer?.classList.remove('d-none');
+    } else {
+        sec?.classList.add('d-none');
+        prevWhtContainer?.classList.add('d-none');
+    }
+    recalculateVatPreview();
+}
+
+function toggleBulkWithholding() {
+    const isChecked = document.getElementById('bulkHasWithholding')?.checked;
+    const grp = document.getElementById('bulkWithholdingGroup');
+    if (isChecked) {
+        grp?.classList.remove('d-none');
+    } else {
+        grp?.classList.add('d-none');
+    }
 }
 
 function recalculateVatPreview() {
     if (!currentEditingItem) return;
     const amount = parseFloat(currentEditingItem.amount) || 0;
-    const rate = parseFloat(document.getElementById('mVatRate').value) || 15.00;
-    const isInclusive = document.getElementById('modeInclusive').checked;
+    const rate = parseFloat(document.getElementById('mVatRate')?.value) || 15.00;
+    const isInclusive = document.getElementById('modeInclusive')?.checked ?? true;
+    const status = document.querySelector('input[name="vat_status"]:checked')?.value;
+    const hasWithholding = document.getElementById('mHasWithholding')?.checked;
+    const whtRate = parseFloat(document.getElementById('mWithholdingRate')?.value) || 3.00;
 
     let base = 0, vat = 0, total = 0;
-    if (isInclusive) {
-        base = Math.round((amount / (1 + (rate / 100))) * 100) / 100;
-        vat = Math.round((amount - base) * 100) / 100;
-        total = amount;
+    if (status === 'vat_applies') {
+        if (isInclusive) {
+            base = Math.round((amount / (1 + (rate / 100))) * 100) / 100;
+            vat = Math.round((amount - base) * 100) / 100;
+            total = amount;
+        } else {
+            base = amount;
+            vat = Math.round((amount * (rate / 100)) * 100) / 100;
+            total = Math.round((base + vat) * 100) / 100;
+        }
     } else {
         base = amount;
-        vat = Math.round((amount * (rate / 100)) * 100) / 100;
-        total = Math.round((base + vat) * 100) / 100;
+        vat = 0;
+        total = amount;
     }
 
-    document.getElementById('prevBase').textContent = base.toLocaleString('en-US', {minimumFractionDigits: 2});
-    document.getElementById('prevVat').textContent = vat.toLocaleString('en-US', {minimumFractionDigits: 2});
-    document.getElementById('prevTotal').textContent = total.toLocaleString('en-US', {minimumFractionDigits: 2});
+    let whtAmount = 0;
+    const manualWhtAmtInput = document.getElementById('mWithholdingAmount');
+    if (hasWithholding) {
+        // Ethiopian 3% Withholding Tax is calculated on taxable base (pre-VAT Subtotal)
+        const autoWht = Math.round((base * (whtRate / 100)) * 100) / 100;
+        if (manualWhtAmtInput && document.activeElement === manualWhtAmtInput && manualWhtAmtInput.value !== '') {
+            whtAmount = parseFloat(manualWhtAmtInput.value) || 0;
+        } else {
+            whtAmount = autoWht;
+            if (manualWhtAmtInput) manualWhtAmtInput.value = whtAmount.toFixed(2);
+        }
+    } else {
+        if (manualWhtAmtInput && document.activeElement !== manualWhtAmtInput) {
+            manualWhtAmtInput.value = '';
+        }
+    }
+
+    const netPayable = Math.max(0, Math.round((total - whtAmount) * 100) / 100);
+
+    const prevBase = document.getElementById('prevBase');
+    const prevVat = document.getElementById('prevVat');
+    const prevWht = document.getElementById('prevWht');
+    const prevTotal = document.getElementById('prevTotal');
+    const prevNet = document.getElementById('prevNet');
+
+    if (prevBase) prevBase.textContent = base.toLocaleString('en-US', {minimumFractionDigits: 2});
+    if (prevVat) prevVat.textContent = vat.toLocaleString('en-US', {minimumFractionDigits: 2});
+    if (prevWht) prevWht.textContent = whtAmount.toLocaleString('en-US', {minimumFractionDigits: 2});
+    if (prevTotal) prevTotal.textContent = total.toLocaleString('en-US', {minimumFractionDigits: 2});
+    if (prevNet) prevNet.textContent = netPayable.toLocaleString('en-US', {minimumFractionDigits: 2});
 }
 
 // ── Bulk Actions Handlers ────────────────────────────────────────────────────

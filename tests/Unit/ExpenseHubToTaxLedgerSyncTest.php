@@ -19,6 +19,7 @@ use App\Models\BankAccount;
 use App\Http\Controllers\Finance\ExpenseHubController;
 use App\Http\Controllers\Finance\FinanceTaxReportController;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -201,6 +202,12 @@ class ExpenseHubToTaxLedgerSyncTest extends TestCase
             $table->decimal('base_amount', 18, 2)->default(0);
             $table->decimal('vat_amount', 18, 2)->default(0);
             $table->decimal('total_amount', 18, 2)->default(0);
+            $table->boolean('has_withholding')->default(false);
+            $table->decimal('withholding_rate', 5, 2)->default(3.00);
+            $table->decimal('withholding_amount', 18, 2)->default(0);
+            $table->string('withholding_receipt')->nullable();
+            $table->string('withholding_receipt_number')->nullable();
+            $table->decimal('net_payable_amount', 18, 2)->default(0);
             $table->string('no_vat_reason_code')->nullable();
             $table->string('no_vat_reason_note')->nullable();
             $table->string('vat_category')->default('G');
@@ -256,6 +263,7 @@ class ExpenseHubToTaxLedgerSyncTest extends TestCase
             $table->string('attachment')->nullable();
             $table->string('payment_reference')->nullable();
             $table->string('withholding_receipt')->nullable();
+            $table->string('withholding_receipt_number')->nullable();
             $table->unsignedBigInteger('tax_settlement_id')->nullable();
             $table->unsignedBigInteger('vat_settlement_id')->nullable();
             $table->unsignedBigInteger('withholding_settlement_id')->nullable();
@@ -291,7 +299,11 @@ class ExpenseHubToTaxLedgerSyncTest extends TestCase
             $table->string('vat_type')->default('none');
             $table->decimal('vat_rate', 5, 2)->default(15.00);
             $table->decimal('vat_amount', 18, 2)->default(0);
+            $table->boolean('has_withholding')->default(false);
+            $table->decimal('withholding_rate', 5, 2)->default(3.00);
             $table->decimal('withholding_amount', 18, 2)->default(0);
+            $table->string('withholding_receipt')->nullable();
+            $table->string('withholding_receipt_number')->nullable();
             $table->decimal('net_amount', 18, 2)->nullable();
             $table->string('status')->default('paid');
             $table->timestamp('paid_at')->nullable();
@@ -403,5 +415,109 @@ class ExpenseHubToTaxLedgerSyncTest extends TestCase
         // 6. Assert that Input VAT KPI card includes the verified VAT amount
         $inputVat = $data['inputVat'];
         $this->assertGreaterThanOrEqual(1500.00, $inputVat, 'Creditable Input VAT must include the 1500 ETB verified VAT.');
+    }
+
+    public function test_recording_withholding_tax_in_expense_hub_syncs_and_appears_in_deductions_ledger()
+    {
+        // 1. Create a paid ExpenseRequest (Subtotal 10,000 ETB)
+        $exp = ExpenseRequest::create([
+            'request_number' => 'REQ-EXP-WHT-001',
+            'user_id'        => $this->financeUser->id,
+            'project_id'     => $this->project->id,
+            'category'       => 'Contractor Service',
+            'description'    => 'Structural consultancy fees',
+            'amount'         => 11500.00,
+            'gross_amount'   => 11500.00,
+            'vat_type'       => 'inclusive',
+            'vat_amount'     => 1500.00,
+            'status'         => ExpenseRequest::STATUS_PAID,
+            'paid_at'        => now(),
+        ]);
+
+        // 2. Prepare fake Withholding Receipt PDF file
+        $fakeFile = UploadedFile::fake()->create('wht_slip_official.pdf', 80, 'application/pdf');
+
+        // 3. Post VAT & Withholding Decision in Expense Hub
+        $hubController = new ExpenseHubController(app(ExpenseHubQueryService::class));
+        $decisionRequest = Request::create(
+            route('finance.expense-hub.decision'),
+            'POST',
+            [
+                'source_type'                => 'expense_request',
+                'source_id'                  => $exp->id,
+                'vat_status'                 => 'vat_applies',
+                'amount'                     => 11500.00,
+                'vat_rate'                   => 15.00,
+                'is_inclusive'               => true,
+                'has_withholding'            => '1',
+                'withholding_rate'           => 3.00,
+                'withholding_amount'         => 300.00, // 3% of 10,000 base
+                'withholding_receipt_number' => 'WHT-ERCA-9922',
+                'custom_seller_tin'          => '0098765432',
+                'custom_fs_no'               => '00099112',
+                'custom_item_description'    => 'Structural consultancy fees with 3% WHT',
+            ],
+            [],
+            [
+                'withholding_receipt_file'   => $fakeFile,
+            ]
+        );
+        app()->instance('request', $decisionRequest);
+
+        $response = $hubController->saveDecision($decisionRequest);
+        $this->assertEquals(302, $response->getStatusCode());
+
+        // 4. Verify ExpenseHubVatDecision record
+        $decision = ExpenseHubVatDecision::where('source_type', 'expense_request')
+            ->where('source_id', $exp->id)
+            ->first();
+        $this->assertNotNull($decision);
+        $this->assertTrue((bool)$decision->has_withholding);
+        $this->assertEquals(3.00, (float)$decision->withholding_rate);
+        $this->assertEquals(300.00, (float)$decision->withholding_amount);
+        $this->assertEquals('WHT-ERCA-9922', $decision->withholding_receipt_number);
+        $this->assertNotEmpty($decision->withholding_receipt);
+        $this->assertEquals(11200.00, (float)$decision->net_payable_amount); // 11500 total - 300 withholding
+
+        // 5. Verify source ExpenseRequest model synchronized
+        $exp->refresh();
+        $this->assertTrue((bool)$exp->has_withholding);
+        $this->assertEquals(3.00, (float)$exp->withholding_rate);
+        $this->assertEquals(300.00, (float)$exp->withholding_amount);
+        $this->assertEquals('WHT-ERCA-9922', $exp->withholding_receipt_number);
+        $this->assertEquals($decision->withholding_receipt, $exp->withholding_receipt);
+        $this->assertEquals(11200.00, (float)$exp->net_amount);
+
+        // 6. Access "VAT & Withholding Tax Deductions Ledger" -> tab=withholding
+        $taxController = new FinanceTaxReportController();
+        $whtLedgerReq = Request::create(route('finance.tax-deductions.index'), 'GET', [
+            'tab'   => 'withholding',
+            'cycle' => 'active',
+        ]);
+        app()->instance('request', $whtLedgerReq);
+
+        $whtView = $taxController->index($whtLedgerReq);
+        $whtData = $whtView->getData();
+
+        $whtExpenses = collect($whtData['records']->items());
+        $matching = $whtExpenses->firstWhere('id', $exp->id);
+        $this->assertNotNull($matching, 'The expense with 3% withholding must appear in the Withholding tab of the tax deductions ledger.');
+        $this->assertEquals(300.00, (float)$matching->withholding_amount);
+        $this->assertEquals('WHT-ERCA-9922', $matching->withholding_receipt_number);
+
+        // 7. Access "VAT & Withholding Tax Deductions Ledger" -> tab=slips
+        $slipsLedgerReq = Request::create(route('finance.tax-deductions.index'), 'GET', [
+            'tab'   => 'slips',
+            'cycle' => 'active',
+        ]);
+        app()->instance('request', $slipsLedgerReq);
+
+        $slipsView = $taxController->index($slipsLedgerReq);
+        $slipsData = $slipsView->getData();
+
+        $slipExpenses = collect($slipsData['records']->items());
+        $slipMatch = $slipExpenses->firstWhere('id', $exp->id);
+        $this->assertNotNull($slipMatch, 'The expense with uploaded withholding receipt must appear in the Withholding Slips tab.');
+        $this->assertNotEmpty($slipMatch->withholding_receipt);
     }
 }

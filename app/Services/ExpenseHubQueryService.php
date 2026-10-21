@@ -100,6 +100,8 @@ class ExpenseHubQueryService
         $pendingTotal     = 0.0;
         $pendingCount     = 0;
         $capexTotal       = 0.0;
+        $withholdingTotal = 0.0;
+        $withholdingCount = 0;
 
         foreach ($expenses as $item) {
             $amt = (float) $item->amount;
@@ -107,6 +109,11 @@ class ExpenseHubQueryService
 
             if ($item->is_capex) {
                 $capexTotal += $amt;
+            }
+
+            if (!empty($item->has_withholding) || (float)($item->withholding_amount ?? 0) > 0) {
+                $withholdingTotal += (float)($item->withholding_amount ?? 0);
+                $withholdingCount++;
             }
 
             if ($item->vat_status === ExpenseHubVatDecision::STATUS_VAT_APPLIES) {
@@ -128,6 +135,8 @@ class ExpenseHubQueryService
             'pending_total'      => $pendingTotal,
             'pending_count'      => $pendingCount,
             'capex_total'        => $capexTotal,
+            'withholding_total'  => $withholdingTotal,
+            'withholding_count'  => $withholdingCount,
             'total_count'        => $expenses->count(),
         ];
     }
@@ -271,6 +280,12 @@ class ExpenseHubQueryService
                 'paid_at_formatted'    => $paidAt,
                 'disbursement_date'    => $payment->paid_at ? $payment->paid_at->toDateString() : ($payment->created_at ? $payment->created_at->toDateString() : null),
                 'receipt_url'          => $attachment,
+                'has_withholding'            => (bool)($payment->has_withholding || (float)($payment->withholding_amount ?? 0) > 0),
+                'withholding_rate'           => (float)($payment->withholding_rate ?: 3.00),
+                'withholding_amount'         => (float)($payment->withholding_amount ?? 0),
+                'withholding_receipt'        => $payment->withholding_receipt ?: null,
+                'withholding_receipt_number' => $payment->withholding_receipt_number ?: null,
+                'net_amount'                 => $payment->net_amount,
                 'category'             => 'material',
                 'category_label'       => 'Material',
                 'is_capex'             => false,
@@ -356,6 +371,12 @@ class ExpenseHubQueryService
                 'paid_at_formatted'    => $paidAt,
                 'disbursement_date'    => $payment->payment_date ? $payment->payment_date->toDateString() : ($payment->created_at ? $payment->created_at->toDateString() : null),
                 'receipt_url'          => $payment->receipt_path,
+                'has_withholding'            => (bool)($payment->has_withholding || (float)($payment->withholding_amount ?? 0) > 0),
+                'withholding_rate'           => (float)($payment->withholding_rate ?: 3.00),
+                'withholding_amount'         => (float)($payment->withholding_amount ?? 0),
+                'withholding_receipt'        => $payment->withholding_receipt ?: null,
+                'withholding_receipt_number' => $payment->withholding_receipt_number ?: null,
+                'net_amount'                 => $payment->net_amount,
                 'category'             => 'material',
                 'category_label'       => 'Credit Settlement',
                 'is_capex'             => false,
@@ -442,6 +463,12 @@ class ExpenseHubQueryService
                 'paid_at_formatted'    => $paidAt,
                 'disbursement_date'    => $req->paid_at ? $req->paid_at->toDateString() : ($req->created_at ? $req->created_at->toDateString() : null),
                 'receipt_url'          => $req->attachment ?: $req->withholding_receipt,
+                'has_withholding'            => (bool)($req->has_withholding || (float)($req->withholding_amount ?? 0) > 0),
+                'withholding_rate'           => (float)($req->withholding_rate ?: 3.00),
+                'withholding_amount'         => (float)($req->withholding_amount ?? 0),
+                'withholding_receipt'        => $req->withholding_receipt ?: null,
+                'withholding_receipt_number' => $req->withholding_receipt_number ?: null,
+                'net_amount'                 => $req->net_amount,
                 'category'             => strtolower($req->category ?: 'overhead'),
                 'category_label'       => $req->category ?: 'General Expense',
                 'is_capex'             => false,
@@ -947,6 +974,12 @@ class ExpenseHubQueryService
             $uom          = $decision->uom ?: '9';
             $qty          = (float) $decision->quantity;
             $unitPrice    = (float) $decision->unit_price;
+            $hasWithholding    = (bool) ($decision->has_withholding ?? ($data['has_withholding'] ?? false));
+            $withholdingRate   = (float) ($decision->withholding_rate > 0 ? $decision->withholding_rate : ($data['withholding_rate'] ?? 3.00));
+            $withholdingAmount = (float) ($decision->withholding_amount ?? ($data['withholding_amount'] ?? 0.00));
+            $withholdingReceipt = $decision->withholding_receipt ?: ($data['withholding_receipt'] ?? null);
+            $withholdingReceiptNumber = $decision->withholding_receipt_number ?: ($data['withholding_receipt_number'] ?? null);
+            $netPayableAmount  = (float) ($decision->net_payable_amount ?? max(0, $totalAmount - $withholdingAmount));
             $hasDecision  = true;
         } else {
             $vatStatus = $data['default_status'] ?? ExpenseHubVatDecision::STATUS_PENDING_DECISION;
@@ -965,6 +998,12 @@ class ExpenseHubQueryService
             $uom          = '9';
             $qty          = 1.0;
             $unitPrice    = $amount;
+            $hasWithholding    = (bool) ($data['has_withholding'] ?? false);
+            $withholdingRate   = (float) ($data['withholding_rate'] ?? 3.00);
+            $withholdingAmount = (float) ($data['withholding_amount'] ?? ($hasWithholding ? round($amount * ($withholdingRate / 100), 2) : 0.00));
+            $withholdingReceipt = $data['withholding_receipt'] ?? null;
+            $withholdingReceiptNumber = $data['withholding_receipt_number'] ?? null;
+            $netPayableAmount  = max(0, $amount - $withholdingAmount);
 
             if ($vatStatus === ExpenseHubVatDecision::STATUS_VAT_APPLIES) {
                 if (($data['source_vat_amount'] ?? 0) > 0) {
@@ -997,27 +1036,33 @@ class ExpenseHubQueryService
         }
 
         return (object) array_merge($data, [
-            'tin'                   => $tin,
-            'vat_status'            => $vatStatus,
-            'vat_rate'              => $vatRate,
-            'is_inclusive'          => $isInclusive,
-            'decision_base_amount'  => $baseAmount,
-            'decision_vat_amount'   => $vatAmount,
-            'decision_total_amount' => $totalAmount,
-            'reason_code'           => $reasonCode,
-            'reason_note'           => $reasonNote,
-            'is_locked'             => $isLocked,
-            'has_decision'          => $hasDecision,
-            'purchase_type'         => $purchaseType,
-            'vat_category'          => $vatCategory,
-            'fs_no'                 => $fsNo,
-            'mrc_no'                => $mrcNo,
-            'item_desc'             => $itemDesc,
-            'uom'                   => $uom,
-            'qty'                   => $qty,
-            'unit_price'            => $unitPrice,
-            'warnings'              => $warnings,
-            'decision_model'        => $decision,
+            'tin'                        => $tin,
+            'vat_status'                 => $vatStatus,
+            'vat_rate'                   => $vatRate,
+            'is_inclusive'               => $isInclusive,
+            'has_withholding'            => $hasWithholding,
+            'withholding_rate'           => $withholdingRate,
+            'withholding_amount'         => $withholdingAmount,
+            'withholding_receipt'        => $withholdingReceipt,
+            'withholding_receipt_number' => $withholdingReceiptNumber,
+            'net_payable_amount'         => $netPayableAmount,
+            'decision_base_amount'       => $baseAmount,
+            'decision_vat_amount'        => $vatAmount,
+            'decision_total_amount'      => $totalAmount,
+            'reason_code'                => $reasonCode,
+            'reason_note'                => $reasonNote,
+            'is_locked'                  => $isLocked,
+            'has_decision'               => $hasDecision,
+            'purchase_type'              => $purchaseType,
+            'vat_category'               => $vatCategory,
+            'fs_no'                      => $fsNo,
+            'mrc_no'                     => $mrcNo,
+            'item_desc'                  => $itemDesc,
+            'uom'                        => $uom,
+            'qty'                        => $qty,
+            'unit_price'                 => $unitPrice,
+            'warnings'                   => $warnings,
+            'decision_model'             => $decision,
         ]);
     }
 
@@ -1047,6 +1092,17 @@ class ExpenseHubQueryService
             if (!empty($filters['vat_status'])) {
                 if ($item->vat_status !== $filters['vat_status']) {
                     return false;
+                }
+            }
+            if (!empty($filters['withholding'])) {
+                if ($filters['withholding'] === 'yes') {
+                    if (empty($item->has_withholding) && (float)($item->withholding_amount ?? 0) <= 0) {
+                        return false;
+                    }
+                } elseif ($filters['withholding'] === 'no') {
+                    if (!empty($item->has_withholding) || (float)($item->withholding_amount ?? 0) > 0) {
+                        return false;
+                    }
                 }
             }
             if (!empty($filters['category'])) {
