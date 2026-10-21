@@ -411,8 +411,12 @@ class MaterialRequestController extends Controller
         try {
             $lifecycle = app(ProcurementLifecycleService::class);
             $materialRequest->loadMissing('purchaseRequests');
+            if ($materialRequest->purchaseRequests->isEmpty()) {
+                $materialRequest->createOrGetPurchaseRequest(auth()->id());
+                $materialRequest->load('purchaseRequests');
+            }
             foreach ($materialRequest->purchaseRequests as $pr) {
-                if (in_array($pr->status, [PurchaseRequest::STATUS_PENDING_HR_APPROVAL, PurchaseRequest::STATUS_DRAFT])) {
+                if (in_array($pr->status, [PurchaseRequest::STATUS_PENDING_HR_APPROVAL, PurchaseRequest::STATUS_DRAFT, PurchaseRequest::STATUS_PENDING_PLANNING])) {
                     $targetRole = $lifecycle->resolveOwnerRole('store_manager', $pr);
                     $pr->update([
                         'status'             => PurchaseRequest::STATUS_PENDING_STORE_REVIEW,
@@ -454,7 +458,11 @@ class MaterialRequestController extends Controller
     public function sendToPr(MaterialRequest $materialRequest)
     {
         Gate::authorize('actionStoreManager', $materialRequest);
+        $materialRequest->update(['status' => 'sent_to_pr']);
         $pr = $materialRequest->createOrGetPurchaseRequest(auth()->id());
+        if ($pr->status === PurchaseRequest::STATUS_PENDING_STORE_REVIEW) {
+            app(ProcurementLifecycleService::class)->sendToProcurementManager($pr, "Converted from Material Request #{$materialRequest->reference_number}");
+        }
 
         return redirect()->route('purchase-requests.show', $pr)
             ->with('success', "Material Request #{$materialRequest->reference_number} successfully routed to Purchase Request #{$pr->pr_no} in the Procurement Lifecycle.");
@@ -462,7 +470,11 @@ class MaterialRequestController extends Controller
 
     public function convertToPr(MaterialRequest $materialRequest)
     {
+        $materialRequest->update(['status' => 'sent_to_pr']);
         $pr = $materialRequest->createOrGetPurchaseRequest(auth()->id());
+        if ($pr->status === PurchaseRequest::STATUS_PENDING_STORE_REVIEW) {
+            app(ProcurementLifecycleService::class)->sendToProcurementManager($pr, "Converted from Material Request #{$materialRequest->reference_number}");
+        }
 
         return redirect()->route('purchase-requests.show', $pr)
             ->with('success', "Material Request #{$materialRequest->reference_number} is now active in the Procurement Lifecycle as Purchase Request #{$pr->pr_no}.");
@@ -471,7 +483,7 @@ class MaterialRequestController extends Controller
     public function createTransfer(MaterialRequest $materialRequest)
     {
         Gate::authorize('actionStoreManager', $materialRequest);
-        $materialRequest->update(['status' => 'transfer_created']);
+        $materialRequest->update(['status' => 'transferred']);
 
         return redirect()->route('transfers.create', [
             'material_request_id' => $materialRequest->id,

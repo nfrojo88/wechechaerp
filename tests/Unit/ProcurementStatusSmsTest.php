@@ -175,6 +175,15 @@ class ProcurementStatusSmsTest extends TestCase
             $table->timestamps();
         });
 
+        Schema::create('material_request_items', function ($table) {
+            $table->id();
+            $table->unsignedBigInteger('material_request_id');
+            $table->unsignedBigInteger('product_id')->nullable();
+            $table->decimal('quantity_requested', 15, 3)->default(1);
+            $table->text('notes')->nullable();
+            $table->timestamps();
+        });
+
         Schema::create('purchase_requests', function ($table) {
             $table->id();
             $table->string('pr_no')->unique();
@@ -537,5 +546,81 @@ class ProcurementStatusSmsTest extends TestCase
         // Requester receives FYI notification
         $phonesSent = array_column($this->sentMessages, 'to');
         $this->assertContains('+251988888888', $phonesSent);
+    }
+
+    /**
+     * Test 10: Once action is taken on an emergency material request,
+     * it does not show in the pending emergency queue sections.
+     */
+    public function test_action_taken_on_emergency_mr_removes_it_from_emergency_queue(): void
+    {
+        $mr = MaterialRequest::create([
+            'reference_number'         => 'MR-EMERGENCY-001',
+            'status'                   => 'pending_planning',
+            'planning_approval_status' => 'pending',
+            'source'                   => 'Emergency',
+        ]);
+        $mr->items()->create(['quantity_requested' => 5]);
+
+        $pr = PurchaseRequest::create([
+            'pr_no'               => 'PR-EMERGENCY-001',
+            'material_request_id' => $mr->id,
+            'status'              => PurchaseRequest::STATUS_PENDING_PLANNING,
+            'current_owner_role'  => 'planning',
+        ]);
+
+        // Helper closures matching ProcurementLifecycleController queries
+        $getPlanningQueue = fn() => MaterialRequest::whereHas('items')
+            ->where('planning_approval_status', 'pending')
+            ->whereNotIn('status', ['planning_approved', 'sent_to_store_manager', 'sent_to_pr', 'transferred', 'transfer_created', 'approved', 'rejected', 'cancelled', 'completed'])
+            ->where(function($q) {
+                $q->whereDoesntHave('purchaseRequests')
+                  ->orWhereHas('purchaseRequests', function($pq) {
+                      $pq->whereIn('status', [PurchaseRequest::STATUS_PENDING_PLANNING, 'pending_planning', PurchaseRequest::STATUS_DRAFT]);
+                  });
+            })->get();
+
+        $getCoordinatorQueue = fn() => MaterialRequest::whereHas('items')
+            ->where(function($q) {
+                $q->where('status', 'planning_approved')
+                  ->orWhere('planning_approval_status', 'approved');
+            })
+            ->whereNotIn('status', ['sent_to_store_manager', 'sent_to_pr', 'transferred', 'transfer_created', 'approved', 'rejected', 'cancelled', 'completed'])
+            ->where(function($q) {
+                $q->whereDoesntHave('purchaseRequests')
+                  ->orWhereHas('purchaseRequests', function($pq) {
+                      $pq->whereIn('status', [PurchaseRequest::STATUS_PENDING_HR_APPROVAL, 'pending_hr_approval']);
+                  });
+            })->get();
+
+        // 1. Initial State: Awaiting Planning Approval
+        $this->assertCount(1, $getPlanningQueue());
+        $this->assertCount(0, $getCoordinatorQueue());
+
+        // 2. Planning Takes Action: APPROVE
+        $mr->update([
+            'planning_approval_status' => 'approved',
+            'status'                   => 'planning_approved',
+        ]);
+        $pr->update([
+            'status'             => PurchaseRequest::STATUS_PENDING_HR_APPROVAL,
+            'current_owner_role' => 'coordinator',
+        ]);
+
+        // Verified: It is NO LONGER in the Planning queue
+        $this->assertCount(0, $getPlanningQueue());
+        // It is now in Coordinator queue
+        $this->assertCount(1, $getCoordinatorQueue());
+
+        // 3. Coordinator Takes Action: DISPATCH TO STORE
+        $mr->update(['status' => 'sent_to_store_manager']);
+        $pr->update([
+            'status'             => PurchaseRequest::STATUS_PENDING_STORE_REVIEW,
+            'current_owner_role' => 'store_manager',
+        ]);
+
+        // Verified: It is NO LONGER in the Coordinator queue
+        $this->assertCount(0, $getCoordinatorQueue());
+        $this->assertCount(0, $getPlanningQueue());
     }
 }

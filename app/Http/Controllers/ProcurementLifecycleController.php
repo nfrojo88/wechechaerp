@@ -44,7 +44,7 @@ class ProcurementLifecycleController extends Controller
                     $q->where('status', 'planning_approved')
                       ->orWhere('planning_approval_status', 'approved');
                 })
-                ->whereNotIn('status', ['sent_to_store_manager', 'approved', 'rejected', 'cancelled', 'completed'])
+                ->whereNotIn('status', ['sent_to_store_manager', 'sent_to_pr', 'transferred', 'transfer_created', 'approved', 'rejected', 'cancelled', 'completed'])
                 ->with('purchaseRequests')
                 ->get();
 
@@ -59,6 +59,12 @@ class ProcurementLifecycleController extends Controller
                             'status'             => PurchaseRequest::STATUS_PENDING_HR_APPROVAL,
                             'current_owner_role' => 'coordinator',
                         ]);
+                    } elseif (!in_array($aPr->status, [PurchaseRequest::STATUS_PENDING_HR_APPROVAL, 'pending_hr_approval'])) {
+                        // The companion PR has already moved beyond coordinator (e.g. dispatched to store, PM, payment, completed, etc.)
+                        // Sync the MR status so it does not keep showing in coordinator emergency queue
+                        if ($aMr->status === 'planning_approved') {
+                            $aMr->update(['status' => 'sent_to_store_manager']);
+                        }
                     }
                 }
             }
@@ -244,6 +250,12 @@ class ProcurementLifecycleController extends Controller
         // 2. Fetch PRs awaiting action by this user's role(s) (must have items)
         $prQuery = PurchaseRequest::with(['project', 'requestedBy', 'store', 'materialRequest.project', 'materialRequest.creator', 'items.product'])
             ->whereHas('items')
+            ->whereNotIn('status', [
+                PurchaseRequest::STATUS_INTAKE_COMPLETE,
+                PurchaseRequest::STATUS_COMPLETED,
+                PurchaseRequest::STATUS_REJECTED,
+                PurchaseRequest::STATUS_CANCELLED
+            ])
             ->latest();
 
         if (!$isAdmin && !$isAuditor) {
@@ -333,16 +345,19 @@ class ProcurementLifecycleController extends Controller
 
         $myPrs = $prQuery->paginate(15, ['*'], 'pr_page')->withQueryString();
 
-        // 3. Emergency / Pending MR approval queue for Planning Team (must have items)
+        // 3. Emergency / Pending MR approval queue for Planning Team (must have items and be awaiting action)
         $emergencyMrs = collect();
         if ($user->hasRole('planning') || $user->hasRole('planning_manager') || $isAdmin) {
             $emergencyMrs = MaterialRequest::with(['project', 'creator', 'requestedBy', 'maintenanceRequest', 'items.product', 'purchaseRequests'])
                 ->whereHas('items')
+                ->where('planning_approval_status', 'pending')
+                ->whereNotIn('status', ['planning_approved', 'sent_to_store_manager', 'sent_to_pr', 'transferred', 'transfer_created', 'approved', 'rejected', 'cancelled', 'completed'])
                 ->where(function($q) {
-                    $q->where('planning_approval_status', 'pending')
-                      ->orWhereIn('status', ['pending_planning', 'submitted', 'pending']);
+                    $q->whereDoesntHave('purchaseRequests')
+                      ->orWhereHas('purchaseRequests', function($pq) {
+                          $pq->whereIn('status', [PurchaseRequest::STATUS_PENDING_PLANNING, 'pending_planning', PurchaseRequest::STATUS_DRAFT]);
+                      });
                 })
-                ->whereNotIn('status', ['planning_approved', 'approved', 'rejected', 'cancelled'])
                 ->latest()
                 ->get();
         }
@@ -356,7 +371,13 @@ class ProcurementLifecycleController extends Controller
                     $q->where('status', 'planning_approved')
                       ->orWhere('planning_approval_status', 'approved');
                 })
-                ->whereNotIn('status', ['sent_to_store_manager', 'approved', 'rejected', 'cancelled', 'completed'])
+                ->whereNotIn('status', ['sent_to_store_manager', 'sent_to_pr', 'transferred', 'transfer_created', 'approved', 'rejected', 'cancelled', 'completed'])
+                ->where(function($q) {
+                    $q->whereDoesntHave('purchaseRequests')
+                      ->orWhereHas('purchaseRequests', function($pq) {
+                          $pq->whereIn('status', [PurchaseRequest::STATUS_PENDING_HR_APPROVAL, 'pending_hr_approval']);
+                      });
+                })
                 ->latest()
                 ->get();
         }
