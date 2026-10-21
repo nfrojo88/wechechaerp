@@ -211,6 +211,14 @@ class FinanceTaxReportController extends Controller
                     }
                 }
             }
+
+            // Sync all ExpenseHubVatDecisions with vat_status = vat_applies so they appear in VAT & Withholding Tax Deductions Ledger
+            if (Schema::hasTable('expense_hub_vat_decisions') && Schema::hasTable('receipts')) {
+                $decisions = \App\Models\ExpenseHubVatDecision::where('vat_status', \App\Models\ExpenseHubVatDecision::STATUS_VAT_APPLIES)->get();
+                foreach ($decisions as $dec) {
+                    \App\Http\Controllers\Finance\ExpenseHubController::syncVatDecisionToLedger($dec);
+                }
+            }
         } catch (\Throwable $e) {
             // Silently ignore if already created
         }
@@ -538,19 +546,38 @@ class FinanceTaxReportController extends Controller
         }
 
         // Bounded to Ethiopian month
-        if (!empty($fromDate) && !empty($toDate) && !$request->filled('ethiopian_year') && !$request->filled('ethiopian_month')) {
-            $ocrQuery->whereHas('receipt', fn($rq) => $rq->whereDate('receipt_date', '>=', Carbon::parse($fromDate))->whereDate('receipt_date', '<=', Carbon::parse($toDate)));
-        } else {
-            $ocrQuery->whereHas('receipt', fn($rq) => $rq->whereBetween('receipt_date', [$periodStartDate, $periodEndDate]));
-        }
+        $ocrDateFilter = function ($rq) use ($fromDate, $toDate, $periodStartDate, $periodEndDate, $periodStart, $periodEnd, $request) {
+            if (!empty($fromDate) && !empty($toDate) && !$request->filled('ethiopian_year') && !$request->filled('ethiopian_month')) {
+                $rq->where(function ($sub) use ($fromDate, $toDate) {
+                    $sub->whereDate('receipt_date', '>=', Carbon::parse($fromDate))
+                        ->whereDate('receipt_date', '<=', Carbon::parse($toDate))
+                        ->orWhere(function ($fallback) use ($fromDate, $toDate) {
+                            $fallback->whereNull('receipt_date')
+                                     ->whereDate('created_at', '>=', Carbon::parse($fromDate))
+                                     ->whereDate('created_at', '<=', Carbon::parse($toDate));
+                        });
+                });
+            } else {
+                $rq->where(function ($sub) use ($periodStartDate, $periodEndDate, $periodStart, $periodEnd) {
+                    $sub->whereBetween('receipt_date', [$periodStartDate, $periodEndDate])
+                        ->orWhereBetween('receipt_date', [$periodStart, $periodEnd])
+                        ->orWhere(function ($fallback) use ($periodStart, $periodEnd) {
+                            $fallback->whereNull('receipt_date')
+                                     ->whereBetween('created_at', [$periodStart, $periodEnd]);
+                        });
+                });
+            }
+        };
+
+        $ocrQuery->whereHas('receipt', $ocrDateFilter);
 
         $ocrItems = $ocrQuery->paginate(20, ['*'], 'ocr_page')->withQueryString();
 
         $ocrStats = [
-            'total_items'   => (int)\App\Models\ReceiptItem::whereHas('receipt', fn($rq) => $rq->whereBetween('receipt_date', [$periodStartDate, $periodEndDate]))->count(),
-            'total_value'   => (float)\App\Models\ReceiptItem::whereHas('receipt', fn($rq) => $rq->whereBetween('receipt_date', [$periodStartDate, $periodEndDate]))->sum('total_value'),
-            'total_vat'     => (float)\App\Models\ReceiptItem::whereHas('receipt', fn($rq) => $rq->whereBetween('receipt_date', [$periodStartDate, $periodEndDate]))->sum('vat_amount'),
-            'total_after'   => (float)\App\Models\ReceiptItem::whereHas('receipt', fn($rq) => $rq->whereBetween('receipt_date', [$periodStartDate, $periodEndDate]))->sum('value_after_vat'),
+            'total_items'   => (int)\App\Models\ReceiptItem::whereHas('receipt', $ocrDateFilter)->count(),
+            'total_value'   => (float)\App\Models\ReceiptItem::whereHas('receipt', $ocrDateFilter)->sum('total_value'),
+            'total_vat'     => (float)\App\Models\ReceiptItem::whereHas('receipt', $ocrDateFilter)->sum('vat_amount'),
+            'total_after'   => (float)\App\Models\ReceiptItem::whereHas('receipt', $ocrDateFilter)->sum('value_after_vat'),
             'flagged_count' => (int)\App\Models\ReceiptItem::where('is_flagged', true)->count(),
         ];
 
@@ -585,9 +612,7 @@ class FinanceTaxReportController extends Controller
         })->get();
 
         // 2. Creditable Purchases & Input VAT (Exclude "VAT B")
-        $ocrItemsInMonth = \App\Models\ReceiptItem::whereHas('receipt', fn($rq) => 
-            $rq->whereBetween('receipt_date', [$periodStartDate, $periodEndDate])
-        )->get();
+        $ocrItemsInMonth = \App\Models\ReceiptItem::whereHas('receipt', $ocrDateFilter)->get();
 
         $ocrPurchasesBase = (float)$ocrItemsInMonth->where('vat_amount', '>', 0)->sum('total_value');
         $ocrInputVat      = (float)$ocrItemsInMonth->sum('vat_amount');

@@ -8,6 +8,13 @@ use App\Models\ExpenseHubVatAuditLog;
 use App\Models\ExpenseHubMonthLock;
 use App\Models\Project;
 use App\Models\User;
+use App\Models\Receipt;
+use App\Models\ReceiptItem;
+use App\Models\ExpenseRequest;
+use App\Models\ProcurementPayment;
+use App\Models\CreditStorePayment;
+use App\Models\PettyCashMaterialPurchase;
+use Illuminate\Support\Facades\Schema;
 use App\Services\ExpenseHubQueryService;
 use App\Services\EthiopianDate;
 use App\Services\ReceiptOcrService;
@@ -133,6 +140,8 @@ class ExpenseHubController extends Controller
         try {
             $scanPath = null;
             $fileUrl  = null;
+            $savedRelativePath = null;
+            $stripped = null;
 
             if ($request->hasFile('receipt_file')) {
                 $file = $request->file('receipt_file');
@@ -205,6 +214,7 @@ class ExpenseHubController extends Controller
                 'success'           => true,
                 'is_verified'       => $isVerified,
                 'file_url'          => $fileUrl,
+                'file_path'         => $savedRelativePath ?: ($stripped ?: null),
                 'vendor_name'       => $vendorName,
                 'supplier_tin'      => $supplierTin,
                 'tin_valid'         => $tinNorm['is_valid'] ?? (!empty($supplierTin) && strlen($supplierTin) === 10),
@@ -260,6 +270,9 @@ class ExpenseHubController extends Controller
             'custom_fs_no'            => 'nullable|string|max:50',
             'custom_mrc_no'           => 'nullable|string|max:50',
             'custom_item_description' => 'nullable|string|max:255',
+            'custom_receipt_date'     => 'nullable|string|max:30',
+            'custom_seller_name'      => 'nullable|string|max:255',
+            'receipt_path'            => 'nullable|string|max:500',
             'uom'                     => 'nullable|string|max:20',
             'quantity'                => 'nullable|numeric|min:0.01',
             'unit_price'              => 'nullable|numeric|min:0',
@@ -317,7 +330,8 @@ class ExpenseHubController extends Controller
             'decided_at'              => now(),
         ];
 
-        DB::transaction(function () use ($validated, $decisionData, $existing, $user) {
+        $decision = null;
+        DB::transaction(function () use ($validated, $decisionData, $existing, $user, &$decision) {
             $decision = ExpenseHubVatDecision::updateOrCreate(
                 [
                     'source_type' => $validated['source_type'],
@@ -337,6 +351,16 @@ class ExpenseHubController extends Controller
                 'performed_by' => $user->id,
             ]);
         });
+
+        if ($decision) {
+            self::syncVatDecisionToLedger(
+                $decision,
+                $request->input('receipt_path'),
+                $request->input('custom_receipt_date'),
+                $request->input('custom_seller_name'),
+                $request->input('custom_item_description')
+            );
+        }
 
         if ($request->wantsJson() || $request->ajax()) {
             return response()->json([
@@ -432,6 +456,8 @@ class ExpenseHubController extends Controller
                     'new_values'   => $decisionData,
                     'performed_by' => $user->id,
                 ]);
+
+                self::syncVatDecisionToLedger($decision);
 
                 $count++;
             }
@@ -651,5 +677,226 @@ class ExpenseHubController extends Controller
         }
 
         return back()->with('success', "Month {$validated['month']}/{$validated['year']} ({$calendar}) has been unlocked.");
+    }
+
+    /**
+     * Synchronize a VAT Decision to the ERCA Line 100 Receipt tables and source model
+     * so it immediately reflects in the VAT & Withholding Tax Deductions Ledger.
+     */
+    public static function syncVatDecisionToLedger(
+        ExpenseHubVatDecision $decision,
+        ?string $receiptPath = null,
+        ?string $customReceiptDate = null,
+        ?string $customSellerName = null,
+        ?string $customDescription = null
+    ): void {
+        try {
+            $sourceType   = $decision->source_type;
+            $sourceId     = (int)$decision->source_id;
+            $vatStatus    = $decision->vat_status;
+            $vatAmount    = (float)$decision->vat_amount;
+            $baseAmount   = (float)$decision->base_amount;
+            $totalAmount  = (float)$decision->total_amount;
+            $isInclusive  = (bool)$decision->is_inclusive;
+            $vatRate      = (float)($decision->vat_rate > 0 ? $decision->vat_rate : 15.00);
+
+            $purchasableClass = match($sourceType) {
+                'expense_request'       => ExpenseRequest::class,
+                'procurement_payment'   => ProcurementPayment::class,
+                'credit_store_payment'  => CreditStorePayment::class,
+                'petty_cash_purchase'   => PettyCashMaterialPurchase::class,
+                default                 => null,
+            };
+
+            if ($vatStatus === ExpenseHubVatDecision::STATUS_VAT_APPLIES) {
+                $targetDate  = $customReceiptDate;
+                $projectId   = null;
+                $vendorName  = $customSellerName;
+                $itemDesc    = $customDescription ?: $decision->custom_item_description;
+
+                // 1. Update underlying source model
+                if ($sourceType === 'expense_request') {
+                    $req = ExpenseRequest::with(['user', 'receipt'])->find($sourceId);
+                    if ($req) {
+                        $req->vat_amount = $vatAmount;
+                        $req->vat_type   = $isInclusive ? 'inclusive' : 'exclusive';
+                        $req->vat_rate   = $vatRate;
+                        if ($totalAmount > 0) {
+                            $req->gross_amount = $totalAmount;
+                        }
+                        if (!empty($decision->custom_fs_no) && empty($req->payment_reference)) {
+                            $req->payment_reference = 'FS: ' . $decision->custom_fs_no . ($decision->custom_mrc_no ? ' | MRC: ' . $decision->custom_mrc_no : '');
+                        }
+                        $req->save();
+
+                        $targetDate  = $targetDate ?: ($req->paid_at ? Carbon::parse($req->paid_at)->toDateString() : ($req->created_at ? Carbon::parse($req->created_at)->toDateString() : null));
+                        $projectId   = $projectId ?: $req->project_id;
+                        $vendorName  = $vendorName ?: ($req->user?->name ?: 'Vendor');
+                        $itemDesc    = $itemDesc ?: ($req->description ?: 'Expense Voucher');
+                        $receiptPath = $receiptPath ?: $req->attachment;
+                    }
+                } elseif ($sourceType === 'procurement_payment') {
+                    $payment = ProcurementPayment::with('purchaseRequest')->find($sourceId);
+                    if ($payment) {
+                        $payment->vat_amount   = $vatAmount;
+                        $payment->vat_type     = $isInclusive ? 'inclusive' : 'exclusive';
+                        $payment->vat_rate     = $vatRate;
+                        if ($totalAmount > 0) {
+                            $payment->gross_amount = $totalAmount;
+                        }
+                        $payment->save();
+
+                        // Also update linked PR ExpenseRequest if one exists
+                        if ($payment->purchase_request_id) {
+                            ExpenseRequest::where('purchase_request_id', $payment->purchase_request_id)->update([
+                                'vat_amount' => $vatAmount,
+                                'vat_type'   => $isInclusive ? 'inclusive' : 'exclusive',
+                                'vat_rate'   => $vatRate,
+                            ]);
+                        }
+
+                        $targetDate  = $targetDate ?: ($payment->paid_at ? Carbon::parse($payment->paid_at)->toDateString() : ($payment->created_at ? Carbon::parse($payment->created_at)->toDateString() : null));
+                        $projectId   = $projectId ?: $payment->purchaseRequest?->project_id;
+                        $vendorName  = $vendorName ?: ($payment->purchaseRequest?->vendor_name ?: 'Procurement Vendor');
+                        $itemDesc    = $itemDesc ?: ($payment->purchaseRequest?->justification ?: 'Procurement Material Purchase');
+                    }
+                } elseif ($sourceType === 'credit_store_payment') {
+                    $p = CreditStorePayment::with('ledger')->find($sourceId);
+                    if ($p) {
+                        $p->vat_amount = $vatAmount;
+                        $p->vat_type   = $isInclusive ? 'inclusive' : 'exclusive';
+                        $p->vat_rate   = $vatRate;
+                        $p->save();
+
+                        $targetDate  = $targetDate ?: ($p->payment_date ? Carbon::parse($p->payment_date)->toDateString() : ($p->created_at ? Carbon::parse($p->created_at)->toDateString() : null));
+                        $projectId   = $projectId ?: $p->ledger?->project_id;
+                        $vendorName  = $vendorName ?: ($p->ledger?->supplier_name ?: 'Credit Supplier');
+                        $itemDesc    = $itemDesc ?: ($p->ledger?->item_description ?: 'Credit Store Settlement');
+                        $receiptPath = $receiptPath ?: $p->receipt_path;
+                    }
+                } elseif ($sourceType === 'petty_cash_purchase') {
+                    $pc = PettyCashMaterialPurchase::find($sourceId);
+                    if ($pc) {
+                        $pc->vat_amount = $vatAmount;
+                        $pc->save();
+
+                        $targetDate  = $targetDate ?: ($pc->purchase_date ? Carbon::parse($pc->purchase_date)->toDateString() : ($pc->created_at ? Carbon::parse($pc->created_at)->toDateString() : null));
+                        $projectId   = $projectId ?: $pc->project_id;
+                        $vendorName  = $vendorName ?: ($pc->vendor_name ?: 'Petty Cash Vendor');
+                        $itemDesc    = $itemDesc ?: ($pc->item_name ?: 'Petty Cash Purchase');
+                        $receiptPath = $receiptPath ?: $pc->receipt_path;
+                    }
+                }
+
+                if (!$targetDate) {
+                    $targetDate = now()->toDateString();
+                }
+                if (!$vendorName) {
+                    $vendorName = 'Supplier';
+                }
+                if (!$itemDesc) {
+                    $itemDesc = 'Purchased Materials / VAT Invoice';
+                }
+
+                // 2. Sync to Receipt (ERCA Line 100 VAT declaration table)
+                if (Schema::hasTable('receipts')) {
+                    $receipt = null;
+                    if ($purchasableClass && $sourceId && Schema::hasColumn('receipts', 'purchasable_type')) {
+                        $receipt = Receipt::where('purchasable_type', $purchasableClass)
+                            ->where('purchasable_id', $sourceId)
+                            ->first();
+                    }
+                    if (!$receipt && !empty($decision->custom_fs_no)) {
+                        $receipt = Receipt::where('fs_no', $decision->custom_fs_no)->first();
+                    }
+                    if (!$receipt) {
+                        $receipt = new Receipt();
+                        $receipt->receipt_number = 'RCP-HUB-' . Carbon::parse($targetDate)->format('Ymd') . '-' . strtoupper(substr(uniqid(), -4));
+                    }
+
+                    $receipt->uploaded_by      = $decision->decided_by ?: (Auth::id() ?: 1);
+                    $receipt->approved_by      = $decision->decided_by ?: (Auth::id() ?: 1);
+                    $receipt->approved_at      = Carbon::parse($targetDate)->setTime(12, 0, 0);
+                    $receipt->status           = 'approved';
+                    if ($purchasableClass && Schema::hasColumn('receipts', 'purchasable_type')) {
+                        $receipt->purchasable_type = $purchasableClass;
+                        $receipt->purchasable_id   = $sourceId;
+                    }
+                    if ($projectId) {
+                        $receipt->project_id   = $projectId;
+                    }
+                    $receipt->vendor_name      = $vendorName;
+                    $receipt->vendor_tin       = $decision->custom_seller_tin ?: ($receipt->vendor_tin ?: null);
+                    $receipt->tin_valid        = !empty($receipt->vendor_tin);
+                    $receipt->buyer_tin        = '0038480010';
+                    $receipt->fs_no            = $decision->custom_fs_no ?: ($receipt->fs_no ?: null);
+                    $receipt->fs_no_raw        = $decision->custom_fs_no ?: ($receipt->fs_no_raw ?: null);
+                    $receipt->fs_no_valid      = !empty($receipt->fs_no);
+                    $receipt->mrc_no           = $decision->custom_mrc_no ?: ($receipt->mrc_no ?: null);
+                    $receipt->receipt_date     = Carbon::parse($targetDate)->toDateString();
+                    $receipt->subtotal         = $baseAmount;
+                    $receipt->vat_amount       = $vatAmount;
+                    $receipt->total_amount     = $totalAmount;
+                    $receipt->currency         = 'ETB';
+                    $receipt->category         = 'material';
+                    $receipt->description      = $itemDesc;
+                    if ($receiptPath) {
+                        $receipt->file_path    = $receiptPath;
+                        $receipt->file_type    = str_ends_with(strtolower($receiptPath), '.pdf') ? 'pdf' : 'image';
+                    }
+                    $receipt->save();
+
+                    // 3. Sync to ReceiptItem
+                    if (Schema::hasTable('receipt_items')) {
+                        $receiptItem = ReceiptItem::where('receipt_id', $receipt->id)->first();
+                        if (!$receiptItem) {
+                            $receiptItem = new ReceiptItem();
+                            $receiptItem->receipt_id = $receipt->id;
+                        }
+                        $receiptItem->item_description = $itemDesc;
+                        $receiptItem->vat_category     = $decision->vat_category ?: 'G';
+                        $receiptItem->calendar_type    = 'E';
+                        $receiptItem->purchase_type    = (int)($decision->purchase_type ?: 3);
+                        $receiptItem->uom              = $decision->uom ?: '9';
+                        $receiptItem->qty              = (float)($decision->quantity ?: 1.0);
+                        $receiptItem->unit_price       = (float)($decision->unit_price ?: $baseAmount);
+                        $receiptItem->total_value      = $baseAmount;
+                        $receiptItem->vat_amount       = $vatAmount;
+                        $receiptItem->value_after_vat  = $totalAmount;
+                        $receiptItem->is_flagged       = false;
+                        $receiptItem->save();
+                    }
+                }
+            } elseif ($vatStatus === ExpenseHubVatDecision::STATUS_NO_VAT) {
+                // If marked No-VAT, clear VAT from source model and zero out receipt VAT
+                if ($sourceType === 'expense_request') {
+                    ExpenseRequest::where('id', $sourceId)->update([
+                        'vat_amount' => 0,
+                        'vat_type'   => 'none',
+                    ]);
+                } elseif ($sourceType === 'procurement_payment') {
+                    ProcurementPayment::where('id', $sourceId)->update([
+                        'vat_amount' => 0,
+                        'vat_type'   => 'none',
+                    ]);
+                }
+                if ($purchasableClass && Schema::hasTable('receipts') && Schema::hasColumn('receipts', 'purchasable_type')) {
+                    $receipt = Receipt::where('purchasable_type', $purchasableClass)
+                        ->where('purchasable_id', $sourceId)
+                        ->first();
+                    if ($receipt) {
+                        $receipt->update(['vat_amount' => 0]);
+                        if (Schema::hasTable('receipt_items')) {
+                            ReceiptItem::where('receipt_id', $receipt->id)->update([
+                                'vat_amount'   => 0,
+                                'vat_category' => 'E',
+                            ]);
+                        }
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::error('syncVatDecisionToLedger failed: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
+        }
     }
 }

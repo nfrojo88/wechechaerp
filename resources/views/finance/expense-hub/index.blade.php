@@ -795,6 +795,10 @@
                 <input type="hidden" name="source_type" id="mSourceType">
                 <input type="hidden" name="source_id" id="mSourceId">
                 <input type="hidden" name="amount" id="mAmount">
+                <input type="hidden" name="custom_receipt_date" id="mReceiptDate">
+                <input type="hidden" name="receipt_path" id="mReceiptPath">
+                <input type="hidden" name="custom_seller_name" id="mSellerName">
+                <input type="hidden" name="custom_item_description" id="mItemDescription">
 
                 <div class="modal-body p-4">
                     <!-- Item Overview Row with Full Purpose & Audit Trail -->
@@ -1248,6 +1252,14 @@ function resetOcrState() {
     if (uploadBtn) uploadBtn.disabled = false;
     const attachedBtn = document.getElementById('btnAttachedOcrScan');
     if (attachedBtn) attachedBtn.disabled = false;
+    const mReceiptDate = document.getElementById('mReceiptDate');
+    if (mReceiptDate) mReceiptDate.value = '';
+    const mReceiptPath = document.getElementById('mReceiptPath');
+    if (mReceiptPath) mReceiptPath.value = '';
+    const mSellerName = document.getElementById('mSellerName');
+    if (mSellerName) mSellerName.value = '';
+    const mItemDescription = document.getElementById('mItemDescription');
+    if (mItemDescription) mItemDescription.value = '';
 }
 
 function openDecisionModal(item) {
@@ -1261,6 +1273,19 @@ function openDecisionModal(item) {
     document.getElementById('mPayee').textContent = item.payee_supplier || '—';
     document.getElementById('mSourceModule').textContent = item.source_module_label;
     document.getElementById('mAmountDisplay').textContent = parseFloat(item.amount).toLocaleString('en-US', {minimumFractionDigits: 2});
+
+    if (item.receipt_url) {
+        document.getElementById('mReceiptPath').value = item.receipt_url;
+    }
+    if (item.disbursement_date) {
+        document.getElementById('mReceiptDate').value = item.disbursement_date;
+    }
+    if (item.payee_supplier) {
+        document.getElementById('mSellerName').value = item.payee_supplier;
+    }
+    if (item.purpose_detail || item.description) {
+        document.getElementById('mItemDescription').value = item.purpose_detail || item.description;
+    }
 
     // Populate Purpose & Operational Audit
     document.getElementById('mPurpose').textContent = item.purpose_detail || item.description || '—';
@@ -1424,6 +1449,18 @@ function handleOcrSuccess(res) {
     }
     if (res.vat_rate) {
         document.getElementById('mVatRate').value = res.vat_rate;
+    }
+    if (res.file_path) {
+        document.getElementById('mReceiptPath').value = res.file_path;
+    }
+    if (res.receipt_date) {
+        document.getElementById('mReceiptDate').value = res.receipt_date;
+    }
+    if (res.vendor_name) {
+        document.getElementById('mSellerName').value = res.vendor_name;
+    }
+    if (res.description) {
+        document.getElementById('mItemDescription').value = res.description;
     }
     document.getElementById('modeInclusive').checked = true;
     recalculateVatPreview();
