@@ -44,6 +44,7 @@ class PettyCashReplenishment extends Model
         'fulfilled_at',
         'rejected_at',
         'rejection_reason',
+        'coa_deducted',
     ];
 
     protected $casts = [
@@ -57,6 +58,7 @@ class PettyCashReplenishment extends Model
         'rejected_at'                => 'datetime',
         'audited_at'                 => 'datetime',
         'reviewed_at'                => 'datetime',
+        'coa_deducted'               => 'boolean',
     ];
 
     // Status Constants

@@ -79,6 +79,7 @@ class ExpenseRequest extends Model
         'tax_settled_at',
         'vat_settled_at',
         'withholding_settled_at',
+        'coa_deducted',
     ];
 
 
@@ -92,6 +93,7 @@ class ExpenseRequest extends Model
         'withholding_amount' => 'decimal:2',
         'net_amount' => 'decimal:2',
         'is_bank_payment' => 'boolean',
+        'coa_deducted' => 'boolean',
         'vat_settled' => 'boolean',
         'withholding_settled' => 'boolean',
         'tax_settled_at' => 'datetime',

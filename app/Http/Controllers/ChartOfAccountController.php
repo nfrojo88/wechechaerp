@@ -38,6 +38,9 @@ class ChartOfAccountController extends Controller
             ChartOfAccount::deleteAccountAndRelated('1003', true);
         }
 
+        // Auto-reconcile and deduct any historical/pending paid requests from COA
+        \App\Services\FinanceCoaReconciliationService::reconcileHistoricalPayments();
+
         $accounts = ChartOfAccount::with(['parent', 'manager', 'bankAccounts'])->orderBy('code')->paginate(50);
 
         $stats = [
@@ -64,6 +67,9 @@ class ChartOfAccountController extends Controller
         if (ChartOfAccount::where('code', '1003')->exists()) {
             ChartOfAccount::deleteAccountAndRelated('1003', true);
         }
+
+        // Auto-reconcile and deduct any historical/pending paid requests from COA
+        \App\Services\FinanceCoaReconciliationService::reconcileHistoricalPayments();
 
         $accounts = ChartOfAccount::with(['parent', 'manager', 'bankAccounts'])
             ->where('is_active', true)
@@ -362,5 +368,17 @@ class ChartOfAccountController extends Controller
             \Illuminate\Support\Facades\Log::error("Failed to delete Chart of Account {$code}: " . $e->getMessage() . "\n" . $e->getTraceAsString());
             return redirect()->route('coa.index')->with('error', "Failed to delete account {$code}: " . $e->getMessage());
         }
+    }
+
+    /**
+     * Reconcile and deduct all approved and paid requests up to now from Chart of Accounts.
+     */
+    public function syncPaidDeductions()
+    {
+        $stats = \App\Services\FinanceCoaReconciliationService::reconcileHistoricalPayments();
+        $totalAmt = $stats['expense_requests_amount'] + $stats['office_requests_amount'] + $stats['replenishments_amount'];
+        $totalCount = $stats['expense_requests_count'] + $stats['office_requests_count'] + $stats['replenishments_count'];
+
+        return redirect()->route('coa.index')->with('success', "✅ Reconciled {$totalCount} paid requests (Total: ETB " . number_format($totalAmt, 2) . ") and deducted from Chart of Accounts.");
     }
 }

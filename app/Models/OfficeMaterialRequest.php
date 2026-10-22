@@ -57,6 +57,7 @@ class OfficeMaterialRequest extends Model
         'audit_receipt_requested_by',
         'audit_receipt_verified_at',
         'audit_receipt_verified_by',
+        'coa_deducted',
     ];
 
     protected $casts = [
@@ -66,6 +67,7 @@ class OfficeMaterialRequest extends Model
         'finance_assigned_at' => 'datetime',
         'paid_at'             => 'datetime',
         'rejected_at'         => 'datetime',
+        'coa_deducted'        => 'boolean',
     ];
 
     // Relationships

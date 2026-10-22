@@ -655,6 +655,8 @@ class ApprovalHubController extends Controller
 
         $projects = Project::orderBy('name')->get();
 
+        \App\Services\FinanceCoaReconciliationService::reconcileHistoricalPayments();
+
         // Finance Accounts & Staff for action modals
         $chartOfAccounts = ChartOfAccount::with('manager')->where('is_active', true)->orderBy('name')->get();
         $bankAccounts = BankAccount::orderBy('bank_name')->get();

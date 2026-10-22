@@ -162,6 +162,7 @@ class PaymentCoaDeductionTest extends TestCase
             $table->unsignedBigInteger('bank_account_id')->nullable();
             $table->unsignedBigInteger('coa_id')->nullable();
             $table->unsignedBigInteger('chart_of_account_id')->nullable();
+            $table->boolean('coa_deducted')->default(false);
             $table->timestamps();
             $table->softDeletes();
         });
@@ -183,6 +184,7 @@ class PaymentCoaDeductionTest extends TestCase
             $table->string('payment_reference')->nullable();
             $table->text('payment_notes')->nullable();
             $table->string('attachment')->nullable();
+            $table->boolean('coa_deducted')->default(false);
             $table->timestamps();
             $table->softDeletes();
         });
@@ -259,6 +261,7 @@ class PaymentCoaDeductionTest extends TestCase
             $table->unsignedBigInteger('journal_entry_id')->nullable();
             $table->string('fulfillment_reference')->nullable();
             $table->timestamp('fulfilled_at')->nullable();
+            $table->boolean('coa_deducted')->default(false);
             $table->timestamps();
             $table->softDeletes();
         });

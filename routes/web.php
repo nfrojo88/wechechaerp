@@ -2290,6 +2290,7 @@ Route::middleware(['auth'])->group(function () {
 
     Route::get('finance/coa/initial-balances', [App\Http\Controllers\ChartOfAccountController::class, 'initialBalances'])->name('coa.initial-balances');
     Route::post('finance/coa/initial-balances', [App\Http\Controllers\ChartOfAccountController::class, 'saveInitialBalances'])->name('coa.initial-balances.save');
+    Route::match(['GET', 'POST'], 'finance/coa/sync-deductions', [App\Http\Controllers\ChartOfAccountController::class, 'syncPaidDeductions'])->name('coa.sync-deductions');
     Route::resource('coa', App\Http\Controllers\ChartOfAccountController::class)->except(['show', 'destroy']);
     Route::match(['POST', 'DELETE'], 'coa/{coa}', [App\Http\Controllers\ChartOfAccountController::class, 'destroy'])->name('coa.destroy');
     Route::match(['POST', 'DELETE'], 'coa/{coa}/delete', [App\Http\Controllers\ChartOfAccountController::class, 'destroy'])->name('coa.destroy.post');

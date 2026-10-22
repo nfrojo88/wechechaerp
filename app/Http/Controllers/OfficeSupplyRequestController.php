@@ -83,6 +83,7 @@ class OfficeSupplyRequestController extends Controller
                     $table->timestamps();
                 });
             }
+            \App\Services\FinanceCoaReconciliationService::ensureSchema();
         } catch (\Throwable $e) {}
     }
 
@@ -126,6 +127,7 @@ class OfficeSupplyRequestController extends Controller
     public function index(Request $request)
     {
         $this->ensureTableExists();
+        \App\Services\FinanceCoaReconciliationService::reconcileHistoricalPayments();
         $user = Auth::user();
 
         $isHr = $this->isHrOrCoordinator();
@@ -577,11 +579,45 @@ class OfficeSupplyRequestController extends Controller
                 ?: ($officeRequest->chart_of_account_id
                 ?: ($bankAccount?->coa_id ?? null)));
 
+            if ($bankAccount && !$bankAccount->coa_id) {
+                $matchedCoa = \App\Models\ChartOfAccount::where('name', 'like', '%' . $bankAccount->bank_name . '%')
+                    ->orWhere('name', 'like', '%' . $bankAccount->account_name . '%')
+                    ->first();
+                if ($matchedCoa) {
+                    $bankAccount->update(['coa_id' => $matchedCoa->id]);
+                    $coaId = $coaId ?: $matchedCoa->id;
+                }
+            }
+
+            if (!$coaId) {
+                $fallbackCoa = \App\Models\ChartOfAccount::where('type', 'asset')
+                    ->where(function($q) {
+                        $q->where('code', 'like', '10%')
+                          ->orWhere('name', 'like', '%Bank%')
+                          ->orWhere('name', 'like', '%Petty Cash%')
+                          ->orWhere('name', 'like', '%Cash%');
+                    })
+                    ->first();
+                if ($fallbackCoa) {
+                    $coaId = $fallbackCoa->id;
+                }
+            }
+
+            $hasOffCoaDeductedCol = \Illuminate\Support\Facades\Schema::hasColumn('office_material_requests', 'coa_deducted');
+            $isOffAlreadyDeducted = $hasOffCoaDeductedCol && (bool)$officeRequest->coa_deducted;
+
             if ($coaId && $finalAmount > 0) {
                 $coa = \App\Models\ChartOfAccount::find($coaId);
-                if ($coa) {
+                if ($coa && !$isOffAlreadyDeducted) {
                     $coa->decrement('current_balance', $finalAmount);
                 }
+                $offUpdate = ['coa_id' => $officeRequest->coa_id ?: $coaId];
+                if ($hasOffCoaDeductedCol) {
+                    $offUpdate['coa_deducted'] = true;
+                }
+                $officeRequest->update($offUpdate);
+            } else if ($hasOffCoaDeductedCol) {
+                $officeRequest->update(['coa_deducted' => true]);
             }
 
             DB::commit();

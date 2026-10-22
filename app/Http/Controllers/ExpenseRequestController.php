@@ -152,6 +152,7 @@ class ExpenseRequestController extends Controller
             }
 
             \App\Http\Controllers\VehicleFuelRequestController::purgeTargetFuelRequest('EXP-FUEL-2026-0273');
+            \App\Services\FinanceCoaReconciliationService::ensureSchema();
         } catch (\Throwable $e) {
             Log::error('Expense table auto-heal error: ' . $e->getMessage());
         }
@@ -164,6 +165,7 @@ class ExpenseRequestController extends Controller
     public function index(Request $request)
     {
         $this->ensureTableExists();
+        \App\Services\FinanceCoaReconciliationService::reconcileHistoricalPayments();
 
         /** @var \App\Models\User $user */
         $user = auth()->user();
@@ -1204,31 +1206,49 @@ class ExpenseRequestController extends Controller
                 ?: ($expenseRequest->coa_id
                 ?: ($bankAccount?->coa_id ?? null))));
 
+            if ($bankAccount && !$bankAccount->coa_id) {
+                $matchedCoa = ChartOfAccount::where('name', 'like', '%' . $bankAccount->bank_name . '%')
+                    ->orWhere('name', 'like', '%' . $bankAccount->account_name . '%')
+                    ->first();
+                if ($matchedCoa) {
+                    $bankAccount->update(['coa_id' => $matchedCoa->id]);
+                    $coaId = $coaId ?: $matchedCoa->id;
+                }
+            }
+
+            if (!$coaId && !$isPettyCash) {
+                $fallbackCoa = ChartOfAccount::where('type', 'asset')
+                    ->where(function($q) {
+                        $q->where('code', 'like', '10%')
+                          ->orWhere('name', 'like', '%Bank%')
+                          ->orWhere('name', 'like', '%Petty Cash%')
+                          ->orWhere('name', 'like', '%Cash%');
+                    })
+                    ->first();
+                if ($fallbackCoa) {
+                    $coaId = $fallbackCoa->id;
+                }
+            }
+
+            $hasExpCoaDeductedCol = \Illuminate\Support\Facades\Schema::hasColumn('expense_requests', 'coa_deducted');
+            $isAlreadyDeducted = $hasExpCoaDeductedCol && (bool)$expenseRequest->coa_deducted;
+
             if ($coaId && !$isPettyCash) {
                 $coa = ChartOfAccount::find($coaId);
-                if ($coa) {
+                if ($coa && !$isAlreadyDeducted) {
                     $coa->decrement('current_balance', $disbursedAmount);
                 }
 
-                if (!$expenseRequest->chart_of_account_id || !$expenseRequest->coa_id) {
-                    $expenseRequest->update([
-                        'chart_of_account_id' => $expenseRequest->chart_of_account_id ?: $coaId,
-                        'coa_id'              => $expenseRequest->coa_id ?: $coaId,
-                    ]);
+                $coaUpdate = [
+                    'chart_of_account_id' => $expenseRequest->chart_of_account_id ?: $coaId,
+                    'coa_id'              => $expenseRequest->coa_id ?: $coaId,
+                ];
+                if ($hasExpCoaDeductedCol) {
+                    $coaUpdate['coa_deducted'] = true;
                 }
-            } elseif (!$coaId && !$isPettyCash && !$expenseRequest->bank_account_id) {
-                // Fallback to active Petty Cash or Cash on Hand COA account
-                $fallbackCoa = ChartOfAccount::where('code', '1010')
-                    ->orWhere('name', 'like', '%Petty Cash%')
-                    ->orWhere('name', 'like', '%Cash%')
-                    ->first();
-                if ($fallbackCoa) {
-                    $fallbackCoa->decrement('current_balance', $disbursedAmount);
-                    $expenseRequest->update([
-                        'chart_of_account_id' => $fallbackCoa->id,
-                        'coa_id'              => $fallbackCoa->id,
-                    ]);
-                }
+                $expenseRequest->update($coaUpdate);
+            } else if (!$isPettyCash && $hasExpCoaDeductedCol) {
+                $expenseRequest->update(['coa_deducted' => true]);
             }
 
             // 5. If this is a Petty Cash Replenishment, TOP UP the Petty Cash Account & fulfill Replenishment
@@ -1475,9 +1495,17 @@ class ExpenseRequestController extends Controller
                 'amount'           => $disbursedAmount,
             ]);
 
+            $hasExpCoaDeductedCol = \Illuminate\Support\Facades\Schema::hasColumn('expense_requests', 'coa_deducted');
+            $isAlreadyDeducted = $hasExpCoaDeductedCol && (bool)$expenseRequest->coa_deducted;
+
             // Credit Source Account if different from petty cash account
             if ($sourceCoa && $sourceCoa->id !== $pettyAccount->id) {
-                $sourceCoa->decrement('current_balance', $disbursedAmount);
+                if (!$isAlreadyDeducted) {
+                    $sourceCoa->decrement('current_balance', $disbursedAmount);
+                    if ($hasExpCoaDeductedCol) {
+                        $expenseRequest->update(['coa_deducted' => true]);
+                    }
+                }
 
                 $isSourceAssetOrExpense = in_array($sourceCoa->type, ['asset', 'expense']);
                 JournalEntryLine::create([
@@ -1487,11 +1515,13 @@ class ExpenseRequestController extends Controller
                     'side'             => $isSourceAssetOrExpense ? 'credit' : 'debit',
                     'amount'           => $disbursedAmount,
                 ]);
+            } else if ($hasExpCoaDeductedCol) {
+                $expenseRequest->update(['coa_deducted' => true]);
             }
 
             // Update Replenishment record to Fulfilled
             if ($replenishment) {
-                $replenishment->update([
+                $pcrUpdate = [
                     'status'                => PettyCashReplenishment::STATUS_FULFILLED,
                     'finance_head_id'       => $user->id,
                     'fulfilled_amount'      => $disbursedAmount,
@@ -1499,7 +1529,11 @@ class ExpenseRequestController extends Controller
                     'journal_entry_id'      => $journalEntry->id,
                     'fulfillment_reference' => $paymentRef,
                     'fulfilled_at'          => now(),
-                ]);
+                ];
+                if (\Illuminate\Support\Facades\Schema::hasColumn('petty_cash_replenishments', 'coa_deducted')) {
+                    $pcrUpdate['coa_deducted'] = true;
+                }
+                $replenishment->update($pcrUpdate);
 
                 ActivityLog::log(
                     'approved',

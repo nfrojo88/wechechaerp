@@ -8,6 +8,12 @@
             <p class="text-muted small mb-0">General ledger accounts, balances, and real-time fund transfers</p>
         </div>
         <div class="d-flex flex-wrap gap-2">
+            <form action="{{ route('coa.sync-deductions') }}" method="POST" class="d-inline">
+                @csrf
+                <button type="submit" class="btn btn-outline-primary btn-sm fw-bold shadow-sm" title="Reconcile and deduct all approved and paid requests up to now from COA balances">
+                    <i class="fa-solid fa-rotate me-1"></i>Sync Paid Deductions
+                </button>
+            </form>
             <a href="{{ route('coa.initial-balances') }}" class="btn btn-warning btn-sm fw-bold shadow-sm text-dark">
                 <i class="fa-solid fa-sliders me-1"></i>One-Time Balance &amp; Ledger Setup
             </a>
