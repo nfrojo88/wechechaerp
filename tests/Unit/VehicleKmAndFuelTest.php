@@ -170,6 +170,8 @@ class VehicleKmAndFuelTest extends TestCase
             $table->decimal('amount', 15, 2);
             $table->decimal('gross_amount', 15, 2)->nullable();
             $table->decimal('net_amount', 15, 2)->nullable();
+            $table->string('vat_type', 30)->default('none');
+            $table->decimal('vat_amount', 15, 2)->default(0);
             $table->boolean('is_bank_payment')->default(false);
             $table->text('description')->nullable();
             $table->string('attachment')->nullable();
@@ -205,6 +207,11 @@ class VehicleKmAndFuelTest extends TestCase
             $table->decimal('actual_amount', 15, 2)->nullable();
             $table->string('fuel_station_name', 255)->nullable();
             $table->string('fuel_station_tin', 50)->nullable();
+            $table->string('fs_no', 50)->nullable();
+            $table->string('mrc_no', 50)->nullable();
+            $table->string('tax_type', 30)->default('no_vat');
+            $table->string('no_vat_reason_code', 50)->nullable();
+            $table->string('no_vat_reason_note', 255)->nullable();
             $table->timestamp('receipt_uploaded_at')->nullable();
             $table->timestamp('closed_at')->nullable();
             $table->unsignedBigInteger('closed_by')->nullable();

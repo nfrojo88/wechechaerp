@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Finance;
 
 use App\Http\Controllers\Controller;
 use App\Models\ExpenseRequest;
+use App\Models\ExpenseHubVatDecision;
 use App\Models\TaxSettlement;
 use App\Models\BankAccount;
 use App\Models\BankTransaction;
@@ -248,14 +249,16 @@ class FinanceTaxReportController extends Controller
         $toDate         = $request->input('to_date');
         $accountId      = $request->input('account_id');
 
-        // Base Query: Strictly PAID records that have VAT, Withholding Tax, or an uploaded Withholding slip
-        $query = ExpenseRequest::with(['user', 'employee', 'paidBy', 'bankAccount', 'chartOfAccount', 'letter', 'purchaseRequest', 'taxSettlement'])
+        // Base Query: Strictly PAID records that have VAT, Withholding Tax, an uploaded Withholding slip, or a Tax Ledger Receipt
+        $query = ExpenseRequest::with(['user', 'employee', 'paidBy', 'bankAccount', 'chartOfAccount', 'letter', 'purchaseRequest', 'taxSettlement', 'receipt', 'expenseHubVatDecision'])
             ->where('status', ExpenseRequest::STATUS_PAID)
             ->where(function ($q) {
                 $q->where('has_withholding', true)
                   ->orWhere('withholding_amount', '>', 0)
                   ->orWhere('vat_amount', '>', 0)
                   ->orWhereIn('vat_type', ['exclusive', 'inclusive', 'vat_b'])
+                  ->orWhere('request_number', 'like', 'EXP-TAX-%')
+                  ->orWhereHas('receipt')
                   ->orWhere(function ($sq) {
                       $sq->whereNotNull('withholding_receipt')->where('withholding_receipt', '!=', '');
                   });
@@ -3313,6 +3316,8 @@ class FinanceTaxReportController extends Controller
             'has_withholding'    => 'nullable|boolean',
             'withholding_amount' => 'nullable|numeric|min:0',
             'tax_type'           => 'nullable|string',
+            'no_vat_reason_code' => 'nullable|string|max:50',
+            'no_vat_reason_note' => 'nullable|string|max:500',
             'project_id'         => 'nullable|exists:projects,id',
             'category'           => 'nullable|string',
             'description'        => 'nullable|string',
@@ -3348,38 +3353,64 @@ class FinanceTaxReportController extends Controller
             $fsNo       = $fsNorm['value'] ?: $fsNoRaw;
 
             $totalAmount = QcService::parseMoney($validated['total_amount']);
-            $vatAmount   = QcService::parseMoney($validated['vat_amount'] ?? 0);
-            $subtotal    = QcService::parseMoney($validated['subtotal'] ?? max(0, $totalAmount - $vatAmount));
+            $taxType     = $validated['tax_type'] ?? 'vat';
+            $category    = $validated['category'] ?? 'material';
 
-            if ($vatAmount == 0 && ($validated['tax_type'] ?? 'vat') !== 'withholding') {
-                $subtotal  = round($totalAmount / 1.15, 2);
-                $vatAmount = round($totalAmount - $subtotal, 2);
+            // Handle Tax Treatment & Exemption (ERCA Line 6 for Fuel / Non-VAT)
+            if ($taxType === 'no_vat' || $category === 'fuel') {
+                $taxType           = 'no_vat';
+                $vatAmount         = 0.00;
+                $subtotal          = $totalAmount;
+                $hasWithholding    = false;
+                $withholdingAmount = 0.00;
+                $purcTypeCode      = 6; // ERCA Line 6 Tax Exempted
+                $vatCategory       = 'E';
+                $noVatReasonCode   = ($validated['no_vat_reason_code'] ?? null) ?: 'exempt_item';
+                $noVatReasonNote   = ($validated['no_vat_reason_note'] ?? null) ?: ($category === 'fuel' ? 'Retail pump fuel purchase (legally VAT-exempt under Ethiopian Proclamation)' : 'Legally VAT-Exempt goods/services');
+            } elseif ($taxType === 'withholding') {
+                $vatAmount         = 0.00;
+                $subtotal          = QcService::parseMoney($validated['subtotal'] ?? $totalAmount);
+                $hasWithholding    = true;
+                $withholdingAmount = QcService::parseMoney($validated['withholding_amount'] ?? round($subtotal * 0.03, 2));
+                $purcNorm          = QcService::normalizePurchaseType($validated['purchase_type'] ?? null, ($validated['description'] ?? '') . ' ' . ($validated['vendor_name'] ?? ''));
+                $purcTypeCode      = $purcNorm['code'];
+                $vatCategory       = $purcNorm['vat_category'];
+                $noVatReasonCode   = null;
+                $noVatReasonNote   = null;
+            } else {
+                $vatAmount = QcService::parseMoney($validated['vat_amount'] ?? 0);
+                if ($vatAmount <= 0) {
+                    $subtotal  = round($totalAmount / 1.15, 2);
+                    $vatAmount = round($totalAmount - $subtotal, 2);
+                } else {
+                    $subtotal  = QcService::parseMoney($validated['subtotal'] ?? max(0, $totalAmount - $vatAmount));
+                }
+                $hasWithholding    = (bool)($validated['has_withholding'] ?? ($taxType === 'both'));
+                $withholdingAmount = QcService::parseMoney($validated['withholding_amount'] ?? ($hasWithholding ? round($subtotal * 0.03, 2) : 0));
+                $purcNorm          = QcService::normalizePurchaseType($validated['purchase_type'] ?? null, ($validated['description'] ?? '') . ' ' . ($validated['vendor_name'] ?? ''));
+                $purcTypeCode      = $purcNorm['code'];
+                $vatCategory       = $purcNorm['vat_category'];
+                $noVatReasonCode   = null;
+                $noVatReasonNote   = null;
             }
-
-            $hasWithholding    = (bool)($validated['has_withholding'] ?? (($validated['tax_type'] ?? '') === 'withholding' || ($validated['tax_type'] ?? '') === 'both'));
-            $withholdingAmount = QcService::parseMoney($validated['withholding_amount'] ?? ($hasWithholding ? round($subtotal * 0.03, 2) : 0));
 
             $ext = $filePath ? strtolower(pathinfo($filePath, PATHINFO_EXTENSION)) : 'jpg';
             $isPdf = $ext === 'pdf';
 
             $receiptNumber = 'RCP-' . $targetDate->format('Ymd') . '-' . strtoupper(substr(uniqid(), -4));
 
-            $purcNorm = QcService::normalizePurchaseType(
-                $validated['purchase_type'] ?? null,
-                ($validated['description'] ?? '') . ' ' . ($validated['vendor_name'] ?? '')
-            );
-            $purcTypeCode = $purcNorm['code'];
-            $vatCategory  = $purcNorm['vat_category'];
+            $vendorName = ($validated['vendor_name'] ?? '') ?: ($category === 'fuel' ? 'Fuel Station' : 'General Merchant');
+            $itemDesc   = ($validated['description'] ?? '') ?: ($category === 'fuel' ? 'Vehicle Fuel Receipt' : 'Purchased Materials / VAT Invoice');
 
-            // 1. Create Receipt (for ERCA Line 100 VAT declaration)
+            // 1. Create Receipt (for ERCA Line 100 / Line 6 VAT declaration)
             $receipt = new Receipt([
                 'receipt_number'   => $receiptNumber,
                 'uploaded_by'      => Auth::id() ?: 1,
                 'project_id'       => $validated['project_id'] ?? null,
-                'vendor_name'      => $validated['vendor_name'] ?: 'General Merchant',
+                'vendor_name'      => $vendorName,
                 'vendor_tin'       => $validated['vendor_tin'] ?? null,
                 'tin_valid'        => true,
-                'buyer_tin'        => $validated['buyer_tin'] ?: '38480010',
+                'buyer_tin'        => ($validated['buyer_tin'] ?? '') ?: '38480010',
                 'fs_no'            => $fsNo,
                 'fs_no_raw'        => $fsNoRaw,
                 'fs_no_valid'      => true,
@@ -3389,8 +3420,8 @@ class FinanceTaxReportController extends Controller
                 'vat_amount'       => $vatAmount,
                 'total_amount'     => $totalAmount,
                 'currency'         => 'ETB',
-                'category'         => $validated['category'] ?? 'material',
-                'description'      => $validated['description'] ?: 'Purchased Materials / VAT Invoice',
+                'category'         => $category,
+                'description'      => $itemDesc,
                 'file_path'        => $filePath,
                 'file_type'        => $isPdf ? 'pdf' : 'image',
                 'status'           => 'approved',
@@ -3404,11 +3435,11 @@ class FinanceTaxReportController extends Controller
             // 2. Create ReceiptItem
             $receiptItem = new ReceiptItem([
                 'receipt_id'       => $receipt->id,
-                'item_description' => $validated['description'] ?: 'Purchased Materials',
+                'item_description' => $itemDesc,
                 'vat_category'     => $vatCategory,
                 'calendar_type'    => 'E',
                 'purchase_type'    => $purcTypeCode,
-                'uom'              => '9',
+                'uom'              => $category === 'fuel' ? 'LTR' : '9',
                 'qty'              => 1.00,
                 'unit_price'       => $subtotal,
                 'total_value'      => $subtotal,
@@ -3425,17 +3456,65 @@ class FinanceTaxReportController extends Controller
             $taxExp->request_number    = 'EXP-TAX-' . $targetDate->format('Ymd') . '-' . strtoupper(substr(uniqid(), -4));
             $taxExp->user_id           = Auth::id() ?: 1;
             $taxExp->project_id        = $validated['project_id'] ?? null;
-            $taxExp->category          = ucfirst($validated['category'] ?? 'Material');
-            $taxExp->description       = $validated['description'] ?: ($receipt->vendor_name . ' (FS: ' . $fsNo . ')');
+            $taxExp->category          = ucfirst($category);
+            $taxExp->description       = $itemDesc . ' (FS: ' . $fsNo . ')';
             $taxExp->amount            = $totalAmount;
             $taxExp->gross_amount      = $totalAmount;
             $taxExp->vat_type          = $vatAmount > 0 ? 'exclusive' : 'none';
-            $taxExp->vat_rate          = 15.00;
+            $taxExp->vat_rate          = $vatAmount > 0 ? 15.00 : 0.00;
             $taxExp->vat_amount        = $vatAmount;
             $taxExp->has_withholding   = $hasWithholding;
-            $taxExp->withholding_rate  = 3.00;
+            $taxExp->withholding_rate  = $hasWithholding ? 3.00 : 0.00;
             $taxExp->withholding_amount= $withholdingAmount;
             $taxExp->net_amount        = max(0, $totalAmount - $withholdingAmount);
+            $taxExp->payment_reference = 'FS: ' . $fsNo . ($receipt->mrc_no ? ' | MRC: ' . $receipt->mrc_no : '');
+            $taxExp->attachment        = $filePath;
+            $taxExp->status            = ExpenseRequest::STATUS_PAID;
+            $taxExp->paid_by           = Auth::id() ?: 1;
+            $taxExp->paid_at           = $targetDate->copy()->setTime(12, 0, 0);
+            $taxExp->created_at        = $targetDate->copy()->setTime(12, 0, 0);
+            $taxExp->updated_at        = $targetDate->copy()->setTime(12, 0, 0);
+            $taxExp->save();
+
+            // Link Receipt to ExpenseRequest
+            $receipt->purchasable_type = ExpenseRequest::class;
+            $receipt->purchasable_id   = $taxExp->id;
+            $receipt->save();
+
+            // 4. Create / Update ExpenseHubVatDecision with Reason for No VAT
+            if (Schema::hasTable('expense_hub_vat_decisions')) {
+                ExpenseHubVatDecision::updateOrCreate(
+                    [
+                        'source_type' => 'expense_request',
+                        'source_id'   => $taxExp->id,
+                    ],
+                    [
+                        'vat_status'              => $vatAmount > 0 ? ExpenseHubVatDecision::STATUS_VAT_APPLIES : ExpenseHubVatDecision::STATUS_NO_VAT,
+                        'vat_rate'                => $vatAmount > 0 ? 15.00 : 0.00,
+                        'is_inclusive'            => true,
+                        'has_withholding'         => $hasWithholding,
+                        'withholding_rate'        => $hasWithholding ? 3.00 : 0.00,
+                        'withholding_amount'      => $withholdingAmount,
+                        'base_amount'             => $subtotal,
+                        'vat_amount'              => $vatAmount,
+                        'total_amount'            => $totalAmount,
+                        'no_vat_reason_code'      => $vatAmount <= 0 ? ($noVatReasonCode ?: 'exempt_item') : null,
+                        'no_vat_reason_note'      => $vatAmount <= 0 ? ($noVatReasonNote ?: 'Legally VAT-Exempt goods/services (Proclamation)') : null,
+                        'purchase_type'           => $purcTypeCode,
+                        'vat_category'            => $vatCategory,
+                        'calendar_type'           => 'E',
+                        'custom_seller_tin'       => $validated['vendor_tin'] ?? null,
+                        'custom_fs_no'            => $fsNo,
+                        'custom_mrc_no'           => $validated['mrc_no'] ?? null,
+                        'custom_item_description' => $itemDesc,
+                        'quantity'                => 1.0,
+                        'unit_price'              => $subtotal,
+                        'uom'                     => $category === 'fuel' ? 'LTR' : '9',
+                        'decided_by'              => Auth::id() ?: 1,
+                        'decided_at'              => now(),
+                    ]
+                );
+            }
             $taxExp->payment_reference = 'FS: ' . $fsNo . ($receipt->mrc_no ? ' | MRC: ' . $receipt->mrc_no : '');
             $taxExp->attachment        = $filePath;
             $taxExp->status            = ExpenseRequest::STATUS_PAID;

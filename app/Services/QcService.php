@@ -202,13 +202,23 @@ class QcService
     }
 
     /**
-     * Normalize ERCA purchase type into official numeric code (3 or 4) and eTax declaration type (PUR_GD or PUR_SR).
+     * Normalize ERCA purchase type into official numeric code (3, 4, or 6) and eTax declaration type (PUR_GD, PUR_SR, PUR_EX).
      * Line 100: 3 = Taxable-local Purchase of Inputs (Goods / Materials) -> PUR_GD
      * Line 110/120: 4 = Taxable-local Services / Imported Inputs -> PUR_SR
+     * Line 6: 6 = Tax Exempted-purchase with no vat or uncollectible inputs (e.g. retail fuel) -> PUR_EX
      */
     public static function normalizePurchaseType($val, ?string $contextText = null): array
     {
         $raw = strtoupper(trim((string)$val));
+        if ($raw === 'PUR_EX' || $raw === '6' || $raw === 'EXEMPT' || $raw === 'EXEMPTED' || $raw === 'NO_VAT' || $raw === 'EXEMPT_ITEM') {
+            return [
+                'code'         => 6,
+                'type'         => 'PUR_EX',
+                'vat_category' => 'E',
+                'label'        => 'PUR_EX (Tax Exempted - Line 6)',
+            ];
+        }
+
         if ($raw === 'PUR_SR' || $raw === '4' || $raw === 'PUR_SER' || $raw === 'S' || $raw === 'SERVICE' || $raw === 'SERVICES') {
             return [
                 'code'         => 4,

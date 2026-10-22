@@ -8,9 +8,14 @@ use App\Models\FixedAssetUnit;
 use App\Models\User;
 use App\Models\VehicleFuelRequest;
 use App\Models\VehicleKmLog;
+use App\Models\Receipt;
+use App\Models\ReceiptItem;
+use App\Models\ExpenseHubVatDecision;
+use App\Models\ExpenseHubVatAuditLog;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 
 class VehicleFuelService
@@ -250,12 +255,34 @@ class VehicleFuelService
         $actualAmount      = !empty($receiptData['actual_amount']) ? (float) $receiptData['actual_amount'] : null;
         $stationName       = $receiptData['fuel_station_name'] ?? null;
         $stationTin        = $receiptData['fuel_station_tin'] ?? null;
+        $fsNo              = !empty($receiptData['fs_no']) ? trim($receiptData['fs_no']) : null;
+        $mrcNo             = !empty($receiptData['mrc_no']) ? trim($receiptData['mrc_no']) : null;
+        $taxType           = $receiptData['tax_type'] ?? 'no_vat';
+        $noVatReasonCode   = $receiptData['no_vat_reason_code'] ?? ($taxType === 'no_vat' ? 'exempt_item' : null);
+        $noVatReasonNote   = $receiptData['no_vat_reason_note'] ?? ($taxType === 'no_vat' ? 'Retail pump fuel purchase (legally VAT-exempt under Ethiopian Proclamation)' : null);
         $userId            = Auth::id() ?: 1;
 
         if (!$receiptPhoto && empty($fuelRequest->receipt_photo)) {
             throw ValidationException::withMessages([
                 'receipt_photo' => ['A photo of the official fuel station receipt is required.'],
             ]);
+        }
+
+        $resolvedAmount = $actualAmount ?: ($fuelRequest->actual_amount ?: $fuelRequest->estimated_amount);
+        $resolvedLiters = $actualLiters ?: ($fuelRequest->actual_liters ?: $fuelRequest->liters_requested);
+
+        if ($taxType === 'vat') {
+            $baseAmount  = round($resolvedAmount / 1.15, 2);
+            $vatAmount   = round($resolvedAmount - $baseAmount, 2);
+            $vatCategory = 'G';
+            $purcType    = 3; // Goods (Line 100)
+            $vatStatus   = ExpenseHubVatDecision::STATUS_VAT_APPLIES;
+        } else {
+            $baseAmount  = $resolvedAmount;
+            $vatAmount   = 0.00;
+            $vatCategory = 'E'; // Exempt (Line 6)
+            $purcType    = 6; // Tax Exempted-purchase with no vat
+            $vatStatus   = ExpenseHubVatDecision::STATUS_NO_VAT;
         }
 
         return DB::transaction(function () use (
@@ -266,6 +293,18 @@ class VehicleFuelService
             $actualAmount,
             $stationName,
             $stationTin,
+            $fsNo,
+            $mrcNo,
+            $taxType,
+            $noVatReasonCode,
+            $noVatReasonNote,
+            $resolvedAmount,
+            $resolvedLiters,
+            $baseAmount,
+            $vatAmount,
+            $vatCategory,
+            $purcType,
+            $vatStatus,
             $userId
         ) {
             // If new odometer reading is provided and greater than previous, update KM log
@@ -283,26 +322,149 @@ class VehicleFuelService
             }
 
             // Update VehicleFuelRequest
-            $fuelRequest->update([
+            $updateData = [
                 'receipt_photo'       => $receiptPhoto ?: $fuelRequest->receipt_photo,
                 'receipt_odometer_km' => $receiptOdometerKm ?: $fuelRequest->receipt_odometer_km,
-                'actual_liters'       => $actualLiters ?: ($fuelRequest->actual_liters ?: $fuelRequest->liters_requested),
-                'actual_amount'       => $actualAmount ?: ($fuelRequest->actual_amount ?: $fuelRequest->estimated_amount),
+                'actual_liters'       => $resolvedLiters,
+                'actual_amount'       => $resolvedAmount,
                 'fuel_station_name'   => $stationName ?: $fuelRequest->fuel_station_name,
                 'fuel_station_tin'    => $stationTin ?: $fuelRequest->fuel_station_tin,
                 'receipt_uploaded_at' => now(),
                 'status'              => VehicleFuelRequest::STATUS_CLOSED,
                 'closed_at'           => now(),
                 'closed_by'           => $userId,
-            ]);
+            ];
+            if (Schema::hasColumn('vehicle_fuel_requests', 'fs_no')) {
+                $updateData['fs_no']              = $fsNo ?: $fuelRequest->fs_no;
+                $updateData['mrc_no']             = $mrcNo ?: $fuelRequest->mrc_no;
+                $updateData['tax_type']           = $taxType;
+                $updateData['no_vat_reason_code'] = $noVatReasonCode ?: $fuelRequest->no_vat_reason_code;
+                $updateData['no_vat_reason_note'] = $noVatReasonNote ?: $fuelRequest->no_vat_reason_note;
+            }
+            $fuelRequest->update($updateData);
+
+            $plateNumber = $fuelRequest->assetUnit?->plate_number ?? ($fuelRequest->assetUnit?->unit_name ?? 'Vehicle');
+            $refText = 'FS: ' . ($fsNo ?: 'N/A') . ($mrcNo ? ' | MRC: ' . $mrcNo : '');
 
             // Sync to ExpenseRequest for Expense Hub / VAT compliance
             if ($fuelRequest->expenseRequest) {
-                $notes = "Fuel Station: " . ($stationName ?: 'N/A') . ($stationTin ? " | TIN: {$stationTin}" : "");
-                $fuelRequest->expenseRequest->update([
+                $notes = "Fuel Station: " . ($stationName ?: 'N/A') . ($stationTin ? " | TIN: {$stationTin}" : "") . " | Tax: " . ($taxType === 'no_vat' ? 'Tax-Exempt (ERCA Line 6)' : '15% VAT');
+                $expUpdate = [
+                    'amount'        => $resolvedAmount,
+                    'gross_amount'  => $resolvedAmount,
                     'attachment'    => $receiptPhoto ?: $fuelRequest->expenseRequest->attachment,
                     'payment_notes' => trim(($fuelRequest->expenseRequest->payment_notes ? $fuelRequest->expenseRequest->payment_notes . "\n" : "") . $notes),
-                ]);
+                ];
+                if (Schema::hasColumn('expense_requests', 'vat_type')) {
+                    $expUpdate['vat_type']   = $taxType === 'vat' ? 'inclusive' : 'none';
+                    $expUpdate['vat_amount'] = $vatAmount;
+                }
+                if ($fsNo && Schema::hasColumn('expense_requests', 'payment_reference')) {
+                    $expUpdate['payment_reference'] = $refText;
+                }
+                $fuelRequest->expenseRequest->update($expUpdate);
+            }
+
+            // Sync / Record to ExpenseHubVatDecision
+            if (Schema::hasTable('expense_hub_vat_decisions') && $fuelRequest->expense_request_id) {
+                ExpenseHubVatDecision::updateOrCreate(
+                    [
+                        'source_type' => 'expense_request',
+                        'source_id'   => $fuelRequest->expense_request_id,
+                    ],
+                    [
+                        'vat_status'              => $vatStatus,
+                        'vat_rate'                => $taxType === 'vat' ? 15.00 : 0.00,
+                        'is_inclusive'            => true,
+                        'has_withholding'         => false,
+                        'withholding_rate'        => 0.00,
+                        'withholding_amount'      => 0.00,
+                        'base_amount'             => $baseAmount,
+                        'vat_amount'              => $vatAmount,
+                        'total_amount'            => $resolvedAmount,
+                        'no_vat_reason_code'      => $vatStatus === 'no_vat' ? ($noVatReasonCode ?: 'exempt_item') : null,
+                        'no_vat_reason_note'      => $vatStatus === 'no_vat' ? ($noVatReasonNote ?: 'Legally VAT-Exempt goods/services (Proclamation) - Fuel') : null,
+                        'purchase_type'           => $purcType,
+                        'vat_category'            => $vatCategory,
+                        'calendar_type'           => 'E',
+                        'custom_seller_tin'       => $stationTin,
+                        'custom_fs_no'            => $fsNo,
+                        'custom_mrc_no'           => $mrcNo,
+                        'custom_item_description' => "Vehicle Fuel: {$plateNumber} ({$resolvedLiters} L)",
+                        'quantity'                => $resolvedLiters ?: 1.0,
+                        'unit_price'              => $resolvedLiters > 0 ? round($resolvedAmount / $resolvedLiters, 2) : $resolvedAmount,
+                        'uom'                     => 'LTR',
+                        'decided_by'              => $userId,
+                        'decided_at'              => now(),
+                    ]
+                );
+            }
+
+            // Sync / Record to Tax Deductions Ledger (Receipt & ReceiptItem)
+            if (Schema::hasTable('receipts')) {
+                $receipt = null;
+                if ($fuelRequest->expense_request_id && Schema::hasColumn('receipts', 'purchasable_type')) {
+                    $receipt = Receipt::where('purchasable_type', ExpenseRequest::class)
+                        ->where('purchasable_id', $fuelRequest->expense_request_id)
+                        ->first();
+                }
+                if (!$receipt && $fsNo) {
+                    $receipt = Receipt::where('fs_no', $fsNo)->first();
+                }
+                if (!$receipt) {
+                    $receipt = new Receipt();
+                    $receipt->receipt_number = 'RCP-FUEL-' . now()->format('Ymd') . '-' . $fuelRequest->id;
+                }
+
+                $receipt->uploaded_by      = $userId;
+                $receipt->approved_by      = $userId;
+                $receipt->approved_at      = now();
+                $receipt->status           = 'approved';
+                if ($fuelRequest->expense_request_id && Schema::hasColumn('receipts', 'purchasable_type')) {
+                    $receipt->purchasable_type = ExpenseRequest::class;
+                    $receipt->purchasable_id   = $fuelRequest->expense_request_id;
+                }
+                $receipt->project_id       = $fuelRequest->project_id;
+                $receipt->vendor_name      = $stationName ?: 'Fuel Station';
+                $receipt->vendor_tin       = $stationTin;
+                $receipt->tin_valid        = !empty($stationTin);
+                $receipt->buyer_tin        = '0038480010';
+                $receipt->fs_no            = $fsNo;
+                $receipt->fs_no_raw        = $fsNo;
+                $receipt->fs_no_valid      = !empty($fsNo);
+                $receipt->mrc_no           = $mrcNo;
+                $receipt->receipt_date     = now()->toDateString();
+                $receipt->subtotal         = $baseAmount;
+                $receipt->vat_amount       = $vatAmount;
+                $receipt->total_amount     = $resolvedAmount;
+                $receipt->currency         = 'ETB';
+                $receipt->category         = 'fuel';
+                $receipt->description      = "Vehicle Fuel: {$plateNumber} ({$resolvedLiters} L)";
+                if ($receiptPhoto) {
+                    $receipt->file_path    = $receiptPhoto;
+                    $receipt->file_type    = str_ends_with(strtolower($receiptPhoto), '.pdf') ? 'pdf' : 'image';
+                }
+                $receipt->save();
+
+                if (Schema::hasTable('receipt_items')) {
+                    $receiptItem = ReceiptItem::where('receipt_id', $receipt->id)->first();
+                    if (!$receiptItem) {
+                        $receiptItem = new ReceiptItem();
+                        $receiptItem->receipt_id = $receipt->id;
+                    }
+                    $receiptItem->item_description = $receipt->description;
+                    $receiptItem->vat_category     = $vatCategory;
+                    $receiptItem->calendar_type    = 'E';
+                    $receiptItem->purchase_type    = $purcType;
+                    $receiptItem->uom              = 'LTR';
+                    $receiptItem->qty              = $resolvedLiters ?: 1.0;
+                    $receiptItem->unit_price       = $resolvedLiters > 0 ? round($resolvedAmount / $resolvedLiters, 2) : $resolvedAmount;
+                    $receiptItem->total_value      = $baseAmount;
+                    $receiptItem->vat_amount       = $vatAmount;
+                    $receiptItem->value_after_vat  = $resolvedAmount;
+                    $receiptItem->is_flagged       = false;
+                    $receiptItem->save();
+                }
             }
 
             return $fuelRequest;

@@ -41,6 +41,21 @@ class VehicleFuelRequestController extends Controller
                     if (!Schema::hasColumn('vehicle_fuel_requests', 'price_per_liter')) {
                         $table->decimal('price_per_liter', 10, 2)->nullable()->after('liters_requested');
                     }
+                    if (!Schema::hasColumn('vehicle_fuel_requests', 'fs_no')) {
+                        $table->string('fs_no', 50)->nullable()->after('fuel_station_tin')->index();
+                    }
+                    if (!Schema::hasColumn('vehicle_fuel_requests', 'mrc_no')) {
+                        $table->string('mrc_no', 50)->nullable()->after('fs_no');
+                    }
+                    if (!Schema::hasColumn('vehicle_fuel_requests', 'tax_type')) {
+                        $table->string('tax_type', 30)->default('no_vat')->after('mrc_no')->index();
+                    }
+                    if (!Schema::hasColumn('vehicle_fuel_requests', 'no_vat_reason_code')) {
+                        $table->string('no_vat_reason_code', 50)->nullable()->after('tax_type')->index();
+                    }
+                    if (!Schema::hasColumn('vehicle_fuel_requests', 'no_vat_reason_note')) {
+                        $table->string('no_vat_reason_note', 255)->nullable()->after('no_vat_reason_code');
+                    }
                 });
             }
         } catch (\Throwable $e) {}
@@ -318,8 +333,9 @@ class VehicleFuelRequestController extends Controller
 
         $serviceStatus = $this->kmService->getServiceStatus($fuelRequest->fixed_asset_unit_id);
         $consumptionMetrics = $this->fuelService->getVehicleConsumptionMetrics($fuelRequest->fixed_asset_unit_id);
+        $reasons = \App\Models\ExpenseHubVatDecision::NO_VAT_REASONS;
 
-        return view('general-service.fuel-requests.show', compact('fuelRequest', 'serviceStatus', 'consumptionMetrics', 'isGeneralAdmin'));
+        return view('general-service.fuel-requests.show', compact('fuelRequest', 'serviceStatus', 'consumptionMetrics', 'isGeneralAdmin', 'reasons'));
     }
 
     /**
@@ -327,15 +343,21 @@ class VehicleFuelRequestController extends Controller
      */
     public function uploadReceipt(Request $request, VehicleFuelRequest $fuelRequest)
     {
+        $this->ensureSchema();
         $this->authorizeVehicleAccess($fuelRequest->fixed_asset_unit_id);
 
         $request->validate([
             'receipt_photo'       => 'required|file|mimes:jpeg,png,jpg,webp,pdf|max:10240',
-            'receipt_odometer_km' => 'nullable|integer|min:' . $fuelRequest->current_odometer_km,
+            'receipt_odometer_km' => 'nullable|integer|min:' . (int)($fuelRequest->current_odometer_km ?? 0),
             'actual_liters'       => 'nullable|numeric|min:0.1',
             'actual_amount'       => 'nullable|numeric|min:1',
             'fuel_station_name'   => 'nullable|string|max:255',
             'fuel_station_tin'    => 'nullable|string|max:50',
+            'fs_no'               => 'nullable|string|max:50',
+            'mrc_no'              => 'nullable|string|max:50',
+            'tax_type'            => 'nullable|string|in:no_vat,vat',
+            'no_vat_reason_code'  => 'nullable|string|max:50',
+            'no_vat_reason_note'  => 'nullable|string|max:255',
         ]);
 
         $receiptPath = FileUploadService::upload($request->file('receipt_photo'), 'fuel_receipts');
@@ -347,10 +369,15 @@ class VehicleFuelRequestController extends Controller
             'actual_amount'       => $request->actual_amount,
             'fuel_station_name'   => $request->fuel_station_name,
             'fuel_station_tin'    => $request->fuel_station_tin,
+            'fs_no'               => $request->fs_no,
+            'mrc_no'              => $request->mrc_no,
+            'tax_type'            => $request->tax_type ?: 'no_vat',
+            'no_vat_reason_code'  => $request->no_vat_reason_code ?: 'exempt_item',
+            'no_vat_reason_note'  => $request->no_vat_reason_note,
         ]);
 
         return redirect()->route('vehicle-fuel-requests.show', $fuelRequest->id)
-            ->with('success', "Fuel station receipt attached successfully! Request #{$fuelRequest->request_no} has been verified and closed.");
+            ->with('success', "Fuel station receipt attached successfully! Request #{$fuelRequest->request_no} has been verified and registered in Tax Ledger.");
     }
 
     /**

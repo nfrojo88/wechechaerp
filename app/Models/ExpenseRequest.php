@@ -599,6 +599,14 @@ class ExpenseRequest extends Model
     }
 
     /**
+     * Linked VAT decision from Expense Hub & VAT Decision Engine.
+     */
+    public function expenseHubVatDecision()
+    {
+        return $this->hasOne(ExpenseHubVatDecision::class, 'source_id')->where('source_type', 'expense_request');
+    }
+
+    /**
      * Check if this request is registered/saved in the VAT report.
      */
     public function getIsSavedInVatAttribute(): bool

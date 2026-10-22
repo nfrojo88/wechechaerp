@@ -1051,13 +1051,58 @@ class ExpenseHubController extends Controller
                     $receipt = Receipt::where('purchasable_type', $purchasableClass)
                         ->where('purchasable_id', $sourceId)
                         ->first();
+                    if (!$receipt && !empty($decision->custom_fs_no)) {
+                        $receipt = Receipt::where('fs_no', $decision->custom_fs_no)->first();
+                    }
+                    if (!$receipt && !empty($decision->custom_fs_no)) {
+                        $receipt = new Receipt();
+                        $receipt->receipt_number   = 'RCP-HUB-' . now()->format('Ymd') . '-' . strtoupper(substr(uniqid(), -4));
+                        $receipt->uploaded_by      = $decision->decided_by ?: (Auth::id() ?: 1);
+                        $receipt->approved_by      = $decision->decided_by ?: (Auth::id() ?: 1);
+                        $receipt->approved_at      = now();
+                        $receipt->status           = 'approved';
+                        $receipt->purchasable_type = $purchasableClass;
+                        $receipt->purchasable_id   = $sourceId;
+                        $receipt->category         = 'fuel';
+                        $receipt->description      = $decision->custom_item_description ?: 'No VAT / Tax Exempt Purchase';
+                        $receipt->buyer_tin        = '0038480010';
+                    }
                     if ($receipt) {
-                        $receipt->update(['vat_amount' => 0]);
+                        $receipt->vat_amount   = 0;
+                        $receipt->subtotal     = $totalAmount;
+                        $receipt->total_amount = $totalAmount;
+                        if (!empty($decision->custom_fs_no)) {
+                            $receipt->fs_no       = $decision->custom_fs_no;
+                            $receipt->fs_no_raw   = $decision->custom_fs_no;
+                            $receipt->fs_no_valid = true;
+                        }
+                        if (!empty($decision->custom_mrc_no)) {
+                            $receipt->mrc_no = $decision->custom_mrc_no;
+                        }
+                        if (!empty($decision->custom_seller_tin)) {
+                            $receipt->vendor_tin = $decision->custom_seller_tin;
+                            $receipt->tin_valid  = true;
+                        }
+                        $receipt->save();
+
                         if (Schema::hasTable('receipt_items')) {
-                            ReceiptItem::where('receipt_id', $receipt->id)->update([
-                                'vat_amount'   => 0,
-                                'vat_category' => 'E',
-                            ]);
+                            $receiptItem = ReceiptItem::where('receipt_id', $receipt->id)->first();
+                            if (!$receiptItem) {
+                                $receiptItem = new ReceiptItem();
+                                $receiptItem->receipt_id = $receipt->id;
+                            }
+                            $receiptItem->item_description = $receipt->description;
+                            $receiptItem->vat_category     = 'E';
+                            $receiptItem->calendar_type    = 'E';
+                            $receiptItem->purchase_type    = (int)($decision->purchase_type ?: 6);
+                            $receiptItem->uom              = $decision->uom ?: '9';
+                            $receiptItem->qty              = (float)($decision->quantity ?: 1.0);
+                            $receiptItem->unit_price       = (float)($decision->unit_price ?: $totalAmount);
+                            $receiptItem->total_value      = $totalAmount;
+                            $receiptItem->vat_amount       = 0;
+                            $receiptItem->value_after_vat  = $totalAmount;
+                            $receiptItem->is_flagged       = false;
+                            $receiptItem->save();
                         }
                     }
                 }

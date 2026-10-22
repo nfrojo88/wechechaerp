@@ -1264,7 +1264,13 @@
 
                                     {{-- 15% VAT (Col N) --}}
                                     <td class="cell-vat text-end font-monospace fw-bold text-info small">
-                                        + ETB {{ number_format($displayVat, 2) }}
+                                        @if($displayVat > 0)
+                                            + ETB {{ number_format($displayVat, 2) }}
+                                        @else
+                                            <span class="badge bg-warning-subtle text-dark border border-warning-subtle rounded-pill" style="font-size:0.65rem;">
+                                                0.00 (Exempt)
+                                            </span>
+                                        @endif
                                     </td>
 
                                     {{-- Total with VAT (Col O) --}}
@@ -2580,7 +2586,30 @@
                             <option value="vat" selected>15% VAT Only (ERCA Line 100)</option>
                             <option value="withholding">3% Withholding Tax Only</option>
                             <option value="both">Both 15% VAT &amp; 3% Withholding</option>
+                            <option value="no_vat">No VAT / Tax Exempt (ERCA Line 6 / Non-VAT)</option>
                         </select>
+                    </div>
+
+                    {{-- REASON FOR NO VAT (Displayed when No VAT / Tax Exempt is selected or Category is Fuel) --}}
+                    <div class="col-md-6" id="add_rcpt_no_vat_section" style="display: none;">
+                        <label class="form-label small fw-bold text-dark mb-1">
+                            <i class="fa-solid fa-shield-halved text-warning me-1"></i>Reason for No VAT <span class="text-danger">*</span>
+                        </label>
+                        <select name="no_vat_reason_code" id="add_rcpt_no_vat_reason_code" class="form-select fw-semibold border-warning">
+                            <option value="">— Select Justification —</option>
+                            @foreach(\App\Models\ExpenseHubVatDecision::NO_VAT_REASONS as $rCode => $rLabel)
+                                <option value="{{ $rCode }}" {{ $rCode === 'exempt_item' ? 'selected' : '' }}>{{ $rLabel }}</option>
+                            @endforeach
+                        </select>
+                        <small class="text-muted" style="font-size:0.68rem;">ERCA statutory justification for zero VAT (e.g. Retail Fuel Proclamation)</small>
+                    </div>
+
+                    {{-- NO VAT AUDIT MEMO / NOTES --}}
+                    <div class="col-md-6" id="add_rcpt_no_vat_note_section" style="display: none;">
+                        <label class="form-label small fw-semibold text-dark mb-1">
+                            <i class="fa-solid fa-note-sticky text-secondary me-1"></i>Audit Memo / Notes
+                        </label>
+                        <input type="text" name="no_vat_reason_note" id="add_rcpt_no_vat_reason_note" class="form-control" placeholder="e.g. Retail pump fuel purchase exempt under Proclamation">
                     </div>
 
                     {{-- FS NUMBER --}}
@@ -2653,6 +2682,7 @@
                                     <select name="purchase_type" id="add_rcpt_purchase_type" class="form-select form-select-sm fw-bold border-success-subtle">
                                         <option value="PUR_GD" selected>PUR_GD (Goods / Materials - 3)</option>
                                         <option value="PUR_SR">PUR_SR (Services - 4)</option>
+                                        <option value="PUR_EX">PUR_EX (Tax Exempted - Line 6)</option>
                                     </select>
                                     <small class="text-muted" style="font-size:0.68rem;">Auto-detected from receipt</small>
                                 </div>
@@ -3705,7 +3735,11 @@
 
         if (total <= 0) return;
 
-        if (taxType === 'withholding') {
+        if (taxType === 'no_vat') {
+            if (subtotalEl) subtotalEl.value = total.toFixed(2);
+            if (vatEl) vatEl.value = '0.00';
+            if (whtEl) whtEl.value = '0.00';
+        } else if (taxType === 'withholding') {
             if (subtotalEl) subtotalEl.value = total.toFixed(2);
             if (vatEl) vatEl.value = '0.00';
             if (whtEl) whtEl.value = (total * 0.03).toFixed(2);
@@ -3727,7 +3761,11 @@
 
         if (subtotal <= 0) return;
 
-        if (taxType === 'withholding') {
+        if (taxType === 'no_vat') {
+            if (vatEl) vatEl.value = '0.00';
+            if (totalEl) totalEl.value = subtotal.toFixed(2);
+            if (whtEl) whtEl.value = '0.00';
+        } else if (taxType === 'withholding') {
             if (vatEl) vatEl.value = '0.00';
             if (totalEl) totalEl.value = subtotal.toFixed(2);
             if (whtEl) whtEl.value = (subtotal * 0.03).toFixed(2);
@@ -3759,9 +3797,41 @@
     function onTaxTypeChange() {
         const taxType = document.getElementById('add_rcpt_tax_type')?.value || 'vat';
         const whtWrapper = document.getElementById('add_rcpt_wht_wrapper');
+        const noVatSection = document.getElementById('add_rcpt_no_vat_section');
+        const noVatNoteSection = document.getElementById('add_rcpt_no_vat_note_section');
+        const purcTypeSelect = document.getElementById('add_rcpt_purchase_type');
+        const formulaBadge = document.getElementById('financials_formula_badge');
+
         if (whtWrapper) {
             whtWrapper.style.display = (taxType === 'withholding' || taxType === 'both') ? 'block' : 'none';
         }
+        if (noVatSection) {
+            noVatSection.style.display = (taxType === 'no_vat') ? 'block' : 'none';
+        }
+        if (noVatNoteSection) {
+            noVatNoteSection.style.display = (taxType === 'no_vat') ? 'block' : 'none';
+        }
+
+        if (taxType === 'no_vat') {
+            if (purcTypeSelect) {
+                purcTypeSelect.value = 'PUR_EX';
+            }
+            if (formulaBadge) {
+                formulaBadge.textContent = 'Tax Exempt / No VAT (ERCA Line 6)';
+                formulaBadge.className = 'badge bg-warning text-dark rounded-pill px-2.5 py-1';
+            }
+        } else if (taxType === 'withholding') {
+            if (formulaBadge) {
+                formulaBadge.textContent = '3% Withholding Only';
+                formulaBadge.className = 'badge bg-secondary text-white rounded-pill px-2.5 py-1';
+            }
+        } else {
+            if (formulaBadge) {
+                formulaBadge.textContent = 'Base + 15% VAT = Total';
+                formulaBadge.className = 'badge bg-success text-white rounded-pill px-2.5 py-1';
+            }
+        }
+
         const total = parseFloat(document.getElementById('add_rcpt_total_amount')?.value) || 0;
         if (total > 0) {
             onTotalAmountChange();
@@ -3771,11 +3841,36 @@
     function onCategoryChange() {
         const cat = document.getElementById('add_rcpt_category')?.value || '';
         const purcTypeSelect = document.getElementById('add_rcpt_purchase_type');
-        if (!purcTypeSelect) return;
-        if (['machinery', 'subcontractor'].includes(cat)) {
-            purcTypeSelect.value = 'PUR_SR';
-        } else if (['material', 'fuel', 'equipment', 'spare_parts'].includes(cat)) {
-            purcTypeSelect.value = 'PUR_GD';
+        const taxTypeSelect = document.getElementById('add_rcpt_tax_type');
+        const noVatReasonSelect = document.getElementById('add_rcpt_no_vat_reason_code');
+        const noVatNoteInput = document.getElementById('add_rcpt_no_vat_reason_note');
+
+        if (cat === 'fuel') {
+            if (taxTypeSelect) {
+                taxTypeSelect.value = 'no_vat';
+                onTaxTypeChange();
+            }
+            if (purcTypeSelect) {
+                purcTypeSelect.value = 'PUR_EX';
+            }
+            if (noVatReasonSelect) {
+                noVatReasonSelect.value = 'exempt_item';
+            }
+            if (noVatNoteInput && !noVatNoteInput.value) {
+                noVatNoteInput.value = 'Retail pump fuel purchase (legally VAT-exempt under Ethiopian Proclamation)';
+            }
+        } else {
+            if (taxTypeSelect && taxTypeSelect.value === 'no_vat') {
+                taxTypeSelect.value = 'vat';
+                onTaxTypeChange();
+            }
+            if (purcTypeSelect) {
+                if (['machinery', 'subcontractor'].includes(cat)) {
+                    purcTypeSelect.value = 'PUR_SR';
+                } else {
+                    purcTypeSelect.value = 'PUR_GD';
+                }
+            }
         }
     }
 
@@ -3850,16 +3945,31 @@
                     whtVal = +(subtotalVal * 0.03).toFixed(2);
                 }
 
-                // Auto-set tax deduction type if VAT detected
+                // Check if fuel slip or fuel category
+                const currentCat = document.getElementById('add_rcpt_category')?.value;
+                const vendorLow = (data.vendor_name || '').toLowerCase();
+                const isFuel = currentCat === 'fuel' || vendorLow.includes('fuel') || vendorLow.includes('station') || vendorLow.includes('totalenergies') || vendorLow.includes('oil') || vendorLow.includes('noc') || vendorLow.includes('petroleum');
                 const taxTypeSelect = document.getElementById('add_rcpt_tax_type');
-                if (taxTypeSelect && vatVal > 0 && taxTypeSelect.value === 'withholding') {
-                    taxTypeSelect.value = 'vat';
-                }
 
-                // Auto-populate ERCA purchase type (Goods vs Services)
-                const ptSelect = document.getElementById('add_rcpt_purchase_type');
-                if (ptSelect && data.purchase_type) {
-                    ptSelect.value = (data.purchase_type === 'PUR_SR' || data.purchase_type === 4 || data.purchase_type === '4') ? 'PUR_SR' : 'PUR_GD';
+                if (isFuel) {
+                    if (document.getElementById('add_rcpt_category')) document.getElementById('add_rcpt_category').value = 'fuel';
+                    if (taxTypeSelect) {
+                        taxTypeSelect.value = 'no_vat';
+                    }
+                    onCategoryChange();
+                    subtotalVal = totalVal;
+                    vatVal = 0.00;
+                } else {
+                    // Auto-set tax deduction type if VAT detected
+                    if (taxTypeSelect && vatVal > 0 && taxTypeSelect.value === 'withholding') {
+                        taxTypeSelect.value = 'vat';
+                    }
+
+                    // Auto-populate ERCA purchase type (Goods vs Services)
+                    const ptSelect = document.getElementById('add_rcpt_purchase_type');
+                    if (ptSelect && data.purchase_type) {
+                        ptSelect.value = (data.purchase_type === 'PUR_SR' || data.purchase_type === 4 || data.purchase_type === '4') ? 'PUR_SR' : 'PUR_GD';
+                    }
                 }
 
                 // Automatically fill all amount fields in ERCA Purchase Type & Financials (Line 100)

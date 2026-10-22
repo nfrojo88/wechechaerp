@@ -222,25 +222,62 @@
                                     <strong class="d-block font-monospace text-dark">{{ $fuelRequest->fuel_station_tin ?: '—' }}</strong>
                                 </div>
                                 <div class="col-6">
+                                    <span class="text-muted">Fiscal Slip (FS #):</span>
+                                    <strong class="d-block font-monospace text-primary">{{ $fuelRequest->fs_no ?: '—' }}</strong>
+                                </div>
+                                <div class="col-6">
+                                    <span class="text-muted">MRC Number:</span>
+                                    <strong class="d-block font-monospace text-secondary">{{ $fuelRequest->mrc_no ?: '—' }}</strong>
+                                </div>
+                                <div class="col-6">
                                     <span class="text-muted">Actual Liters:</span>
                                     <strong class="d-block font-monospace text-dark">{{ number_format($fuelRequest->actual_liters, 2) }} L</strong>
                                 </div>
                                 <div class="col-6">
-                                    <span class="text-muted">Actual Cost:</span>
+                                    <span class="text-muted">Total Amount (ETB):</span>
                                     <strong class="d-block font-monospace text-success">ETB {{ number_format($fuelRequest->actual_amount, 2) }}</strong>
                                 </div>
                                 <div class="col-6">
-                                    <span class="text-muted">Post-Fueling Odometer:</span>
-                                    <strong class="d-block font-monospace text-primary">{{ number_format($fuelRequest->receipt_odometer_km) }} KM</strong>
+                                    <span class="text-muted">Tax Option:</span>
+                                    <div class="mt-0.5">
+                                        @if(($fuelRequest->tax_type ?? 'no_vat') === 'no_vat')
+                                            <span class="badge bg-warning-subtle text-dark border border-warning-subtle rounded-pill px-2 py-0.5" style="font-size:0.7rem;">
+                                                <i class="fa-solid fa-shield-halved text-warning me-1"></i>No VAT (ERCA Line 6)
+                                            </span>
+                                        @else
+                                            <span class="badge bg-info-subtle text-info border border-info-subtle rounded-pill px-2 py-0.5" style="font-size:0.7rem;">
+                                                <i class="fa-solid fa-percent me-1"></i>15% VAT Applicable
+                                            </span>
+                                        @endif
+                                    </div>
                                 </div>
+                                <div class="col-6">
+                                    <span class="text-muted">Post-Fueling Odometer:</span>
+                                    <strong class="d-block font-monospace text-primary">{{ $fuelRequest->receipt_odometer_km ? number_format($fuelRequest->receipt_odometer_km) . ' KM' : '—' }}</strong>
+                                </div>
+                                @if(($fuelRequest->tax_type ?? 'no_vat') === 'no_vat')
+                                    <div class="col-12 mt-1 p-2 bg-white rounded border border-warning border-opacity-25">
+                                        <span class="text-muted d-block text-xxs text-uppercase fw-bold">Reason for No VAT:</span>
+                                        <span class="text-dark fw-semibold d-inline-flex align-items-center gap-1">
+                                            <i class="fa-solid fa-circle-check text-success"></i>
+                                            {{ \App\Models\ExpenseHubVatDecision::NO_VAT_REASONS[$fuelRequest->no_vat_reason_code] ?? ($fuelRequest->no_vat_reason_code ?: 'Legally VAT-Exempt goods/services (Proclamation)') }}
+                                        </span>
+                                        @if($fuelRequest->no_vat_reason_note)
+                                            <small class="text-muted d-block mt-0.5" style="font-size:0.7rem;">{{ $fuelRequest->no_vat_reason_note }}</small>
+                                        @endif
+                                    </div>
+                                @endif
                                 @if($fuelRequest->km_per_liter)
                                     <div class="col-6">
                                         <span class="text-muted">Calculated Mileage:</span>
                                         <strong class="d-block font-monospace text-dark">{{ $fuelRequest->km_per_liter }} KM/L</strong>
                                     </div>
                                 @endif
-                                <div class="col-12 mt-2 pt-2 border-top text-muted" style="font-size:0.75rem;">
-                                    Verified &amp; closed on {{ $fuelRequest->closed_at?->format('d M Y, H:i') }} by {{ $fuelRequest->closedByUser?->name ?? 'System' }}.
+                                <div class="col-12 mt-2 pt-2 border-top text-muted d-flex justify-content-between align-items-center flex-wrap gap-1" style="font-size:0.75rem;">
+                                    <span>Verified &amp; closed on {{ $fuelRequest->closed_at?->format('d M Y, H:i') }} by {{ $fuelRequest->closedByUser?->name ?? 'System' }}.</span>
+                                    <a href="{{ route('finance.tax-deductions.index', ['tab' => 'vat']) }}" class="btn btn-xs btn-outline-primary rounded-pill px-2 py-0.5 text-xxs">
+                                        <i class="fa-solid fa-book-open me-1"></i>View in Tax Ledger
+                                    </a>
                                 </div>
                             </div>
                         </div>
@@ -259,23 +296,58 @@
                                 </div>
 
                                 <div class="col-sm-6">
-                                    <label class="form-label fw-semibold small">Gas Station Name</label>
-                                    <input type="text" name="fuel_station_name" placeholder="e.g. TotalEnergies, NOC, Oilibya" class="form-control form-control-sm">
+                                    <label class="form-label fw-semibold small">Total Amount (ETB) <span class="text-danger">*</span></label>
+                                    <input type="number" step="0.01" name="actual_amount" value="{{ $fuelRequest->estimated_amount }}" class="form-control form-control-sm font-monospace fw-bold text-success border-success" required>
                                 </div>
 
                                 <div class="col-sm-6">
-                                    <label class="form-label fw-semibold small">Station TIN</label>
-                                    <input type="text" name="fuel_station_tin" placeholder="e.g. 0001234567" class="form-control form-control-sm font-monospace">
-                                </div>
-
-                                <div class="col-sm-6">
-                                    <label class="form-label fw-semibold small">Actual Liters Pumped</label>
+                                    <label class="form-label fw-semibold small">Actual Liters Pumped <span class="text-danger">*</span></label>
                                     <input type="number" step="0.1" name="actual_liters" value="{{ $fuelRequest->liters_requested }}" class="form-control form-control-sm font-monospace" required>
                                 </div>
 
                                 <div class="col-sm-6">
-                                    <label class="form-label fw-semibold small">Actual Amount (ETB)</label>
-                                    <input type="number" step="0.01" name="actual_amount" value="{{ $fuelRequest->estimated_amount }}" class="form-control form-control-sm font-monospace" required>
+                                    <label class="form-label fw-semibold small">Fiscal Slip No. (FS #)</label>
+                                    <input type="text" name="fs_no" placeholder="e.g. FS00045892" class="form-control form-control-sm font-monospace text-uppercase">
+                                </div>
+
+                                <div class="col-sm-6">
+                                    <label class="form-label fw-semibold small">Machine Reg. Code (MRC)</label>
+                                    <input type="text" name="mrc_no" placeholder="e.g. CAS1029" class="form-control form-control-sm font-monospace text-uppercase">
+                                </div>
+
+                                <div class="col-sm-6">
+                                    <label class="form-label fw-semibold small">Seller / Station TIN</label>
+                                    <input type="text" name="fuel_station_tin" placeholder="e.g. 0001234567" class="form-control form-control-sm font-monospace">
+                                </div>
+
+                                <div class="col-sm-6">
+                                    <label class="form-label fw-semibold small">Gas Station Name</label>
+                                    <input type="text" name="fuel_station_name" placeholder="e.g. TotalEnergies, NOC, Oilibya" class="form-control form-control-sm">
+                                </div>
+
+                                {{-- TAX TREATMENT OPTION --}}
+                                <div class="col-sm-6">
+                                    <label class="form-label fw-semibold small">Tax Deduction Option <span class="text-danger">*</span></label>
+                                    <select name="tax_type" id="fuel_tax_type" class="form-select form-select-sm fw-semibold" onchange="toggleFuelTaxFields()">
+                                        <option value="no_vat" selected>No VAT / Tax Exempt (ERCA Line 6 - Retail Fuel)</option>
+                                        <option value="vat">15% VAT Applicable (Commercial/Industrial Slip)</option>
+                                    </select>
+                                </div>
+
+                                {{-- REASON FOR NO VAT --}}
+                                <div class="col-sm-6" id="fuel_no_vat_reason_group">
+                                    <label class="form-label fw-semibold small text-dark">Reason for No VAT <span class="text-danger">*</span></label>
+                                    <select name="no_vat_reason_code" id="fuel_no_vat_reason" class="form-select form-select-sm fw-semibold border-warning">
+                                        @foreach($reasons ?? \App\Models\ExpenseHubVatDecision::NO_VAT_REASONS as $rCode => $rLabel)
+                                            <option value="{{ $rCode }}" {{ $rCode === 'exempt_item' ? 'selected' : '' }}>{{ $rLabel }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+
+                                {{-- AUDIT MEMO / NOTES --}}
+                                <div class="col-12" id="fuel_no_vat_note_group">
+                                    <label class="form-label fw-semibold small">Audit Memo / Notes</label>
+                                    <input type="text" name="no_vat_reason_note" class="form-control form-control-sm" value="Retail fuel pump purchase (legally VAT-exempt under Ethiopian Proclamation)">
                                 </div>
 
                                 <div class="col-12">
@@ -286,11 +358,21 @@
 
                                 <div class="col-12 mt-3">
                                     <button type="submit" class="btn btn-warning text-dark btn-sm rounded-pill w-100 fw-bold shadow-sm">
-                                        <i class="fa-solid fa-receipt me-1"></i>Verify &amp; Close Fuel Request
+                                        <i class="fa-solid fa-receipt me-1"></i>Verify, Save to Tax Ledger &amp; Close
                                     </button>
                                 </div>
                             </div>
                         </form>
+
+                        <script>
+                            function toggleFuelTaxFields() {
+                                const taxType = document.getElementById('fuel_tax_type')?.value;
+                                const reasonGrp = document.getElementById('fuel_no_vat_reason_group');
+                                const noteGrp = document.getElementById('fuel_no_vat_note_group');
+                                if (reasonGrp) reasonGrp.style.display = (taxType === 'no_vat') ? 'block' : 'none';
+                                if (noteGrp) noteGrp.style.display = (taxType === 'no_vat') ? 'block' : 'none';
+                            }
+                        </script>
                     @endif
                 </div>
             </div>
