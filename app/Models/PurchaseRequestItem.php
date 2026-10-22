@@ -8,7 +8,7 @@ class PurchaseRequestItem extends Model
 {
     protected $fillable = [
         'purchase_request_id', 'product_id', 'quantity', 'purchased_quantity', 'received_quantity', 'unit',
-        'specifications', 'estimated_unit_cost', 'estimated_total', 'payment_method',
+        'specifications', 'estimated_unit_cost', 'payment_method',
         'proforma_invoice_id', 'supplier_id',
     ];
 
@@ -19,6 +19,25 @@ class PurchaseRequestItem extends Model
         'estimated_unit_cost' => 'decimal:2',
         'estimated_total'     => 'decimal:2',
     ];
+
+    protected static function booted()
+    {
+        static::saving(function ($model) {
+            // Unset generated column estimated_total before saving to prevent MySQL error 1906
+            unset($model->attributes['estimated_total']);
+        });
+    }
+
+    /**
+     * Accessor for estimated_total: returns stored value or computes dynamically.
+     */
+    public function getEstimatedTotalAttribute($value)
+    {
+        if ($value !== null && (float)$value > 0) {
+            return (float)$value;
+        }
+        return round((float)$this->quantity * (float)($this->estimated_unit_cost ?? 0), 2);
+    }
 
     public function purchaseRequest() { return $this->belongsTo(PurchaseRequest::class); }
     public function product()         { return $this->belongsTo(Product::class); }

@@ -261,7 +261,6 @@ class ProcurementLifecycleService
                     $lineTotal = round($cost * $effQty, 2);
                     $item->update([
                         'estimated_unit_cost' => $cost,
-                        'estimated_total'     => $lineTotal,
                     ]);
                     $totalCalculated += $lineTotal;
                 }
