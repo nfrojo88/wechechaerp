@@ -549,6 +549,7 @@ class OfficeSupplyRequestController extends Controller
             ]);
 
             // Deduct from bank account if set
+            $bankAccount = null;
             if ($officeRequest->bank_account_id && $finalAmount > 0) {
                 $bankAccount = BankAccount::find($officeRequest->bank_account_id);
                 if ($bankAccount) {
@@ -567,6 +568,19 @@ class OfficeSupplyRequestController extends Controller
                         'description'     => "Office Material Request #{$officeRequest->request_no}: {$officeRequest->office_purpose}",
                         'is_reconciled'   => true,
                     ]);
+                }
+            }
+
+            // Deduct from Chart of Account (COA)
+            $coaId = $request->input('coa_id')
+                ?: ($officeRequest->coa_id
+                ?: ($officeRequest->chart_of_account_id
+                ?: ($bankAccount?->coa_id ?? null)));
+
+            if ($coaId && $finalAmount > 0) {
+                $coa = \App\Models\ChartOfAccount::find($coaId);
+                if ($coa) {
+                    $coa->decrement('current_balance', $finalAmount);
                 }
             }
 

@@ -1173,6 +1173,7 @@ class ExpenseRequestController extends Controller
                 || str_contains($expenseRequest->category, 'Petty Cash Replenishment');
 
             // 2. Deduct disbursed amount from selected funding Bank Account
+            $bankAccount = null;
             if ($expenseRequest->bank_account_id) {
                 $bankAccount = BankAccount::find($expenseRequest->bank_account_id);
                 if ($bankAccount) {
@@ -1196,12 +1197,37 @@ class ExpenseRequestController extends Controller
                 }
             }
 
-            // 4. Deduct disbursed amount from Source Chart of Account if assigned (only if not petty cash target)
-            $coaId = $expenseRequest->chart_of_account_id ?? $expenseRequest->coa_id;
-            if ($coaId && !$expenseRequest->bank_account_id && !$isPettyCash) {
+            // 4. Deduct disbursed amount from Source Chart of Account (COA)
+            $coaId = $request->input('coa_id')
+                ?: ($request->input('chart_of_account_id')
+                ?: ($expenseRequest->chart_of_account_id
+                ?: ($expenseRequest->coa_id
+                ?: ($bankAccount?->coa_id ?? null))));
+
+            if ($coaId && !$isPettyCash) {
                 $coa = ChartOfAccount::find($coaId);
                 if ($coa) {
                     $coa->decrement('current_balance', $disbursedAmount);
+                }
+
+                if (!$expenseRequest->chart_of_account_id || !$expenseRequest->coa_id) {
+                    $expenseRequest->update([
+                        'chart_of_account_id' => $expenseRequest->chart_of_account_id ?: $coaId,
+                        'coa_id'              => $expenseRequest->coa_id ?: $coaId,
+                    ]);
+                }
+            } elseif (!$coaId && !$isPettyCash && !$expenseRequest->bank_account_id) {
+                // Fallback to active Petty Cash or Cash on Hand COA account
+                $fallbackCoa = ChartOfAccount::where('code', '1010')
+                    ->orWhere('name', 'like', '%Petty Cash%')
+                    ->orWhere('name', 'like', '%Cash%')
+                    ->first();
+                if ($fallbackCoa) {
+                    $fallbackCoa->decrement('current_balance', $disbursedAmount);
+                    $expenseRequest->update([
+                        'chart_of_account_id' => $fallbackCoa->id,
+                        'coa_id'              => $fallbackCoa->id,
+                    ]);
                 }
             }
 
@@ -1451,6 +1477,8 @@ class ExpenseRequestController extends Controller
 
             // Credit Source Account if different from petty cash account
             if ($sourceCoa && $sourceCoa->id !== $pettyAccount->id) {
+                $sourceCoa->decrement('current_balance', $disbursedAmount);
+
                 $isSourceAssetOrExpense = in_array($sourceCoa->type, ['asset', 'expense']);
                 JournalEntryLine::create([
                     'journal_entry_id' => $journalEntry->id,

@@ -1893,6 +1893,7 @@ class FinanceTaxReportController extends Controller
             }
 
             // If Paid Now with Bank Account, decrement balance & record transaction
+            $bankAccount = null;
             if ($payNow && $bankAccountId && $totalPayable > 0) {
                 $bankAccount = BankAccount::find($bankAccountId);
                 if ($bankAccount) {
@@ -1917,6 +1918,15 @@ class FinanceTaxReportController extends Controller
                         'description'      => "{$taxDesc} (Settlement #{$settlementNumber})",
                         'is_reconciled'    => true,
                     ]);
+                }
+            }
+
+            // Deduct from Chart of Account (COA) if applicable
+            $taxCoaId = $settlement->coa_id ?? ($bankAccount?->coa_id ?? null);
+            if ($payNow && $taxCoaId && $totalPayable > 0) {
+                $taxCoa = ChartOfAccount::find($taxCoaId);
+                if ($taxCoa) {
+                    $taxCoa->decrement('current_balance', $totalPayable);
                 }
             }
 
@@ -2024,6 +2034,7 @@ class FinanceTaxReportController extends Controller
             }
 
             // Deduct from bank account if applicable
+            $bankAccount = null;
             if ($bankAccountId && $settlement->total_tax_paid > 0) {
                 $bankAccount = BankAccount::find($bankAccountId);
                 if ($bankAccount) {
@@ -2048,6 +2059,15 @@ class FinanceTaxReportController extends Controller
                         'description'      => "{$taxDesc} (Settlement #{$settlement->settlement_number})",
                         'is_reconciled'    => true,
                     ]);
+                }
+            }
+
+            // Deduct from Chart of Account (COA) if applicable
+            $taxCoaId = $settlement->coa_id ?? ($bankAccount?->coa_id ?? null);
+            if ($taxCoaId && $settlement->total_tax_paid > 0) {
+                $taxCoa = ChartOfAccount::find($taxCoaId);
+                if ($taxCoa) {
+                    $taxCoa->decrement('current_balance', $settlement->total_tax_paid);
                 }
             }
 

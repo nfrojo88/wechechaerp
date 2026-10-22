@@ -806,11 +806,23 @@
             <div class="modal-content shadow border-0">
                 <form method="POST" action="{{ route('expense-requests.mark-paid', $req->id) }}" enctype="multipart/form-data">
                     @csrf
+                    <input type="hidden" name="coa_id" value="{{ $req->chart_of_account_id ?? $req->coa_id }}">
                     <div class="modal-header bg-success bg-gradient text-white">
                         <h5 class="modal-title fw-bold"><i class="fa-solid fa-money-bill-wave me-2"></i>Process Payment — Request #{{ $req->request_number }}</h5>
                         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-body p-4">
+                        @if(!$req->chart_of_account_id && !$req->coa_id)
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold text-dark"><i class="fa-solid fa-sitemap text-primary me-1"></i>Select Funding Account (COA) <span class="text-danger">*</span></label>
+                                <select name="coa_id" class="form-select form-select-sm" required>
+                                    <option value="">-- Choose Account from COA --</option>
+                                    @foreach($coaBankAccounts ?? ($chartOfAccounts ?? []) as $coaItem)
+                                        <option value="{{ $coaItem->id }}">[{{ $coaItem->code }}] {{ $coaItem->name }} — ETB {{ number_format($coaItem->current_balance ?? 0, 2) }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        @endif
                         <div class="bg-light p-3 rounded-3 mb-3 border">
                             <div class="row g-2 small">
                                 <div class="col-md-6">

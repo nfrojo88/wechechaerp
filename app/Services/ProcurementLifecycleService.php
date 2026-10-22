@@ -891,7 +891,22 @@ class ProcurementLifecycleService
             ? (float)$taxData['net_amount']
             : (float)($payment ? $payment->amount : 0);
 
+        $coaAccountId = $payment?->coa_account_id
+            ?? $pr->expenseRequest?->chart_of_account_id
+            ?? $pr->expenseRequest?->coa_id
+            ?? null;
+
+        if (!$coaAccountId) {
+            $coaAccountId = \App\Models\ChartOfAccount::where('code', '1010')
+                ->orWhere('name', 'like', '%Cash%')
+                ->value('id');
+        }
+
         if ($payment) {
+            if (!$payment->coa_account_id && $coaAccountId) {
+                $payment->update(['coa_account_id' => $coaAccountId]);
+            }
+
             $updateData = [
                 'status'  => 'paid',
                 'paid_by' => Auth::id(),
@@ -914,7 +929,7 @@ class ProcurementLifecycleService
             $payment->update($updateData);
 
             // Create journal entry: Debit → Procurement Expense; Credit → Cash/Bank COA
-            $this->createJournalEntry($pr, $payment->coa_account_id, $disbursedAmount, 'cash', $taxData);
+            $this->createJournalEntry($pr, $coaAccountId ? (int)$coaAccountId : null, $disbursedAmount, 'cash', $taxData);
         }
 
         // Update Expense record to approved
@@ -1483,8 +1498,12 @@ class ProcurementLifecycleService
      * Debit: Procurement Expense account (passed coaAccountId)
      * Credit: Cash/Payable (same COA — Finance Head decides)
      */
-    private function createJournalEntry(PurchaseRequest $pr, int $coaAccountId, float $amount, string $method, array $taxData = []): void
+    private function createJournalEntry(PurchaseRequest $pr, ?int $coaAccountId, float $amount, string $method, array $taxData = []): void
     {
+        if (!$coaAccountId) {
+            return;
+        }
+
         try {
             DB::transaction(function () use ($pr, $coaAccountId, $amount, $method, $taxData) {
                 $entryNo = 'PROC-' . date('Ymd') . '-' . str_pad(JournalEntry::count() + 1, 5, '0', STR_PAD_LEFT);

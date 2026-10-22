@@ -570,20 +570,23 @@ class LetterController extends Controller
                 }
 
                 // Resolve Chart of Account and deduct balance
+                $fundingCoa = null;
                 if (!empty($validated['chart_of_account_id'])) {
-                    $coa = \App\Models\ChartOfAccount::find($validated['chart_of_account_id']);
-                    if ($coa) {
-                        $paidFromAccountName = "{$coa->code} - {$coa->name}";
-                        $coa->decrement('current_balance', $disbursedAmount);
-                    }
-                } elseif (!empty($validated['bank_account_id'])) {
-                    $bankAcc = \App\Models\BankAccount::with('chartOfAccount')->find($validated['bank_account_id']);
+                    $fundingCoa = \App\Models\ChartOfAccount::find($validated['chart_of_account_id']);
+                }
+                if (!empty($validated['bank_account_id'])) {
+                    $bankAcc = \App\Models\BankAccount::find($validated['bank_account_id']);
                     if ($bankAcc) {
                         $paidFromAccountName = "{$bankAcc->bank_name} ({$bankAcc->account_number})";
-                        if ($bankAcc->chartOfAccount) {
-                            $bankAcc->chartOfAccount->decrement('current_balance', $disbursedAmount);
+                        $bankAcc->decrement('current_balance', $disbursedAmount);
+                        if (!$fundingCoa && $bankAcc->coa_id) {
+                            $fundingCoa = \App\Models\ChartOfAccount::find($bankAcc->coa_id);
                         }
                     }
+                }
+                if ($fundingCoa) {
+                    $paidFromAccountName = $paidFromAccountName ?? "{$fundingCoa->code} - {$fundingCoa->name}";
+                    $fundingCoa->decrement('current_balance', $disbursedAmount);
                 }
 
                 // 2. Create official ExpenseRequest record (shows in "Ask Money", Paid Expense history, and VAT Report)

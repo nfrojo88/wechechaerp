@@ -1582,6 +1582,7 @@
                 <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
                     <form method="POST" action="{{ route('expense-requests.mark-paid', $req->id) }}" id="payForm{{ $req->id }}" enctype="multipart/form-data">
                         @csrf
+                        <input type="hidden" name="coa_id" value="{{ $req->chart_of_account_id ?? $req->coa_id }}">
 
                         <div class="modal-header bg-success text-white border-0 py-3 px-4">
                             <div class="d-flex align-items-center gap-2">
@@ -1717,6 +1718,18 @@
                                             </div>
                                         </div>
                                     </div>
+                                </div>
+                            @endif
+
+                            @if(!$req->chart_of_account_id && !$req->coa_id)
+                                <div class="mb-3">
+                                    <label class="form-label small fw-bold text-dark"><i class="fa-solid fa-sitemap text-primary me-1"></i>Select Paying COA Account <span class="text-danger">*</span></label>
+                                    <select name="coa_id" class="form-select form-select-sm" required>
+                                        <option value="">-- Choose Account from COA --</option>
+                                        @foreach($chartOfAccounts ?? [] as $coaItem)
+                                            <option value="{{ $coaItem->id }}">[{{ $coaItem->code }}] {{ $coaItem->name }} — ETB {{ number_format($coaItem->current_balance ?? 0, 2) }}</option>
+                                        @endforeach
+                                    </select>
                                 </div>
                             @endif
 
@@ -2260,6 +2273,7 @@
             <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
                 <form method="POST" action="{{ route('office-requests.mark-paid', $item->id_raw) }}" enctype="multipart/form-data">
                     @csrf
+                    <input type="hidden" name="coa_id" value="{{ $officeReq->coa_id ?? ($officeReq->chart_of_account_id ?? '') }}">
                     <div class="modal-header bg-success text-white border-0 py-3 px-4">
                         <div class="d-flex align-items-center gap-2">
                             <span class="badge bg-white bg-opacity-20 text-white p-2 rounded-3 fs-6">
