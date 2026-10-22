@@ -243,27 +243,32 @@ class ProcurementLifecycleService
     // STAGE 4 — Procurement Team Sourcing
     // ═══════════════════════════════════════════════════════════════════
 
-    public function submitDirectBuy(PurchaseRequest $pr, float $amount, string $notes = null, array $itemPrices = []): void
+    public function submitDirectBuy(PurchaseRequest $pr, float $amount, string $notes = null, array $itemPrices = [], bool $includeVat = false): void
     {
         $from = $pr->status;
 
         // If individual item prices are supplied, update each PR item and calculate total
         if (!empty($itemPrices)) {
-            $totalCalculated = 0;
+            $totalCalculated = 0.0;
             foreach ($itemPrices as $itemId => $unitCost) {
                 $item = $pr->items()->find($itemId);
                 if ($item) {
                     $cost = (float)$unitCost;
+                    $effQty = method_exists($item, 'getRemainingQty') ? $item->getRemainingQty() : (float)$item->quantity;
+                    if ($effQty <= 0 && (float)$item->quantity > 0 && (float)($item->purchased_quantity ?? 0) == 0) {
+                        $effQty = (float)$item->quantity;
+                    }
+                    $lineTotal = round($cost * $effQty, 2);
                     $item->update([
                         'estimated_unit_cost' => $cost,
-                        'estimated_total'     => round($cost * (float)$item->quantity, 2),
+                        'estimated_total'     => $lineTotal,
                     ]);
-                    $totalCalculated += ($cost * (float)$item->quantity);
+                    $totalCalculated += $lineTotal;
                 }
             }
-            if ($amount <= 0 && $totalCalculated > 0) {
-                $amount = round($totalCalculated, 2);
-            }
+            $calculatedWithVat = $includeVat ? round($totalCalculated * 1.15, 2) : round($totalCalculated, 2);
+            // When individual item prices are supplied, the total direct buy amount is the exact calculated items sum (with VAT if selected)
+            $amount = $calculatedWithVat;
         }
 
         $targetRole = $this->resolveOwnerRole('purchase_manager', $pr);

@@ -429,38 +429,104 @@
                                     <div class="text-muted">{{ $purchaseRequest->procurement_team_notes }}</div>
                                 </div>
                             @endif
-                            <form action="{{ route('purchase-requests.submit-direct-buy', $purchaseRequest) }}" method="POST">
+                            @php
+                                $initialDirectItemsSum = (float)$purchaseRequest->items->sum(function($itm) {
+                                    $u = (float)($itm->estimated_unit_cost ?? 0);
+                                    $q = method_exists($itm, 'getRemainingQty') ? $itm->getRemainingQty() : (float)$itm->quantity;
+                                    if ($q <= 0 && (float)$itm->quantity > 0 && (float)($itm->purchased_quantity ?? 0) == 0) {
+                                        $q = (float)$itm->quantity;
+                                    }
+                                    return $q * $u;
+                                });
+                                $initialDirectTotal = (float)($purchaseRequest->direct_buy_amount ?? 0);
+                                if ($initialDirectTotal <= 0) {
+                                    $initialDirectTotal = $initialDirectItemsSum;
+                                }
+                            @endphp
+                            <form action="{{ route('purchase-requests.submit-direct-buy', $purchaseRequest) }}" method="POST" id="directBuyPricingForm">
                                 @csrf
-                                <div class="bg-light p-2 rounded border mb-3" style="max-height: 250px; overflow-y: auto;">
+                                <div class="bg-light p-2 rounded border mb-3" style="max-height: 280px; overflow-y: auto;">
                                     @foreach($purchaseRequest->items as $itm)
+                                    @php
+                                        $effQty = method_exists($itm, 'getRemainingQty') ? $itm->getRemainingQty() : (float)$itm->quantity;
+                                        if ($effQty <= 0 && (float)$itm->quantity > 0 && (float)($itm->purchased_quantity ?? 0) == 0) {
+                                            $effQty = (float)$itm->quantity;
+                                        }
+                                        $uCost = (float)($itm->estimated_unit_cost ?? 0);
+                                        $lineTotal = round($effQty * $uCost, 2);
+                                        $unitLabel = $itm->unit ?? ($itm->product?->unit ?? 'pcs');
+                                    @endphp
                                     <div class="mb-2 pb-2 border-bottom">
                                         <div class="d-flex justify-content-between align-items-center mb-1">
                                             <span class="small fw-bold text-dark">{{ $itm->product?->name ?? 'Item #' . $itm->product_id }}</span>
-                                            <span class="badge bg-secondary">{{ (float)$itm->quantity }} {{ $itm->unit }}</span>
+                                            <span class="badge bg-secondary">{{ (float)$effQty }} {{ $unitLabel }}</span>
                                         </div>
                                         <div class="input-group input-group-sm">
                                             <span class="input-group-text">Unit Price (ETB)</span>
                                             <input type="number" step="0.01" min="0" 
                                                    name="item_prices[{{ $itm->id }}]" 
-                                                   value="{{ $itm->estimated_unit_cost > 0 ? (float)$itm->estimated_unit_cost : '' }}" 
-                                                   class="form-control form-control-sm direct-item-cost" 
-                                                   data-qty="{{ (float)$itm->quantity }}"
+                                                   id="direct_item_price_{{ $itm->id }}"
+                                                   value="{{ $uCost > 0 ? (float)$uCost : '' }}" 
+                                                   class="form-control form-control-sm direct-item-cost fw-semibold text-dark" 
+                                                   data-item-id="{{ $itm->id }}"
+                                                   data-qty="{{ (float)$effQty }}"
                                                    oninput="recalculateDirectTotal()"
                                                    placeholder="0.00" required>
+                                        </div>
+                                        <div class="d-flex justify-content-between align-items-center mt-1 px-1">
+                                            <span class="text-muted" style="font-size: 11px;">Line Total:</span>
+                                            <span class="fw-bold text-success font-monospace" id="directLineTotal_{{ $itm->id }}" style="font-size: 12px;">
+                                                {{ number_format($lineTotal, 2) }} ETB
+                                            </span>
                                         </div>
                                     </div>
                                     @endforeach
                                 </div>
 
-                                <div class="mb-2">
-                                    <label class="form-label small fw-bold text-uppercase">Total Direct Purchase Amount (ETB)</label>
-                                    <input type="number" step="0.01" name="amount" id="directTotalAmountInput" class="form-control form-control-sm fw-bold bg-white" required placeholder="0.00" value="{{ $purchaseRequest->direct_buy_amount > 0 ? (float)$purchaseRequest->direct_buy_amount : (float)$purchaseRequest->estimated_total }}">
+                                {{-- Calculations Summary Card --}}
+                                <div class="card border border-success border-opacity-25 bg-white mb-3 shadow-xs">
+                                    <div class="card-body p-2">
+                                        <div class="d-flex justify-content-between align-items-center mb-1">
+                                            <span class="small text-muted fw-bold text-uppercase" style="font-size: 11px;">Items Subtotal:</span>
+                                            <span class="fw-bold text-dark font-monospace" id="directItemsSubtotalDisplay">
+                                                {{ number_format($initialDirectItemsSum, 2) }} ETB
+                                            </span>
+                                        </div>
+
+                                        {{-- 15% VAT Option --}}
+                                        <div class="d-flex justify-content-between align-items-center py-1 border-top border-bottom my-1">
+                                            <div class="form-check form-switch mb-0">
+                                                <input class="form-check-input cursor-pointer" type="checkbox" id="directVatToggle" name="include_vat" value="1" onchange="recalculateDirectTotal()">
+                                                <label class="form-check-label small fw-bold text-dark cursor-pointer" for="directVatToggle" style="font-size: 12px;">
+                                                    Add 15% VAT
+                                                </label>
+                                            </div>
+                                            <span class="small font-monospace text-muted" id="directVatAmountDisplay">+0.00 ETB</span>
+                                        </div>
+
+                                        <div class="d-flex justify-content-between align-items-center pt-1 mb-1">
+                                            <label class="form-label small fw-bold text-uppercase text-dark mb-0" style="font-size: 11px;">
+                                                Total Direct Purchase Amount (ETB)
+                                            </label>
+                                            <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none text-primary" onclick="syncDirectTotalWithItems()" title="Recalculate exact items total">
+                                                <i class="fas fa-rotate me-1"></i>Sync
+                                            </button>
+                                        </div>
+                                        <div class="input-group input-group-sm">
+                                            <span class="input-group-text fw-bold bg-light">ETB</span>
+                                            <input type="number" step="0.01" min="0" name="amount" id="directTotalAmountInput" 
+                                                   class="form-control form-control-sm fw-bold bg-white text-success fs-6 font-monospace" 
+                                                   required placeholder="0.00" 
+                                                   value="{{ $initialDirectTotal > 0 ? number_format($initialDirectTotal, 2, '.', '') : '0.00' }}">
+                                        </div>
+                                    </div>
                                 </div>
+
                                 <div class="mb-3">
                                     <label class="form-label small fw-bold text-uppercase">Procurement Notes</label>
                                     <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="Add pricing notes or remarks..."></textarea>
                                 </div>
-                                <button class="btn btn-success btn-sm w-100 fw-bold">
+                                <button class="btn btn-success btn-sm w-100 fw-bold shadow-sm">
                                     <i class="fas fa-check-circle me-1"></i> Submit Material Prices
                                 </button>
                                 <div class="mt-2 text-center pt-2 border-top">
@@ -3323,9 +3389,38 @@
                         </table>
                     </div>
 
-                    <div class="mb-3">
-                        <label class="form-label small fw-bold text-uppercase">Total Amount for Selected Items (ETB)</label>
-                        <input type="number" step="0.01" name="amount" id="procTeamDirectBuyTotalAmount" class="form-control fw-bold bg-white" required placeholder="0.00">
+                    {{-- Modal Calculations Summary Card --}}
+                    <div class="card border border-success border-opacity-25 bg-white mb-3 shadow-xs">
+                        <div class="card-body p-2">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span class="small text-muted fw-bold text-uppercase" style="font-size: 11px;">Selected Items Subtotal:</span>
+                                <span class="fw-bold text-dark font-monospace" id="procTeamDirectBuySubtotalDisplay">0.00 ETB</span>
+                            </div>
+
+                            {{-- 15% VAT Option --}}
+                            <div class="d-flex justify-content-between align-items-center py-1 border-top border-bottom my-1">
+                                <div class="form-check form-switch mb-0">
+                                    <input class="form-check-input cursor-pointer" type="checkbox" id="procTeamDirectBuyVatToggle" name="include_vat" value="1" onchange="recalculateProcTeamDirectBuyTotal()">
+                                    <label class="form-check-label small fw-bold text-dark cursor-pointer" for="procTeamDirectBuyVatToggle" style="font-size: 12px;">
+                                        Add 15% VAT
+                                    </label>
+                                </div>
+                                <span class="small font-monospace text-muted" id="procTeamDirectBuyVatDisplay">+0.00 ETB</span>
+                            </div>
+
+                            <div class="d-flex justify-content-between align-items-center pt-1 mb-1">
+                                <label class="form-label small fw-bold text-uppercase text-dark mb-0" style="font-size: 11px;">
+                                    Total Amount for Selected Items (ETB)
+                                </label>
+                                <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none text-primary" onclick="recalculateProcTeamDirectBuyTotal()" title="Recalculate exact total">
+                                    <i class="fas fa-rotate me-1"></i>Sync
+                                </button>
+                            </div>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text fw-bold bg-light">ETB</span>
+                                <input type="number" step="0.01" min="0" name="amount" id="procTeamDirectBuyTotalAmount" class="form-control fw-bold bg-white text-success fs-6 font-monospace" required placeholder="0.00">
+                            </div>
+                        </div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label small fw-bold text-uppercase">Procurement Notes / Remarks</label>
@@ -4651,22 +4746,37 @@ function openProcTeamSelectiveDirectBuyModal() {
 }
 
 function recalculateProcTeamDirectBuyTotal() {
-    let total = 0;
+    let subtotal = 0;
     document.querySelectorAll('.proc-team-direct-item-cost').forEach(input => {
         const val = parseFloat(input.value) || 0;
         const qty = parseFloat(input.dataset.qty) || 0;
-        const lineTot = val * qty;
-        total += lineTot;
+        const lineTot = Math.round((val * qty) * 100) / 100;
+        subtotal += lineTot;
 
         const lineSpan = document.getElementById('procTeamLineTotal_' + input.dataset.itemId);
         if (lineSpan) {
-            lineSpan.textContent = Number(lineTot.toFixed(2)).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' ETB';
+            lineSpan.textContent = Number(lineTot).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' ETB';
         }
     });
 
+    subtotal = Math.round(subtotal * 100) / 100;
+    const subtotalDisplay = document.getElementById('procTeamDirectBuySubtotalDisplay');
+    if (subtotalDisplay) {
+        subtotalDisplay.textContent = Number(subtotal).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' ETB';
+    }
+
+    const vatToggle = document.getElementById('procTeamDirectBuyVatToggle');
+    const isVat = vatToggle ? vatToggle.checked : false;
+    const vatAmount = isVat ? Math.round((subtotal * 0.15) * 100) / 100 : 0;
+    const vatDisplay = document.getElementById('procTeamDirectBuyVatDisplay');
+    if (vatDisplay) {
+        vatDisplay.textContent = '+' + Number(vatAmount).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' ETB';
+    }
+
+    const grandTotal = Math.round((subtotal + vatAmount) * 100) / 100;
     const totalInput = document.getElementById('procTeamDirectBuyTotalAmount');
     if (totalInput) {
-        totalInput.value = total.toFixed(2);
+        totalInput.value = grandTotal > 0 ? grandTotal.toFixed(2) : (subtotal > 0 ? subtotal.toFixed(2) : '0.00');
     }
 }
 
@@ -4780,16 +4890,47 @@ function toggleSplitRowFields(selectEl, index) {
 }
 
 function recalculateDirectTotal() {
-    let total = 0;
+    let subtotal = 0;
     document.querySelectorAll('.direct-item-cost').forEach(input => {
         const val = parseFloat(input.value) || 0;
         const qty = parseFloat(input.dataset.qty) || 0;
-        total += (val * qty);
+        const lineTot = Math.round((val * qty) * 100) / 100;
+        subtotal += lineTot;
+
+        const itemId = input.dataset.itemId;
+        if (itemId) {
+            const lineSpan = document.getElementById('directLineTotal_' + itemId);
+            if (lineSpan) {
+                lineSpan.textContent = Number(lineTot).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' ETB';
+            }
+        }
     });
-    const totalInput = document.getElementById('directTotalAmountInput');
-    if (totalInput && total > 0) {
-        totalInput.value = total.toFixed(2);
+
+    subtotal = Math.round(subtotal * 100) / 100;
+
+    const subtotalDisplay = document.getElementById('directItemsSubtotalDisplay');
+    if (subtotalDisplay) {
+        subtotalDisplay.textContent = Number(subtotal).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' ETB';
     }
+
+    const vatToggle = document.getElementById('directVatToggle');
+    const isVat = vatToggle ? vatToggle.checked : false;
+    const vatAmount = isVat ? Math.round((subtotal * 0.15) * 100) / 100 : 0;
+
+    const vatDisplay = document.getElementById('directVatAmountDisplay');
+    if (vatDisplay) {
+        vatDisplay.textContent = '+' + Number(vatAmount).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' ETB';
+    }
+
+    const grandTotal = Math.round((subtotal + vatAmount) * 100) / 100;
+    const totalInput = document.getElementById('directTotalAmountInput');
+    if (totalInput) {
+        totalInput.value = grandTotal > 0 ? grandTotal.toFixed(2) : (subtotal > 0 ? subtotal.toFixed(2) : '0.00');
+    }
+}
+
+function syncDirectTotalWithItems() {
+    recalculateDirectTotal();
 }
 
 function recalculateProformaModalTotal() {
@@ -5113,6 +5254,25 @@ function submitQuickSupplier() {
         if (errorDiv) errorDiv.innerText = 'Failed to save supplier. Please check fields and try again.';
     });
 }
+
+// Initialize Direct Buy live calculations on page load and bind responsive input events
+document.addEventListener('DOMContentLoaded', function () {
+    if (document.querySelector('.direct-item-cost')) {
+        recalculateDirectTotal();
+        document.querySelectorAll('.direct-item-cost').forEach(input => {
+            input.addEventListener('change', recalculateDirectTotal);
+            input.addEventListener('keyup', recalculateDirectTotal);
+        });
+    }
+
+    // When switching tabs to Direct Buy, ensure recalculation
+    const directTabBtn = document.querySelector('button[data-bs-target="#tabDirect"]');
+    if (directTabBtn) {
+        directTabBtn.addEventListener('shown.bs.tab', function () {
+            recalculateDirectTotal();
+        });
+    }
+});
 </script>
 
 @if($isGlobalAdmin)

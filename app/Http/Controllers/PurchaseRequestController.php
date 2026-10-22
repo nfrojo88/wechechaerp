@@ -1232,11 +1232,12 @@ class PurchaseRequestController extends Controller
         $method = $request->input('sourcing_method', $purchaseRequest->sourcing_method ?: 'direct_buy');
         $itemPrices = $request->input('item_prices', []);
         $amount = (float)($request->input('amount', 0));
+        $includeVat = $request->boolean('include_vat');
 
         // If all items selected, no split needed: submit directly
         if (count($itemIds) >= $allItemsCount) {
             if ($method === 'direct_buy') {
-                $this->lifecycle->submitDirectBuy($purchaseRequest, $amount, $request->notes, $itemPrices);
+                $this->lifecycle->submitDirectBuy($purchaseRequest, $amount, $request->notes, $itemPrices, $includeVat);
                 return back()->with('success', 'Direct buy material pricing submitted for all items. Awaiting marketing review.');
             } else {
                 $this->lifecycle->submitProformas($purchaseRequest, $request->notes);
@@ -1245,7 +1246,7 @@ class PurchaseRequestController extends Controller
         }
 
         // Subset selected: Split into new PR and advance the selected items
-        return DB::transaction(function () use ($purchaseRequest, $itemIds, $method, $request, $itemPrices, $amount) {
+        return DB::transaction(function () use ($purchaseRequest, $itemIds, $method, $request, $itemPrices, $amount, $includeVat) {
             $newPrNo = PurchaseRequest::generatePrNo();
 
             $newPr = PurchaseRequest::create([
@@ -1284,7 +1285,7 @@ class PurchaseRequestController extends Controller
 
             // Submit the new PR forward
             if ($method === 'direct_buy') {
-                $this->lifecycle->submitDirectBuy($newPr, $amount, $request->notes, $itemPrices);
+                $this->lifecycle->submitDirectBuy($newPr, $amount, $request->notes, $itemPrices, $includeVat);
             } else {
                 $this->lifecycle->submitProformas($newPr, $request->notes);
             }
@@ -1402,13 +1403,15 @@ class PurchaseRequestController extends Controller
             'item_prices'   => 'nullable|array',
             'item_prices.*' => 'nullable|numeric|min:0',
             'amount'        => 'nullable|numeric|min:0',
+            'include_vat'   => 'nullable|boolean',
             'notes'         => 'nullable|string',
         ]);
 
         $itemPrices = $request->input('item_prices', []);
         $amount = (float)($request->input('amount', 0));
+        $includeVat = $request->boolean('include_vat');
 
-        $this->lifecycle->submitDirectBuy($purchaseRequest, $amount, $request->notes, $itemPrices);
+        $this->lifecycle->submitDirectBuy($purchaseRequest, $amount, $request->notes, $itemPrices, $includeVat);
         return back()->with('success', 'Direct buy material pricing submitted. Awaiting marketing review.');
     }
 
