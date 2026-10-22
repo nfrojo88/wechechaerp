@@ -19,6 +19,7 @@ use App\Services\ReceiptOcrService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class ExpenseRequestController extends Controller
@@ -149,6 +150,8 @@ class ExpenseRequestController extends Controller
                     }
                 });
             }
+
+            \App\Http\Controllers\VehicleFuelRequestController::purgeTargetFuelRequest('EXP-FUEL-2026-0273');
         } catch (\Throwable $e) {
             Log::error('Expense table auto-heal error: ' . $e->getMessage());
         }
@@ -1781,5 +1784,93 @@ class ExpenseRequestController extends Controller
 
             return back()->with('error', 'Error attaching receipt: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Delete an expense request and linked fuel request, receipts, and VAT decisions.
+     */
+    public function destroy(ExpenseRequest $expenseRequest)
+    {
+        $this->ensureTableExists();
+        $user = auth()->user();
+        if (!$user) {
+            abort(401);
+        }
+
+        $userRoleNames = strtolower(implode(' ', $user->getRoleNames()->toArray()));
+        $isAdmin = $user->hasAnyRole(['admin', 'global_admin', 'gm', 'general_service']) || str_contains($userRoleNames, 'admin');
+        $isOwnerPending = ($expenseRequest->user_id === $user->id) && in_array($expenseRequest->status, ['Pending (HR Review)', 'Pending (GM Review)', 'draft']);
+
+        if (!$isAdmin && !$isOwnerPending) {
+            abort(403, 'Unauthorized to delete this expense request.');
+        }
+
+        $requestNum = $expenseRequest->request_number;
+
+        DB::transaction(function () use ($expenseRequest) {
+            $expId = $expenseRequest->id;
+
+            // Delete linked vehicle fuel request if any
+            if (Schema::hasTable('vehicle_fuel_requests')) {
+                DB::table('vehicle_fuel_requests')->where('expense_request_id', $expId)->delete();
+            }
+
+            // Delete linked receipts and items
+            if (Schema::hasTable('receipts')) {
+                $receipts = DB::table('receipts')
+                    ->where(function ($q) use ($expId) {
+                        $q->where('purchasable_id', $expId)
+                          ->where(function ($c) {
+                              $c->where('purchasable_type', 'like', '%ExpenseRequest%')
+                                ->orWhere('purchasable_type', 'expense_request');
+                          });
+                    })
+                    ->get();
+
+                $receiptIds = $receipts->pluck('id')->toArray();
+                if (!empty($receiptIds) && Schema::hasTable('receipt_items')) {
+                    DB::table('receipt_items')->whereIn('receipt_id', $receiptIds)->delete();
+                }
+                if (!empty($receiptIds)) {
+                    DB::table('receipts')->whereIn('id', $receiptIds)->delete();
+                }
+            }
+
+            // Delete linked expense hub decisions
+            if (Schema::hasTable('expense_hub_vat_decisions')) {
+                $decisions = DB::table('expense_hub_vat_decisions')
+                    ->where('source_type', 'expense_request')
+                    ->where('source_id', $expId)
+                    ->get();
+                $decisionIds = $decisions->pluck('id')->toArray();
+
+                if (!empty($decisionIds) && Schema::hasTable('expense_hub_vat_audit_logs')) {
+                    DB::table('expense_hub_vat_audit_logs')->whereIn('decision_id', $decisionIds)->delete();
+                }
+                if (!empty($decisionIds)) {
+                    DB::table('expense_hub_vat_decisions')->whereIn('id', $decisionIds)->delete();
+                }
+            }
+
+            // Clean up foreign keys in letters or credit_store_payments
+            if (Schema::hasTable('letters') && Schema::hasColumn('letters', 'expense_request_id')) {
+                DB::table('letters')->where('expense_request_id', $expId)->update(['expense_request_id' => null]);
+            }
+            if (Schema::hasTable('credit_store_payments') && Schema::hasColumn('credit_store_payments', 'expense_request_id')) {
+                DB::table('credit_store_payments')->where('expense_request_id', $expId)->update(['expense_request_id' => null]);
+            }
+
+            // Force delete
+            $expenseRequest->forceDelete();
+        });
+
+        if (request()->wantsJson() || request()->ajax()) {
+            return response()->json([
+                'success' => true,
+                'message' => "Expense request {$requestNum} has been deleted successfully."
+            ]);
+        }
+
+        return redirect()->route('expense-requests.index')->with('success', "Expense request {$requestNum} has been deleted successfully.");
     }
 }

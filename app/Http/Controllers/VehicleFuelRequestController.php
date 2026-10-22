@@ -13,6 +13,8 @@ use App\Services\VehicleFuelService;
 use App\Services\VehicleKmService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 
 class VehicleFuelRequestController extends Controller
@@ -58,7 +60,177 @@ class VehicleFuelRequestController extends Controller
                     }
                 });
             }
+
+            self::purgeTargetFuelRequest('EXP-FUEL-2026-0273');
         } catch (\Throwable $e) {}
+    }
+
+    /**
+     * Permanently purge target fuel / expense request and its linked models.
+     */
+    public static function purgeTargetFuelRequest(string $targetRef = 'EXP-FUEL-2026-0273'): void
+    {
+        try {
+            $targetRef = trim($targetRef);
+            if (empty($targetRef)) {
+                return;
+            }
+
+            // 1. Locate ExpenseRequest(s)
+            $expenseRequestIds = [];
+            if (Schema::hasTable('expense_requests')) {
+                $expenseRequests = DB::table('expense_requests')
+                    ->where(function ($q) use ($targetRef) {
+                        $q->where('request_number', $targetRef)
+                          ->orWhereRaw('TRIM(request_number) = ?', [$targetRef])
+                          ->orWhere('request_number', 'like', "%{$targetRef}%");
+                    })
+                    ->get();
+
+                foreach ($expenseRequests as $exp) {
+                    $expenseRequestIds[] = $exp->id;
+                }
+            }
+
+            // 2. Locate linked VehicleFuelRequest(s)
+            $fuelRequestIds = [];
+            if (Schema::hasTable('vehicle_fuel_requests')) {
+                $fuelQuery = DB::table('vehicle_fuel_requests');
+                if (!empty($expenseRequestIds)) {
+                    $fuelQuery->where(function ($q) use ($expenseRequestIds, $targetRef) {
+                        $q->whereIn('expense_request_id', $expenseRequestIds)
+                          ->orWhere('reason', 'like', "%{$targetRef}%")
+                          ->orWhere('request_no', 'like', "%{$targetRef}%");
+                    });
+                } else {
+                    $fuelQuery->where(function ($q) use ($targetRef) {
+                        $q->where('reason', 'like', "%{$targetRef}%")
+                          ->orWhere('request_no', 'like', "%{$targetRef}%");
+                    });
+                }
+                $fuelRequests = $fuelQuery->get();
+                foreach ($fuelRequests as $fr) {
+                    $fuelRequestIds[] = $fr->id;
+                }
+            }
+
+            if (empty($expenseRequestIds) && empty($fuelRequestIds)) {
+                return;
+            }
+
+            // 3. Purge linked Receipts and ReceiptItems
+            if (Schema::hasTable('receipts')) {
+                $receiptQuery = DB::table('receipts');
+                $receiptQuery->where(function ($q) use ($expenseRequestIds, $fuelRequestIds, $targetRef) {
+                    $hasClause = false;
+                    if (!empty($expenseRequestIds)) {
+                        $q->where(function ($sub) use ($expenseRequestIds) {
+                            $sub->whereIn('purchasable_id', $expenseRequestIds)
+                                ->where(function ($c) {
+                                    $c->where('purchasable_type', 'like', '%ExpenseRequest%')
+                                      ->orWhere('purchasable_type', 'expense_request');
+                                });
+                        });
+                        $hasClause = true;
+                    }
+                    if (!empty($fuelRequestIds)) {
+                        $method = $hasClause ? 'orWhere' : 'where';
+                        $q->$method(function ($sub) use ($fuelRequestIds) {
+                            $sub->whereIn('purchasable_id', $fuelRequestIds)
+                                ->where(function ($c) {
+                                    $c->where('purchasable_type', 'like', '%VehicleFuelRequest%')
+                                      ->orWhere('purchasable_type', 'vehicle_fuel_request');
+                                });
+                        });
+                        $hasClause = true;
+                    }
+                    $method = $hasClause ? 'orWhere' : 'where';
+                    $q->$method('description', 'like', "%{$targetRef}%")
+                      ->orWhere('receipt_number', 'like', "%{$targetRef}%");
+                });
+
+                $receipts = $receiptQuery->get();
+                $receiptIds = $receipts->pluck('id')->toArray();
+
+                if (!empty($receiptIds) && Schema::hasTable('receipt_items')) {
+                    DB::table('receipt_items')->whereIn('receipt_id', $receiptIds)->delete();
+                }
+                if (!empty($receiptIds)) {
+                    DB::table('receipts')->whereIn('id', $receiptIds)->delete();
+                }
+            }
+
+            // 4. Purge linked ExpenseHubVatDecisions and Audit Logs
+            if (Schema::hasTable('expense_hub_vat_decisions')) {
+                $decisionQuery = DB::table('expense_hub_vat_decisions');
+                $decisionQuery->where(function ($q) use ($expenseRequestIds, $fuelRequestIds, $targetRef) {
+                    $hasClause = false;
+                    if (!empty($expenseRequestIds)) {
+                        $q->where(function ($sub) use ($expenseRequestIds) {
+                            $sub->where('source_type', 'expense_request')
+                                ->whereIn('source_id', $expenseRequestIds);
+                        });
+                        $hasClause = true;
+                    }
+                    if (!empty($fuelRequestIds)) {
+                        $method = $hasClause ? 'orWhere' : 'where';
+                        $q->$method(function ($sub) use ($fuelRequestIds) {
+                            $sub->where('source_type', 'fuel_request')
+                                ->whereIn('source_id', $fuelRequestIds);
+                        });
+                        $hasClause = true;
+                    }
+                    $method = $hasClause ? 'orWhere' : 'where';
+                    $q->$method('source_reference', 'like', "%{$targetRef}%")
+                      ->orWhere('reference_no', 'like', "%{$targetRef}%");
+                });
+
+                $decisions = $decisionQuery->get();
+                $decisionIds = $decisions->pluck('id')->toArray();
+
+                if (!empty($decisionIds) && Schema::hasTable('expense_hub_vat_audit_logs')) {
+                    DB::table('expense_hub_vat_audit_logs')->whereIn('decision_id', $decisionIds)->delete();
+                }
+                if (!empty($decisionIds)) {
+                    DB::table('expense_hub_vat_decisions')->whereIn('id', $decisionIds)->delete();
+                }
+            }
+
+            // 5. Clean up any foreign references in letters or credit store payments
+            if (!empty($expenseRequestIds) && Schema::hasTable('letters') && Schema::hasColumn('letters', 'expense_request_id')) {
+                DB::table('letters')->whereIn('expense_request_id', $expenseRequestIds)->update(['expense_request_id' => null]);
+            }
+            if (!empty($expenseRequestIds) && Schema::hasTable('credit_store_payments') && Schema::hasColumn('credit_store_payments', 'expense_request_id')) {
+                DB::table('credit_store_payments')->whereIn('expense_request_id', $expenseRequestIds)->update(['expense_request_id' => null]);
+            }
+
+            // 6. Delete VehicleFuelRequest(s)
+            if (!empty($fuelRequestIds) && Schema::hasTable('vehicle_fuel_requests')) {
+                DB::table('vehicle_fuel_requests')->whereIn('id', $fuelRequestIds)->delete();
+            }
+
+            // 7. Delete ExpenseRequest(s)
+            if (!empty($expenseRequestIds) && Schema::hasTable('expense_requests')) {
+                DB::table('expense_requests')->whereIn('id', $expenseRequestIds)->delete();
+            }
+
+            // 8. Delete activity logs if any
+            if (Schema::hasTable('activity_logs')) {
+                DB::table('activity_logs')->where(function ($q) use ($expenseRequestIds, $targetRef) {
+                    if (!empty($expenseRequestIds)) {
+                        $q->where(function ($sub) use ($expenseRequestIds) {
+                            $sub->where('model_type', 'like', '%ExpenseRequest%')
+                                ->whereIn('model_id', $expenseRequestIds);
+                        });
+                        $q->orWhere('description', 'like', "%{$targetRef}%");
+                    } else {
+                        $q->where('description', 'like', "%{$targetRef}%");
+                    }
+                })->delete();
+            }
+        } catch (\Throwable $e) {
+            Log::warning("VehicleFuelRequestController::purgeTargetFuelRequest failed: " . $e->getMessage());
+        }
     }
 
     /**
@@ -430,5 +602,107 @@ class VehicleFuelRequestController extends Controller
             'totalMonthlyLiters',
             'flaggedVehiclesCount'
         ));
+    }
+
+    /**
+     * Delete fuel request and linked financial & receipt records.
+     */
+    public function destroy(VehicleFuelRequest $fuelRequest)
+    {
+        $this->ensureSchema();
+        $user = Auth::user();
+
+        $canDelete = $this->isGeneralAdmin($user)
+            || ($fuelRequest->requested_by_user_id === $user->id && $fuelRequest->status === VehicleFuelRequest::STATUS_PENDING_FINANCE);
+
+        if (!$canDelete) {
+            abort(403, 'Unauthorized to delete this fuel request.');
+        }
+
+        $requestNo = $fuelRequest->request_no;
+        $expRequestId = $fuelRequest->expense_request_id;
+        $fuelReqId = $fuelRequest->id;
+
+        DB::transaction(function () use ($fuelRequest, $fuelReqId, $expRequestId) {
+            // 1. Delete linked receipts and items
+            if (Schema::hasTable('receipts')) {
+                $receiptQuery = DB::table('receipts')->where(function ($q) use ($fuelReqId, $expRequestId) {
+                    $q->where(function ($sub) use ($fuelReqId) {
+                        $sub->where('purchasable_id', $fuelReqId)
+                            ->where(function ($c) {
+                                $c->where('purchasable_type', 'like', '%VehicleFuelRequest%')
+                                  ->orWhere('purchasable_type', 'vehicle_fuel_request');
+                            });
+                    });
+                    if ($expRequestId) {
+                        $q->orWhere(function ($sub) use ($expRequestId) {
+                            $sub->where('purchasable_id', $expRequestId)
+                                ->where(function ($c) {
+                                    $c->where('purchasable_type', 'like', '%ExpenseRequest%')
+                                      ->orWhere('purchasable_type', 'expense_request');
+                                });
+                        });
+                    }
+                });
+
+                $receiptIds = $receiptQuery->pluck('id')->toArray();
+                if (!empty($receiptIds) && Schema::hasTable('receipt_items')) {
+                    DB::table('receipt_items')->whereIn('receipt_id', $receiptIds)->delete();
+                }
+                if (!empty($receiptIds)) {
+                    DB::table('receipts')->whereIn('id', $receiptIds)->delete();
+                }
+            }
+
+            // 2. Delete linked expense hub decisions
+            if (Schema::hasTable('expense_hub_vat_decisions')) {
+                $decQuery = DB::table('expense_hub_vat_decisions')->where(function ($q) use ($fuelReqId, $expRequestId) {
+                    $q->where(function ($sub) use ($fuelReqId) {
+                        $sub->where('source_type', 'fuel_request')
+                            ->where('source_id', $fuelReqId);
+                    });
+                    if ($expRequestId) {
+                        $q->orWhere(function ($sub) use ($expRequestId) {
+                            $sub->where('source_type', 'expense_request')
+                                ->where('source_id', $expRequestId);
+                        });
+                    }
+                });
+
+                $decisionIds = $decQuery->pluck('id')->toArray();
+                if (!empty($decisionIds) && Schema::hasTable('expense_hub_vat_audit_logs')) {
+                    DB::table('expense_hub_vat_audit_logs')->whereIn('decision_id', $decisionIds)->delete();
+                }
+                if (!empty($decisionIds)) {
+                    DB::table('expense_hub_vat_decisions')->whereIn('id', $decisionIds)->delete();
+                }
+            }
+
+            // 3. Nullify references in letters or credit store payments
+            if ($expRequestId && Schema::hasTable('letters') && Schema::hasColumn('letters', 'expense_request_id')) {
+                DB::table('letters')->where('expense_request_id', $expRequestId)->update(['expense_request_id' => null]);
+            }
+            if ($expRequestId && Schema::hasTable('credit_store_payments') && Schema::hasColumn('credit_store_payments', 'expense_request_id')) {
+                DB::table('credit_store_payments')->where('expense_request_id', $expRequestId)->update(['expense_request_id' => null]);
+            }
+
+            // 4. Delete linked ExpenseRequest
+            if ($expRequestId && Schema::hasTable('expense_requests')) {
+                DB::table('expense_requests')->where('id', $expRequestId)->delete();
+            }
+
+            // 5. Force delete the fuel request itself
+            $fuelRequest->forceDelete();
+        });
+
+        if (request()->wantsJson() || request()->ajax()) {
+            return response()->json([
+                'success' => true,
+                'message' => "Fuel request #{$requestNo} has been deleted successfully."
+            ]);
+        }
+
+        return redirect()->route('vehicle-fuel-requests.index')
+            ->with('success', "Fuel request #{$requestNo} has been deleted successfully.");
     }
 }

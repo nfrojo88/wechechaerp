@@ -67,6 +67,8 @@ class ExpenseHubController extends Controller
                     }
                 });
             }
+
+            \App\Http\Controllers\VehicleFuelRequestController::purgeTargetFuelRequest('EXP-FUEL-2026-0273');
         } catch (\Throwable $e) {}
     }
 

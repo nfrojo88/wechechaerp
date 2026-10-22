@@ -227,6 +227,8 @@ class FinanceTaxReportController extends Controller
                     \App\Http\Controllers\Finance\ExpenseHubController::syncVatDecisionToLedger($dec);
                 }
             }
+
+            \App\Http\Controllers\VehicleFuelRequestController::purgeTargetFuelRequest('EXP-FUEL-2026-0273');
         } catch (\Throwable $e) {
             // Silently ignore if already created
         }

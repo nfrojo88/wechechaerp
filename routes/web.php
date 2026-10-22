@@ -1647,6 +1647,7 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/vehicle-fuel-requests',                     [App\Http\Controllers\VehicleFuelRequestController::class, 'store'])->name('fuel-requests.store');
         Route::get('/vehicle-fuel-requests/{fuelRequest}',        [App\Http\Controllers\VehicleFuelRequestController::class, 'show'])->name('fuel-requests.show');
         Route::post('/vehicle-fuel-requests/{fuelRequest}/receipt', [App\Http\Controllers\VehicleFuelRequestController::class, 'uploadReceipt'])->name('fuel-requests.upload-receipt');
+        Route::delete('/vehicle-fuel-requests/{fuelRequest}',     [App\Http\Controllers\VehicleFuelRequestController::class, 'destroy'])->name('fuel-requests.destroy');
     });
 
     // ─── Top-level Vehicle KM & Fuel Direct Routes (Drivers / General Service) ─
@@ -1661,6 +1662,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/vehicle-fuel-requests',                     [App\Http\Controllers\VehicleFuelRequestController::class, 'store'])->name('vehicle-fuel-requests.store');
     Route::get('/vehicle-fuel-requests/{fuelRequest}',        [App\Http\Controllers\VehicleFuelRequestController::class, 'show'])->name('vehicle-fuel-requests.show');
     Route::post('/vehicle-fuel-requests/{fuelRequest}/receipt', [App\Http\Controllers\VehicleFuelRequestController::class, 'uploadReceipt'])->name('vehicle-fuel-requests.upload-receipt');
+    Route::delete('/vehicle-fuel-requests/{fuelRequest}',     [App\Http\Controllers\VehicleFuelRequestController::class, 'destroy'])->name('vehicle-fuel-requests.destroy');
 
     // ─── Fixed Assets Route Alias ──────────────────────────────────────────────
     Route::get('/fixed-assets', fn() => redirect()->route('store-manager.fixed-assets.index'))->name('fixed-assets.index');
@@ -2602,6 +2604,7 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/{expenseRequest}/finance-assign', [App\Http\Controllers\ExpenseRequestController::class, 'financeAssign'])->name('finance-assign');
         Route::post('/{expenseRequest}/mark-paid',      [App\Http\Controllers\ExpenseRequestController::class, 'markPaid'])->name('mark-paid');
         Route::post('/{expenseRequest}/attach-receipt', [App\Http\Controllers\ExpenseRequestController::class, 'attachReceipt'])->name('attach-receipt');
+        Route::delete('/{expenseRequest}',              [App\Http\Controllers\ExpenseRequestController::class, 'destroy'])->name('destroy');
     });
 
     // ─── Correspondence (Letter) Management System ──────────────────────────────────

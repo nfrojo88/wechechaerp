@@ -206,6 +206,15 @@
                                             <i class="fa-solid fa-receipt me-1"></i>Attach Receipt
                                         </a>
                                     @endif
+                                    @if($isGeneralAdmin || (auth()->id() === $req->requested_by_user_id && $req->status === \App\Models\VehicleFuelRequest::STATUS_PENDING_FINANCE))
+                                        <form action="{{ route('vehicle-fuel-requests.destroy', $req->id) }}" method="POST" onsubmit="return confirm('Delete fuel request {{ $req->request_no }}?');" class="d-inline">
+                                            @csrf
+                                            @method('DELETE')
+                                            <button type="submit" class="btn btn-outline-danger px-2 py-1" title="Delete Fuel Request">
+                                                <i class="fa-solid fa-trash"></i>
+                                            </button>
+                                        </form>
+                                    @endif
                                 </div>
                             </td>
                         </tr>

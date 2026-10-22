@@ -32,6 +32,15 @@
             <a href="{{ route('general-service.vehicle-reminders.vehicle-detail', $fuelRequest->fixed_asset_unit_id) }}" class="btn btn-outline-primary rounded-pill px-3 shadow-sm">
                 <i class="fa-solid fa-truck-pickup me-1"></i>Vehicle Hub
             </a>
+            @if($isGeneralAdmin || (auth()->id() === $fuelRequest->requested_by_user_id && $fuelRequest->status === \App\Models\VehicleFuelRequest::STATUS_PENDING_FINANCE))
+                <form action="{{ route('vehicle-fuel-requests.destroy', $fuelRequest->id) }}" method="POST" onsubmit="return confirm('Are you sure you want to permanently delete this fuel request ({{ $fuelRequest->request_no }}) and its linked financial records? This action cannot be undone.');" class="d-inline">
+                    @csrf
+                    @method('DELETE')
+                    <button type="submit" class="btn btn-outline-danger rounded-pill px-3 shadow-sm">
+                        <i class="fa-solid fa-trash me-1"></i>Delete Request
+                    </button>
+                </form>
+            @endif
         </div>
     </div>
 
