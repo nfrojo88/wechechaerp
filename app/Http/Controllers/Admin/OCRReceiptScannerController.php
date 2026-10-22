@@ -1487,56 +1487,137 @@ class OCRReceiptScannerController extends Controller
             $writer->openToFile($tempPath);
 
             if ($template === 'erca_15') {
-                // Header row with exact ERCA descriptions
-                $headerCells = [
-                    Cell::fromValue("VAT CATEGORY\n(G=GOODS;S=SERVICES)"),
-                    Cell::fromValue("CALENDAR TYPE\n(E=ETHIOPIAN;G=GREGORIAN)"),
-                    Cell::fromValue("Types of purchase.\n1 = Taxable-local Purchase of Capital Assets (Line No. 65)\n2 = Taxable-imported Purchase of Capital Assets (Line No. 75)\n3 = Taxable-local Purchase of Inputs (Line No. 100)\n4 = Taxable-imported Purchase of Inputs (Line No. 110)\n5 = Taxable-general Expense Inputs Purchase (Line No. 120)\n6 = Tax Exempted-purchase with no vat or uncollectible inputs\n(Please type 1-6). Mandatory."),
-                    Cell::fromValue("TIN\nMandatory for local VAT"),
-                    Cell::fromValue("Seller name\nRegistered Business Trade Name"),
-                    Cell::fromValue("Date of purchase\nDispatched Date (DD/MM/YYYY)"),
-                    Cell::fromValue("MRC Number\nMachine Registration Code"),
-                    Cell::fromValue("Vat receipt number / FS No\nFiscal Receipt Number"),
-                    Cell::fromValue("Description / Item\nExact purchased material"),
-                    Cell::fromValue("Unit of Measure\n(2 KG, 5 LIT, 7 PCS, 9 OTHER, 10 PC)"),
-                    Cell::fromValue("Quantity\nNumeric only"),
-                    Cell::fromValue("Unit Price\nNumeric only"),
-                    Cell::fromValue("Total value\nTaxable Subtotal"),
-                    Cell::fromValue("VAT (15%)\nValue Added Tax"),
-                    Cell::fromValue("Value after vat\nGrand Total"),
+                $ercaHeaders = [
+                    'VAT CATEGORY  (G=GOODS;S=SERVICES)',
+                    'CALENDAR TYPE (E=ETHIOPIAN;G=GREGORIAN)',
+                    'Types of purchase. 1 = Taxable-local Purchase of Capital Assets (Line No. 65) 2 = Taxable-imported Purchase of Capital Assets (Line No. 75) 3 = Taxable-local Purchase of Inputs (Line No. 100) 4 = Taxable-imported Purchase of Inputs (Line No. 110) 5 = Taxable-general Expense Inputs Purchase (Line No. 120) 6= Tax Exempted-purchase with no vat or uncollectible inputs (Line no. 85 or Line no. 130)    (Please type 1 or 2 or 3 or 4 or 5 or 6).This field is mandatory.',
+                    'TIN..This field  is not mandatory.',
+                    'Seller name (if Seller has no TIN or item is not locally purchased) This field is not mandatory.',
+                    'Date of purchase/Customs Declaration No.  Dispatched Date (Please use  dd/mm/yyyy date format).  This field is mandatory.',
+                    'MRC Number..This field is not mandatory.',
+                    'Vat receipt number/ Customs Declaration Number.This field is mandatory.',
+                    'Description.This field is mandatory.',
+                    'Unit of Measure (type ID 2-10). 2 KG 3 ML 4 GM 5 LIT 6 MT 7 PCS 8 CT 9 OTHER 10 PC This field is mandatory.',
+                    'Quantity. Enter number.Don\'t use comma (,) or Quatation ("") This field is  mandatory.',
+                    'Unit Price. Enter number only .Don\'t use comma (,) or Quatation ("") This field is  mandatory.',
+                    'Total value',
+                    'vat',
+                    'value after vat',
                 ];
+                $headerCells = array_map(fn($h) => Cell::fromValue($h), $ercaHeaders);
                 $writer->addRow(new Row($headerCells));
 
                 foreach ($items as $item) {
                     $r = $item->receipt;
-                    $dateFormatted = $r && $r->receipt_date ? EthiopianDate::formatDateEc($r->receipt_date, 'DD/MM/YYYY EC') : EthiopianDate::formatDateEc(now(), 'DD/MM/YYYY EC');
+
+                    $cat = strtoupper(trim((string)($item->vat_category ?: ($r?->vat_category ?: 'G'))));
+                    $vatCategory = ($cat === 'S' || str_starts_with($cat, 'SERV')) ? 'S' : 'G';
+
+                    $calType = strtoupper(trim((string)($item->calendar_type ?: ($request->input('calendar_type') ?: 'G'))));
+                    $calendarType = ($calType === 'E') ? 'E' : 'G';
+
+                    $date = $r?->receipt_date ?: $item->created_at;
+                    if ($calendarType === 'E') {
+                        $dateFormatted = $date ? EthiopianDate::formatDateEc($date, 'd/m/Y') : EthiopianDate::formatDateEc(now(), 'd/m/Y');
+                    } else {
+                        $dateFormatted = $date ? Carbon::parse($date)->format('d/m/Y') : now()->format('d/m/Y');
+                    }
+
                     $rawTin = $r ? (string)$r->vendor_tin : '';
-                    $rawFs  = $r ? (string)$r->fs_no : '';
-                    $seller = $r ? (string)$r->vendor_name : '';
-                    $mrc    = $r ? (string)$r->mrc_no : '';
-
                     $tinDigits = preg_replace('/[^0-9]/', '', $rawTin);
-                    $tinText = (strlen($tinDigits) === 10) ? $tinDigits : $rawTin;
+                    $tinDigits = preg_replace('/^0+/', '', $tinDigits);
+                    $tinVal = ($tinDigits !== '') ? (int)$tinDigits : '';
 
-                    $fsDigits = preg_replace('/[^0-9]/', '', $rawFs);
-                    $fsText = (strlen($fsDigits) === 8) ? $fsDigits : $rawFs;
+                    $seller = $r ? trim((string)$r->vendor_name) : '';
+
+                    $rawMrc = $r ? trim((string)$r->mrc_no) : '';
+                    $mrcVal = ($rawMrc !== '' && $rawMrc !== '-' && strtoupper($rawMrc) !== 'N/A') ? $rawMrc : '';
+
+                    $rawFs = $r ? trim((string)($r->fs_no ?: ($r->fs_no_raw ?: ($r->receipt_number ?: '')))) : '';
+                    if ($rawFs === '' || $rawFs === '-') {
+                        $rawFs = $r ? trim((string)$r->receipt_number) : 'FS00000000';
+                    }
+
+                    $desc = trim((string)($item->item_description ?: ($r?->description ?: 'Purchased Goods')));
+
+                    $uomRaw = strtoupper(trim((string)$item->uom));
+                    if (is_numeric($uomRaw) && (int)$uomRaw >= 2 && (int)$uomRaw <= 10) {
+                        $uomId = (int)$uomRaw;
+                    } else {
+                        $uomId = match (true) {
+                            str_contains($uomRaw, 'KG') || str_contains($uomRaw, 'KILO') => 2,
+                            str_contains($uomRaw, 'ML') => 3,
+                            str_contains($uomRaw, 'GM') || str_contains($uomRaw, 'GRAM') => 4,
+                            str_contains($uomRaw, 'LIT') || str_contains($uomRaw, 'LTR') || $uomRaw === 'L' => 5,
+                            str_contains($uomRaw, 'MT') || str_contains($uomRaw, 'TON') => 6,
+                            str_contains($uomRaw, 'PCS') || str_contains($uomRaw, 'PIECE') || str_contains($uomRaw, 'PCS.') => 7,
+                            str_contains($uomRaw, 'CT') || str_contains($uomRaw, 'CARTON') || str_contains($uomRaw, 'BOX') => 8,
+                            $uomRaw === 'PC' => 10,
+                            default => 9,
+                        };
+                    }
+
+                    $baseVal  = (float)$item->total_value;
+                    $vatVal   = (float)$item->vat_amount;
+                    $afterVal = (float)$item->value_after_vat;
+                    $unitVal  = (float)$item->unit_price;
+                    $qty      = (float)$item->qty > 0 ? (float)$item->qty : 1.0;
+
+                    if ($baseVal > 0 && $vatVal > 0) {
+                        $calcBase = round($baseVal / 1.15, 2);
+                        if (abs(($baseVal - $vatVal) - $calcBase) <= 0.05 && abs(round($calcBase * 0.15, 2) - $vatVal) <= 0.05) {
+                            $afterVal = $baseVal;
+                            $baseVal  = $calcBase;
+                            $unitVal  = round($calcBase / $qty, 2);
+                        }
+                    }
+
+                    if ($afterVal <= 0 && $baseVal > 0) {
+                        if ($vatVal <= 0) $vatVal = round($baseVal * 0.15, 2);
+                        $afterVal = round($baseVal + $vatVal, 2);
+                    } elseif ($baseVal <= 0 && $afterVal > 0) {
+                        if ($vatVal > 0) {
+                            $baseVal = round($afterVal - $vatVal, 2);
+                        } else {
+                            $baseVal = round($afterVal / 1.15, 2);
+                            $vatVal  = round($afterVal - $baseVal, 2);
+                        }
+                    }
+
+                    if ($unitVal <= 0 && $baseVal > 0) {
+                        $unitVal = round($baseVal / $qty, 2);
+                    }
+
+                    if (abs(($baseVal + $vatVal) - $afterVal) > 0.05) {
+                        $afterVal = round($baseVal + $vatVal, 2);
+                    }
+
+                    $pType = (int)($item->purchase_type ?: 3);
+                    if ($pType < 1 || $pType > 6) $pType = 3;
+                    if ($vatVal <= 0 && $pType === 3) $pType = 6;
+
+                    $qtyVal   = (floor($qty) == $qty) ? (int)$qty : round($qty, 4);
+                    $unitVal  = round($unitVal, 2);
+                    $baseVal  = round($baseVal, 2);
+                    $vatVal   = round($vatVal, 2);
+                    $afterVal = round($afterVal, 2);
 
                     $rowCells = [
-                        Cell::fromValue((string)($item->vat_category ?: 'G')),
-                        Cell::fromValue((string)($item->calendar_type ?: 'E')),
-                        Cell::fromValue((int)($item->purchase_type ?: 3)),
-                        Cell::fromValue((string)$tinText),
+                        Cell::fromValue($vatCategory),
+                        Cell::fromValue($calendarType),
+                        Cell::fromValue($pType),
+                        Cell::fromValue($tinVal),
                         Cell::fromValue($seller),
                         Cell::fromValue($dateFormatted),
-                        Cell::fromValue($mrc),
-                        Cell::fromValue((string)$fsText),
-                        Cell::fromValue((string)($item->item_description ?: 'Material')),
-                        Cell::fromValue((string)($item->uom ?: '9')),
-                        Cell::fromValue((float)$item->qty),
-                        Cell::fromValue((float)$item->unit_price),
-                        Cell::fromValue((float)$item->total_value),
-                        Cell::fromValue((float)$item->vat_amount),
-                        Cell::fromValue((float)$item->value_after_vat),
+                        Cell::fromValue($mrcVal),
+                        Cell::fromValue($rawFs),
+                        Cell::fromValue($desc),
+                        Cell::fromValue($uomId),
+                        Cell::fromValue($qtyVal),
+                        Cell::fromValue($unitVal),
+                        Cell::fromValue($baseVal),
+                        Cell::fromValue($vatVal),
+                        Cell::fromValue($afterVal),
                     ];
                     $writer->addRow(new Row($rowCells));
                 }
@@ -1753,53 +1834,134 @@ class OCRReceiptScannerController extends Controller
 
             if ($template === 'erca_15') {
                 fputcsv($out, [
-                    "VAT CATEGORY\n (G=GOODS;S=SERVICES)",
-                    "CALENDAR TYPE\n(E=ETHIOPIAN;G=GREGORIAN)",
-                    "Types of purchase.\n1 = Taxable-local Purchase of Capital Assets (Line No. 65)\n2 = Taxable-imported Purchase of Capital Assets (Line No. 75)\n3 = Taxable-local Purchase of Inputs (Line No. 100)\n4 = Taxable-imported Purchase of Inputs (Line No. 110)\n5 = Taxable-general Expense Inputs Purchase (Line No. 120)\n6= Tax Exempted-purchase with no vat or uncollectible inputs (Line no. 85 or Line no. 130)",
-                    "TIN",
-                    "Seller name",
-                    "Date of purchase\nDispatched Date (dd/mm/yyyy)",
-                    "MRC Number",
-                    "Vat receipt number / FS No",
-                    "Description",
-                    "Unit of Measure (type ID 2-10)",
-                    "Quantity",
-                    "Unit Price",
-                    "Total value",
-                    "vat",
-                    "value after vat"
+                    'VAT CATEGORY  (G=GOODS;S=SERVICES)',
+                    'CALENDAR TYPE (E=ETHIOPIAN;G=GREGORIAN)',
+                    'Types of purchase. 1 = Taxable-local Purchase of Capital Assets (Line No. 65) 2 = Taxable-imported Purchase of Capital Assets (Line No. 75) 3 = Taxable-local Purchase of Inputs (Line No. 100) 4 = Taxable-imported Purchase of Inputs (Line No. 110) 5 = Taxable-general Expense Inputs Purchase (Line No. 120) 6= Tax Exempted-purchase with no vat or uncollectible inputs (Line no. 85 or Line no. 130)    (Please type 1 or 2 or 3 or 4 or 5 or 6).This field is mandatory.',
+                    'TIN..This field  is not mandatory.',
+                    'Seller name (if Seller has no TIN or item is not locally purchased) This field is not mandatory.',
+                    'Date of purchase/Customs Declaration No.  Dispatched Date (Please use  dd/mm/yyyy date format).  This field is mandatory.',
+                    'MRC Number..This field is not mandatory.',
+                    'Vat receipt number/ Customs Declaration Number.This field is mandatory.',
+                    'Description.This field is mandatory.',
+                    'Unit of Measure (type ID 2-10). 2 KG 3 ML 4 GM 5 LIT 6 MT 7 PCS 8 CT 9 OTHER 10 PC This field is mandatory.',
+                    'Quantity. Enter number.Don\'t use comma (,) or Quatation ("") This field is  mandatory.',
+                    'Unit Price. Enter number only .Don\'t use comma (,) or Quatation ("") This field is  mandatory.',
+                    'Total value',
+                    'vat',
+                    'value after vat',
                 ]);
 
                 foreach ($items as $item) {
                     $r = $item->receipt;
-                    $dateFormatted = $r && $r->receipt_date ? EthiopianDate::formatDateEc($r->receipt_date, 'DD/MM/YYYY EC') : EthiopianDate::formatDateEc(now(), 'DD/MM/YYYY EC');
+
+                    $cat = strtoupper(trim((string)($item->vat_category ?: ($r?->vat_category ?: 'G'))));
+                    $vatCategory = ($cat === 'S' || str_starts_with($cat, 'SERV')) ? 'S' : 'G';
+
+                    $calType = strtoupper(trim((string)($item->calendar_type ?: ($request->input('calendar_type') ?: 'G'))));
+                    $calendarType = ($calType === 'E') ? 'E' : 'G';
+
+                    $date = $r?->receipt_date ?: $item->created_at;
+                    if ($calendarType === 'E') {
+                        $dateFormatted = $date ? EthiopianDate::formatDateEc($date, 'd/m/Y') : EthiopianDate::formatDateEc(now(), 'd/m/Y');
+                    } else {
+                        $dateFormatted = $date ? Carbon::parse($date)->format('d/m/Y') : now()->format('d/m/Y');
+                    }
+
                     $rawTin = $r ? (string)$r->vendor_tin : '';
-                    $rawFs  = $r ? (string)$r->fs_no : '';
-                    $seller = $r ? (string)$r->vendor_name : '';
-                    $mrc    = $r ? (string)$r->mrc_no : '';
-
                     $tinDigits = preg_replace('/[^0-9]/', '', $rawTin);
-                    $tinText = (strlen($tinDigits) === 10) ? $tinDigits : $rawTin;
+                    $tinDigits = preg_replace('/^0+/', '', $tinDigits);
+                    $tinVal = ($tinDigits !== '') ? (int)$tinDigits : '';
 
-                    $fsDigits = preg_replace('/[^0-9]/', '', $rawFs);
-                    $fsText = (strlen($fsDigits) === 8) ? $fsDigits : $rawFs;
+                    $seller = $r ? trim((string)$r->vendor_name) : '';
+
+                    $rawMrc = $r ? trim((string)$r->mrc_no) : '';
+                    $mrcVal = ($rawMrc !== '' && $rawMrc !== '-' && strtoupper($rawMrc) !== 'N/A') ? $rawMrc : '';
+
+                    $rawFs = $r ? trim((string)($r->fs_no ?: ($r->fs_no_raw ?: ($r->receipt_number ?: '')))) : '';
+                    if ($rawFs === '' || $rawFs === '-') {
+                        $rawFs = $r ? trim((string)$r->receipt_number) : 'FS00000000';
+                    }
+
+                    $desc = trim((string)($item->item_description ?: ($r?->description ?: 'Purchased Goods')));
+
+                    $uomRaw = strtoupper(trim((string)$item->uom));
+                    if (is_numeric($uomRaw) && (int)$uomRaw >= 2 && (int)$uomRaw <= 10) {
+                        $uomId = (int)$uomRaw;
+                    } else {
+                        $uomId = match (true) {
+                            str_contains($uomRaw, 'KG') || str_contains($uomRaw, 'KILO') => 2,
+                            str_contains($uomRaw, 'ML') => 3,
+                            str_contains($uomRaw, 'GM') || str_contains($uomRaw, 'GRAM') => 4,
+                            str_contains($uomRaw, 'LIT') || str_contains($uomRaw, 'LTR') || $uomRaw === 'L' => 5,
+                            str_contains($uomRaw, 'MT') || str_contains($uomRaw, 'TON') => 6,
+                            str_contains($uomRaw, 'PCS') || str_contains($uomRaw, 'PIECE') || str_contains($uomRaw, 'PCS.') => 7,
+                            str_contains($uomRaw, 'CT') || str_contains($uomRaw, 'CARTON') || str_contains($uomRaw, 'BOX') => 8,
+                            $uomRaw === 'PC' => 10,
+                            default => 9,
+                        };
+                    }
+
+                    $baseVal  = (float)$item->total_value;
+                    $vatVal   = (float)$item->vat_amount;
+                    $afterVal = (float)$item->value_after_vat;
+                    $unitVal  = (float)$item->unit_price;
+                    $qty      = (float)$item->qty > 0 ? (float)$item->qty : 1.0;
+
+                    if ($baseVal > 0 && $vatVal > 0) {
+                        $calcBase = round($baseVal / 1.15, 2);
+                        if (abs(($baseVal - $vatVal) - $calcBase) <= 0.05 && abs(round($calcBase * 0.15, 2) - $vatVal) <= 0.05) {
+                            $afterVal = $baseVal;
+                            $baseVal  = $calcBase;
+                            $unitVal  = round($calcBase / $qty, 2);
+                        }
+                    }
+
+                    if ($afterVal <= 0 && $baseVal > 0) {
+                        if ($vatVal <= 0) $vatVal = round($baseVal * 0.15, 2);
+                        $afterVal = round($baseVal + $vatVal, 2);
+                    } elseif ($baseVal <= 0 && $afterVal > 0) {
+                        if ($vatVal > 0) {
+                            $baseVal = round($afterVal - $vatVal, 2);
+                        } else {
+                            $baseVal = round($afterVal / 1.15, 2);
+                            $vatVal  = round($afterVal - $baseVal, 2);
+                        }
+                    }
+
+                    if ($unitVal <= 0 && $baseVal > 0) {
+                        $unitVal = round($baseVal / $qty, 2);
+                    }
+
+                    if (abs(($baseVal + $vatVal) - $afterVal) > 0.05) {
+                        $afterVal = round($baseVal + $vatVal, 2);
+                    }
+
+                    $pType = (int)($item->purchase_type ?: 3);
+                    if ($pType < 1 || $pType > 6) $pType = 3;
+                    if ($vatVal <= 0 && $pType === 3) $pType = 6;
+
+                    $qtyVal   = (floor($qty) == $qty) ? (int)$qty : round($qty, 4);
+                    $unitVal  = round($unitVal, 2);
+                    $baseVal  = round($baseVal, 2);
+                    $vatVal   = round($vatVal, 2);
+                    $afterVal = round($afterVal, 2);
 
                     fputcsv($out, [
-                        $item->vat_category ?: 'G',
-                        $item->calendar_type ?: 'E',
-                        $item->purchase_type ?: 3,
-                        (string)$tinText,
+                        $vatCategory,
+                        $calendarType,
+                        $pType,
+                        $tinVal,
                         $seller,
                         $dateFormatted,
-                        $mrc,
-                        (string)$fsText,
-                        $item->item_description ?: 'Material',
-                        $item->uom ?: '9',
-                        number_format((float)$item->qty, 2, '.', ''),
-                        number_format((float)$item->unit_price, 2, '.', ''),
-                        number_format((float)$item->total_value, 2, '.', ''),
-                        number_format((float)$item->vat_amount, 2, '.', ''),
-                        number_format((float)$item->value_after_vat, 2, '.', ''),
+                        $mrcVal,
+                        $rawFs,
+                        $desc,
+                        $uomId,
+                        $qtyVal,
+                        $unitVal,
+                        $baseVal,
+                        $vatVal,
+                        $afterVal,
                     ]);
                 }
             } else {

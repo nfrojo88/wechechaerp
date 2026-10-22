@@ -13,6 +13,8 @@ use App\Models\IncomeRecord;
 use App\Models\SystemSetting;
 use App\Models\Receipt;
 use App\Models\ReceiptItem;
+use App\Models\CreditStorePayment;
+use App\Models\CreditStoreLedger;
 use App\Models\User;
 use App\Services\ReceiptOcrService;
 use App\Services\QcService;
@@ -2841,80 +2843,332 @@ class FinanceTaxReportController extends Controller
     }
 
     /**
-     * Export Purchase VAT Report (ERCA 15 Columns).
+     * Export Purchase VAT Report (ERCA 15 Columns matching pro.doc).
      */
     protected function exportPurchaseVatExcel(Request $request, string $startDate, string $endDate, int $year, ?int $month, string $monthSuffix)
     {
         $filename = 'Purchase_VAT_Report' . $monthSuffix . '_' . now()->format('Ymd_His') . '.xlsx';
         $tempPath = storage_path('app/purch_vat_' . uniqid() . '.xlsx');
 
+        // Exact 15-column ERCA Purchase VAT headers from pro.doc
         $headers = [
-            "VAT CATEGORY\n(G=GOODS;S=SERVICES)",
-            "CALENDAR TYPE\n(E=ETHIOPIAN;G=GREGORIAN)",
-            "Types of purchase.\n1 = Taxable-local Purchase of Capital Assets (Line No. 65)\n2 = Taxable-imported Purchase of Capital Assets (Line No. 75)\n3 = Taxable-local Purchase of Inputs (Line No. 100)\n4 = Taxable-imported Purchase of Inputs (Line No. 110)\n5 = Taxable-general Expense Inputs Purchase (Line No. 120)\n6 = Tax Exempted-purchase with no vat or uncollectible inputs\n(Please type 1-6). Mandatory.",
-            "TIN\nMandatory for local VAT",
-            "Seller name\nRegistered Business Trade Name",
-            "Date of purchase\nDispatched Date (DD/MM/YYYY)",
-            "MRC Number\nMachine Registration Code",
-            "Vat receipt number / FS No\nFiscal Receipt Number",
-            "Description / Item\nExact purchased material",
-            "Unit of Measure\n(2 KG, 5 LIT, 7 PCS, 9 OTHER, 10 PC)",
-            "Quantity\nNumeric only",
-            "Unit Price\nNumeric only",
-            "Total value\nTaxable Subtotal",
-            "VAT (15%)\nValue Added Tax",
-            "Value after vat\nGrand Total",
+            'VAT CATEGORY  (G=GOODS;S=SERVICES)',
+            'CALENDAR TYPE (E=ETHIOPIAN;G=GREGORIAN)',
+            'Types of purchase. 1 = Taxable-local Purchase of Capital Assets (Line No. 65) 2 = Taxable-imported Purchase of Capital Assets (Line No. 75) 3 = Taxable-local Purchase of Inputs (Line No. 100) 4 = Taxable-imported Purchase of Inputs (Line No. 110) 5 = Taxable-general Expense Inputs Purchase (Line No. 120) 6= Tax Exempted-purchase with no vat or uncollectible inputs (Line no. 85 or Line no. 130)    (Please type 1 or 2 or 3 or 4 or 5 or 6).This field is mandatory.',
+            'TIN..This field  is not mandatory.',
+            'Seller name (if Seller has no TIN or item is not locally purchased) This field is not mandatory.',
+            'Date of purchase/Customs Declaration No.  Dispatched Date (Please use  dd/mm/yyyy date format).  This field is mandatory.',
+            'MRC Number..This field is not mandatory.',
+            'Vat receipt number/ Customs Declaration Number.This field is mandatory.',
+            'Description.This field is mandatory.',
+            'Unit of Measure (type ID 2-10). 2 KG 3 ML 4 GM 5 LIT 6 MT 7 PCS 8 CT 9 OTHER 10 PC This field is mandatory.',
+            'Quantity. Enter number.Don\'t use comma (,) or Quatation ("") This field is  mandatory.',
+            'Unit Price. Enter number only .Don\'t use comma (,) or Quatation ("") This field is  mandatory.',
+            'Total value',
+            'vat',
+            'value after vat',
         ];
 
+        // 1. Gather all itemized OCR receipts in date range
         $ocrItems = collect();
         if (Schema::hasTable('receipt_items')) {
             $ocrItems = ReceiptItem::with(['receipt', 'receipt.project', 'receipt.uploader'])
-                ->whereHas('receipt', fn($rq) => $rq->whereBetween('receipt_date', [$startDate, $endDate]))
+                ->whereHas('receipt', function ($rq) use ($startDate, $endDate) {
+                    $rq->whereBetween('receipt_date', [$startDate, $endDate])
+                       ->orWhere(function ($sub) use ($startDate, $endDate) {
+                           $sub->whereNull('receipt_date')
+                               ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+                       });
+                })
                 ->orderBy('id', 'asc')
                 ->get();
+        }
+
+        // 2. Also include standalone Receipts that don't have receipt_items (virtualized as items)
+        if (Schema::hasTable('receipts')) {
+            $standaloneReceipts = Receipt::with(['project', 'uploader'])
+                ->doesntHave('items')
+                ->where(function ($rq) use ($startDate, $endDate) {
+                    $rq->whereBetween('receipt_date', [$startDate, $endDate])
+                       ->orWhere(function ($sub) use ($startDate, $endDate) {
+                           $sub->whereNull('receipt_date')
+                               ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+                       });
+                })
+                ->orderBy('id', 'asc')
+                ->get();
+
+            foreach ($standaloneReceipts as $sr) {
+                $subtotal = (float)$sr->subtotal;
+                $vat = (float)$sr->vat_amount;
+                $total = (float)$sr->total_amount;
+                if ($total <= 0 && ($subtotal > 0 || $vat > 0)) {
+                    $total = round($subtotal + $vat, 2);
+                }
+                if ($subtotal <= 0 && $total > 0) {
+                    if ($vat > 0) {
+                        $subtotal = round($total - $vat, 2);
+                    } else {
+                        $subtotal = round($total / 1.15, 2);
+                        $vat = round($total - $subtotal, 2);
+                    }
+                }
+
+                $virtualItem = new ReceiptItem([
+                    'receipt_id'       => $sr->id,
+                    'item_description' => $sr->description ?: 'Purchased Goods',
+                    'vat_category'     => 'G',
+                    'calendar_type'    => 'G',
+                    'purchase_type'    => ($vat > 0 ? 3 : 6),
+                    'uom'              => '9',
+                    'qty'              => 1.00,
+                    'unit_price'       => $subtotal,
+                    'total_value'      => $subtotal,
+                    'vat_amount'       => $vat,
+                    'value_after_vat'  => $total,
+                ]);
+                $virtualItem->id = $sr->id;
+                $virtualItem->setRelation('receipt', $sr);
+                $ocrItems->push($virtualItem);
+            }
+        }
+
+        // 3. Include any CreditStorePayments in this period with receipt_path
+        if (Schema::hasTable('credit_store_payments')) {
+            $paymentSlips = CreditStorePayment::with(['ledger', 'ledger.project'])
+                ->whereNotNull('receipt_path')
+                ->where('receipt_path', '!=', '')
+                ->where(function ($q) use ($startDate, $endDate) {
+                    $q->whereBetween('payment_date', [$startDate, $endDate])
+                      ->orWhere(function ($sub) use ($startDate, $endDate) {
+                          $sub->whereNull('payment_date')
+                              ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+                      });
+                })
+                ->get();
+
+            $existingFiles = $ocrItems->map(fn($it) => $it->receipt?->file_path)->filter()->all();
+
+            foreach ($paymentSlips as $p) {
+                if (in_array($p->receipt_path, $existingFiles)) {
+                    continue;
+                }
+
+                $ledger = $p->ledger;
+                $gross = (float)$p->amount;
+                $vatRate = (float)($p->vat_rate ?: 15.00);
+                $vatIncluded = ((float)($p->vat_amount ?? 0) > 0) || in_array($p->vat_type, ['inclusive', 'vat_b', 'exclusive']);
+
+                if ($vatIncluded && in_array($p->vat_type, ['inclusive', 'vat_b'])) {
+                    $receiptSubtotal = (float)($p->gross_amount > 0 ? $p->gross_amount : round($gross / (1 + ($vatRate / 100)), 2));
+                    $vatAmount = (float)($p->vat_amount > 0 ? $p->vat_amount : round($gross - $receiptSubtotal, 2));
+                    $receiptTotal = $gross;
+                } elseif ($vatIncluded && $p->vat_type === 'exclusive') {
+                    $receiptSubtotal = $gross;
+                    $vatAmount = (float)($p->vat_amount > 0 ? $p->vat_amount : round($gross * ($vatRate / 100), 2));
+                    $receiptTotal = round($gross + $vatAmount, 2);
+                } else {
+                    $receiptSubtotal = $gross;
+                    $vatAmount = 0.0;
+                    $receiptTotal = $gross;
+                }
+
+                $vReceipt = new Receipt([
+                    'vendor_name'    => $ledger?->supplier_name ?: 'Credit Vendor',
+                    'vendor_tin'     => '',
+                    'buyer_tin'      => '0038480010',
+                    'receipt_number' => $p->reference_no ?: ('REC-PAY-' . $p->id),
+                    'fs_no'          => $p->reference_no ?: '',
+                    'receipt_date'   => $p->payment_date ?: $p->created_at?->toDateString(),
+                    'subtotal'       => $receiptSubtotal,
+                    'vat_amount'     => $vatAmount,
+                    'total_amount'   => $receiptTotal,
+                    'file_path'      => $p->receipt_path,
+                    'file_type'      => 'image',
+                    'description'    => "Credit Payment #{$p->id} - " . ($ledger?->item_description ?: ($ledger?->notes ?: 'Materials')),
+                ]);
+                $vReceipt->id = 'P' . $p->id;
+                if ($ledger?->project) {
+                    $vReceipt->setRelation('project', $ledger->project);
+                }
+
+                $vItem = new ReceiptItem([
+                    'receipt_id'       => $vReceipt->id,
+                    'item_description' => $ledger?->item_description ?: ($ledger?->notes ?: 'Credit settlement'),
+                    'vat_category'     => $vatIncluded ? 'G' : 'E',
+                    'calendar_type'    => 'G',
+                    'purchase_type'    => $vatIncluded ? 3 : 6,
+                    'uom'              => '9',
+                    'qty'              => 1.0,
+                    'unit_price'       => $receiptSubtotal,
+                    'total_value'      => $receiptSubtotal,
+                    'vat_amount'       => $vatAmount,
+                    'value_after_vat'  => $receiptTotal,
+                ]);
+                $vItem->id = 'P' . $p->id;
+                $vItem->setRelation('receipt', $vReceipt);
+
+                $ocrItems->push($vItem);
+                $existingFiles[] = $p->receipt_path;
+            }
+        }
+
+        // Apply filters if requested
+        if ($request->filled('search')) {
+            $s = strtolower(trim((string)$request->search));
+            $ocrItems = $ocrItems->filter(function ($item) use ($s) {
+                $r = $item->receipt;
+                return str_contains(strtolower((string)$item->item_description), $s)
+                    || str_contains(strtolower((string)($r?->fs_no ?? '')), $s)
+                    || str_contains(strtolower((string)($r?->vendor_name ?? '')), $s)
+                    || str_contains(strtolower((string)($r?->vendor_tin ?? '')), $s)
+                    || str_contains(strtolower((string)($r?->mrc_no ?? '')), $s);
+            });
+        }
+
+        if ($request->filled('category')) {
+            $catFilter = strtolower(trim((string)$request->category));
+            $ocrItems = $ocrItems->filter(function ($item) use ($catFilter) {
+                $r = $item->receipt;
+                return strtolower((string)($r?->category ?? '')) === $catFilter
+                    || strtolower((string)($item->vat_category ?? '')) === $catFilter;
+            });
+        }
+
+        if ($request->boolean('valid_only')) {
+            $ocrItems = $ocrItems->filter(function ($item) {
+                $r = $item->receipt;
+                $tinDigits = preg_replace('/[^0-9]/', '', (string)($r?->vendor_tin ?? ''));
+                $fsDigits = preg_replace('/[^0-9]/', '', (string)($r?->fs_no ?? ''));
+                return strlen($tinDigits) === 10 && strlen($fsDigits) === 8;
+            });
         }
 
         $rows = [];
         foreach ($ocrItems as $item) {
             $r = $item->receipt;
-            $dateFormatted = $r && $r->receipt_date ? EthiopianDate::formatDateEc($r->receipt_date, 'DD/MM/YYYY EC') : EthiopianDate::formatDateEc(now(), 'DD/MM/YYYY EC');
+
+            // 1. VAT CATEGORY: G or S
+            $cat = strtoupper(trim((string)($item->vat_category ?: ($r?->vat_category ?: 'G'))));
+            $vatCategory = ($cat === 'S' || str_starts_with($cat, 'SERV')) ? 'S' : 'G';
+
+            // 2. CALENDAR TYPE: G (default) or E
+            $calType = strtoupper(trim((string)($item->calendar_type ?: ($request->input('calendar_type') ?: 'G'))));
+            $calendarType = ($calType === 'E') ? 'E' : 'G';
+
+            // 6. Date of purchase (dd/mm/yyyy format)
+            $date = $r?->receipt_date ?: $item->created_at;
+            if ($calendarType === 'E') {
+                $dateFormatted = $date ? EthiopianDate::formatDateEc($date, 'd/m/Y') : EthiopianDate::formatDateEc(now(), 'd/m/Y');
+            } else {
+                $dateFormatted = $date ? Carbon::parse($date)->format('d/m/Y') : now()->format('d/m/Y');
+            }
+
+            // 4. TIN: clean digits only or empty
             $rawTin = $r ? (string)$r->vendor_tin : '';
-            $rawFs  = $r ? (string)$r->fs_no : '';
-            $seller = $r ? (string)$r->vendor_name : '';
-            $mrc    = $r ? (string)$r->mrc_no : '';
-
             $tinDigits = preg_replace('/[^0-9]/', '', $rawTin);
-            $tinText = (strlen($tinDigits) === 10) ? $tinDigits : $rawTin;
+            $tinDigits = preg_replace('/^0+/', '', $tinDigits);
+            $tinVal = ($tinDigits !== '') ? (int)$tinDigits : '';
 
-            $fsDigits = preg_replace('/[^0-9]/', '', $rawFs);
-            $fsText = (strlen($fsDigits) === 8) ? $fsDigits : $rawFs;
+            // 5. Seller name
+            $seller = $r ? trim((string)$r->vendor_name) : '';
 
-            $baseVal = (float)$item->total_value;
-            $vatVal = (float)$item->vat_amount;
+            // 7. MRC Number: clean string or empty
+            $rawMrc = $r ? trim((string)$r->mrc_no) : '';
+            $mrcVal = ($rawMrc !== '' && $rawMrc !== '-' && strtoupper($rawMrc) !== 'N/A') ? $rawMrc : '';
+
+            // 8. VAT receipt number / Customs Declaration Number
+            $rawFs = $r ? trim((string)($r->fs_no ?: ($r->fs_no_raw ?: ($r->receipt_number ?: '')))) : '';
+            if ($rawFs === '' || $rawFs === '-') {
+                $rawFs = $r ? trim((string)$r->receipt_number) : 'FS00000000';
+            }
+
+            // 9. Description
+            $desc = trim((string)($item->item_description ?: ($r?->description ?: 'Purchased Goods')));
+
+            // 10. Unit of Measure (ID 2-10: 2 KG 3 ML 4 GM 5 LIT 6 MT 7 PCS 8 CT 9 OTHER 10 PC)
+            $uomRaw = strtoupper(trim((string)$item->uom));
+            if (is_numeric($uomRaw) && (int)$uomRaw >= 2 && (int)$uomRaw <= 10) {
+                $uomId = (int)$uomRaw;
+            } else {
+                $uomId = match (true) {
+                    str_contains($uomRaw, 'KG') || str_contains($uomRaw, 'KILO') => 2,
+                    str_contains($uomRaw, 'ML') => 3,
+                    str_contains($uomRaw, 'GM') || str_contains($uomRaw, 'GRAM') => 4,
+                    str_contains($uomRaw, 'LIT') || str_contains($uomRaw, 'LTR') || $uomRaw === 'L' => 5,
+                    str_contains($uomRaw, 'MT') || str_contains($uomRaw, 'TON') => 6,
+                    str_contains($uomRaw, 'PCS') || str_contains($uomRaw, 'PIECE') || str_contains($uomRaw, 'PCS.') => 7,
+                    str_contains($uomRaw, 'CT') || str_contains($uomRaw, 'CARTON') || str_contains($uomRaw, 'BOX') => 8,
+                    $uomRaw === 'PC' => 10,
+                    default => 9, // 9 = OTHER
+                };
+            }
+
+            // Amounts calculation
+            $baseVal  = (float)$item->total_value;
+            $vatVal   = (float)$item->vat_amount;
             $afterVal = (float)$item->value_after_vat;
-            $unitVal = (float)$item->unit_price;
+            $unitVal  = (float)$item->unit_price;
+            $qty      = (float)$item->qty > 0 ? (float)$item->qty : 1.0;
 
             if ($baseVal > 0 && $vatVal > 0) {
                 $calcBase = round($baseVal / 1.15, 2);
                 if (abs(($baseVal - $vatVal) - $calcBase) <= 0.05 && abs(round($calcBase * 0.15, 2) - $vatVal) <= 0.05) {
                     $afterVal = $baseVal;
-                    $baseVal = $calcBase;
-                    $unitVal = ((float)$item->qty > 0) ? round($calcBase / (float)$item->qty, 2) : $calcBase;
+                    $baseVal  = $calcBase;
+                    $unitVal  = round($calcBase / $qty, 2);
                 }
             }
 
+            if ($afterVal <= 0 && $baseVal > 0) {
+                if ($vatVal <= 0) {
+                    $vatVal = round($baseVal * 0.15, 2);
+                }
+                $afterVal = round($baseVal + $vatVal, 2);
+            } elseif ($baseVal <= 0 && $afterVal > 0) {
+                if ($vatVal > 0) {
+                    $baseVal = round($afterVal - $vatVal, 2);
+                } else {
+                    $baseVal = round($afterVal / 1.15, 2);
+                    $vatVal  = round($afterVal - $baseVal, 2);
+                }
+            }
+
+            if ($unitVal <= 0 && $baseVal > 0) {
+                $unitVal = round($baseVal / $qty, 2);
+            }
+
+            if (abs(($baseVal + $vatVal) - $afterVal) > 0.05) {
+                $afterVal = round($baseVal + $vatVal, 2);
+            }
+
+            // 3. Purchase Type (1-6)
+            $pType = (int)($item->purchase_type ?: 3);
+            if ($pType < 1 || $pType > 6) {
+                $pType = 3;
+            }
+            if ($vatVal <= 0 && $pType === 3) {
+                $pType = 6;
+            }
+
+            $qtyVal   = (floor($qty) == $qty) ? (int)$qty : round($qty, 4);
+            $unitVal  = round($unitVal, 2);
+            $baseVal  = round($baseVal, 2);
+            $vatVal   = round($vatVal, 2);
+            $afterVal = round($afterVal, 2);
+
             $rows[] = [
-                (string)($item->vat_category ?: 'G'),
-                (string)($item->calendar_type ?: 'E'),
-                (int)($item->purchase_type ?: 3),
-                (string)$tinText,
+                $vatCategory,
+                $calendarType,
+                $pType,
+                $tinVal,
                 $seller,
                 $dateFormatted,
-                $mrc,
-                (string)$fsText,
-                (string)($item->item_description ?: 'Material'),
-                (string)($item->uom ?: '9'),
-                (float)$item->qty,
+                $mrcVal,
+                $rawFs,
+                $desc,
+                $uomId,
+                $qtyVal,
                 $unitVal,
                 $baseVal,
                 $vatVal,
@@ -2922,6 +3176,7 @@ class FinanceTaxReportController extends Controller
             ];
         }
 
+        // Fallback: if no OCR items found, query paid Expense Requests with VAT
         if (empty($rows) && Schema::hasTable('expense_requests')) {
             $expenses = ExpenseRequest::with(['user', 'bankAccount', 'chartOfAccount', 'paidBy'])
                 ->where('status', ExpenseRequest::STATUS_PAID)
@@ -2935,18 +3190,21 @@ class FinanceTaxReportController extends Controller
                 $gross = (float)($exp->gross_amount > 0 ? $exp->gross_amount : $exp->amount);
                 $vatAmount = (float)$exp->vat_amount;
                 $base = round($gross - $vatAmount, 2);
+                $date = $exp->paid_at ?: $exp->created_at;
+                $dateFormatted = $date ? Carbon::parse($date)->format('d/m/Y') : now()->format('d/m/Y');
+
                 $rows[] = [
                     'G',
-                    'E',
+                    'G',
                     3,
                     '',
                     $exp->account_name ?: ($exp->user?->name ?: 'Vendor'),
-                    $exp->paid_at ? EthiopianDate::formatDateEc($exp->paid_at, 'DD/MM/YYYY EC') : EthiopianDate::formatDateEc($exp->created_at, 'DD/MM/YYYY EC'),
+                    $dateFormatted,
                     '',
-                    $exp->payment_reference ?: $exp->request_number,
-                    $exp->description ?: 'Purchased Goods',
-                    '9',
-                    1.0,
+                    (string)($exp->payment_reference ?: $exp->request_number),
+                    (string)($exp->description ?: 'Purchased Goods'),
+                    9,
+                    1,
                     $base,
                     $base,
                     $vatAmount,

@@ -631,34 +631,40 @@ class ExpenseHubController extends Controller
             $handle = fopen('php://output', 'w');
             fprintf($handle, chr(0xEF).chr(0xBB).chr(0xBF)); // UTF-8 BOM
 
-            // Official 15 ERA Columns matching FinanceTaxReportController.php
+            // Official 15 ERA Columns matching pro.doc
             fputcsv($handle, [
-                "VAT CATEGORY (G=GOODS;S=SERVICES)",
-                "CALENDAR TYPE (E=ETHIOPIAN;G=GREGORIAN)",
-                "Types of purchase (1-6)",
-                "TIN",
-                "Seller name",
-                "Date of purchase",
-                "MRC Number",
-                "Vat receipt number / FS No",
-                "Description / Item",
-                "Unit of Measure",
-                "Quantity",
-                "Unit Price",
-                "Total value",
-                "VAT (15%)",
-                "Value after vat",
+                'VAT CATEGORY  (G=GOODS;S=SERVICES)',
+                'CALENDAR TYPE (E=ETHIOPIAN;G=GREGORIAN)',
+                'Types of purchase. 1 = Taxable-local Purchase of Capital Assets (Line No. 65) 2 = Taxable-imported Purchase of Capital Assets (Line No. 75) 3 = Taxable-local Purchase of Inputs (Line No. 100) 4 = Taxable-imported Purchase of Inputs (Line No. 110) 5 = Taxable-general Expense Inputs Purchase (Line No. 120) 6= Tax Exempted-purchase with no vat or uncollectible inputs (Line no. 85 or Line no. 130)    (Please type 1 or 2 or 3 or 4 or 5 or 6).This field is mandatory.',
+                'TIN..This field  is not mandatory.',
+                'Seller name (if Seller has no TIN or item is not locally purchased) This field is not mandatory.',
+                'Date of purchase/Customs Declaration No.  Dispatched Date (Please use  dd/mm/yyyy date format).  This field is mandatory.',
+                'MRC Number..This field is not mandatory.',
+                'Vat receipt number/ Customs Declaration Number.This field is mandatory.',
+                'Description.This field is mandatory.',
+                'Unit of Measure (type ID 2-10). 2 KG 3 ML 4 GM 5 LIT 6 MT 7 PCS 8 CT 9 OTHER 10 PC This field is mandatory.',
+                'Quantity. Enter number.Don\'t use comma (,) or Quatation ("") This field is  mandatory.',
+                'Unit Price. Enter number only .Don\'t use comma (,) or Quatation ("") This field is  mandatory.',
+                'Total value',
+                'vat',
+                'value after vat',
             ]);
 
             foreach ($expenses as $item) {
                 $rawTin = (string) ($item->tin ?? '');
                 $tinDigits = preg_replace('/[^0-9]/', '', $rawTin);
-                $tinText = (strlen($tinDigits) === 10) ? $tinDigits : $rawTin;
+                $tinDigits = preg_replace('/^0+/', '', $tinDigits);
+                $tinVal = ($tinDigits !== '') ? (int)$tinDigits : '';
 
-                // Format Ethiopian Date
-                $ethDate = $item->disbursement_date
-                    ? EthiopianDate::formatDateEc($item->disbursement_date, 'DD/MM/YYYY EC')
-                    : EthiopianDate::formatDateEc(now(), 'DD/MM/YYYY EC');
+                $calType = strtoupper(trim((string)($item->calendar_type ?: 'G')));
+                $calendarType = ($calType === 'E') ? 'E' : 'G';
+
+                $date = $item->disbursement_date ?: $item->created_at;
+                if ($calendarType === 'E') {
+                    $dateFormatted = $date ? EthiopianDate::formatDateEc($date, 'd/m/Y') : EthiopianDate::formatDateEc(now(), 'd/m/Y');
+                } else {
+                    $dateFormatted = $date ? Carbon::parse($date)->format('d/m/Y') : now()->format('d/m/Y');
+                }
 
                 $baseVal = (float) $item->decision_base_amount;
                 $vatVal  = (float) $item->decision_vat_amount;
@@ -666,22 +672,52 @@ class ExpenseHubController extends Controller
                 $qty     = (float) ($item->qty > 0 ? $item->qty : 1);
                 $unitVal = round($baseVal / $qty, 2);
 
+                if (abs(($baseVal + $vatVal) - $totVal) > 0.05) {
+                    $totVal = round($baseVal + $vatVal, 2);
+                }
+
+                $uomRaw = strtoupper(trim((string)($item->uom ?? '')));
+                if (is_numeric($uomRaw) && (int)$uomRaw >= 2 && (int)$uomRaw <= 10) {
+                    $uomId = (int)$uomRaw;
+                } else {
+                    $uomId = match (true) {
+                        str_contains($uomRaw, 'KG') || str_contains($uomRaw, 'KILO') => 2,
+                        str_contains($uomRaw, 'ML') => 3,
+                        str_contains($uomRaw, 'GM') || str_contains($uomRaw, 'GRAM') => 4,
+                        str_contains($uomRaw, 'LIT') || str_contains($uomRaw, 'LTR') || $uomRaw === 'L' => 5,
+                        str_contains($uomRaw, 'MT') || str_contains($uomRaw, 'TON') => 6,
+                        str_contains($uomRaw, 'PCS') || str_contains($uomRaw, 'PIECE') || str_contains($uomRaw, 'PCS.') => 7,
+                        str_contains($uomRaw, 'CT') || str_contains($uomRaw, 'CARTON') || str_contains($uomRaw, 'BOX') => 8,
+                        $uomRaw === 'PC' => 10,
+                        default => 9,
+                    };
+                }
+
+                $pType = (int)($item->purchase_type ?: 3);
+                if ($pType < 1 || $pType > 6) $pType = 3;
+                if ($vatVal <= 0 && $pType === 3) $pType = 6;
+
+                $rawMrc = trim((string)($item->mrc_no ?? ''));
+                $mrcVal = ($rawMrc !== '' && $rawMrc !== '-' && strtoupper($rawMrc) !== 'N/A') ? $rawMrc : '';
+
+                $rawFs = trim((string)($item->fs_no ?? ''));
+
                 fputcsv($handle, [
                     $item->vat_category ?: 'G',
-                    $item->calendar_type ?: 'E',
-                    $item->purchase_type ?: 3,
-                    $tinText ?: 'N/A',
-                    $item->payee_supplier,
-                    $ethDate,
-                    $item->mrc_no ?: '',
-                    $item->fs_no ?: '',
-                    $item->item_desc ?: $item->description,
-                    $item->uom ?: '9',
-                    number_format($qty, 2, '.', ''),
-                    number_format($unitVal, 2, '.', ''),
-                    number_format($baseVal, 2, '.', ''),
-                    number_format($vatVal, 2, '.', ''),
-                    number_format($totVal, 2, '.', ''),
+                    $calendarType,
+                    $pType,
+                    $tinVal,
+                    trim((string)($item->payee_supplier ?? '')),
+                    $dateFormatted,
+                    $mrcVal,
+                    $rawFs,
+                    trim((string)($item->item_desc ?: ($item->description ?? 'Purchased Goods'))),
+                    $uomId,
+                    (floor($qty) == $qty) ? (int)$qty : round($qty, 4),
+                    round($unitVal, 2),
+                    round($baseVal, 2),
+                    round($vatVal, 2),
+                    round($totVal, 2),
                 ]);
             }
 
