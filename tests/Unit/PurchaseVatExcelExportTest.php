@@ -93,6 +93,8 @@ class PurchaseVatExcelExportTest extends TestCase
             $table->boolean('needs_review')->default(false);
             $table->string('purchasable_type')->nullable();
             $table->unsignedBigInteger('purchasable_id')->nullable();
+            $table->string('tax_type')->nullable();
+            $table->string('no_vat_reason_code')->nullable();
             $table->json('parsed_data')->nullable();
             $table->timestamps();
         });
@@ -375,5 +377,182 @@ class PurchaseVatExcelExportTest extends TestCase
         $this->assertEquals(85739.13, $rows[1][12]);
         $this->assertEquals(12860.87, $rows[1][13]);
         $this->assertEquals(98600.0, $rows[1][14]);
+    }
+
+    public function test_calculate_month_movements_shows_only_vat_receipts_by_default()
+    {
+        // 1. Valid VAT itemized receipt
+        $r1 = Receipt::create([
+            'vendor_name'    => 'VAT VENDOR 1',
+            'vendor_tin'     => '1234567890',
+            'receipt_number' => 'FS0001',
+            'fs_no'          => 'FS0001',
+            'receipt_date'   => '2026-04-10',
+            'subtotal'       => 100.00,
+            'vat_amount'     => 15.00,
+            'total_amount'   => 115.00,
+            'tax_type'       => 'vat',
+            'project_id'     => $this->project->id,
+        ]);
+        ReceiptItem::create([
+            'receipt_id'       => $r1->id,
+            'item_description' => 'Vat Item 1',
+            'vat_category'     => 'G',
+            'calendar_type'    => 'G',
+            'purchase_type'    => 3,
+            'uom'              => '9',
+            'qty'              => 1.0,
+            'unit_price'       => 100.00,
+            'total_value'      => 100.00,
+            'vat_amount'       => 15.00,
+            'value_after_vat'  => 115.00,
+        ]);
+
+        // 2. Non-VAT / Exempt itemized receipt
+        $r2 = Receipt::create([
+            'vendor_name'         => 'NON VAT VENDOR',
+            'vendor_tin'          => '9876543210',
+            'receipt_number'      => 'FS0002',
+            'fs_no'               => 'FS0002',
+            'receipt_date'        => '2026-04-12',
+            'subtotal'            => 200.00,
+            'vat_amount'          => 0.00,
+            'total_amount'        => 200.00,
+            'tax_type'            => 'no_vat',
+            'no_vat_reason_code'  => 'EXEMPT',
+            'project_id'          => $this->project->id,
+        ]);
+        ReceiptItem::create([
+            'receipt_id'       => $r2->id,
+            'item_description' => 'Non Vat Item',
+            'vat_category'     => 'E',
+            'calendar_type'    => 'G',
+            'purchase_type'    => 6,
+            'uom'              => '9',
+            'qty'              => 1.0,
+            'unit_price'       => 200.00,
+            'total_value'      => 200.00,
+            'vat_amount'       => 0.00,
+            'value_after_vat'  => 200.00,
+        ]);
+
+        // 3. Fuel receipt with 0 VAT (proclamation exempt)
+        Receipt::create([
+            'vendor_name'    => 'TOTAL ENERGIES',
+            'vendor_tin'     => '1122334455',
+            'receipt_number' => 'FS0003',
+            'fs_no'          => 'FS0003',
+            'receipt_date'   => '2026-04-15',
+            'subtotal'       => 500.00,
+            'vat_amount'     => 0.00,
+            'total_amount'   => 500.00,
+            'category'       => 'fuel',
+            'tax_type'       => 'no_vat',
+            'description'    => 'Diesel fuel',
+            'project_id'     => $this->project->id,
+        ]);
+
+        // 4. Valid standalone VAT receipt
+        Receipt::create([
+            'vendor_name'    => 'VAT HARDWARE',
+            'vendor_tin'     => '5544332211',
+            'receipt_number' => 'FS0004',
+            'fs_no'          => 'FS0004',
+            'receipt_date'   => '2026-04-18',
+            'subtotal'       => 1000.00,
+            'vat_amount'     => 150.00,
+            'total_amount'   => 1150.00,
+            'tax_type'       => 'vat',
+            'description'    => 'Cement Bags',
+            'project_id'     => $this->project->id,
+        ]);
+
+        // 5. Zero-VAT credit payment slip
+        $ledgerZero = CreditStoreLedger::create([
+            'project_id'    => $this->project->id,
+            'supplier_name' => 'Zero Vat Supplier',
+        ]);
+        CreditStorePayment::create([
+            'credit_store_ledger_id' => $ledgerZero->id,
+            'amount'                 => 300.00,
+            'gross_amount'           => 300.00,
+            'vat_amount'             => 0.00,
+            'vat_rate'               => 0.00,
+            'vat_type'               => 'none',
+            'payment_date'           => '2026-04-20',
+            'receipt_path'           => 'receipts/zero_vat.jpg',
+        ]);
+
+        // 6. Valid VAT credit payment slip
+        $ledgerVat = CreditStoreLedger::create([
+            'project_id'    => $this->project->id,
+            'supplier_name' => 'Vat Supplier',
+        ]);
+        CreditStorePayment::create([
+            'credit_store_ledger_id' => $ledgerVat->id,
+            'amount'                 => 230.00,
+            'gross_amount'           => 200.00,
+            'vat_amount'             => 30.00,
+            'vat_rate'               => 15.00,
+            'vat_type'               => 'inclusive',
+            'payment_date'           => '2026-04-22',
+            'receipt_path'           => 'receipts/valid_vat.jpg',
+        ]);
+
+        $controller = app(FinanceTaxReportController::class);
+
+        // A. Test with vatOnly = true (default)
+        $dataVatOnly = $controller->calculateMonthMovementsData(2018, 8, true);
+        $ocrItems = $dataVatOnly['ocr_items'];
+
+        // Should strictly have only the 3 VAT receipts
+        $this->assertCount(3, $ocrItems);
+        foreach ($ocrItems as $item) {
+            $this->assertGreaterThan(0, $item['vat_amount']);
+            $this->assertTrue($item['is_vat_receipt']);
+            $this->assertFalse($item['is_no_vat']);
+            $this->assertNotEquals('fuel', $item['category']);
+        }
+
+        // B. Test with vatOnly = false
+        $dataAll = $controller->calculateMonthMovementsData(2018, 8, false);
+        $allOcrItems = $dataAll['ocr_items'];
+
+        // Should return all 6 receipts
+        $this->assertCount(6, $allOcrItems);
+
+        $noVatItems = $allOcrItems->where('is_no_vat', true);
+        $this->assertCount(3, $noVatItems);
+        foreach ($noVatItems as $item) {
+            $this->assertEquals(0, $item['vat_amount']);
+            $this->assertFalse($item['is_vat_receipt']);
+        }
+
+        // C. Test Purchase VAT Excel export strictly exports only VAT items
+        $request = new Request([
+            'type'            => 'purchase_vat',
+            'ethiopian_year'  => 2018,
+            'ethiopian_month' => 8,
+        ]);
+
+        $response = $controller->exportExcel($request);
+        $this->assertEquals(200, $response->getStatusCode());
+
+        $rows = [];
+        ob_start();
+        $response->sendContent();
+        $content = ob_get_clean();
+        $content = preg_replace('/^\xEF\xBB\xBF/', '', $content);
+        $lines = explode("\n", trim($content));
+        foreach ($lines as $line) {
+            if (trim($line) === '') continue;
+            $rows[] = str_getcsv($line);
+        }
+
+        // Header + exactly 3 VAT items
+        $this->assertCount(4, $rows);
+        for ($i = 1; $i <= 3; $i++) {
+            $this->assertGreaterThan(0, (float)$rows[$i][13]); // Column 13: VAT
+        }
     }
 }

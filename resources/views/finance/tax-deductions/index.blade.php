@@ -3305,11 +3305,24 @@
                                     <div class="d-flex align-items-center gap-2">
                                         <span class="badge bg-primary-subtle text-primary p-2 rounded-3"><i class="fa-solid fa-camera-retro fs-6"></i></span>
                                         <div>
-                                            <h6 class="fw-bold mb-0 text-dark">Scanned OCR Receipts (ERCA Cash Register Invoices)</h6>
-                                            <small class="text-muted">Itemized receipts with verified Vendor TIN, FS Numbers, and Machine MRC</small>
+                                            <div class="d-flex align-items-center gap-2">
+                                                <h6 class="fw-bold mb-0 text-dark">Scanned OCR Receipts (ERCA Cash Register Invoices)</h6>
+                                                <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill small fw-semibold px-2.5 py-0.5">
+                                                    <i class="fa-solid fa-percent me-1"></i>Only VAT Receipts
+                                                </span>
+                                            </div>
+                                            <small class="text-muted">Itemized receipts with verified 15% VAT, Vendor TIN, FS Numbers, and Machine MRC</small>
                                         </div>
                                     </div>
                                     <div class="d-flex align-items-center gap-2">
+                                        <div class="btn-group btn-group-sm shadow-xs rounded-pill p-0.5 bg-light border me-1" role="group">
+                                            <button type="button" class="btn btn-sm rounded-pill px-2.5 py-1 fw-semibold btn-success text-white shadow-xs" id="btnFilterOcrVatOnly" onclick="toggleOcrVatFilter(true)" title="Show Only Receipts with 15% VAT">
+                                                <i class="fa-solid fa-percent me-1"></i>Only VAT Receipts
+                                            </button>
+                                            <button type="button" class="btn btn-sm rounded-pill px-2.5 py-1 fw-semibold text-muted" id="btnFilterOcrAll" onclick="toggleOcrVatFilter(false)" title="Show All Scanned Invoices (including 0% VAT / exempt)">
+                                                <i class="fa-solid fa-list me-1"></i>All Scanned
+                                            </button>
+                                        </div>
                                         <div class="btn-group shadow-xs rounded-pill overflow-hidden">
                                             <button type="button" class="btn btn-sm btn-outline-primary fw-semibold px-3 text-nowrap d-inline-flex align-items-center gap-1" onclick="exportMovementsExcel('purchase_tas')">
                                                 <i class="fa-solid fa-file-excel"></i>
@@ -3320,7 +3333,7 @@
                                                 <span>Purchase VAT</span>
                                             </button>
                                         </div>
-                                        <div style="min-width: 250px;">
+                                        <div style="min-width: 220px;">
                                             <input type="text" class="form-control form-control-sm rounded-pill" placeholder="Search vendor, FS #, item..." onkeyup="filterMovementTable('mOcrTable', this.value)">
                                         </div>
                                     </div>
@@ -5897,67 +5910,10 @@
         document.getElementById('mExpenseTotalWht').innerText = '- ETB ' + formatMoney(s.withholding_tax);
         document.getElementById('mExpenseTotalNet').innerText = 'ETB ' + formatMoney(s.net_disbursed);
 
-        // 3. Render OCR Invoices Table
-        const ocrTbody = document.getElementById('mOcrTableBody');
-        ocrTbody.innerHTML = '';
-        let ocrSumBase = 0, ocrSumVat = 0, ocrSumAfter = 0;
+        // 3. Render OCR Invoices Table (Defaults strictly to VAT receipts)
         window._movementOcrCache['modal'] = data.ocr_items || [];
-
-        if (data.ocr_items && data.ocr_items.length > 0) {
-            data.ocr_items.forEach((ocr, idx) => {
-                ocrSumBase += ocr.base_value;
-                ocrSumVat += ocr.vat_amount;
-                ocrSumAfter += ocr.value_after_vat;
-
-                const slipBtnHtml = `<button type="button" class="btn btn-xs ${ocr.file_url ? (ocr.is_pdf ? 'btn-outline-danger' : 'btn-outline-info') : 'btn-outline-primary'} rounded-pill px-2.5 py-1 d-inline-flex align-items-center gap-1.5 shadow-xs" onclick="previewMovementOcrSlip('modal', ${idx})" title="Inspect Slip & Edit Details">
-                    <i class="fa-solid ${ocr.file_url ? (ocr.is_pdf ? 'fa-file-pdf text-danger' : 'fa-receipt text-info') : 'fa-pen-to-square text-primary'}"></i>
-                    <span>${ocr.file_url ? (ocr.is_pdf ? 'PDF Slip' : 'See Slip') : 'Inspect'}</span>
-                    <i class="fa-solid fa-pen-to-square ms-0.5 text-muted" style="font-size:0.65rem;"></i>
-                </button>`;
-
-                const tr = document.createElement('tr');
-                tr.id = 'm-ocr-row-' + ocr.id;
-                tr.innerHTML = `
-                    <td class="ps-3 text-muted font-monospace small">${idx + 1}</td>
-                    <td>
-                        <span class="fw-bold font-monospace text-dark d-block cell-date-ec">${ocr.date_ec}</span>
-                        <small class="text-muted cell-date-gc" style="font-size:0.75rem;">${ocr.date_gc}</small>
-                    </td>
-                    <td>
-                        <span class="badge bg-light text-primary border font-monospace cell-fs">${ocr.fs_no}</span>
-                        <small class="text-muted d-block cell-receipt-no" style="font-size:0.75rem;">${ocr.receipt_number}</small>
-                        ${ocr.mrc_no && ocr.mrc_no !== '-' ? `<small class="text-muted font-monospace d-block cell-mrc" style="font-size:0.7rem;">MRC: ${ocr.mrc_no}</small>` : ''}
-                    </td>
-                    <td>
-                        <span class="fw-semibold text-dark d-block cell-vendor">${ocr.vendor_name}</span>
-                        <small class="text-muted font-monospace cell-tin" style="font-size:0.75rem;">TIN: ${ocr.vendor_tin}</small>
-                    </td>
-                    <td>
-                        <span class="badge bg-secondary-subtle text-secondary rounded-pill small cell-project">${ocr.project_name}</span>
-                        <small class="text-muted d-block cell-category" style="font-size:0.75rem;">${ocr.category}</small>
-                    </td>
-                    <td class="small text-dark text-truncate" style="max-width: 220px;" title="${ocr.item_description}">
-                        <span class="cell-desc">${ocr.item_description}</span>
-                    </td>
-                    <td class="text-end font-monospace cell-base">ETB ${formatMoney(ocr.base_value)}</td>
-                    <td class="text-end font-monospace text-success fw-semibold cell-vat">ETB ${formatMoney(ocr.vat_amount)}</td>
-                    <td class="text-end font-monospace text-dark fw-bold cell-total">ETB ${formatMoney(ocr.value_after_vat)}</td>
-                    <td class="text-center pe-3">${slipBtnHtml}</td>
-                `;
-                ocrTbody.appendChild(tr);
-            });
-        } else {
-            ocrTbody.innerHTML = `
-                <tr>
-                    <td colspan="10" class="text-center py-4 text-muted">
-                        <i class="fa-solid fa-folder-open me-2 text-secondary"></i>No OCR scanned receipts recorded for this Ethiopian month.
-                    </td>
-                </tr>
-            `;
-        }
-        document.getElementById('mOcrTotalBase').innerText = 'ETB ' + formatMoney(ocrSumBase);
-        document.getElementById('mOcrTotalVat').innerText = 'ETB ' + formatMoney(ocrSumVat);
-        document.getElementById('mOcrTotalAfter').innerText = 'ETB ' + formatMoney(ocrSumAfter);
+        window._ocrVatOnly = true;
+        renderMovementOcrTable(true);
 
         // 4. Render ERCA Line 100 Audit Tab
         document.getElementById('mAuditPeriodBadge').innerText = `${m.title}`;
@@ -6007,6 +5963,145 @@
             <i class="fa-solid fa-circle-check text-success me-1"></i>
             Total <strong>${s.total_count}</strong> transactions loaded: <strong>${s.income_count}</strong> income receipts &bull; <strong>${s.expense_count}</strong> expense vouchers &bull; <strong>${s.ocr_count}</strong> scanned OCR invoices.
         `;
+    }
+
+    // ── VAT-Only vs All Scanned Filter for Modal OCR Table ─────────────────────
+    window._ocrVatOnly = true;
+
+    function toggleOcrVatFilter(vatOnly) {
+        window._ocrVatOnly = vatOnly;
+
+        if (!vatOnly && !window._movementOcrCache['modal_all'] && currentMovementsData && currentMovementsData.month) {
+            const ethYear = currentMovementsData.month.year;
+            const ethMonth = currentMovementsData.month.month;
+            const url = "{{ route('finance.tax-deductions.month-movements') }}?ethiopian_year=" + ethYear + "&ethiopian_month=" + ethMonth + "&vat_only=0";
+
+            fetch(url, {
+                headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success && data.ocr_items) {
+                    window._movementOcrCache['modal_all'] = data.ocr_items;
+                    renderMovementOcrTable(vatOnly);
+                }
+            })
+            .catch(err => {
+                console.error("Failed to fetch all scanned items", err);
+                renderMovementOcrTable(vatOnly);
+            });
+            return;
+        }
+
+        renderMovementOcrTable(vatOnly);
+    }
+
+    function renderMovementOcrTable(vatOnly) {
+        window._ocrVatOnly = vatOnly;
+        const btnVatOnly = document.getElementById('btnFilterOcrVatOnly');
+        const btnAll = document.getElementById('btnFilterOcrAll');
+
+        if (btnVatOnly && btnAll) {
+            if (vatOnly) {
+                btnVatOnly.className = 'btn btn-sm rounded-pill px-2.5 py-1 fw-semibold btn-success text-white shadow-xs';
+                btnAll.className = 'btn btn-sm rounded-pill px-2.5 py-1 fw-semibold text-muted';
+            } else {
+                btnVatOnly.className = 'btn btn-sm rounded-pill px-2.5 py-1 fw-semibold text-muted';
+                btnAll.className = 'btn btn-sm rounded-pill px-2.5 py-1 fw-semibold btn-secondary text-white shadow-xs';
+            }
+        }
+
+        // Determine source list
+        let sourceList = [];
+        if (!vatOnly && window._movementOcrCache['modal_all']) {
+            sourceList = window._movementOcrCache['modal_all'];
+        } else {
+            sourceList = window._movementOcrCache['modal'] || [];
+        }
+
+        // Filter items: when vatOnly is true, only include rows with vat_amount > 0 and not is_no_vat
+        const items = vatOnly
+            ? sourceList.filter(ocr => (parseFloat(ocr.vat_amount) > 0 && !ocr.is_no_vat))
+            : sourceList;
+
+        // Update Tab & Button Badges
+        const ocrBadge = document.getElementById('mTabOcrBadge');
+        if (ocrBadge) ocrBadge.innerText = items.length;
+
+        const ocrTbody = document.getElementById('mOcrTableBody');
+        if (!ocrTbody) return;
+        ocrTbody.innerHTML = '';
+
+        let ocrSumBase = 0, ocrSumVat = 0, ocrSumAfter = 0;
+
+        if (items && items.length > 0) {
+            items.forEach((ocr, idx) => {
+                const b = parseFloat(ocr.base_value) || 0;
+                const v = parseFloat(ocr.vat_amount) || 0;
+                const a = parseFloat(ocr.value_after_vat) || 0;
+                ocrSumBase += b;
+                ocrSumVat += v;
+                ocrSumAfter += a;
+
+                const cacheKey = (!vatOnly && window._movementOcrCache['modal_all']) ? 'modal_all' : 'modal';
+                const slipBtnHtml = `<button type="button" class="btn btn-xs ${ocr.file_url ? (ocr.is_pdf ? 'btn-outline-danger' : 'btn-outline-info') : 'btn-outline-primary'} rounded-pill px-2.5 py-1 d-inline-flex align-items-center gap-1.5 shadow-xs" onclick="previewMovementOcrSlip('${cacheKey}', ${idx})" title="Inspect Slip & Edit Details">
+                    <i class="fa-solid ${ocr.file_url ? (ocr.is_pdf ? 'fa-file-pdf text-danger' : 'fa-receipt text-info') : 'fa-pen-to-square text-primary'}"></i>
+                    <span>${ocr.file_url ? (ocr.is_pdf ? 'PDF Slip' : 'See Slip') : 'Inspect'}</span>
+                    <i class="fa-solid fa-pen-to-square ms-0.5 text-muted" style="font-size:0.65rem;"></i>
+                </button>`;
+
+                const isVat = parseFloat(ocr.vat_amount) > 0 && !ocr.is_no_vat;
+                const vatCellContent = isVat 
+                    ? `<span class="cell-vat text-success fw-semibold">ETB ${formatMoney(v)}</span>`
+                    : `<span class="badge bg-light text-muted border px-1.5 py-0.5" style="font-size:0.65rem;">No VAT</span>`;
+
+                const tr = document.createElement('tr');
+                tr.id = 'm-ocr-row-' + ocr.id;
+                tr.innerHTML = `
+                    <td class="ps-3 text-muted font-monospace small">${idx + 1}</td>
+                    <td>
+                        <span class="fw-bold font-monospace text-dark d-block cell-date-ec">${ocr.date_ec || '-'}</span>
+                        <small class="text-muted cell-date-gc" style="font-size:0.75rem;">${ocr.date_gc || '-'}</small>
+                    </td>
+                    <td>
+                        <span class="badge bg-light text-primary border font-monospace cell-fs">${ocr.fs_no || '-'}</span>
+                        <small class="text-muted d-block cell-receipt-no" style="font-size:0.75rem;">${ocr.receipt_number || ''}</small>
+                        ${ocr.mrc_no && ocr.mrc_no !== '-' ? `<small class="text-muted font-monospace d-block cell-mrc" style="font-size:0.7rem;">MRC: ${ocr.mrc_no}</small>` : ''}
+                    </td>
+                    <td>
+                        <span class="fw-semibold text-dark d-block cell-vendor">${ocr.vendor_name || 'Vendor'}</span>
+                        <small class="text-muted font-monospace cell-tin" style="font-size:0.75rem;">TIN: ${ocr.vendor_tin || '-'}</small>
+                    </td>
+                    <td>
+                        <span class="badge bg-secondary-subtle text-secondary rounded-pill small cell-project">${ocr.project_name || 'General'}</span>
+                        <small class="text-muted d-block cell-category" style="font-size:0.75rem;">${ocr.category || ''}</small>
+                    </td>
+                    <td class="small text-dark text-truncate" style="max-width: 220px;" title="${ocr.item_description || ''}">
+                        <span class="cell-desc">${ocr.item_description || '-'}</span>
+                    </td>
+                    <td class="text-end font-monospace cell-base">ETB ${formatMoney(b)}</td>
+                    <td class="text-end font-monospace">${vatCellContent}</td>
+                    <td class="text-end font-monospace text-dark fw-bold cell-total">ETB ${formatMoney(a)}</td>
+                    <td class="text-center pe-3">${slipBtnHtml}</td>
+                `;
+                ocrTbody.appendChild(tr);
+            });
+        } else {
+            ocrTbody.innerHTML = `
+                <tr>
+                    <td colspan="10" class="text-center py-4 text-muted">
+                        <i class="fa-solid fa-folder-open me-2 text-secondary"></i>${vatOnly ? 'No verified VAT cash register receipts found for this Ethiopian month.' : 'No OCR scanned receipts recorded for this Ethiopian month.'}
+                    </td>
+                </tr>
+            `;
+        }
+
+        const baseEl = document.getElementById('mOcrTotalBase');
+        if (baseEl) baseEl.innerText = 'ETB ' + formatMoney(ocrSumBase);
+        const vatEl = document.getElementById('mOcrTotalVat');
+        if (vatEl) vatEl.innerText = 'ETB ' + formatMoney(ocrSumVat);
+        const afterEl = document.getElementById('mOcrTotalAfter');
+        if (afterEl) afterEl.innerText = 'ETB ' + formatMoney(ocrSumAfter);
     }
 
     function filterMovementTable(tableId, query) {

@@ -1027,7 +1027,8 @@ class FinanceTaxReportController extends Controller
 
         $availableEthYears  = EthiopianDate::getYears();
         $availableEthMonths = EthiopianDate::getMonths();
-        $movementsData = $this->calculateMonthMovementsData($selectedEthYear, $selectedEthMonth);
+        $vatOnly = $request->has('vat_only') ? $request->boolean('vat_only') : true;
+        $movementsData = $this->calculateMonthMovementsData($selectedEthYear, $selectedEthMonth, $vatOnly);
 
         // Previous and Next month navigation
         $prevYear  = ($selectedEthMonth === 1) ? $selectedEthYear - 1 : $selectedEthYear;
@@ -1052,7 +1053,8 @@ class FinanceTaxReportController extends Controller
             'nextMonth',
             'activeTab',
             'ocrProjects',
-            'ocrCategories'
+            'ocrCategories',
+            'vatOnly'
         ));
     }
 
@@ -1068,8 +1070,9 @@ class FinanceTaxReportController extends Controller
             $curEth = EthiopianDate::toEthiopian(now());
             $year  = (int)($request->query('ethiopian_year') ?: $curEth['year']);
             $month = (int)($request->query('ethiopian_month') ?: $curEth['month']);
+            $vatOnly = $request->has('vat_only') ? $request->boolean('vat_only') : true;
 
-            $data = $this->calculateMonthMovementsData($year, $month);
+            $data = $this->calculateMonthMovementsData($year, $month, $vatOnly);
             return response()->json($data);
         } catch (\Throwable $e) {
             Log::error("FinanceTaxReportController monthMovements error: " . $e->getMessage() . "\n" . $e->getTraceAsString());
@@ -1130,8 +1133,9 @@ class FinanceTaxReportController extends Controller
 
     /**
      * Reusable computation logic for Ethiopian Month Financial Movements & Tax Audit.
+     * Defaults to vatOnly = true to show ONLY verified VAT receipts in Tab 3 (Scanned OCR Receipts).
      */
-    public function calculateMonthMovementsData(int $year, int $month): array
+    public function calculateMonthMovementsData(int $year, int $month, bool $vatOnly = true): array
     {
         $this->ensureSchema();
 
@@ -1277,11 +1281,11 @@ class FinanceTaxReportController extends Controller
             ];
         });
 
-        // 3. OCR Scanned Receipts in this Ethiopian month
+        // 3. OCR Scanned Receipts in this Ethiopian month (strictly VAT receipts when vatOnly = true)
         $ocrItems = collect();
         if (Schema::hasTable('receipt_items')) {
             try {
-                $ocrItems = \App\Models\ReceiptItem::with(['receipt', 'receipt.project', 'receipt.uploader'])
+                $ocrQuery = \App\Models\ReceiptItem::with(['receipt', 'receipt.project', 'receipt.uploader'])
                     ->whereHas('receipt', function ($rq) use ($startDate, $endDate) {
                         $rq->whereBetween('receipt_date', [$startDate, $endDate])
                            ->orWhere(function ($sub) use ($startDate, $endDate) {
@@ -1289,8 +1293,26 @@ class FinanceTaxReportController extends Controller
                                    ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
                            });
                     })
-                    ->orderBy('id', 'asc')
-                    ->get();
+                    ->orderBy('id', 'asc');
+
+                if ($vatOnly) {
+                    $ocrQuery->where('vat_amount', '>', 0)
+                        ->where(function ($q) {
+                            $q->whereNull('vat_category')->orWhere('vat_category', '!=', 'E');
+                        })
+                        ->where(function ($q) {
+                            $q->whereNull('purchase_type')->orWhere('purchase_type', '!=', 6);
+                        })
+                        ->whereHas('receipt', function ($rq) {
+                            $rq->where(function ($sub) {
+                                $sub->whereNull('tax_type')->orWhere('tax_type', '!=', 'no_vat');
+                            })->where(function ($sub) {
+                                $sub->whereNull('no_vat_reason_code')->orWhere('no_vat_reason_code', '');
+                            });
+                        });
+                }
+
+                $ocrItems = $ocrQuery->get();
             } catch (\Throwable $e) {
                 Log::warning("monthMovements ReceiptItem query: " . $e->getMessage());
                 $ocrItems = collect();
@@ -1300,7 +1322,7 @@ class FinanceTaxReportController extends Controller
         // Also include standalone Receipts that don't have receipt_items (mapped safely in-memory)
         if (Schema::hasTable('receipts')) {
             try {
-                $standaloneReceipts = \App\Models\Receipt::with(['project', 'uploader'])
+                $srQuery = \App\Models\Receipt::with(['project', 'uploader'])
                     ->doesntHave('items')
                     ->where(function ($rq) use ($startDate, $endDate) {
                         $rq->whereBetween('receipt_date', [$startDate, $endDate])
@@ -1308,10 +1330,32 @@ class FinanceTaxReportController extends Controller
                                $sub->whereNull('receipt_date')
                                    ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
                            });
-                    })
-                    ->get();
+                    });
+
+                if ($vatOnly) {
+                    $srQuery->where(function ($q) {
+                        $q->where('vat_amount', '>', 0)
+                          ->orWhere(function ($sub) {
+                              $sub->where('tax_type', 'vat')
+                                  ->where(function ($amt) {
+                                      $amt->where('subtotal', '>', 0)->orWhere('total_amount', '>', 0);
+                                  });
+                          });
+                    })->where(function ($q) {
+                        $q->whereNull('tax_type')->orWhere('tax_type', '!=', 'no_vat');
+                    })->where(function ($q) {
+                        $q->whereNull('no_vat_reason_code')->orWhere('no_vat_reason_code', '');
+                    });
+                }
+
+                $standaloneReceipts = $srQuery->get();
 
                 foreach ($standaloneReceipts as $sr) {
+                    $taxType = strtolower((string)($sr->tax_type ?? ''));
+                    $isNoVatExplicit = ($taxType === 'no_vat')
+                        || !empty($sr->no_vat_reason_code)
+                        || ($sr->category === 'fuel' && (float)$sr->vat_amount <= 0);
+
                     $subtotal = (float)$sr->subtotal;
                     $vat = (float)$sr->vat_amount;
                     $total = (float)$sr->total_amount;
@@ -1321,18 +1365,26 @@ class FinanceTaxReportController extends Controller
                     if ($subtotal <= 0 && $total > 0) {
                         if ($vat > 0) {
                             $subtotal = round($total - $vat, 2);
-                        } else {
+                        } elseif (!$isNoVatExplicit && $taxType === 'vat') {
                             $subtotal = round($total / 1.15, 2);
                             $vat = round($total - $subtotal, 2);
+                        } else {
+                            $subtotal = $total;
+                            $vat = 0.0;
                         }
+                    }
+
+                    // Strict check: if vatOnly requested, skip non-VAT standalone receipts
+                    if ($vatOnly && ($vat <= 0 || $isNoVatExplicit)) {
+                        continue;
                     }
 
                     $virtualItem = new \App\Models\ReceiptItem([
                         'receipt_id'       => $sr->id,
                         'item_description' => $sr->description ?: 'Purchased Goods/Services',
-                        'vat_category'     => 'G',
+                        'vat_category'     => ($vat > 0 ? 'G' : 'E'),
                         'calendar_type'    => 'G',
-                        'purchase_type'    => 3,
+                        'purchase_type'    => ($vat > 0 ? 3 : 6),
                         'uom'              => '9',
                         'qty'              => 1.00,
                         'unit_price'       => $subtotal,
@@ -1390,6 +1442,10 @@ class FinanceTaxReportController extends Controller
                         $receiptTotal = $gross;
                     }
 
+                    if ($vatOnly && $vatAmount <= 0) {
+                        continue;
+                    }
+
                     $vReceipt = new \App\Models\Receipt([
                         'vendor_name'    => $ledger?->supplier_name ?: 'Credit Vendor',
                         'vendor_tin'     => '-',
@@ -1402,7 +1458,7 @@ class FinanceTaxReportController extends Controller
                         'total_amount'   => $receiptTotal,
                         'file_path'      => $p->receipt_path,
                         'file_type'      => 'image',
-                        'description'    => "Credit Payment #{$p->id} - " . ($ledger?->item_description ?: 'Materials'),
+                        'description'    => "Credit Payment #{$p->id} - " . ($ledger?->item_description ?: ($ledger?->notes ?: 'Materials')),
                     ]);
                     $vReceipt->id = 'P' . $p->id;
                     if ($ledger?->project) {
@@ -1411,7 +1467,7 @@ class FinanceTaxReportController extends Controller
 
                     $vItem = new \App\Models\ReceiptItem([
                         'receipt_id'       => $vReceipt->id,
-                        'item_description' => $ledger?->item_description ?: 'Credit settlement',
+                        'item_description' => $ledger?->item_description ?: ($ledger?->notes ?: 'Credit settlement'),
                         'vat_category'     => $vatIncluded ? 'G' : 'E',
                         'calendar_type'    => 'G',
                         'purchase_type'    => $vatIncluded ? 3 : 6,
@@ -1431,6 +1487,20 @@ class FinanceTaxReportController extends Controller
             } catch (\Throwable $e) {
                 Log::warning("monthMovements paymentSlips mapping error: " . $e->getMessage());
             }
+        }
+
+        // Strictly filter to only VAT receipts if vatOnly is requested
+        if ($vatOnly) {
+            $ocrItems = $ocrItems->filter(function ($item) {
+                $vatVal = (float)$item->vat_amount;
+                $r = $item->receipt;
+                $taxType = strtolower((string)($r?->tax_type ?? ''));
+                $hasNoVatReason = !empty($r?->no_vat_reason_code);
+                $isExempt = ($item->vat_category === 'E') || ((int)$item->purchase_type === 6 && $vatVal <= 0);
+                $isFuelNoVat = ($r?->category === 'fuel' && $vatVal <= 0);
+
+                return $vatVal > 0 && $taxType !== 'no_vat' && !$hasNoVatReason && !$isExempt && !$isFuelNoVat;
+            });
         }
 
         $formattedOcrItems = $ocrItems->map(function ($ocr) {
@@ -1462,6 +1532,13 @@ class FinanceTaxReportController extends Controller
             $fileExt = $filePath ? strtolower(pathinfo($filePath, PATHINFO_EXTENSION)) : '';
             $isPdf = in_array($fileExt, ['pdf']) || str_contains(strtolower($filePath ?? ''), 'pdf');
 
+            $taxType = strtolower((string)($r?->tax_type ?? ''));
+            $isNoVat = ($taxType === 'no_vat')
+                || !empty($r?->no_vat_reason_code)
+                || ($ocr->vat_category === 'E')
+                || ((int)$ocr->purchase_type === 6 && $vatVal <= 0)
+                || ($r?->category === 'fuel' && $vatVal <= 0);
+
             return [
                 'id'               => $ocr->id,
                 'receipt_id'       => $r?->id,
@@ -1488,6 +1565,8 @@ class FinanceTaxReportController extends Controller
                 'file_url'         => $fileUrl,
                 'file_type'        => $isPdf ? 'pdf' : ($r?->file_type ?: 'image'),
                 'is_pdf'           => $isPdf,
+                'is_vat_receipt'   => ($vatVal > 0 && !$isNoVat),
+                'is_no_vat'        => $isNoVat,
             ];
         });
 
@@ -1665,6 +1744,7 @@ class FinanceTaxReportController extends Controller
                 'ocr_count'              => $formattedOcrItems->count(),
                 'total_count'            => $formattedIncomes->count() + $formattedExpenses->count() + $formattedOcrItems->count(),
             ],
+            'vat_only'  => $vatOnly,
             'incomes'   => $formattedIncomes->values(),
             'expenses'  => $formattedExpenses->values(),
             'ocr_items' => $formattedOcrItems->values(),
@@ -2899,6 +2979,11 @@ class FinanceTaxReportController extends Controller
                 ->get();
 
             foreach ($standaloneReceipts as $sr) {
+                $taxType = strtolower((string)($sr->tax_type ?? ''));
+                $isNoVatExplicit = ($taxType === 'no_vat')
+                    || !empty($sr->no_vat_reason_code)
+                    || ($sr->category === 'fuel' && (float)$sr->vat_amount <= 0);
+
                 $subtotal = (float)$sr->subtotal;
                 $vat = (float)$sr->vat_amount;
                 $total = (float)$sr->total_amount;
@@ -2908,10 +2993,18 @@ class FinanceTaxReportController extends Controller
                 if ($subtotal <= 0 && $total > 0) {
                     if ($vat > 0) {
                         $subtotal = round($total - $vat, 2);
-                    } else {
+                    } elseif (!$isNoVatExplicit && $taxType === 'vat') {
                         $subtotal = round($total / 1.15, 2);
                         $vat = round($total - $subtotal, 2);
+                    } else {
+                        $subtotal = $total;
+                        $vat = 0.0;
                     }
+                }
+
+                // Purchase VAT report only exports receipts with VAT
+                if ($vat <= 0 || $isNoVatExplicit) {
+                    continue;
                 }
 
                 $virtualItem = new ReceiptItem([
@@ -2919,7 +3012,7 @@ class FinanceTaxReportController extends Controller
                     'item_description' => $sr->description ?: 'Purchased Goods',
                     'vat_category'     => 'G',
                     'calendar_type'    => 'G',
-                    'purchase_type'    => ($vat > 0 ? 3 : 6),
+                    'purchase_type'    => 3,
                     'uom'              => '9',
                     'qty'              => 1.00,
                     'unit_price'       => $subtotal,
@@ -2973,6 +3066,10 @@ class FinanceTaxReportController extends Controller
                     $receiptTotal = $gross;
                 }
 
+                if ($vatAmount <= 0) {
+                    continue;
+                }
+
                 $vReceipt = new Receipt([
                     'vendor_name'    => $ledger?->supplier_name ?: 'Credit Vendor',
                     'vendor_tin'     => '',
@@ -2995,9 +3092,9 @@ class FinanceTaxReportController extends Controller
                 $vItem = new ReceiptItem([
                     'receipt_id'       => $vReceipt->id,
                     'item_description' => $ledger?->item_description ?: ($ledger?->notes ?: 'Credit settlement'),
-                    'vat_category'     => $vatIncluded ? 'G' : 'E',
+                    'vat_category'     => 'G',
                     'calendar_type'    => 'G',
-                    'purchase_type'    => $vatIncluded ? 3 : 6,
+                    'purchase_type'    => 3,
                     'uom'              => '9',
                     'qty'              => 1.0,
                     'unit_price'       => $receiptSubtotal,
@@ -3012,6 +3109,18 @@ class FinanceTaxReportController extends Controller
                 $existingFiles[] = $p->receipt_path;
             }
         }
+
+        // Strictly filter to only VAT receipts for Purchase VAT Excel report
+        $ocrItems = $ocrItems->filter(function ($item) {
+            $vatVal = (float)$item->vat_amount;
+            $r = $item->receipt;
+            $taxType = strtolower((string)($r?->tax_type ?? ''));
+            $hasNoVatReason = !empty($r?->no_vat_reason_code);
+            $isExempt = ($item->vat_category === 'E') || ((int)$item->purchase_type === 6 && $vatVal <= 0);
+            $isFuelNoVat = ($r?->category === 'fuel' && $vatVal <= 0);
+
+            return $vatVal > 0 && $taxType !== 'no_vat' && !$hasNoVatReason && !$isExempt && !$isFuelNoVat;
+        });
 
         // Apply filters if requested
         if ($request->filled('search')) {

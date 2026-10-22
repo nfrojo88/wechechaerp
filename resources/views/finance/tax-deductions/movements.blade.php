@@ -514,11 +514,26 @@
                     <div class="d-flex align-items-center gap-2">
                         <span class="badge bg-primary-subtle text-primary p-2 rounded-3"><i class="fa-solid fa-camera-retro fs-6"></i></span>
                         <div>
-                            <h6 class="fw-bold mb-0 text-dark">Scanned OCR Receipts (ERCA Cash Register Invoices)</h6>
-                            <small class="text-muted">Itemized receipts with verified Vendor TIN, FS Numbers, and Machine MRC</small>
+                            <div class="d-flex align-items-center gap-2">
+                                <h6 class="fw-bold mb-0 text-dark">Scanned OCR Receipts (ERCA Cash Register Invoices)</h6>
+                                <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill small fw-semibold px-2.5 py-0.5">
+                                    <i class="fa-solid fa-shield-check me-1"></i>Only VAT Receipts
+                                </span>
+                            </div>
+                            <small class="text-muted">Itemized receipts with verified 15% VAT, Vendor TIN, FS Numbers, and Machine MRC</small>
                         </div>
                     </div>
                     <div class="d-flex align-items-center gap-2 d-print-none">
+                        <div class="btn-group btn-group-sm shadow-xs rounded-pill p-0.5 bg-light border me-1" role="group">
+                            <a href="{{ route('finance.tax-deductions.movements', array_merge(request()->query(), ['ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth, 'tab' => 'ocr', 'vat_only' => 1])) }}" 
+                               class="btn btn-sm rounded-pill px-2.5 py-1 fw-semibold {{ ($vatOnly ?? true) ? 'btn-success text-white shadow-xs' : 'text-muted' }}" title="Show Only Receipts with 15% VAT">
+                                <i class="fa-solid fa-percent me-1"></i>Only VAT Receipts ({{ count($movementsData['ocr_items'] ?? []) }})
+                            </a>
+                            <a href="{{ route('finance.tax-deductions.movements', array_merge(request()->query(), ['ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth, 'tab' => 'ocr', 'vat_only' => 0])) }}" 
+                               class="btn btn-sm rounded-pill px-2.5 py-1 fw-semibold {{ !($vatOnly ?? true) ? 'btn-secondary text-white shadow-xs' : 'text-muted' }}" title="Show All Scanned Invoices (including 0% VAT / exempt)">
+                                <i class="fa-solid fa-list me-1"></i>All Scanned
+                            </a>
+                        </div>
                         <div class="btn-group shadow-xs rounded-pill overflow-hidden">
                             <a href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_tas', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}" 
                                class="btn btn-sm btn-outline-primary fw-semibold px-3 text-nowrap d-inline-flex align-items-center gap-1">
@@ -531,7 +546,7 @@
                                 <span>Purchase VAT</span>
                             </a>
                         </div>
-                        <div style="min-width: 250px;">
+                        <div style="min-width: 220px;">
                             <input type="text" class="form-control form-control-sm rounded-pill" placeholder="Search vendor, FS #, item..." onkeyup="filterLocalTable('pageOcrTable', this.value)">
                         </div>
                     </div>
