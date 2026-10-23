@@ -635,6 +635,21 @@
         </div>
 
         {{-- ── TAB 3: TAS PURCHASES (0% VAT / e-Tax Declaration pro.doc) ──────── --}}
+        @php
+            $rawTasPurchases = $movementsData['tas_purchases'] ?? [];
+            $tasTotalCount = count($rawTasPurchases);
+            $tasWithTinCount = 0;
+            $tasMissingTinCount = 0;
+            foreach ($rawTasPurchases as $tpItem) {
+                $cTin = preg_replace('/\D/', '', (string)($tpItem['seller_tin'] ?? ''));
+                if (strlen($cTin) === 10) {
+                    $tasWithTinCount++;
+                } else {
+                    $tasMissingTinCount++;
+                }
+            }
+            $tasTinCompliancePercent = $tasTotalCount > 0 ? round(($tasWithTinCount / $tasTotalCount) * 100) : 0;
+        @endphp
         <div class="tab-pane fade {{ $activeTab === 'tas' ? 'show active' : '' }}" id="page-tas" role="tabpanel">
             <div class="card border-0 shadow-sm rounded-4 overflow-hidden bg-white">
                 <div class="card-header bg-white border-bottom py-3 px-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -651,6 +666,31 @@
                         </div>
                     </div>
                     <div class="d-flex align-items-center gap-2 d-print-none flex-wrap">
+                        {{-- Quick TIN Filters --}}
+                        <div class="btn-group btn-group-sm shadow-xs rounded-pill p-0.5 bg-light border me-1" role="group">
+                            <button type="button" 
+                                    class="btn btn-sm rounded-pill px-2.5 py-1 fw-semibold btn-primary text-white shadow-xs" 
+                                    id="btnTasFilterAll" 
+                                    onclick="filterTasByTin('all')" 
+                                    title="Show All TAS Purchases">
+                                <i class="fa-solid fa-list me-1"></i>All TAS (<span id="tasCountAll">{{ $tasTotalCount }}</span>)
+                            </button>
+                            <button type="button" 
+                                    class="btn btn-sm rounded-pill px-2.5 py-1 fw-semibold text-muted" 
+                                    id="btnTasFilterWithTin" 
+                                    onclick="filterTasByTin('with_tin')" 
+                                    title="Show Records With 10-Digit Seller TIN">
+                                <i class="fa-solid fa-circle-check text-success me-1"></i>With Seller TIN (<span id="tasCountWithTin">{{ $tasWithTinCount }}</span>)
+                            </button>
+                            <button type="button" 
+                                    class="btn btn-sm rounded-pill px-2.5 py-1 fw-semibold text-muted" 
+                                    id="btnTasFilterMissingTin" 
+                                    onclick="filterTasByTin('missing_tin')" 
+                                    title="Show Records Missing Seller TIN">
+                                <i class="fa-solid fa-circle-exclamation text-danger me-1"></i>Missing TIN (<span id="tasCountMissingTin">{{ $tasMissingTinCount }}</span>)
+                            </button>
+                        </div>
+
                         <a href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_tas', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}" 
                            class="btn btn-sm btn-primary text-white rounded-pill px-3 py-1.5 fw-semibold shadow-xs d-inline-flex align-items-center gap-1.5">
                             <i class="fa-solid fa-file-excel"></i>
@@ -662,12 +702,27 @@
                     </div>
                 </div>
 
-                {{-- Summary Banner --}}
+                {{-- Summary Banner with Seller TIN Status --}}
                 <div class="row g-2 px-3 pt-3 pb-2 bg-light bg-opacity-50 border-bottom">
                     <div class="col-sm-6 col-md-3">
                         <div class="card border border-primary-subtle bg-primary-subtle bg-opacity-25 rounded-3 p-2.5">
                             <small class="text-muted d-block text-uppercase fw-bold" style="font-size:0.65rem;">Total TAS Purchases</small>
-                            <span class="fw-bold font-monospace text-primary fs-6">{{ count($movementsData['tas_purchases'] ?? []) }} Receipts / Vouchers</span>
+                            <span class="fw-bold font-monospace text-primary fs-6">{{ $tasTotalCount }} Receipts / Vouchers</span>
+                        </div>
+                    </div>
+                    <div class="col-sm-6 col-md-3">
+                        <div class="card border {{ $tasMissingTinCount === 0 ? 'border-success-subtle bg-success-subtle bg-opacity-20' : 'border-warning-subtle bg-warning-subtle bg-opacity-25' }} rounded-3 p-2.5">
+                            <div class="d-flex align-items-center justify-content-between">
+                                <small class="text-muted d-block text-uppercase fw-bold" style="font-size:0.65rem;">2. Seller TIN Status</small>
+                                <span class="badge {{ $tasMissingTinCount === 0 ? 'bg-success' : 'bg-warning text-dark' }} rounded-pill" style="font-size:0.62rem;" id="summaryTasTinBadge">
+                                    {{ $tasMissingTinCount === 0 ? '100% Filled' : $tasMissingTinCount . ' Need TIN' }}
+                                </span>
+                            </div>
+                            <div class="d-flex align-items-baseline gap-1 mt-0.5">
+                                <span class="fw-bold font-monospace text-success fs-6" id="summaryTasWithTinCount">{{ $tasWithTinCount }}</span>
+                                <span class="text-muted small">/ {{ $tasTotalCount }} filled</span>
+                                <span class="text-muted small ms-auto font-monospace" id="summaryTasTinPercent">({{ $tasTinCompliancePercent }}%)</span>
+                            </div>
                         </div>
                     </div>
                     <div class="col-sm-6 col-md-3">
@@ -678,14 +733,11 @@
                     </div>
                     <div class="col-sm-6 col-md-3">
                         <div class="card border border-secondary-subtle bg-white rounded-3 p-2.5">
-                            <small class="text-muted d-block text-uppercase fw-bold" style="font-size:0.65rem;">VAT Rate / Impact</small>
-                            <span class="fw-bold font-monospace text-secondary fs-6">0% VAT (Exempt in TAS)</span>
-                        </div>
-                    </div>
-                    <div class="col-sm-6 col-md-3">
-                        <div class="card border border-warning-subtle bg-warning-subtle bg-opacity-25 rounded-3 p-2.5">
                             <small class="text-muted d-block text-uppercase fw-bold" style="font-size:0.65rem;">Official e-Tax Specification</small>
-                            <span class="badge bg-warning text-dark rounded-pill fw-bold" style="font-size:0.7rem;"><i class="fa-solid fa-file-lines me-1"></i>pro.doc 9 Columns Standard</span>
+                            <div class="d-flex align-items-center gap-1.5 mt-0.5 flex-wrap">
+                                <span class="badge bg-secondary-subtle text-dark rounded-pill fw-semibold" style="font-size:0.68rem;">0% VAT Exempt</span>
+                                <span class="badge bg-warning text-dark rounded-pill fw-bold" style="font-size:0.68rem;"><i class="fa-solid fa-file-lines me-1"></i>pro.doc 9 Cols</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -705,44 +757,75 @@
                                 <th class="py-2.5">7. Machine MRC</th>
                                 <th class="py-2.5 text-center">8. PurcType</th>
                                 <th class="py-2.5">9. Encoded By</th>
-                                <th class="py-2.5 text-center pe-3 d-print-none">Receipt Slip</th>
+                                <th class="py-2.5 text-center pe-3 d-print-none">Actions / Slip</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y">
                             @php
                                 $tasTotalAmount = 0;
                             @endphp
-                            @forelse($movementsData['tas_purchases'] ?? [] as $idx => $tas)
+                            @forelse($rawTasPurchases as $idx => $tas)
                                 @php
                                     $tAmt = (float)($tas['amount'] ?? ($tas['base_amount'] ?? 0));
                                     $tasTotalAmount += $tAmt;
                                     $slipUrl = $tas['receipt_slip_url'] ?? ($tas['attachment_url'] ?? null);
                                     $isFuel = !empty($tas['is_fuel']);
                                     $isPdf = $slipUrl && str_contains(strtolower($slipUrl), '.pdf');
+                                    $cleanSellerTin = preg_replace('/\D/', '', (string)($tas['seller_tin'] ?? ''));
+                                    $hasValidSellerTin = strlen($cleanSellerTin) === 10;
+                                    $hasPartialSellerTin = !empty($cleanSellerTin) && strlen($cleanSellerTin) !== 10;
                                 @endphp
-                                <tr>
+                                <tr data-has-tin="{{ $hasValidSellerTin ? '1' : '0' }}"
+                                    data-receipt-id="{{ $tas['receipt_id'] ?? ($tas['id'] ?? '') }}"
+                                    data-fs="{{ ($tas['fs_no'] ?? '') !== '-' ? ($tas['fs_no'] ?? '') : '' }}"
+                                    data-expense-id="{{ $tas['id'] ?? '' }}"
+                                    id="page-tas-row-{{ $tas['id'] ?? $idx }}"
+                                    class="tas-row">
                                     <td class="ps-3 text-muted font-monospace small">{{ $idx + 1 }}</td>
                                     <td>
                                         <span class="badge bg-light text-dark border font-monospace">{{ $tas['purchaser_tin'] ?? '0038480010' }}</span>
                                     </td>
                                     <td>
-                                        <div class="d-flex align-items-center gap-1 flex-wrap">
-                                            <span class="fw-bold font-monospace text-dark">{{ $tas['seller_tin'] ?: '-' }}</span>
+                                        <div class="d-flex align-items-center gap-1.5 flex-wrap">
+                                            @if($hasValidSellerTin)
+                                                <span class="badge bg-success-subtle text-success border border-success-subtle font-monospace px-2 py-0.5 rounded-2 cell-tas-tin fw-bold" title="ERCA Valid 10-Digit Seller TIN">
+                                                    <i class="fa-solid fa-circle-check text-success me-1"></i>{{ $cleanSellerTin }}
+                                                </span>
+                                            @elseif($hasPartialSellerTin)
+                                                <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle font-monospace px-2 py-0.5 rounded-2 cell-tas-tin fw-bold" title="{{ strlen($cleanSellerTin) }}/10 Digits - Incomplete ERCA TIN">
+                                                    <i class="fa-solid fa-triangle-exclamation text-warning me-1"></i>{{ $tas['seller_tin'] }}
+                                                </span>
+                                            @else
+                                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle font-monospace px-2 py-0.5 rounded-2 cell-tas-tin fw-semibold" title="Missing Seller TIN">
+                                                    <i class="fa-solid fa-circle-xmark me-1"></i>No Seller TIN
+                                                </span>
+                                            @endif
+
                                             @if($isFuel)
                                                 <span class="badge bg-warning text-dark border border-warning-subtle rounded-pill font-monospace" style="font-size:0.62rem;"><i class="fa-solid fa-gas-pump me-0.5"></i>Fuel</span>
                                             @endif
+
+                                            <button type="button" 
+                                                    class="btn btn-xs {{ $hasValidSellerTin ? 'btn-link text-muted p-0' : 'btn-outline-danger rounded-pill px-2 py-0.5 shadow-2xs' }} d-inline-flex align-items-center gap-1 fw-semibold d-print-none cell-tas-tin-btn" 
+                                                    onclick="openPageTasInspector({{ $idx }})" 
+                                                    title="{{ $hasValidSellerTin ? 'Edit Seller TIN / Slip' : 'Fill Seller TIN in Inspector' }}">
+                                                <i class="fa-solid fa-pen-to-square"></i>
+                                                @if(!$hasValidSellerTin)
+                                                    <span>Fill TIN</span>
+                                                @endif
+                                            </button>
                                         </div>
-                                        <small class="text-muted d-block text-truncate" style="max-width: 170px;">{{ $tas['payee'] ?? ($tas['seller_name'] ?? 'Vendor') }}</small>
+                                        <small class="text-muted d-block text-truncate cell-tas-vendor" style="max-width: 175px;">{{ $tas['payee'] ?? ($tas['seller_name'] ?? 'Vendor') }}</small>
                                     </td>
-                                    <td class="text-end font-monospace fw-bold text-dark">ETB {{ number_format($tAmt, 2) }}</td>
+                                    <td class="text-end font-monospace fw-bold text-dark cell-tas-amount">ETB {{ number_format($tAmt, 2) }}</td>
                                     <td>
-                                        <span class="badge bg-light text-primary border font-monospace">{{ $tas['fs_no'] ?: ($tas['request_number'] ?? '-') }}</span>
+                                        <span class="badge bg-light text-primary border font-monospace cell-tas-fs">{{ $tas['fs_no'] ?: ($tas['request_number'] ?? '-') }}</span>
                                         @if(!empty($tas['request_number']) && $tas['request_number'] !== ($tas['fs_no'] ?? ''))
                                             <small class="text-muted d-block font-monospace" style="font-size:0.7rem;">{{ $tas['request_number'] }}</small>
                                         @endif
                                     </td>
                                     <td>
-                                        <span class="fw-bold font-monospace text-dark d-block">{{ $tas['receipt_date_ec'] ?: ($tas['date_ec'] ?? '-') }}</span>
+                                        <span class="fw-bold font-monospace text-dark d-block cell-tas-date-ec">{{ $tas['receipt_date_ec'] ?: ($tas['date_ec'] ?? '-') }}</span>
                                         @if(!empty($tas['date_gc']))
                                             <small class="text-muted" style="font-size:0.7rem;">{{ $tas['date_gc'] }}</small>
                                         @endif
@@ -751,23 +834,32 @@
                                         <span class="font-monospace text-muted d-block">{{ $tas['encoding_date_ec'] ?: '-' }}</span>
                                     </td>
                                     <td>
-                                        <span class="badge bg-light text-secondary border font-monospace">{{ $tas['mrc_no'] ?: '-' }}</span>
+                                        <span class="badge bg-light text-secondary border font-monospace cell-tas-mrc">{{ $tas['mrc_no'] ?: '-' }}</span>
                                     </td>
                                     <td class="text-center font-monospace small">
-                                        <span class="badge bg-secondary-subtle text-secondary rounded-pill">{{ $tas['purc_type'] ?? '3' }}</span>
+                                        <span class="badge bg-secondary-subtle text-secondary rounded-pill cell-tas-purc-type">{{ $tas['purc_type'] ?? 'PUR_GD' }}</span>
                                     </td>
                                     <td>
                                         <span class="small text-muted font-monospace">{{ $tas['encoded_by'] ?? 'wechacha' }}</span>
                                     </td>
                                     <td class="text-center pe-3 d-print-none">
-                                        @if($slipUrl)
-                                            <a href="{{ $slipUrl }}" target="_blank" class="btn btn-xs {{ $isPdf ? 'btn-outline-danger' : 'btn-outline-primary' }} rounded-pill px-2.5 py-1 d-inline-flex align-items-center gap-1 shadow-2xs" title="View Scanned Fuel / Purchase Slip">
-                                                <i class="fa-solid {{ $isPdf ? 'fa-file-pdf text-danger' : 'fa-receipt text-primary' }}"></i>
-                                                <span>{{ $isPdf ? 'PDF Slip' : 'See Slip' }}</span>
-                                            </a>
-                                        @else
-                                            <span class="badge bg-light text-muted border" style="font-size:0.68rem;">No Slip</span>
-                                        @endif
+                                        <div class="d-inline-flex align-items-center gap-1">
+                                            <button type="button" 
+                                                    class="btn btn-xs {{ $hasValidSellerTin ? 'btn-outline-secondary' : 'btn-primary text-white shadow-2xs' }} rounded-pill px-2.5 py-1 d-inline-flex align-items-center gap-1 fw-semibold cell-tas-action-btn" 
+                                                    onclick="openPageTasInspector({{ $idx }})" 
+                                                    title="Open ERCA Slip Inspector to Edit Seller TIN / FS / Amounts">
+                                                <i class="fa-solid fa-pencil"></i>
+                                                <span>{{ $hasValidSellerTin ? 'Edit' : 'Fill TIN' }}</span>
+                                            </button>
+                                            @if($slipUrl)
+                                                <a href="{{ $slipUrl }}" target="_blank" class="btn btn-xs {{ $isPdf ? 'btn-outline-danger' : 'btn-outline-primary' }} rounded-pill px-2.5 py-1 d-inline-flex align-items-center gap-1 shadow-2xs" title="View Scanned Fuel / Purchase Slip">
+                                                    <i class="fa-solid {{ $isPdf ? 'fa-file-pdf text-danger' : 'fa-receipt text-primary' }}"></i>
+                                                    <span>{{ $isPdf ? 'PDF Slip' : 'See Slip' }}</span>
+                                                </a>
+                                            @else
+                                                <span class="badge bg-light text-muted border" style="font-size:0.68rem;">No Slip</span>
+                                            @endif
+                                        </div>
                                     </td>
                                 </tr>
                             @empty
@@ -777,11 +869,18 @@
                                     </td>
                                 </tr>
                             @endforelse
+                            <tr id="pageTasEmptyFilterRow" class="d-none">
+                                <td colspan="11" class="text-center py-4 text-muted">
+                                    <i class="fa-solid fa-filter me-2 text-secondary"></i>No TAS purchases match the selected Seller TIN filter.
+                                </td>
+                            </tr>
                         </tbody>
                         <tfoot class="table-light fw-bold border-top">
                             <tr>
-                                <td colspan="3" class="ps-3 py-2 text-uppercase small text-muted">Total TAS Purchases ({{ count($movementsData['tas_purchases'] ?? []) }} items)</td>
-                                <td class="text-end py-2 font-monospace text-dark">ETB {{ number_format($tasTotalAmount, 2) }}</td>
+                                <td colspan="3" class="ps-3 py-2 text-uppercase small text-muted">
+                                    Total TAS Purchases (<span id="pageTasFootCount">{{ $tasTotalCount }}</span> items)
+                                </td>
+                                <td class="text-end py-2 font-monospace text-dark" id="pageTasFootAmount">ETB {{ number_format($tasTotalAmount, 2) }}</td>
                                 <td colspan="7" class="pe-3 d-print-none"></td>
                             </tr>
                         </tfoot>
@@ -1401,6 +1500,64 @@
 <script>
     // Cached items for live inspector and table sync
     window._pageOcrItems = @json($movementsData['ocr_items'] ?? []);
+    window._pageTasPurchases = @json($movementsData['tas_purchases'] ?? []);
+
+    // Toggle TAS Purchases by Seller TIN status: 'all', 'with_tin', 'missing_tin'
+    let _activeTasTinFilter = 'all';
+
+    function filterTasByTin(filter) {
+        _activeTasTinFilter = filter;
+
+        const btnAll = document.getElementById('btnTasFilterAll');
+        const btnWith = document.getElementById('btnTasFilterWithTin');
+        const btnMissing = document.getElementById('btnTasFilterMissingTin');
+
+        if (btnAll) btnAll.className = 'btn btn-sm rounded-pill px-2.5 py-1 fw-semibold ' + (filter === 'all' ? 'btn-primary text-white shadow-xs' : 'text-muted');
+        if (btnWith) btnWith.className = 'btn btn-sm rounded-pill px-2.5 py-1 fw-semibold ' + (filter === 'with_tin' ? 'btn-success text-white shadow-xs' : 'text-muted');
+        if (btnMissing) btnMissing.className = 'btn btn-sm rounded-pill px-2.5 py-1 fw-semibold ' + (filter === 'missing_tin' ? 'btn-danger text-white shadow-xs' : 'text-muted');
+
+        const rows = document.querySelectorAll('#pageTasTable tbody tr.tas-row');
+        let visibleCount = 0;
+        let totalVisibleAmt = 0;
+
+        rows.forEach(tr => {
+            const hasTin = tr.getAttribute('data-has-tin') === '1';
+            let matches = false;
+            if (filter === 'all') {
+                matches = true;
+            } else if (filter === 'with_tin') {
+                matches = hasTin;
+            } else if (filter === 'missing_tin') {
+                matches = !hasTin;
+            }
+
+            if (matches) {
+                tr.style.display = '';
+                visibleCount++;
+                const amtCell = tr.querySelector('.cell-tas-amount');
+                if (amtCell) {
+                    const amtVal = parseFloat((amtCell.textContent || '0').replace(/[^0-9.-]/g, '')) || 0;
+                    totalVisibleAmt += amtVal;
+                }
+            } else {
+                tr.style.display = 'none';
+            }
+        });
+
+        const emptyFilterRow = document.getElementById('pageTasEmptyFilterRow');
+        if (emptyFilterRow) {
+            if (visibleCount === 0 && rows.length > 0) {
+                emptyFilterRow.classList.remove('d-none');
+            } else {
+                emptyFilterRow.classList.add('d-none');
+            }
+        }
+
+        const footCount = document.getElementById('pageTasFootCount');
+        if (footCount) footCount.textContent = visibleCount;
+        const footAmt = document.getElementById('pageTasFootAmount');
+        if (footAmt) footAmt.textContent = 'ETB ' + totalVisibleAmt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
 
     // Live table filtering
     function filterLocalTable(tableId, query) {
@@ -1412,10 +1569,24 @@
         const q = (query || '').toLowerCase().trim();
 
         trs.forEach(tr => {
-            const rowMatchesCategory = (_activeExpenseFilter === 'all' || tr.getAttribute('data-purchase-category') === _activeExpenseFilter);
-            if (!rowMatchesCategory && tableId === 'pageExpenseTable') {
-                tr.style.display = 'none';
-                return;
+            if (tableId === 'pageExpenseTable') {
+                const rowMatchesCategory = (_activeExpenseFilter === 'all' || tr.getAttribute('data-purchase-category') === _activeExpenseFilter);
+                if (!rowMatchesCategory) {
+                    tr.style.display = 'none';
+                    return;
+                }
+            }
+            if (tableId === 'pageTasTable') {
+                if (tr.id === 'pageTasEmptyFilterRow') return;
+                const hasTin = tr.getAttribute('data-has-tin') === '1';
+                if (_activeTasTinFilter === 'with_tin' && !hasTin) {
+                    tr.style.display = 'none';
+                    return;
+                }
+                if (_activeTasTinFilter === 'missing_tin' && hasTin) {
+                    tr.style.display = 'none';
+                    return;
+                }
             }
             const text = tr.innerText.toLowerCase();
             tr.style.display = text.includes(q) ? '' : 'none';
@@ -1706,6 +1877,138 @@
         }
     }
 
+    // Open Inspector directly for a TAS Purchase (0% VAT / fuel receipt)
+    function openPageTasInspector(idx) {
+        const tas = (window._pageTasPurchases && window._pageTasPurchases[idx]) || {};
+        const modalEl = document.getElementById('movementSlipModal');
+        if (!modalEl) return;
+
+        // Check if this TAS item matches an item in window._pageOcrItems
+        let matchingOcrIdx = -1;
+        if (window._pageOcrItems && window._pageOcrItems.length > 0) {
+            matchingOcrIdx = window._pageOcrItems.findIndex(it => 
+                (tas.receipt_id && (it.receipt_id == tas.receipt_id || it.id == tas.receipt_id)) ||
+                (tas.fs_no && tas.fs_no !== '-' && it.fs_no === tas.fs_no) ||
+                (tas.id && (it.expense_request_id == tas.id || it.receipt_id == tas.id))
+            );
+        }
+
+        if (matchingOcrIdx !== -1) {
+            openPageOcrInspector(matchingOcrIdx);
+            // Ensure 0% VAT is preserved
+            const vatCat = document.getElementById('movement_edit_vat_category');
+            if (vatCat && (!vatCat.value || vatCat.value === 'G')) {
+                const vatInput = document.getElementById('movement_edit_vat_amount');
+                if (!vatInput || parseFloat(vatInput.value || 0) === 0) {
+                    vatCat.value = 'E';
+                }
+            }
+            return;
+        }
+
+        const cleanNum = (v) => {
+            const n = parseFloat(String(v ?? '0').replace(/[^0-9.-]/g, ''));
+            return isNaN(n) ? 0 : n;
+        };
+
+        const idInput = document.getElementById('movement_edit_ocr_item_id');
+        if (idInput) idInput.value = '';
+
+        const rcptIdInput = document.getElementById('movement_edit_receipt_id');
+        if (rcptIdInput) rcptIdInput.value = tas.receipt_id || (tas.id ? ('EXP-' + tas.id) : (tas.request_number || ''));
+
+        const badgeId = document.getElementById('movement_edit_ocr_badge_id');
+        if (badgeId) badgeId.textContent = tas.request_number || ('TAS #' + (idx + 1));
+
+        const fsDisplay = document.getElementById('movementModalFsNoDisplay');
+        if (fsDisplay) {
+            fsDisplay.textContent = tas.fs_no && tas.fs_no !== '-' 
+                ? ('FS #' + tas.fs_no + ' (TAS 0% VAT)') 
+                : (tas.request_number ? (tas.request_number + ' (TAS 0% VAT)') : 'TAS Receipt Inspector');
+        }
+
+        const sellerName = document.getElementById('movement_edit_seller_name');
+        if (sellerName) sellerName.value = tas.payee || tas.seller_name || '';
+
+        const tinInput = document.getElementById('movement_edit_supplier_tin');
+        if (tinInput) {
+            const rawTin = tas.seller_tin === '-' ? '' : (tas.seller_tin || '');
+            tinInput.value = rawTin;
+            validateMovementTin(rawTin);
+        }
+
+        const fsInput = document.getElementById('movement_edit_fs_no');
+        if (fsInput) {
+            const rawFs = tas.fs_no === '-' ? '' : (tas.fs_no || '');
+            fsInput.value = rawFs;
+            validateMovementFs(rawFs);
+        }
+
+        const mrcInput = document.getElementById('movement_edit_mrc_no');
+        if (mrcInput) mrcInput.value = (tas.mrc_no === '-' ? '' : tas.mrc_no) || '';
+
+        const dateInput = document.getElementById('movement_edit_receipt_date');
+        if (dateInput) {
+            let ymd = '';
+            if (tas.date_gc) {
+                try {
+                    const parsed = new Date(tas.date_gc);
+                    if (!isNaN(parsed.getTime())) {
+                        ymd = parsed.toISOString().split('T')[0];
+                    }
+                } catch (e) {}
+            }
+            dateInput.value = ymd;
+        }
+
+        const dateEcPreview = document.getElementById('movement_edit_date_ec_preview');
+        if (dateEcPreview) dateEcPreview.textContent = tas.receipt_date_ec ? ('EC: ' + tas.receipt_date_ec) : (tas.date_ec ? ('EC: ' + tas.date_ec) : '');
+
+        const descInput = document.getElementById('movement_edit_item_description');
+        if (descInput) descInput.value = tas.description && tas.description !== '-' ? tas.description : (tas.category || 'TAS Purchase');
+
+        const projSelect = document.getElementById('movement_edit_project_id');
+        if (projSelect) projSelect.value = '';
+
+        const catSelect = document.getElementById('movement_edit_category');
+        if (catSelect) catSelect.value = tas.is_fuel ? 'fuel' : 'materials';
+
+        // TAS Purchases are 0% VAT
+        const vatCatSelect = document.getElementById('movement_edit_vat_category');
+        if (vatCatSelect) vatCatSelect.value = 'E';
+
+        const purcTypeSelect = document.getElementById('movement_edit_purchase_type');
+        if (purcTypeSelect) purcTypeSelect.value = tas.purc_type || 'PUR_GD';
+
+        const amt = cleanNum(tas.amount || tas.base_amount);
+        const baseInput = document.getElementById('movement_edit_total_value');
+        if (baseInput) baseInput.value = amt.toFixed(2);
+
+        const vatInput = document.getElementById('movement_edit_vat_amount');
+        if (vatInput) vatInput.value = '0.00';
+
+        const totalInput = document.getElementById('movement_edit_value_after_vat');
+        if (totalInput) totalInput.value = amt.toFixed(2);
+
+        // Clear alerts
+        const alertBox = document.getElementById('movementOcrModalAlert');
+        if (alertBox) {
+            alertBox.className = 'alert d-none';
+            alertBox.innerHTML = '';
+        }
+
+        // Set preview image / pdf
+        const slipUrl = tas.receipt_slip_url || tas.attachment_url;
+        _setPageSlipPreview(slipUrl);
+
+        // Show modal
+        if (window.bootstrap && bootstrap.Modal) {
+            bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        } else if (window.$ && typeof $(modalEl).modal === 'function') {
+            $(modalEl).modal('show');
+        }
+    }
+
     // Validation functions
     function validateMovementTin(val) {
         const clean = (val || '').replace(/\D/g, '');
@@ -1919,6 +2222,7 @@
 
                 // Update table row in Scanned OCR Receipts DOM
                 const submittedId = form.elements['id'] ? form.elements['id'].value : null;
+                const submittedReceiptId = form.elements['receipt_id'] ? form.elements['receipt_id'].value : null;
                 const tr = document.getElementById('page-ocr-row-' + itm.id) 
                     || (itm.receipt_id ? document.querySelector(`tr[data-receipt-id="${itm.receipt_id}"]`) : null)
                     || (submittedId ? document.getElementById('page-ocr-row-' + submittedId) : null);
@@ -1985,33 +2289,123 @@
                 }
 
                 // Update matching rows in TAS Purchases Table (#pageTasTable)
-                const tasRows = document.querySelectorAll('#pageTasTable tbody tr');
+                const tasRows = document.querySelectorAll('#pageTasTable tbody tr.tas-row');
                 tasRows.forEach(tasTr => {
                     const rowRcptId = tasTr.getAttribute('data-receipt-id');
                     const rowFs = tasTr.getAttribute('data-fs');
-                    const matchById = rowRcptId && (rowRcptId == itm.id || rowRcptId == itm.receipt_id || rowRcptId == ('REC-' + itm.receipt_id));
-                    const matchByFs = rowFs && itm.fs_no && rowFs === itm.fs_no;
+                    const rowExpId = tasTr.getAttribute('data-expense-id');
 
-                    if (matchById || matchByFs) {
-                        const fsBadge = tasTr.querySelector('.cell-tas-fs') || tasTr.querySelector('td:nth-child(5) .badge');
-                        const sellerTin = tasTr.querySelector('.cell-tas-tin') || tasTr.querySelector('td:nth-child(3) .fw-bold');
-                        const sellerName = tasTr.querySelector('.cell-tas-vendor') || tasTr.querySelector('td:nth-child(3) small');
-                        const amtCell = tasTr.querySelector('.cell-tas-amount') || tasTr.querySelector('td:nth-child(4)');
-                        const mrcBadge = tasTr.querySelector('.cell-tas-mrc') || tasTr.querySelector('td:nth-child(8) .badge');
-                        const dateEc = tasTr.querySelector('.cell-tas-date-ec') || tasTr.querySelector('td:nth-child(6) span');
+                    const matchById = rowRcptId && (
+                        rowRcptId == itm.id || 
+                        rowRcptId == itm.receipt_id || 
+                        rowRcptId == ('REC-' + itm.receipt_id) || 
+                        (submittedReceiptId && (rowRcptId == submittedReceiptId || ('REC-' + rowRcptId) == submittedReceiptId)) ||
+                        (submittedId && rowRcptId == submittedId)
+                    );
+                    const matchByFs = rowFs && itm.fs_no && rowFs === itm.fs_no;
+                    const matchByExp = rowExpId && (
+                        (submittedReceiptId && (submittedReceiptId == ('EXP-' + rowExpId) || submittedReceiptId == rowExpId)) ||
+                        (submittedId && (submittedId == ('EXP-' + rowExpId) || submittedId == rowExpId)) ||
+                        (itm.expense_request_id && rowExpId == itm.expense_request_id)
+                    );
+
+                    if (matchById || matchByFs || matchByExp) {
+                        const fsBadge = tasTr.querySelector('.cell-tas-fs');
+                        const tinBadge = tasTr.querySelector('.cell-tas-tin');
+                        const sellerName = tasTr.querySelector('.cell-tas-vendor');
+                        const amtCell = tasTr.querySelector('.cell-tas-amount');
+                        const mrcBadge = tasTr.querySelector('.cell-tas-mrc');
+                        const dateEc = tasTr.querySelector('.cell-tas-date-ec');
+                        const tinBtn = tasTr.querySelector('.cell-tas-tin-btn');
+                        const actionBtn = tasTr.querySelector('.cell-tas-action-btn');
 
                         if (fsBadge && itm.fs_no && itm.fs_no !== '-') fsBadge.textContent = itm.fs_no;
-                        if (sellerTin && itm.vendor_tin) sellerTin.textContent = itm.vendor_tin;
                         if (sellerName && itm.vendor_name) sellerName.textContent = itm.vendor_name;
                         if (amtCell && itm.total_value !== undefined) amtCell.textContent = 'ETB ' + parseFloat(itm.total_value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                         if (mrcBadge && itm.mrc_no && itm.mrc_no !== '-') mrcBadge.textContent = itm.mrc_no;
                         if (dateEc && itm.receipt_date_ec) dateEc.textContent = itm.receipt_date_ec;
+
+                        const rawTin = itm.vendor_tin || '';
+                        const cleanTinDigits = rawTin.replace(/\D/g, '');
+                        if (cleanTinDigits.length === 10) {
+                            tasTr.setAttribute('data-has-tin', '1');
+                            if (tinBadge) {
+                                tinBadge.className = 'badge bg-success-subtle text-success border border-success-subtle font-monospace px-2 py-0.5 rounded-2 cell-tas-tin fw-bold';
+                                tinBadge.innerHTML = '<i class="fa-solid fa-circle-check text-success me-1"></i>' + cleanTinDigits;
+                                tinBadge.title = 'ERCA Valid 10-Digit Seller TIN';
+                            }
+                            if (tinBtn) {
+                                tinBtn.className = 'btn btn-xs btn-link text-muted p-0 d-inline-flex align-items-center gap-1 fw-semibold d-print-none cell-tas-tin-btn';
+                                tinBtn.innerHTML = '<i class="fa-solid fa-pen-to-square"></i>';
+                                tinBtn.title = 'Edit Seller TIN / Slip';
+                            }
+                            if (actionBtn) {
+                                actionBtn.className = 'btn btn-xs btn-outline-secondary rounded-pill px-2.5 py-1 d-inline-flex align-items-center gap-1 fw-semibold cell-tas-action-btn';
+                                actionBtn.innerHTML = '<i class="fa-solid fa-pencil"></i><span>Edit</span>';
+                            }
+                        } else if (cleanTinDigits.length > 0) {
+                            tasTr.setAttribute('data-has-tin', '0');
+                            if (tinBadge) {
+                                tinBadge.className = 'badge bg-warning-subtle text-warning-emphasis border border-warning-subtle font-monospace px-2 py-0.5 rounded-2 cell-tas-tin fw-bold';
+                                tinBadge.innerHTML = '<i class="fa-solid fa-triangle-exclamation text-warning me-1"></i>' + rawTin;
+                                tinBadge.title = cleanTinDigits.length + '/10 Digits - Incomplete ERCA TIN';
+                            }
+                        } else {
+                            tasTr.setAttribute('data-has-tin', '0');
+                            if (tinBadge) {
+                                tinBadge.className = 'badge bg-danger-subtle text-danger border border-danger-subtle font-monospace px-2 py-0.5 rounded-2 cell-tas-tin fw-semibold';
+                                tinBadge.innerHTML = '<i class="fa-solid fa-circle-xmark me-1"></i>No Seller TIN';
+                                tinBadge.title = 'Missing Seller TIN';
+                            }
+                        }
 
                         tasTr.style.transition = 'background-color 0.4s ease';
                         tasTr.style.backgroundColor = '#d1e7dd';
                         setTimeout(() => { tasTr.style.backgroundColor = ''; }, 2000);
                     }
                 });
+
+                // Update cached TAS purchase items
+                if (window._pageTasPurchases && window._pageTasPurchases.length > 0) {
+                    window._pageTasPurchases.forEach(tp => {
+                        const matchExp = tp.id && (submittedReceiptId == ('EXP-' + tp.id) || submittedId == ('EXP-' + tp.id) || (itm.expense_request_id && tp.id == itm.expense_request_id));
+                        const matchRcpt = tp.receipt_id && (tp.receipt_id == itm.receipt_id || tp.receipt_id == itm.id || tp.receipt_id == submittedReceiptId);
+                        if (matchExp || matchRcpt) {
+                            if (itm.vendor_tin) tp.seller_tin = itm.vendor_tin;
+                            if (itm.vendor_name) tp.payee = itm.vendor_name;
+                            if (itm.fs_no) tp.fs_no = itm.fs_no;
+                            if (itm.mrc_no) tp.mrc_no = itm.mrc_no;
+                        }
+                    });
+                }
+
+                // Recompute TAS TIN compliance banner & filter counts
+                let liveWithTin = 0;
+                let liveMissingTin = 0;
+                const allTasDomRows = document.querySelectorAll('#pageTasTable tbody tr.tas-row');
+                allTasDomRows.forEach(r => {
+                    if (r.getAttribute('data-has-tin') === '1') {
+                        liveWithTin++;
+                    } else {
+                        liveMissingTin++;
+                    }
+                });
+                const totalTasCount = allTasDomRows.length;
+                const pct = totalTasCount > 0 ? Math.round((liveWithTin / totalTasCount) * 100) : 0;
+
+                const cWith = document.getElementById('tasCountWithTin');
+                if (cWith) cWith.textContent = liveWithTin;
+                const cMissing = document.getElementById('tasCountMissingTin');
+                if (cMissing) cMissing.textContent = liveMissingTin;
+                const sumWith = document.getElementById('summaryTasWithTinCount');
+                if (sumWith) sumWith.textContent = liveWithTin;
+                const sumBadge = document.getElementById('summaryTasTinBadge');
+                if (sumBadge) {
+                    sumBadge.className = 'badge ' + (liveMissingTin === 0 ? 'bg-success' : 'bg-warning text-dark') + ' rounded-pill';
+                    sumBadge.textContent = liveMissingTin === 0 ? '100% Filled' : (liveMissingTin + ' Need TIN');
+                }
+                const sumPct = document.getElementById('summaryTasTinPercent');
+                if (sumPct) sumPct.textContent = '(' + pct + '%)';
 
                 // Update matching rows in Expenses Table (#pageExpenseTable)
                 const expRows = document.querySelectorAll('#pageExpenseTable tbody tr');

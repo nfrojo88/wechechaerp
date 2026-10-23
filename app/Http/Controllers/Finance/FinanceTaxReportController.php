@@ -1323,6 +1323,42 @@ class FinanceTaxReportController extends Controller
             }
 
             $sellerTin = $r?->vendor_tin ?: ($dec?->custom_seller_tin ?: (!empty($parsed['seller_tin']) ? $parsed['seller_tin'] : null));
+
+            // Fallback 1: Extract TIN from payment reference (e.g. "FS: 00012345 | TIN: 0012345678")
+            if (empty($sellerTin) && !empty($item->payment_reference) && preg_match('/TIN[:\s]+([0-9]{9,12})/i', $item->payment_reference, $mTin)) {
+                $sellerTin = $mTin[1];
+            }
+
+            // Fallback 2: Check linked VehicleFuelRequest for fuel_station_tin
+            if (empty($sellerTin) && Schema::hasTable('vehicle_fuel_requests')) {
+                $fuelReq = \App\Models\VehicleFuelRequest::where('expense_request_id', $item->id)->first()
+                    ?: \App\Models\VehicleFuelRequest::where('request_number', $item->request_number)->first();
+                if ($fuelReq && !empty($fuelReq->fuel_station_tin)) {
+                    $sellerTin = $fuelReq->fuel_station_tin;
+                    if (empty($fsNo) && !empty($fuelReq->fs_no)) {
+                        $fsNo = $fuelReq->fs_no;
+                    }
+                    if (empty($mrcNo) && !empty($fuelReq->mrc_no)) {
+                        $mrcNo = $fuelReq->mrc_no;
+                    }
+                }
+            }
+
+            // Fallback 3: Check Supplier tax_id / TIN by payee name
+            if (empty($sellerTin) && !empty($payee) && Schema::hasTable('suppliers')) {
+                $supTin = \App\Models\Supplier::where('name', $payee)->value('tax_id');
+                if (!empty($supTin)) {
+                    $sellerTin = $supTin;
+                }
+            }
+
+            // Fallback 4: Check CreditStorePayment if linked
+            if (empty($sellerTin) && !empty($item->credit_store_ledger_id) && Schema::hasTable('credit_store_payments')) {
+                $cPayment = \App\Models\CreditStorePayment::where('credit_store_ledger_id', $item->credit_store_ledger_id)->whereNotNull('receipt_path')->latest('id')->first();
+                if ($cPayment && $cPayment->receipt && !empty($cPayment->receipt->vendor_tin)) {
+                    $sellerTin = $cPayment->receipt->vendor_tin;
+                }
+            }
             $purchaserTin = $r?->buyer_tin ?: (!empty($parsed['purchaser_tin']) ? $parsed['purchaser_tin'] : $defaultPurchaserDigits);
 
             $purcType = $dec?->purc_type ?: (!empty($parsed['purc_type']) ? $parsed['purc_type'] : null);
@@ -3225,7 +3261,8 @@ class FinanceTaxReportController extends Controller
             $buyerDigits = preg_replace('/^0+/', '', preg_replace('/[^0-9]/', '', (string)$buyerTin));
             $purchaserTinVal = ($buyerDigits !== '') ? (int)$buyerDigits : $defaultPurchaserDigits;
 
-            $rawTin = $r ? (string)$r->vendor_tin : '';
+            $parsed = is_string($r?->parsed_data ?? null) ? (json_decode($r->parsed_data, true) ?: []) : (array)($r?->parsed_data ?? []);
+            $rawTin = (string)($r?->vendor_tin ?: (!empty($parsed['seller_tin']) ? $parsed['seller_tin'] : ''));
             $sellerDigits = preg_replace('/^0+/', '', preg_replace('/[^0-9]/', '', $rawTin));
             $sellerTinVal = ($sellerDigits !== '') ? (int)$sellerDigits : (trim($rawTin) ?: '');
 
@@ -4736,6 +4773,17 @@ class FinanceTaxReportController extends Controller
                             $vatDec->vat_amount = $vat;
                             if ($vat <= 0) $vatDec->vat_status = 'no_vat';
                             $vatDec->save();
+                        }
+                    }
+
+                    if (Schema::hasTable('vehicle_fuel_requests')) {
+                        $fuelReq = \App\Models\VehicleFuelRequest::where('expense_request_id', $linkedExp->id)->first()
+                            ?: \App\Models\VehicleFuelRequest::where('request_number', $linkedExp->request_number)->first();
+                        if ($fuelReq) {
+                            if (!empty($receipt->vendor_tin)) $fuelReq->fuel_station_tin = $receipt->vendor_tin;
+                            if (!empty($receipt->fs_no)) $fuelReq->fs_no = $receipt->fs_no;
+                            if (!empty($receipt->mrc_no)) $fuelReq->mrc_no = $receipt->mrc_no;
+                            $fuelReq->save();
                         }
                     }
                 }

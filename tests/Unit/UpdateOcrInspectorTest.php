@@ -45,6 +45,7 @@ class UpdateOcrInspectorTest extends TestCase
 
     protected function setupSchema(): void
     {
+        Schema::dropIfExists('vehicle_fuel_requests');
         Schema::dropIfExists('expense_hub_vat_audit_logs');
         Schema::dropIfExists('expense_hub_vat_decisions');
         Schema::dropIfExists('receipt_items');
@@ -53,6 +54,19 @@ class UpdateOcrInspectorTest extends TestCase
         Schema::dropIfExists('projects');
         Schema::dropIfExists('users');
         Schema::dropIfExists('system_settings');
+
+        Schema::create('vehicle_fuel_requests', function ($table) {
+            $table->id();
+            $table->string('request_no')->nullable();
+            $table->string('request_number')->nullable();
+            $table->unsignedBigInteger('expense_request_id')->nullable();
+            $table->string('fuel_station_tin')->nullable();
+            $table->string('fs_no')->nullable();
+            $table->string('mrc_no')->nullable();
+            $table->decimal('total_price', 18, 2)->default(0);
+            $table->timestamps();
+            $table->softDeletes();
+        });
 
         Schema::create('system_settings', function ($table) {
             $table->id();
@@ -425,5 +439,64 @@ class UpdateOcrInspectorTest extends TestCase
         $this->assertEquals('00099999', $vatDec->custom_fs_no);
         $this->assertEquals('0099999999', $vatDec->custom_seller_tin);
         $this->assertEquals('MRC-NEW-88', $vatDec->custom_mrc_no);
+    }
+
+    public function test_tas_purchase_seller_tin_fill_and_fuel_request_sync()
+    {
+        $exp = ExpenseRequest::create([
+            'request_number'    => 'EXP-FUEL-2026-0276',
+            'amount'            => 1250.00,
+            'vat_amount'        => 0.00,
+            'gross_amount'      => 1250.00,
+            'net_amount'        => 1250.00,
+            'payee'             => 'NOC Fuel Station',
+            'category'          => 'fuel',
+            'status'            => 'paid',
+            'payment_reference' => 'Fuel refill voucher',
+        ]);
+
+        $fuelReq = \App\Models\VehicleFuelRequest::create([
+            'request_number'     => 'EXP-FUEL-2026-0276',
+            'expense_request_id' => $exp->id,
+            'fuel_station_tin'   => null,
+            'fs_no'              => null,
+            'total_price'        => 1250.00,
+        ]);
+
+        // Inspector update from TAS tab: user fills missing Seller TIN
+        $response = $this->postJson(route('finance.tax-deductions.update-ocr-item'), [
+            'receipt_id'       => $exp->request_number,
+            'seller_name'      => 'NOC Fuel Station Gurd Shola',
+            'supplier_tin'     => '0012345678',
+            'fs_no'            => '00055443',
+            'mrc_no'           => 'MRC-NOC-99',
+            'receipt_date'     => '2026-03-05',
+            'item_description' => 'Vehicle Benzene Fuel Refill',
+            'vat_category'     => 'E',
+            'purchase_type'    => 'PUR_GD',
+            'total_value'      => 1250.00,
+            'vat_amount'       => 0.00,
+            'value_after_vat'  => 1250.00,
+        ]);
+
+        $response->assertStatus(200);
+        $response->assertJson([
+            'success' => true,
+            'item'    => [
+                'vendor_tin'  => '0012345678',
+                'vendor_name' => 'NOC Fuel Station Gurd Shola',
+                'fs_no'       => '00055443',
+            ]
+        ]);
+
+        $fuelReq->refresh();
+        $this->assertEquals('0012345678', $fuelReq->fuel_station_tin);
+        $this->assertEquals('00055443', $fuelReq->fs_no);
+        $this->assertEquals('MRC-NOC-99', $fuelReq->mrc_no);
+
+        $receipt = Receipt::where('purchasable_id', $exp->id)->first();
+        $this->assertNotNull($receipt);
+        $this->assertEquals('0012345678', $receipt->vendor_tin);
+        $this->assertTrue((bool)$receipt->tin_valid);
     }
 }

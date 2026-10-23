@@ -524,5 +524,21 @@ class FuelExpenseTasReceiptExportTest extends TestCase
         $this->assertEquals('38480010', (string)$found['purchaser_tin']);
         $this->assertEquals('PUR_GD', $found['purc_type']);
         $this->assertEquals('wechacha', $found['encoded_by']);
+
+        // Assert movements controller and blade view render TAS Purchases tab with Seller TIN badges, filters and inspector buttons
+        $viewRequest = Request::create(route('finance.tax-deductions.movements'), 'GET', [
+            'ethiopian_year'  => $ethDate['year'],
+            'ethiopian_month' => $ethDate['month'],
+            'tab'             => 'tas',
+        ]);
+        $viewResponse = $taxController->movementsPage($viewRequest);
+        $renderedHtml = $viewResponse->render();
+
+        $this->assertStringContainsString('TAS Purchases (0% VAT / Fuel Receipts', $renderedHtml);
+        $this->assertStringContainsString('2. Seller TIN Status', $renderedHtml);
+        $this->assertStringContainsString('btnTasFilterWithTin', $renderedHtml);
+        $this->assertStringContainsString('btnTasFilterMissingTin', $renderedHtml);
+        $this->assertStringContainsString('openPageTasInspector', $renderedHtml);
+        $this->assertStringContainsString('5201', $renderedHtml);
     }
 }
