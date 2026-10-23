@@ -393,4 +393,55 @@ class MonthMovementsExpensesTest extends TestCase
         $this->assertFalse($data['tas_purchases'][0]['is_vat_purchase']);
         $this->assertTrue($data['tas_purchases'][0]['is_tas_purchase']);
     }
+
+    public function test_movements_page_handles_vehicle_fuel_requests_with_only_request_no_column()
+    {
+        Schema::dropIfExists('vehicle_fuel_requests');
+        Schema::create('vehicle_fuel_requests', function ($table) {
+            $table->id();
+            $table->string('request_no')->nullable();
+            $table->unsignedBigInteger('expense_request_id')->nullable();
+            $table->string('fuel_station_tin')->nullable();
+            $table->string('fs_no')->nullable();
+            $table->string('mrc_no')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+        });
+
+        // Ensure vehicle_fuel_requests strictly has no request_number column initially
+        $this->assertFalse(Schema::hasColumn('vehicle_fuel_requests', 'request_number'));
+
+        DB::table('vehicle_fuel_requests')->insert([
+            'request_no'       => 'REQ-20261008-QHKA',
+            'fuel_station_tin' => '0012345678',
+            'fs_no'            => '00088899',
+            'mrc_no'           => 'MRC-999',
+            'created_at'       => now(),
+            'updated_at'       => now(),
+        ]);
+
+        ExpenseRequest::create([
+            'request_number'    => 'REQ-20261008-QHKA',
+            'category'          => 'fuel',
+            'payee'             => 'Total Station',
+            'amount'            => 1250.00,
+            'gross_amount'      => 1250.00,
+            'net_amount'        => 1250.00,
+            'vat_amount'        => 0.00,
+            'withholding_amount'=> 0.00,
+            'status'            => 'paid',
+            'paid_at'           => '2026-10-15 10:00:00', // Month 2 in Ethiopian Year 2019
+        ]);
+
+        $controller = new \App\Http\Controllers\Finance\FinanceTaxReportController();
+        $request = new Request(['ethiopian_year' => 2019, 'ethiopian_month' => 2]);
+        $response = $controller->movementsPage($request);
+
+        $this->assertInstanceOf(\Illuminate\View\View::class, $response);
+        $viewData = $response->getData();
+        $this->assertArrayHasKey('movementsData', $viewData);
+        $this->assertNotEmpty($viewData['movementsData']['tas_purchases']);
+        $this->assertEquals('0012345678', $viewData['movementsData']['tas_purchases'][0]['seller_tin']);
+        $this->assertEquals('00088899', $viewData['movementsData']['tas_purchases'][0]['fs_no']);
+    }
 }

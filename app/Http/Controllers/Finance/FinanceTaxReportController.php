@@ -167,6 +167,26 @@ class FinanceTaxReportController extends Controller
                 });
             }
 
+            if (Schema::hasTable('vehicle_fuel_requests')) {
+                Schema::table('vehicle_fuel_requests', function (\Illuminate\Database\Schema\Blueprint $table) {
+                    if (!Schema::hasColumn('vehicle_fuel_requests', 'request_number')) {
+                        $table->string('request_number', 50)->nullable()->index();
+                    }
+                    if (!Schema::hasColumn('vehicle_fuel_requests', 'fuel_station_name')) {
+                        $table->string('fuel_station_name', 255)->nullable();
+                    }
+                    if (!Schema::hasColumn('vehicle_fuel_requests', 'fuel_station_tin')) {
+                        $table->string('fuel_station_tin', 50)->nullable();
+                    }
+                    if (!Schema::hasColumn('vehicle_fuel_requests', 'fs_no')) {
+                        $table->string('fs_no', 50)->nullable();
+                    }
+                    if (!Schema::hasColumn('vehicle_fuel_requests', 'mrc_no')) {
+                        $table->string('mrc_no', 50)->nullable();
+                    }
+                });
+            }
+
             // Sync/heal: If any IncomeRecord or ExpenseRequest was created AFTER a TaxSettlement was paid/created,
             // but was inadvertently linked or marked settled, restore it to active/unsettled!
             // When a month is cleared, subsequent new transactions must start adding up fresh from zero.
@@ -1331,16 +1351,38 @@ class FinanceTaxReportController extends Controller
 
             // Fallback 2: Check linked VehicleFuelRequest for fuel_station_tin
             if (empty($sellerTin) && Schema::hasTable('vehicle_fuel_requests')) {
-                $fuelReq = \App\Models\VehicleFuelRequest::where('expense_request_id', $item->id)->first()
-                    ?: \App\Models\VehicleFuelRequest::where('request_number', $item->request_number)->first();
-                if ($fuelReq && !empty($fuelReq->fuel_station_tin)) {
-                    $sellerTin = $fuelReq->fuel_station_tin;
-                    if (empty($fsNo) && !empty($fuelReq->fs_no)) {
-                        $fsNo = $fuelReq->fs_no;
+                try {
+                    $fuelReq = null;
+                    if (Schema::hasColumn('vehicle_fuel_requests', 'expense_request_id')) {
+                        $fuelReq = \App\Models\VehicleFuelRequest::where('expense_request_id', $item->id)->first();
                     }
-                    if (empty($mrcNo) && !empty($fuelReq->mrc_no)) {
-                        $mrcNo = $fuelReq->mrc_no;
+                    if (!$fuelReq && !empty($item->request_number)) {
+                        $hasReqNo = Schema::hasColumn('vehicle_fuel_requests', 'request_no');
+                        $hasReqNum = Schema::hasColumn('vehicle_fuel_requests', 'request_number');
+                        if ($hasReqNo || $hasReqNum) {
+                            $fuelReq = \App\Models\VehicleFuelRequest::where(function ($q) use ($item, $hasReqNo, $hasReqNum) {
+                                if ($hasReqNo && $hasReqNum) {
+                                    $q->where('request_no', $item->request_number)
+                                      ->orWhere('request_number', $item->request_number);
+                                } elseif ($hasReqNo) {
+                                    $q->where('request_no', $item->request_number);
+                                } else {
+                                    $q->where('request_number', $item->request_number);
+                                }
+                            })->first();
+                        }
                     }
+                    if ($fuelReq && !empty($fuelReq->fuel_station_tin)) {
+                        $sellerTin = $fuelReq->fuel_station_tin;
+                        if (empty($fsNo) && !empty($fuelReq->fs_no)) {
+                            $fsNo = $fuelReq->fs_no;
+                        }
+                        if (empty($mrcNo) && !empty($fuelReq->mrc_no)) {
+                            $mrcNo = $fuelReq->mrc_no;
+                        }
+                    }
+                } catch (\Throwable $e) {
+                    // Suppress error to avoid breaking movements page load
                 }
             }
 
@@ -4669,46 +4711,57 @@ class FinanceTaxReportController extends Controller
 
             // 8. Fallback resolution via VehicleFuelRequest
             if (!$receipt && Schema::hasTable('vehicle_fuel_requests')) {
-                $fuelQuery = \App\Models\VehicleFuelRequest::query();
-                if (!empty($rawRequestNumber)) {
-                    $fuelQuery->where('request_number', (string)$rawRequestNumber)->orWhere('request_no', (string)$rawRequestNumber);
-                }
-                if (!empty($rawReceiptId)) {
-                    $fuelQuery->orWhere('request_number', (string)$rawReceiptId)->orWhere('request_no', (string)$rawReceiptId);
-                }
-                $fuel = $fuelQuery->first();
-                if ($fuel && $fuel->expense_request_id) {
-                    $expReq = \App\Models\ExpenseRequest::find($fuel->expense_request_id);
-                    if ($expReq) {
-                        $receipt = \App\Models\Receipt::where('purchasable_type', \App\Models\ExpenseRequest::class)
-                            ->where('purchasable_id', $expReq->id)
-                            ->first();
-                        if (!$receipt) {
-                            $candidateReceiptNo = $expReq->request_number ?: ('RCP-FUEL-' . $fuel->id);
-                            if (\App\Models\Receipt::where('receipt_number', $candidateReceiptNo)->exists()) {
-                                $candidateReceiptNo = 'RCP-EXP-' . now()->format('Ymd') . '-' . $expReq->id . '-' . strtoupper(substr(uniqid(), -4));
+                try {
+                    $cands = array_values(array_filter([(string)$rawRequestNumber, (string)$rawReceiptId]));
+                    $hasReqNo = Schema::hasColumn('vehicle_fuel_requests', 'request_no');
+                    $hasReqNum = Schema::hasColumn('vehicle_fuel_requests', 'request_number');
+                    $fuel = null;
+                    if (!empty($cands) && ($hasReqNo || $hasReqNum)) {
+                        $fuel = \App\Models\VehicleFuelRequest::where(function ($q) use ($cands, $hasReqNo, $hasReqNum) {
+                            if ($hasReqNo && $hasReqNum) {
+                                $q->whereIn('request_no', $cands)->orWhereIn('request_number', $cands);
+                            } elseif ($hasReqNo) {
+                                $q->whereIn('request_no', $cands);
+                            } else {
+                                $q->whereIn('request_number', $cands);
                             }
-                            $receipt = new \App\Models\Receipt([
-                                'purchasable_type' => \App\Models\ExpenseRequest::class,
-                                'purchasable_id'   => $expReq->id,
-                                'receipt_number'   => $candidateReceiptNo,
-                                'vendor_name'      => $request->seller_name ?: ($expReq->payee ?: 'Fuel Station'),
-                                'vendor_tin'       => $request->supplier_tin ?: $fuel->fuel_station_tin,
-                                'fs_no'            => $request->fs_no ?: $fuel->fs_no,
-                                'mrc_no'           => $request->mrc_no ?: $fuel->mrc_no,
-                                'uploaded_by'      => Auth::id() ?: ($expReq->user_id ?: 1),
-                                'project_id'       => $request->project_id ?: $expReq->project_id,
-                                'file_path'        => (string)($expReq->attachment ?? ''),
-                                'file_type'        => 'image',
-                                'category'         => 'fuel',
-                                'tax_type'         => ((float)($request->vat_amount ?? 0) <= 0) ? 'no_vat' : 'vat_standard',
-                                'subtotal'         => (float)($request->total_value ?: $expReq->amount),
-                                'vat_amount'       => (float)($request->vat_amount ?: $expReq->vat_amount),
-                                'total_amount'     => (float)($request->value_after_vat ?: ($expReq->gross_amount ?: $expReq->amount)),
-                            ]);
-                            $receipt->save();
+                        })->first();
+                    }
+                    if ($fuel && !empty($fuel->expense_request_id)) {
+                        $expReq = \App\Models\ExpenseRequest::find($fuel->expense_request_id);
+                        if ($expReq) {
+                            $receipt = \App\Models\Receipt::where('purchasable_type', \App\Models\ExpenseRequest::class)
+                                ->where('purchasable_id', $expReq->id)
+                                ->first();
+                            if (!$receipt) {
+                                $candidateReceiptNo = $expReq->request_number ?: ('RCP-FUEL-' . $fuel->id);
+                                if (\App\Models\Receipt::where('receipt_number', $candidateReceiptNo)->exists()) {
+                                    $candidateReceiptNo = 'RCP-EXP-' . now()->format('Ymd') . '-' . $expReq->id . '-' . strtoupper(substr(uniqid(), -4));
+                                }
+                                $receipt = new \App\Models\Receipt([
+                                    'purchasable_type' => \App\Models\ExpenseRequest::class,
+                                    'purchasable_id'   => $expReq->id,
+                                    'receipt_number'   => $candidateReceiptNo,
+                                    'vendor_name'      => $request->seller_name ?: ($expReq->payee ?: 'Fuel Station'),
+                                    'vendor_tin'       => $request->supplier_tin ?: ($fuel->fuel_station_tin ?? null),
+                                    'fs_no'            => $request->fs_no ?: ($fuel->fs_no ?? null),
+                                    'mrc_no'           => $request->mrc_no ?: ($fuel->mrc_no ?? null),
+                                    'uploaded_by'      => Auth::id() ?: ($expReq->user_id ?: 1),
+                                    'project_id'       => $request->project_id ?: $expReq->project_id,
+                                    'file_path'        => (string)($expReq->attachment ?? ''),
+                                    'file_type'        => 'image',
+                                    'category'         => 'fuel',
+                                    'tax_type'         => ((float)($request->vat_amount ?? 0) <= 0) ? 'no_vat' : 'vat_standard',
+                                    'subtotal'         => (float)($request->total_value ?: $expReq->amount),
+                                    'vat_amount'       => (float)($request->vat_amount ?: $expReq->vat_amount),
+                                    'total_amount'     => (float)($request->value_after_vat ?: ($expReq->gross_amount ?: $expReq->amount)),
+                                ]);
+                                $receipt->save();
+                            }
                         }
                     }
+                } catch (\Throwable $e) {
+                    // Suppress
                 }
             }
 
@@ -4945,22 +4998,44 @@ class FinanceTaxReportController extends Controller
                     }
 
                     if (Schema::hasTable('vehicle_fuel_requests')) {
-                        $fuelReq = \App\Models\VehicleFuelRequest::where('expense_request_id', $linkedExp->id)->first()
-                            ?: \App\Models\VehicleFuelRequest::where('request_number', $linkedExp->request_number)->first();
-                        if ($fuelReq) {
-                            if (!empty($receipt->vendor_tin) && Schema::hasColumn('vehicle_fuel_requests', 'fuel_station_tin')) {
-                                $fuelReq->fuel_station_tin = $receipt->vendor_tin;
+                        try {
+                            $fuelReq = null;
+                            if (Schema::hasColumn('vehicle_fuel_requests', 'expense_request_id')) {
+                                $fuelReq = \App\Models\VehicleFuelRequest::where('expense_request_id', $linkedExp->id)->first();
                             }
-                            if (!empty($receipt->fs_no) && Schema::hasColumn('vehicle_fuel_requests', 'fs_no')) {
-                                $fuelReq->fs_no = $receipt->fs_no;
+                            if (!$fuelReq && !empty($linkedExp->request_number)) {
+                                $hasReqNo = Schema::hasColumn('vehicle_fuel_requests', 'request_no');
+                                $hasReqNum = Schema::hasColumn('vehicle_fuel_requests', 'request_number');
+                                if ($hasReqNo || $hasReqNum) {
+                                    $fuelReq = \App\Models\VehicleFuelRequest::where(function ($q) use ($linkedExp, $hasReqNo, $hasReqNum) {
+                                        if ($hasReqNo && $hasReqNum) {
+                                            $q->where('request_no', $linkedExp->request_number)
+                                              ->orWhere('request_number', $linkedExp->request_number);
+                                        } elseif ($hasReqNo) {
+                                            $q->where('request_no', $linkedExp->request_number);
+                                        } else {
+                                            $q->where('request_number', $linkedExp->request_number);
+                                        }
+                                    })->first();
+                                }
                             }
-                            if (!empty($receipt->mrc_no) && Schema::hasColumn('vehicle_fuel_requests', 'mrc_no')) {
-                                $fuelReq->mrc_no = $receipt->mrc_no;
+                            if ($fuelReq) {
+                                if (!empty($receipt->vendor_tin) && Schema::hasColumn('vehicle_fuel_requests', 'fuel_station_tin')) {
+                                    $fuelReq->fuel_station_tin = $receipt->vendor_tin;
+                                }
+                                if (!empty($receipt->fs_no) && Schema::hasColumn('vehicle_fuel_requests', 'fs_no')) {
+                                    $fuelReq->fs_no = $receipt->fs_no;
+                                }
+                                if (!empty($receipt->mrc_no) && Schema::hasColumn('vehicle_fuel_requests', 'mrc_no')) {
+                                    $fuelReq->mrc_no = $receipt->mrc_no;
+                                }
+                                if ($request->filled('seller_name') && Schema::hasColumn('vehicle_fuel_requests', 'fuel_station_name')) {
+                                    $fuelReq->fuel_station_name = trim((string)$request->seller_name);
+                                }
+                                $fuelReq->save();
                             }
-                            if ($request->filled('seller_name') && Schema::hasColumn('vehicle_fuel_requests', 'fuel_station_name')) {
-                                $fuelReq->fuel_station_name = trim((string)$request->seller_name);
-                            }
-                            $fuelReq->save();
+                        } catch (\Throwable $e) {
+                            Log::warning('updateOcrItem fuelReq sync error: ' . $e->getMessage());
                         }
                     }
                 }
