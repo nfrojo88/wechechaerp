@@ -465,7 +465,14 @@
                                         <small class="text-muted" style="font-size:0.75rem;">{{ $exp['date_gc'] ?? '-' }}</small>
                                     </td>
                                     <td>
-                                        <span class="badge bg-light text-dark border font-monospace">{{ $exp['request_number'] ?? '-' }}</span>
+                                        <div class="d-flex align-items-center gap-1 flex-wrap">
+                                            <span class="badge bg-light text-dark border font-monospace">{{ $exp['request_number'] ?? '-' }}</span>
+                                            @if(($exp['source_type'] ?? '') === 'petty_cash')
+                                                <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-pill small" style="font-size:0.65rem;"><i class="fa-solid fa-coins me-0.5"></i>Petty Cash</span>
+                                            @elseif(($exp['source_type'] ?? '') === 'direct_expense')
+                                                <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle rounded-pill small" style="font-size:0.65rem;">Direct</span>
+                                            @endif
+                                        </div>
                                         @if(!empty($exp['payment_reference']) && $exp['payment_reference'] !== '-')
                                             <small class="text-muted d-block font-monospace">Ref: {{ $exp['payment_reference'] }}</small>
                                         @endif

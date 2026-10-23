@@ -1068,8 +1068,8 @@ class FinanceTaxReportController extends Controller
             $this->ensureSchema();
 
             $curEth = EthiopianDate::toEthiopian(now());
-            $year  = (int)($request->query('ethiopian_year') ?: $curEth['year']);
-            $month = (int)($request->query('ethiopian_month') ?: $curEth['month']);
+            $year  = (int)($request->input('ethiopian_year') ?: ($request->query('ethiopian_year') ?: $curEth['year']));
+            $month = (int)($request->input('ethiopian_month') ?: ($request->query('ethiopian_month') ?: $curEth['month']));
             $vatOnly = $request->has('vat_only') ? $request->boolean('vat_only') : true;
 
             $data = $this->calculateMonthMovementsData($year, $month, $vatOnly);
@@ -1213,14 +1213,28 @@ class FinanceTaxReportController extends Controller
         $totalOutputVat = (float)$formattedIncomes->sum('output_vat');
         $totalGrossIncome = (float)$formattedIncomes->sum('gross_amount');
 
-        // 2. Paid Expenses in this Ethiopian month (Where our purchases came from, excluding VAT B)
+        // 2. Paid Expenses & Purchases in this Ethiopian month (Where our purchases came from, excluding VAT B)
+        // Includes: All paid ExpenseRequests (created or paid in month), PettyCashMaterialPurchases, and direct project expenses
         $expenses = collect();
         if (Schema::hasTable('expense_requests')) {
             $expenses = ExpenseRequest::with(['project', 'user', 'bankAccount', 'chartOfAccount', 'paidBy'])
-                ->where('status', ExpenseRequest::STATUS_PAID)
-                ->whereBetween('created_at', [$start, $end])
-                ->where('vat_type', '!=', 'vat_b')
-                ->orderBy('created_at', 'asc')
+                ->where(function ($q) {
+                    $q->whereIn('status', [ExpenseRequest::STATUS_PAID, 'paid', 'PAID'])
+                      ->orWhereNotNull('paid_at');
+                })
+                ->whereNotIn('status', [ExpenseRequest::STATUS_REJECTED, 'rejected', 'Rejected'])
+                ->where(function ($q) use ($start, $end) {
+                    $q->whereBetween('paid_at', [$start, $end])
+                      ->orWhere(function ($sub) use ($start, $end) {
+                          $sub->whereNull('paid_at')
+                              ->whereBetween('created_at', [$start, $end]);
+                      })
+                      ->orWhereBetween('created_at', [$start, $end]);
+                })
+                ->where(function ($q) {
+                    $q->whereNull('vat_type')->orWhere('vat_type', '!=', 'vat_b');
+                })
+                ->orderByRaw('COALESCE(paid_at, created_at) asc')
                 ->get();
         }
 
@@ -1241,10 +1255,21 @@ class FinanceTaxReportController extends Controller
             } elseif ($vatType === 'exclusive') {
                 $vatAmount  = round($gross * ($vatRate / 100), 2);
                 $baseAmount = $gross;
+            } elseif ((float)$item->vat_amount > 0) {
+                $vatAmount  = (float)$item->vat_amount;
+                $baseAmount = max(0.0, round($gross - $vatAmount, 2));
             }
 
             $whtAmount = (float)$item->calculated_withholding_amount;
+            if ($whtAmount <= 0 && $item->has_withholding) {
+                $whtRate = (float)($item->withholding_rate ?: 3.00);
+                $whtAmount = round($baseAmount * ($whtRate / 100), 2);
+            }
+
             $netDisbursed = (float)$item->effective_payable_amount;
+            if ($netDisbursed <= 0) {
+                $netDisbursed = round($baseAmount + $vatAmount - $whtAmount, 2);
+            }
 
             $accountName = '-';
             if ($item->bankAccount) {
@@ -1256,13 +1281,15 @@ class FinanceTaxReportController extends Controller
             }
 
             $payee = $item->account_name ?: ($item->user?->name ?: 'Vendor / Payee');
+            $itemDate = $item->paid_at ?: $item->created_at;
 
             return [
                 'id'                 => $item->id,
                 'request_number'     => $item->request_number,
                 'payment_reference'  => $item->payment_reference ?: '-',
-                'date_ec'            => EthiopianDate::formatDateEc($item->created_at, 'DD/MM/YYYY EC'),
-                'date_gc'            => $item->created_at->format('M d, Y'),
+                'date_ec'            => $itemDate ? EthiopianDate::formatDateEc($itemDate, 'DD/MM/YYYY EC') : '-',
+                'date_gc'            => $itemDate ? Carbon::parse($itemDate)->format('M d, Y') : '-',
+                'raw_date'           => $itemDate ? Carbon::parse($itemDate)->toDateTimeString() : '',
                 'payee'              => $payee,
                 'project_name'       => $item->project?->name ?: 'General',
                 'category'           => ucfirst(str_replace('_', ' ', $item->category ?: 'Expense')),
@@ -1271,15 +1298,184 @@ class FinanceTaxReportController extends Controller
                 'vat_type'           => $vatType,
                 'vat_rate'           => $vatRate,
                 'vat_amount'         => $vatAmount,
-                'has_withholding'    => (bool)$item->has_withholding,
+                'has_withholding'    => (bool)($item->has_withholding || $whtAmount > 0),
                 'withholding_amount' => $whtAmount,
                 'net_disbursed'      => $netDisbursed,
                 'description'        => $item->description ?: '-',
                 'attachment_url'     => $item->attachment_url,
                 'status'             => $item->status,
                 'is_settled'         => (bool)$item->vat_settled,
+                'source_type'        => 'expense_request',
+                'source_label'       => 'Expense Voucher',
             ];
         });
+
+        // Include Petty Cash Material Purchases in this Ethiopian month
+        if (Schema::hasTable('petty_cash_material_purchases')) {
+            try {
+                $pettyPurchases = \App\Models\PettyCashMaterialPurchase::with(['store.project', 'purchaser', 'chartOfAccount', 'items.product'])
+                    ->whereNotIn('status', ['rejected', 'cancelled'])
+                    ->where(function ($q) use ($startDate, $endDate, $start, $end) {
+                        $q->whereBetween('purchase_date', [$startDate, $endDate])
+                          ->orWhere(function ($sub) use ($start, $end) {
+                              $sub->whereNull('purchase_date')
+                                  ->whereBetween('created_at', [$start, $end]);
+                          });
+                    })
+                    ->orderByRaw('COALESCE(purchase_date, created_at) asc')
+                    ->get();
+
+                $existingExpNumbers = $formattedExpenses->pluck('request_number')->filter()->all();
+
+                foreach ($pettyPurchases as $p) {
+                    $refNo = $p->purchase_no ?: ('PCMP-' . $p->id);
+                    if (in_array($refNo, $existingExpNumbers)) {
+                        continue;
+                    }
+
+                    $pGross = (float)$p->total_amount;
+                    $pDate = $p->purchase_date ?: $p->created_at;
+
+                    $accountName = '-';
+                    if ($p->chartOfAccount) {
+                        $accountName = $p->chartOfAccount->name;
+                    } elseif ($p->store) {
+                        $accountName = $p->store->name . ' (Petty Cash)';
+                    } else {
+                        $accountName = 'Petty Cash Fund';
+                    }
+
+                    $payee = $p->supplier_name ?: ($p->purchaser?->name ?: 'Petty Cash Supplier');
+                    $projectName = $p->store?->project?->name ?: ($p->store?->name ?: 'Site Store');
+
+                    $paymentRef = '-';
+                    if (!empty($p->receipt_no) && !empty($p->fs_no)) {
+                        $paymentRef = 'Rec: ' . $p->receipt_no . ' / FS: ' . $p->fs_no;
+                    } elseif (!empty($p->receipt_no)) {
+                        $paymentRef = 'Rec: ' . $p->receipt_no;
+                    } elseif (!empty($p->fs_no)) {
+                        $paymentRef = 'FS: ' . $p->fs_no;
+                    }
+
+                    $desc = $p->notes;
+                    if (empty($desc) && $p->items && $p->items->isNotEmpty()) {
+                        $desc = $p->items->map(fn($it) => ($it->product?->name ?: ($it->remarks ?: 'Material')) . ' (' . (float)$it->quantity . ' ' . ($it->unit ?: 'pcs') . ')')->take(3)->implode(', ');
+                    }
+                    if (empty($desc)) {
+                        $desc = 'Site Material Petty Cash Purchase';
+                    }
+
+                    $attachmentUrl = null;
+                    if (!empty($p->attachment_path)) {
+                        try {
+                            $attachmentUrl = \App\Services\FileUploadService::url($p->attachment_path);
+                        } catch (\Throwable $e) {
+                            $attachmentUrl = asset('storage/' . ltrim($p->attachment_path, '/'));
+                        }
+                    }
+
+                    $formattedExpenses->push([
+                        'id'                 => 'PC-' . $p->id,
+                        'request_number'     => $refNo,
+                        'payment_reference'  => $paymentRef,
+                        'date_ec'            => $pDate ? EthiopianDate::formatDateEc($pDate, 'DD/MM/YYYY EC') : '-',
+                        'date_gc'            => $pDate ? Carbon::parse($pDate)->format('M d, Y') : '-',
+                        'raw_date'           => $pDate ? Carbon::parse($pDate)->toDateTimeString() : '',
+                        'payee'              => $payee,
+                        'project_name'       => $projectName,
+                        'category'           => 'Petty Cash Purchase',
+                        'account_name'       => $accountName,
+                        'base_amount'        => $pGross,
+                        'vat_type'           => 'none',
+                        'vat_rate'           => 0.0,
+                        'vat_amount'         => 0.0,
+                        'has_withholding'    => false,
+                        'withholding_amount' => 0.0,
+                        'net_disbursed'      => $pGross,
+                        'description'        => $desc,
+                        'attachment_url'     => $attachmentUrl,
+                        'status'             => $p->status ?: 'completed',
+                        'is_settled'         => false,
+                        'source_type'        => 'petty_cash',
+                        'source_label'       => 'Petty Cash',
+                    ]);
+                }
+            } catch (\Throwable $e) {
+                Log::warning("monthMovements petty cash purchases mapping error: " . $e->getMessage());
+            }
+        }
+
+        // Include direct project expenses in this Ethiopian month if not already captured
+        if (Schema::hasTable('expenses')) {
+            try {
+                $directExpenses = \App\Models\Expense::with(['project', 'creator'])
+                    ->whereIn('status', ['paid', 'approved', 'completed'])
+                    ->where(function ($q) use ($startDate, $endDate, $start, $end) {
+                        $q->whereBetween('expense_date', [$startDate, $endDate])
+                          ->orWhere(function ($sub) use ($start, $end) {
+                              $sub->whereNull('expense_date')
+                                  ->whereBetween('created_at', [$start, $end]);
+                          });
+                    })
+                    ->get();
+
+                $existingDescriptions = $formattedExpenses->pluck('description')->filter()->all();
+                $existingVouchers = $formattedExpenses->pluck('request_number')->filter()->all();
+
+                foreach ($directExpenses as $de) {
+                    $deDesc = $de->description ?: $de->notes;
+                    $deRef  = 'EXP-DIR-' . $de->id;
+                    if (in_array($deRef, $existingVouchers) || ($deDesc && in_array($deDesc, $existingDescriptions))) {
+                        continue;
+                    }
+
+                    $deGross = (float)$de->amount;
+                    $deDate = $de->expense_date ?: ($de->approved_at ?: $de->created_at);
+
+                    $attachmentUrl = null;
+                    if (!empty($de->receipt_path)) {
+                        try {
+                            $attachmentUrl = \App\Services\FileUploadService::url($de->receipt_path);
+                        } catch (\Throwable $e) {
+                            $attachmentUrl = asset('storage/' . ltrim($de->receipt_path, '/'));
+                        }
+                    }
+
+                    $formattedExpenses->push([
+                        'id'                 => 'DIR-' . $de->id,
+                        'request_number'     => $deRef,
+                        'payment_reference'  => '-',
+                        'date_ec'            => $deDate ? EthiopianDate::formatDateEc($deDate, 'DD/MM/YYYY EC') : '-',
+                        'date_gc'            => $deDate ? Carbon::parse($deDate)->format('M d, Y') : '-',
+                        'raw_date'           => $deDate ? Carbon::parse($deDate)->toDateTimeString() : '',
+                        'payee'              => $de->creator?->name ?: 'Direct Payee',
+                        'project_name'       => $de->project?->name ?: 'General',
+                        'category'           => ucfirst(str_replace('_', ' ', $de->category ?: 'Expense')),
+                        'account_name'       => 'Direct Project Expense',
+                        'base_amount'        => $deGross,
+                        'vat_type'           => 'none',
+                        'vat_rate'           => 0.0,
+                        'vat_amount'         => 0.0,
+                        'has_withholding'    => false,
+                        'withholding_amount' => 0.0,
+                        'net_disbursed'      => $deGross,
+                        'description'        => $deDesc ?: 'Direct Expense',
+                        'attachment_url'     => $attachmentUrl,
+                        'status'             => $de->status ?: 'approved',
+                        'is_settled'         => false,
+                        'source_type'        => 'direct_expense',
+                        'source_label'       => 'Direct Expense',
+                    ]);
+                }
+            } catch (\Throwable $e) {
+                Log::warning("monthMovements direct expenses mapping error: " . $e->getMessage());
+            }
+        }
+
+        // Chronologically sort all expenses
+        $formattedExpenses = $formattedExpenses->sortBy(function ($item) {
+            return $item['raw_date'] ?? $item['date_gc'] ?? '';
+        })->values();
 
         // 3. OCR Scanned Receipts in this Ethiopian month (strictly VAT receipts when vatOnly = true)
         $ocrItems = collect();
@@ -1600,9 +1796,22 @@ class FinanceTaxReportController extends Controller
 
             $prevExpIn = 0.0;
             if (Schema::hasTable('expense_requests')) {
-                $prevExp = ExpenseRequest::where('status', ExpenseRequest::STATUS_PAID)
-                    ->whereBetween('created_at', [$prevRange['start'], $prevRange['end']])
-                    ->where('vat_type', '!=', 'vat_b')
+                $prevExp = ExpenseRequest::where(function ($q) {
+                        $q->whereIn('status', [ExpenseRequest::STATUS_PAID, 'paid', 'PAID'])
+                          ->orWhereNotNull('paid_at');
+                    })
+                    ->whereNotIn('status', [ExpenseRequest::STATUS_REJECTED, 'rejected', 'Rejected'])
+                    ->where(function ($q) use ($prevRange) {
+                        $q->whereBetween('paid_at', [$prevRange['start'], $prevRange['end']])
+                          ->orWhere(function ($sub) use ($prevRange) {
+                              $sub->whereNull('paid_at')
+                                  ->whereBetween('created_at', [$prevRange['start'], $prevRange['end']]);
+                          })
+                          ->orWhereBetween('created_at', [$prevRange['start'], $prevRange['end']]);
+                    })
+                    ->where(function ($q) {
+                        $q->whereNull('vat_type')->orWhere('vat_type', '!=', 'vat_b');
+                    })
                     ->get();
                 $prevExpIn = (float)$prevExp->sum(function ($item) {
                     if ((float)$item->vat_amount > 0 && ($item->vat_type ?? '') === 'exclusive') return (float)$item->vat_amount;
@@ -2896,11 +3105,25 @@ class FinanceTaxReportController extends Controller
 
         // Fallback to paid expense requests if no receipts present
         if (empty($rows) && Schema::hasTable('expense_requests')) {
+            $sDay = Carbon::parse($startDate)->startOfDay();
+            $eDay = Carbon::parse($endDate)->endOfDay();
             $expenses = ExpenseRequest::with(['user', 'bankAccount', 'chartOfAccount', 'paidBy'])
-                ->where('status', ExpenseRequest::STATUS_PAID)
-                ->whereBetween('created_at', [Carbon::parse($startDate)->startOfDay(), Carbon::parse($endDate)->endOfDay()])
-                ->where('vat_type', '!=', 'vat_b')
-                ->orderBy('created_at', 'asc')
+                ->where(function ($q) {
+                    $q->whereIn('status', [ExpenseRequest::STATUS_PAID, 'paid', 'PAID'])
+                      ->orWhereNotNull('paid_at');
+                })
+                ->whereNotIn('status', [ExpenseRequest::STATUS_REJECTED, 'rejected', 'Rejected'])
+                ->where(function ($q) use ($sDay, $eDay) {
+                    $q->whereBetween('paid_at', [$sDay, $eDay])
+                      ->orWhere(function ($sub) use ($sDay, $eDay) {
+                          $sub->whereNull('paid_at')->whereBetween('created_at', [$sDay, $eDay]);
+                      })
+                      ->orWhereBetween('created_at', [$sDay, $eDay]);
+                })
+                ->where(function ($q) {
+                    $q->whereNull('vat_type')->orWhere('vat_type', '!=', 'vat_b');
+                })
+                ->orderByRaw('COALESCE(paid_at, created_at) asc')
                 ->get();
 
             foreach ($expenses as $exp) {
@@ -3287,12 +3510,26 @@ class FinanceTaxReportController extends Controller
 
         // Fallback: if no OCR items found, query paid Expense Requests with VAT
         if (empty($rows) && Schema::hasTable('expense_requests')) {
+            $sDay = Carbon::parse($startDate)->startOfDay();
+            $eDay = Carbon::parse($endDate)->endOfDay();
             $expenses = ExpenseRequest::with(['user', 'bankAccount', 'chartOfAccount', 'paidBy'])
-                ->where('status', ExpenseRequest::STATUS_PAID)
-                ->whereBetween('created_at', [Carbon::parse($startDate)->startOfDay(), Carbon::parse($endDate)->endOfDay()])
-                ->where('vat_type', '!=', 'vat_b')
+                ->where(function ($q) {
+                    $q->whereIn('status', [ExpenseRequest::STATUS_PAID, 'paid', 'PAID'])
+                      ->orWhereNotNull('paid_at');
+                })
+                ->whereNotIn('status', [ExpenseRequest::STATUS_REJECTED, 'rejected', 'Rejected'])
+                ->where(function ($q) use ($sDay, $eDay) {
+                    $q->whereBetween('paid_at', [$sDay, $eDay])
+                      ->orWhere(function ($sub) use ($sDay, $eDay) {
+                          $sub->whereNull('paid_at')->whereBetween('created_at', [$sDay, $eDay]);
+                      })
+                      ->orWhereBetween('created_at', [$sDay, $eDay]);
+                })
+                ->where(function ($q) {
+                    $q->whereNull('vat_type')->orWhere('vat_type', '!=', 'vat_b');
+                })
                 ->where('vat_amount', '>', 0)
-                ->orderBy('created_at', 'asc')
+                ->orderByRaw('COALESCE(paid_at, created_at) asc')
                 ->get();
 
             foreach ($expenses as $exp) {
