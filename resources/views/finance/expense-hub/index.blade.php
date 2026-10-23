@@ -19,6 +19,9 @@
             <a href="{{ route('finance.expense-hub.export-hub', request()->query()) }}" class="btn btn-outline-success btn-sm shadow-xs">
                 <i class="fa-solid fa-file-excel me-1"></i> Export Hub (Excel)
             </a>
+            <a href="{{ route('finance.expense-hub.export-tas', request()->query()) }}" class="btn btn-dark btn-sm shadow-xs" title="Download 9-Column e-Tax Purchase TAS Declaration (pro.doc format)">
+                <i class="fa-solid fa-file-excel text-success me-1"></i> Purchase TAS Excel (9 Cols)
+            </a>
             <a href="{{ route('finance.expense-hub.export-vat', request()->query()) }}" class="btn btn-primary btn-sm shadow-xs">
                 <i class="fa-solid fa-download me-1"></i> Official VAT Report (15 Cols)
             </a>
@@ -862,6 +865,7 @@
                 <input type="hidden" name="withholding_receipt" id="mWithholdingReceiptPath">
                 <input type="hidden" name="custom_seller_name" id="mSellerName">
                 <input type="hidden" name="custom_item_description" id="mItemDescription">
+                <input type="hidden" name="purc_type" id="mPurcType" value="PUR_GD">
 
                 <div class="modal-body p-4">
                     <!-- Item Overview Row with Full Purpose & Audit Trail -->
@@ -952,7 +956,7 @@
 
                             <input type="radio" class="btn-check" name="vat_status" id="optNoVat" value="no_vat" onchange="toggleVatFields()">
                             <label class="btn btn-outline-secondary flex-fill py-2 text-xs fw-semibold" for="optNoVat">
-                                <i class="fa-solid fa-ban me-1"></i> No VAT (Exempt / Salary)
+                                <i class="fa-solid fa-receipt me-1"></i> No VAT / TAS Purchase (0% VAT)
                             </label>
 
                             <input type="radio" class="btn-check" name="vat_status" id="optPending" value="pending_decision" onchange="toggleVatFields()">
@@ -990,24 +994,24 @@
                             <!-- Official VAT Report Metadata -->
                             <div class="col-md-4">
                                 <label class="form-label text-xs">Vendor TIN (10 Digits)</label>
-                                <input type="text" name="custom_seller_tin" id="mTin" class="form-control form-control-sm" placeholder="e.g. 0012345678">
+                                <input type="text" name="custom_seller_tin" id="mTin" class="form-control form-control-sm" placeholder="e.g. 0012345678" oninput="syncField('mTin', 'mNoVatTin')">
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label text-xs">Fiscal Receipt # (FS No)</label>
-                                <input type="text" name="custom_fs_no" id="mFsNo" class="form-control form-control-sm" placeholder="e.g. 00045892">
+                                <input type="text" name="custom_fs_no" id="mFsNo" class="form-control form-control-sm" placeholder="e.g. 00045892" oninput="syncField('mFsNo', 'mNoVatFsNo')">
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label text-xs">MRC Number</label>
-                                <input type="text" name="custom_mrc_no" id="mMrcNo" class="form-control form-control-sm" placeholder="e.g. CAS1029">
+                                <input type="text" name="custom_mrc_no" id="mMrcNo" class="form-control form-control-sm" placeholder="e.g. CAS1029" oninput="syncField('mMrcNo', 'mNoVatMrcNo')">
                             </div>
                         </div>
                     </div>
 
-                    <!-- No VAT Justification Section -->
+                    <!-- No VAT Justification & TAS Purchase Section -->
                     <div id="noVatSection" class="p-3 border rounded-3 mb-3 bg-light d-none">
-                        <div class="row g-2">
+                        <div class="row g-2 mb-3">
                             <div class="col-md-6">
-                                <label class="form-label text-xs fw-semibold text-dark">Reason for No VAT <span class="text-danger">*</span></label>
+                                <label class="form-label text-xs fw-semibold text-dark">Reason for No VAT / TAS Exemption <span class="text-danger">*</span></label>
                                 <select name="no_vat_reason_code" id="mReasonCode" class="form-select form-select-sm">
                                     <option value="">— Select Justification —</option>
                                     @foreach($reasons as $rCode => $rLabel)
@@ -1018,6 +1022,49 @@
                             <div class="col-md-6">
                                 <label class="form-label text-xs fw-semibold text-dark">Audit Memo / Notes</label>
                                 <input type="text" name="no_vat_reason_note" id="mReasonNote" class="form-control form-control-sm" placeholder="Additional explanation...">
+                            </div>
+                        </div>
+
+                        <!-- TAS Fiscal Receipt (pro.doc 9-Column e-Tax Format) -->
+                        <div class="p-2.5 rounded-3 border bg-white shadow-xs">
+                            <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom">
+                                <span class="fw-bold text-xs text-dark d-flex align-items-center gap-1.5">
+                                    <i class="fa-solid fa-receipt text-primary"></i> TAS Purchase Fiscal Receipt (pro.doc 9-Column Format)
+                                </span>
+                                <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 text-xxs">0% VAT TAS e-Tax</span>
+                            </div>
+                            <div class="row g-2">
+                                <div class="col-md-4">
+                                    <label class="form-label text-xxs fw-semibold text-muted mb-1">Seller TIN (Vendor TIN)</label>
+                                    <input type="text" id="mNoVatTin" class="form-control form-control-sm text-xs font-monospace" placeholder="e.g. 5201 or 0012345678" oninput="syncField('mNoVatTin', 'mTin')">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label text-xxs fw-semibold text-muted mb-1">Receipt No / Fiscal # (FS No)</label>
+                                    <input type="text" id="mNoVatFsNo" class="form-control form-control-sm text-xs font-monospace fw-bold" placeholder="e.g. FS00003898 or DHN638Y2E0" oninput="syncField('mNoVatFsNo', 'mFsNo')">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label text-xxs fw-semibold text-muted mb-1">MRC Number (Machine No)</label>
+                                    <input type="text" id="mNoVatMrcNo" class="form-control form-control-sm text-xs font-monospace" placeholder="e.g. DDB0000032" oninput="syncField('mNoVatMrcNo', 'mMrcNo')">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label text-xxs fw-semibold text-muted mb-1">Receipt Date</label>
+                                    <input type="date" id="mNoVatReceiptDate" class="form-control form-control-sm text-xs" onchange="syncField('mNoVatReceiptDate', 'mReceiptDate')">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label text-xxs fw-semibold text-muted mb-1">PurcType (Commodity Type)</label>
+                                    <select id="mNoVatPurcType" class="form-select form-select-sm text-xs" onchange="document.getElementById('mPurcType').value = this.value">
+                                        <option value="PUR_GD" selected>PUR_GD (Goods / Fuel / Materials)</option>
+                                        <option value="PUR_SER">PUR_SER (Services / Labor / Transport)</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label text-xxs fw-semibold text-muted mb-1">Purchaser TIN</label>
+                                    <input type="text" class="form-control form-control-sm text-xs bg-light" value="38480010" readonly title="Default Purchaser TIN">
+                                </div>
+                            </div>
+                            <div class="mt-2 text-xxs text-muted d-flex align-items-center gap-1">
+                                <i class="fa-solid fa-circle-info text-primary"></i> 
+                                <span>This receipt has 0% VAT. Saving it registers the slip as a <strong>TAS Purchase</strong> and integrates into the 9-column <code>Purchase_TAS.xlsx</code> matching <strong>pro.doc</strong>.</span>
                             </div>
                         </div>
                     </div>
@@ -1430,6 +1477,18 @@ function resetOcrState() {
     if (mSellerName) mSellerName.value = '';
     const mItemDescription = document.getElementById('mItemDescription');
     if (mItemDescription) mItemDescription.value = '';
+    const noVatTin = document.getElementById('mNoVatTin');
+    if (noVatTin) noVatTin.value = '';
+    const noVatFsNo = document.getElementById('mNoVatFsNo');
+    if (noVatFsNo) noVatFsNo.value = '';
+    const noVatMrcNo = document.getElementById('mNoVatMrcNo');
+    if (noVatMrcNo) noVatMrcNo.value = '';
+    const noVatDate = document.getElementById('mNoVatReceiptDate');
+    if (noVatDate) noVatDate.value = '';
+    const noVatPurcType = document.getElementById('mNoVatPurcType');
+    if (noVatPurcType) noVatPurcType.value = 'PUR_GD';
+    const mPurcType = document.getElementById('mPurcType');
+    if (mPurcType) mPurcType.value = 'PUR_GD';
 }
 
 function openDecisionModal(item) {
@@ -1476,6 +1535,19 @@ function openDecisionModal(item) {
     document.getElementById('mTin').value = item.tin || '';
     document.getElementById('mFsNo').value = item.fs_no || '';
     document.getElementById('mMrcNo').value = item.mrc_no || '';
+    const noVatTin = document.getElementById('mNoVatTin');
+    if (noVatTin) noVatTin.value = item.tin || '';
+    const noVatFsNo = document.getElementById('mNoVatFsNo');
+    if (noVatFsNo) noVatFsNo.value = item.fs_no || '';
+    const noVatMrcNo = document.getElementById('mNoVatMrcNo');
+    if (noVatMrcNo) noVatMrcNo.value = item.mrc_no || '';
+    const noVatDate = document.getElementById('mNoVatReceiptDate');
+    if (noVatDate) noVatDate.value = item.disbursement_date || '';
+    const purcTypeVal = (item.vat_category === 'S' || item.purc_type === 'PUR_SER') ? 'PUR_SER' : 'PUR_GD';
+    const noVatPurcType = document.getElementById('mNoVatPurcType');
+    if (noVatPurcType) noVatPurcType.value = purcTypeVal;
+    const mPurcType = document.getElementById('mPurcType');
+    if (mPurcType) mPurcType.value = purcTypeVal;
     document.getElementById('mVatRate').value = item.vat_rate || 15.00;
     document.getElementById('mPurchaseType').value = item.purchase_type || (item.is_capex ? 1 : 3);
     document.getElementById('mReasonCode').value = item.reason_code || '';
@@ -1641,23 +1713,33 @@ function handleOcrSuccess(res) {
     const badge = document.getElementById('ocrStatusBadge');
     const resultBox = document.getElementById('ocrResultBox');
 
-    // Auto-populate VAT Decision form as VAT APPLIES
-    document.getElementById('optVatApplies').checked = true;
-    toggleVatFields();
+    const isZeroVat = Boolean(res.is_no_vat) || (parseFloat(res.vat_amount || 0) === 0);
+    const isFuel = Boolean(currentEditingItem && (
+        (currentEditingItem.reference_no && currentEditingItem.reference_no.includes('FUEL')) ||
+        (currentEditingItem.category && currentEditingItem.category.toLowerCase().includes('fuel')) ||
+        (currentEditingItem.purpose_detail && currentEditingItem.purpose_detail.toLowerCase().includes('fuel'))
+    ));
 
+    // Fill metadata fields (both VAT Applies and TAS No-VAT inputs)
     if (res.supplier_tin) {
         document.getElementById('mTin').value = res.supplier_tin;
+        const noVatTin = document.getElementById('mNoVatTin');
+        if (noVatTin) noVatTin.value = res.supplier_tin;
     }
     if (res.fs_no) {
         document.getElementById('mFsNo').value = res.fs_no;
+        const noVatFsNo = document.getElementById('mNoVatFsNo');
+        if (noVatFsNo) noVatFsNo.value = res.fs_no;
     }
     if (res.mrc_no) {
         document.getElementById('mMrcNo').value = res.mrc_no;
+        const noVatMrcNo = document.getElementById('mNoVatMrcNo');
+        if (noVatMrcNo) noVatMrcNo.value = res.mrc_no;
     }
     if (res.purchase_type) {
         document.getElementById('mPurchaseType').value = res.purchase_type;
     }
-    if (res.vat_rate) {
+    if (res.vat_rate !== undefined) {
         document.getElementById('mVatRate').value = res.vat_rate;
     }
     if (res.file_path) {
@@ -1665,6 +1747,8 @@ function handleOcrSuccess(res) {
     }
     if (res.receipt_date) {
         document.getElementById('mReceiptDate').value = res.receipt_date;
+        const noVatDate = document.getElementById('mNoVatReceiptDate');
+        if (noVatDate) noVatDate.value = res.receipt_date;
     }
     if (res.vendor_name) {
         document.getElementById('mSellerName').value = res.vendor_name;
@@ -1672,28 +1756,53 @@ function handleOcrSuccess(res) {
     if (res.description) {
         document.getElementById('mItemDescription').value = res.description;
     }
-    document.getElementById('modeInclusive').checked = true;
-    recalculateVatPreview();
 
-    // Update Status Badge
-    badge.className = 'badge bg-success text-white text-xxs shadow-xs';
-    badge.innerHTML = '<i class="fa-solid fa-circle-check me-1"></i> OCR Verified';
+    const purcTypeVal = res.purc_type || (isFuel ? 'PUR_GD' : 'PUR_GD');
+    const noVatPurcType = document.getElementById('mNoVatPurcType');
+    if (noVatPurcType) noVatPurcType.value = purcTypeVal;
+    const mPurcType = document.getElementById('mPurcType');
+    if (mPurcType) mPurcType.value = purcTypeVal;
+
+    document.getElementById('modeInclusive').checked = true;
+
+    // Smart classification: If 0% VAT or fuel slip, default to No-VAT (TAS Purchase)
+    if (isZeroVat || isFuel) {
+        document.getElementById('optNoVat').checked = true;
+        const reasonSelect = document.getElementById('mReasonCode');
+        if (reasonSelect && !reasonSelect.value) {
+            reasonSelect.value = isFuel ? 'fuel_zero_vat' : 'tas_purchase';
+        }
+        toggleVatFields();
+
+        badge.className = 'badge bg-primary text-white text-xxs shadow-xs';
+        badge.innerHTML = '<i class="fa-solid fa-receipt me-1"></i> TAS Purchase (0% VAT)';
+    } else {
+        document.getElementById('optVatApplies').checked = true;
+        toggleVatFields();
+
+        badge.className = 'badge bg-success text-white text-xxs shadow-xs';
+        badge.innerHTML = '<i class="fa-solid fa-circle-check me-1"></i> OCR Verified (VAT)';
+    }
+
+    recalculateVatPreview();
 
     // Build OCR Result Box HTML
     let html = `
         <div class="d-flex align-items-center justify-content-between mb-2">
             <div class="d-flex align-items-center gap-1.5">
-                <span class="badge bg-success text-white"><i class="fa-solid fa-circle-check me-1"></i> OCR Verified</span>
+                <span class="badge ${isZeroVat ? 'bg-primary' : 'bg-success'} text-white">
+                    <i class="fa-solid fa-circle-check me-1"></i> ${isZeroVat ? 'OCR Analyzed (0% VAT - TAS Purchase)' : 'OCR Verified (VAT Applies)'}
+                </span>
                 <span class="text-muted text-xxs">Engine: <strong>${res.engine || 'AI Vision'}</strong> (${res.confidence || 'high'})</span>
             </div>
             ${res.is_duplicate ? '<span class="badge bg-danger text-white"><i class="fa-solid fa-triangle-exclamation me-1"></i> Duplicate FS</span>' : ''}
         </div>
         <div class="row g-2 text-xxs mb-2 border-top border-bottom py-1.5 bg-light rounded">
-            <div class="col-4"><strong>FS No:</strong> <span class="font-monospace fw-bold text-dark">${res.fs_no || '—'}</span></div>
-            <div class="col-4"><strong>Vendor TIN:</strong> <span class="font-monospace fw-bold text-dark">${res.supplier_tin || '—'}</span></div>
+            <div class="col-4"><strong>FS / Slip #:</strong> <span class="font-monospace fw-bold text-dark">${res.fs_no || '—'}</span></div>
+            <div class="col-4"><strong>Seller TIN:</strong> <span class="font-monospace fw-bold text-dark">${res.supplier_tin || '—'}</span></div>
             <div class="col-4"><strong>MRC No:</strong> <span class="font-monospace text-dark">${res.mrc_no || '—'}</span></div>
             <div class="col-4"><strong>Subtotal:</strong> ${parseFloat(res.subtotal || 0).toLocaleString('en-US', {minimumFractionDigits: 2})} ETB</div>
-            <div class="col-4 text-success"><strong>15% VAT:</strong> ${parseFloat(res.vat_amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2})} ETB</div>
+            <div class="col-4 ${isZeroVat ? 'text-secondary' : 'text-success'}"><strong>VAT:</strong> ${isZeroVat ? '0.00 ETB (0% VAT / TAS)' : parseFloat(res.vat_amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2}) + ' ETB'}</div>
             <div class="col-4 text-primary"><strong>Grand Total:</strong> ${parseFloat(res.total_amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2})} ETB</div>
         </div>
     `;
@@ -1703,23 +1812,93 @@ function handleOcrSuccess(res) {
     }
 
     html += `
-        <div class="d-flex justify-content-between align-items-center pt-1">
-            <span class="text-success text-xxs fw-semibold"><i class="fa-solid fa-check-double me-1"></i> VAT fields auto-populated below</span>
-            <button type="button" class="btn btn-sm btn-success px-3 shadow-xs fw-semibold" onclick="applyOcrAndSave()">
-                <i class="fa-solid fa-bolt me-1"></i> Save to VAT Now
-            </button>
+        <div class="d-flex justify-content-between align-items-center pt-1 flex-wrap gap-2">
+            <div>
+                <span class="text-muted text-xxs"><i class="fa-solid fa-receipt me-1"></i> Ready for e-Tax / TAS Export (9 columns)</span>
+            </div>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-sm btn-dark px-3 shadow-xs fw-semibold" onclick="applyOcrAndSaveTas()" title="Save as TAS Purchase (0% VAT) for pro.doc 9-Column Excel format">
+                    <i class="fa-solid fa-file-excel text-success me-1"></i> Save to TAS Excel (0% VAT)
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-success px-3 shadow-xs fw-semibold" onclick="applyOcrAndSaveVat()" title="Save as 15% VAT Applicable (Line 100 Input VAT)">
+                    <i class="fa-solid fa-percent me-1"></i> Save to VAT Now
+                </button>
+            </div>
         </div>
     `;
 
-    resultBox.className = 'mt-2.5 p-2.5 rounded-3 bg-white border border-success border-opacity-50 text-xs shadow-xs';
+    resultBox.className = 'mt-2.5 p-2.5 rounded-3 bg-white border ' + (isZeroVat ? 'border-primary' : 'border-success') + ' border-opacity-50 text-xs shadow-xs';
     resultBox.innerHTML = html;
     resultBox.classList.remove('d-none');
 }
 
-function applyOcrAndSave() {
-    document.getElementById('optVatApplies').checked = true;
+function applyOcrAndSaveTas() {
+    document.getElementById('optNoVat').checked = true;
+    toggleVatFields();
+
+    const tinVal = document.getElementById('mNoVatTin')?.value || document.getElementById('mTin')?.value;
+    const fsVal  = document.getElementById('mNoVatFsNo')?.value || document.getElementById('mFsNo')?.value;
+    const mrcVal = document.getElementById('mNoVatMrcNo')?.value || document.getElementById('mMrcNo')?.value;
+    const dtVal  = document.getElementById('mNoVatReceiptDate')?.value || document.getElementById('mReceiptDate')?.value;
+    const pTypeVal = document.getElementById('mNoVatPurcType')?.value || 'PUR_GD';
+
+    document.getElementById('mTin').value = tinVal;
+    document.getElementById('mFsNo').value = fsVal;
+    document.getElementById('mMrcNo').value = mrcVal;
+    if (dtVal) document.getElementById('mReceiptDate').value = dtVal;
+    document.getElementById('mPurcType').value = pTypeVal;
+
+    const reasonSelect = document.getElementById('mReasonCode');
+    if (!reasonSelect.value) {
+        const isFuel = Boolean(currentEditingItem && (
+            (currentEditingItem.reference_no && currentEditingItem.reference_no.includes('FUEL')) ||
+            (currentEditingItem.category && currentEditingItem.category.toLowerCase().includes('fuel'))
+        ));
+        reasonSelect.value = isFuel ? 'fuel_zero_vat' : 'tas_purchase';
+    }
+
     document.getElementById('decisionForm').submit();
 }
+
+function applyOcrAndSaveVat() {
+    document.getElementById('optVatApplies').checked = true;
+    toggleVatFields();
+
+    const tinVal = document.getElementById('mTin')?.value || document.getElementById('mNoVatTin')?.value;
+    const fsVal  = document.getElementById('mFsNo')?.value || document.getElementById('mNoVatFsNo')?.value;
+    const mrcVal = document.getElementById('mMrcNo')?.value || document.getElementById('mNoVatMrcNo')?.value;
+    document.getElementById('mTin').value = tinVal;
+    document.getElementById('mFsNo').value = fsVal;
+    document.getElementById('mMrcNo').value = mrcVal;
+
+    document.getElementById('decisionForm').submit();
+}
+
+function syncField(fromId, toId) {
+    const fromEl = document.getElementById(fromId);
+    const toEl = document.getElementById(toId);
+    if (fromEl && toEl) {
+        toEl.value = fromEl.value;
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('decisionForm')?.addEventListener('submit', function() {
+        if (document.getElementById('optNoVat')?.checked) {
+            const tinVal = document.getElementById('mNoVatTin')?.value;
+            const fsVal  = document.getElementById('mNoVatFsNo')?.value;
+            const mrcVal = document.getElementById('mNoVatMrcNo')?.value;
+            const dtVal  = document.getElementById('mNoVatReceiptDate')?.value;
+            const pTypeVal = document.getElementById('mNoVatPurcType')?.value;
+
+            if (tinVal) document.getElementById('mTin').value = tinVal;
+            if (fsVal) document.getElementById('mFsNo').value = fsVal;
+            if (mrcVal) document.getElementById('mMrcNo').value = mrcVal;
+            if (dtVal) document.getElementById('mReceiptDate').value = dtVal;
+            if (pTypeVal) document.getElementById('mPurcType').value = pTypeVal;
+        }
+    });
+});
 
 function toggleVatFields() {
     const status = document.querySelector('input[name="vat_status"]:checked')?.value;

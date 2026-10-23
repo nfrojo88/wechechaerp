@@ -27,7 +27,11 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use App\Models\SystemSetting;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use OpenSpout\Writer\XLSX\Writer as XlsxWriter;
+use OpenSpout\Common\Entity\Row;
+use OpenSpout\Common\Entity\Cell;
 
 class ExpenseHubController extends Controller
 {
@@ -64,6 +68,12 @@ class ExpenseHubController extends Controller
                     }
                     if (!Schema::hasColumn('expense_hub_vat_decisions', 'net_payable_amount')) {
                         $table->decimal('net_payable_amount', 18, 2)->nullable()->after('withholding_receipt_number');
+                    }
+                    if (!Schema::hasColumn('expense_hub_vat_decisions', 'custom_receipt_date')) {
+                        $table->string('custom_receipt_date', 30)->nullable()->after('custom_item_description');
+                    }
+                    if (!Schema::hasColumn('expense_hub_vat_decisions', 'purc_type')) {
+                        $table->string('purc_type', 20)->default('PUR_GD')->after('vat_category');
                     }
                 });
             }
@@ -227,8 +237,27 @@ class ExpenseHubController extends Controller
             $vatAmount   = (float)($scan['vat_amount'] ?? 0);
             $totalAmount = (float)($scan['total_amount'] ?? 0);
 
-            // Cross-calculate 15% VAT if needed
-            if ($totalAmount > 0 && $vatAmount == 0 && $subtotal == 0) {
+            // Determine if receipt is a 0% VAT / Fuel / Tax-Exempt TAS purchase
+            $descLower = strtolower(($scan['description'] ?? '') . ' ' . $vendorName);
+            $isFuelOrExempt = str_contains($descLower, 'fuel')
+                || str_contains($descLower, 'diesel')
+                || str_contains($descLower, 'benzin')
+                || str_contains($descLower, 'oil')
+                || str_contains($descLower, 'petroleum')
+                || str_contains($descLower, 'totalenergies')
+                || str_contains($descLower, 'oillibya')
+                || str_contains($descLower, 'nogp')
+                || str_contains($descLower, 'station')
+                || ($scan['is_non_vat'] ?? false)
+                || (($scan['vat_category'] ?? '') === 'E');
+
+            // Cross-calculate 15% VAT only if taxable VAT slip, not if 0% VAT / TAS purchase
+            if ($isFuelOrExempt || ($vatAmount == 0 && ($scan['is_non_vat'] ?? false))) {
+                $vatAmount = 0.00;
+                $subtotal  = $totalAmount > 0 ? $totalAmount : $subtotal;
+                $totalAmount = $subtotal;
+            } elseif ($totalAmount > 0 && $vatAmount == 0 && $subtotal == 0) {
+                // If not explicitly exempt, standard VAT calculation
                 $subtotal  = round($totalAmount / 1.15, 2);
                 $vatAmount = round($totalAmount - $subtotal, 2);
             } elseif ($subtotal > 0 && $vatAmount == 0 && $totalAmount > $subtotal) {
@@ -237,18 +266,31 @@ class ExpenseHubController extends Controller
                 $totalAmount = round($subtotal + $vatAmount, 2);
             }
 
-            // Purchase Type: 1 = Capital, 2 = Goods Line 70, 3 = Services Line 75
-            $purchaseType = $scan['purchase_type_int'] ?? 2;
-            if (($scan['purchase_type'] ?? '') === 'PUR_SR') {
+            // PurcType: PUR_GD (Goods/Fuel) vs PUR_SER (Services) for pro.doc e-Tax export
+            $rawPurcType = $scan['purchase_type'] ?? '';
+            $purcType = ($rawPurcType === 'PUR_SR' || $rawPurcType === 'PUR_SER') ? 'PUR_SER' : 'PUR_GD';
+
+            // Purchase Type: 1 = Capital, 2 = Goods Line 70, 3 = Services Line 75, 6 = Exempt
+            $purchaseType = $scan['purchase_type_int'] ?? ($vatAmount == 0 ? 6 : 3);
+            if ($rawPurcType === 'PUR_SR' && $vatAmount > 0) {
                 $purchaseType = 3;
+            } elseif ($vatAmount == 0) {
+                $purchaseType = 6;
             }
 
-            // Verified if TIN, FS No, or VAT Amount are extracted
-            $isVerified = (!empty($fsNo) || !empty($supplierTin) || $vatAmount > 0);
+            $isNoVat = ($vatAmount <= 0.00);
+
+            // Verified if TIN, FS No, or total amount is extracted
+            $isVerified = (!empty($fsNo) || !empty($supplierTin) || $totalAmount > 0);
+
+            $receiptDateYmd = $scan['receipt_date_ymd'] ?? now()->toDateString();
+            $receiptDateEc  = EthiopianDate::formatDateEc($receiptDateYmd, 'd-m-Y');
 
             return response()->json([
                 'success'           => true,
                 'is_verified'       => $isVerified,
+                'is_no_vat'         => $isNoVat,
+                'purc_type'         => $purcType,
                 'file_url'          => $fileUrl,
                 'file_path'         => $savedRelativePath ?: ($stripped ?: null),
                 'vendor_name'       => $vendorName,
@@ -257,11 +299,12 @@ class ExpenseHubController extends Controller
                 'fs_no'             => $fsNo,
                 'fs_no_valid'       => $fsNorm['is_valid'] ?? !empty($fsNo),
                 'mrc_no'            => $mrcNo,
-                'receipt_date'      => $scan['receipt_date_ymd'] ?? now()->toDateString(),
+                'receipt_date'      => $receiptDateYmd,
+                'receipt_date_ec'   => $receiptDateEc,
                 'subtotal'          => $subtotal,
                 'vat_amount'        => $vatAmount,
                 'total_amount'      => $totalAmount,
-                'vat_rate'          => 15.00,
+                'vat_rate'          => $vatAmount > 0 ? 15.00 : 0.00,
                 'is_inclusive'      => true,
                 'purchase_type'     => $purchaseType,
                 'description'       => $scan['description'] ?? '',
@@ -308,6 +351,7 @@ class ExpenseHubController extends Controller
             'no_vat_reason_code'         => 'nullable|string|max:50',
             'no_vat_reason_note'         => 'nullable|string|max:500',
             'vat_category'               => 'nullable|in:G,S',
+            'purc_type'                  => 'nullable|string|in:PUR_GD,PUR_SER',
             'purchase_type'              => 'nullable|integer|between:1,6',
             'custom_seller_tin'          => 'nullable|string|max:30',
             'custom_fs_no'               => 'nullable|string|max:50',
@@ -390,12 +434,14 @@ class ExpenseHubController extends Controller
             'no_vat_reason_code'         => $vatStatus === 'no_vat' ? ($validated['no_vat_reason_code'] ?? null) : null,
             'no_vat_reason_note'         => $vatStatus === 'no_vat' ? ($validated['no_vat_reason_note'] ?? null) : null,
             'vat_category'               => $validated['vat_category'] ?? 'G',
+            'purc_type'                  => $validated['purc_type'] ?? (($validated['vat_category'] ?? 'G') === 'S' ? 'PUR_SER' : 'PUR_GD'),
             'calendar_type'              => 'E',
-            'purchase_type'              => $validated['purchase_type'] ?? 3,
+            'purchase_type'              => $validated['purchase_type'] ?? ($vatStatus === 'no_vat' ? 6 : 3),
             'custom_seller_tin'          => $validated['custom_seller_tin'] ?? null,
             'custom_fs_no'               => $validated['custom_fs_no'] ?? null,
             'custom_mrc_no'              => $validated['custom_mrc_no'] ?? null,
             'custom_item_description'    => $validated['custom_item_description'] ?? null,
+            'custom_receipt_date'        => $validated['custom_receipt_date'] ?? null,
             'uom'                        => $validated['uom'] ?? '9',
             'quantity'                   => $validated['quantity'] ?? 1.0,
             'unit_price'                 => $validated['unit_price'] ?? ($baseAmount / max((float)($validated['quantity'] ?? 1), 1)),
@@ -431,7 +477,8 @@ class ExpenseHubController extends Controller
                 $request->input('receipt_path'),
                 $request->input('custom_receipt_date'),
                 $request->input('custom_seller_name'),
-                $request->input('custom_item_description')
+                $request->input('custom_item_description'),
+                $request->input('purc_type')
             );
         }
 
@@ -731,6 +778,121 @@ class ExpenseHubController extends Controller
     }
 
     /**
+     * Export Purchase TAS Excel (9 Columns e-Tax format matching pro.doc).
+     * Purchaser TIN | Seller TIN | Amount | Receipt No | Receipt Date | Encoding Date | MRC | PurcType | Encoded By
+     */
+    public function exportTasExcel(Request $request)
+    {
+        $filters = $request->only(['date_from', 'date_to', 'project_id', 'source_module', 'category', 'supplier', 'search']);
+        $filters['vat_status'] = ExpenseHubVatDecision::STATUS_NO_VAT;
+
+        $expenses = $this->queryService->getExpenses($filters, Auth::user());
+
+        $defaultPurchaserTin = SystemSetting::get('purchaser_tin', SystemSetting::get('company_tin', '38480010'));
+        $defaultPurchaserDigits = (int)preg_replace('/^0+/', '', preg_replace('/[^0-9]/', '', (string)$defaultPurchaserTin));
+        if (!$defaultPurchaserDigits) $defaultPurchaserDigits = 38480010;
+
+        $filename = 'Purchase_TAS_' . now()->format('Ymd_His') . '.xlsx';
+        $tempPath = storage_path('app/hub_purch_tas_' . uniqid() . '.xlsx');
+
+        $headers = [
+            'Purchaser TIN',
+            'Seller TIN',
+            'Amount',
+            'Receipt No',
+            'Receipt Date',
+            'Encoding Date',
+            'MRC',
+            'PurcType',
+            'Encoded By',
+        ];
+
+        $rows = [];
+        foreach ($expenses as $item) {
+            $rawTin = (string)($item->tin ?? '');
+            $sellerDigits = preg_replace('/^0+/', '', preg_replace('/[^0-9]/', '', $rawTin));
+            $sellerTinVal = ($sellerDigits !== '') ? (int)$sellerDigits : (trim($rawTin) ?: '');
+
+            $amountVal = round((float)($item->decision_total_amount ?: $item->amount), 2);
+
+            $rawFs = trim((string)($item->fs_no ?? ''));
+            $receiptNo = $rawFs ?: ($item->reference_no ?: '');
+
+            $date = $item->disbursement_date ?: $item->created_at;
+            $receiptDate = $date ? EthiopianDate::formatDateEc($date, 'd-m-Y') : EthiopianDate::formatDateEc(now(), 'd-m-Y');
+            $encodingDate = EthiopianDate::formatDateEc(now(), 'd-m-Y');
+
+            $rawMrc = trim((string)($item->mrc_no ?? ''));
+            $mrcVal = ($rawMrc !== '' && $rawMrc !== '-' && strtoupper($rawMrc) !== 'N/A') ? $rawMrc : '';
+
+            $purcType = $item->purc_type ?: ($item->vat_category === 'S' ? 'PUR_SER' : 'PUR_GD');
+
+            $encodedBy = 'wechacha';
+
+            $rows[] = [
+                $defaultPurchaserDigits,
+                $sellerTinVal,
+                $amountVal,
+                $receiptNo,
+                $receiptDate,
+                $encodingDate,
+                $mrcVal,
+                $purcType,
+                $encodedBy,
+            ];
+        }
+
+        return $this->writeExcelFile($headers, $rows, $tempPath, $filename);
+    }
+
+    /**
+     * Helper to write an XLSX spreadsheet with automatic CSV streaming fallback.
+     */
+    protected function writeExcelFile(array $headers, array $rows, string $tempPath, string $filename)
+    {
+        try {
+            $writer = new XlsxWriter();
+            $writer->openToFile($tempPath);
+
+            $headerCells = array_map(fn($h) => Cell::fromValue($h), $headers);
+            $writer->addRow(new Row($headerCells));
+
+            foreach ($rows as $row) {
+                $rowCells = array_map(fn($v) => Cell::fromValue($v), $row);
+                $writer->addRow(new Row($rowCells));
+            }
+
+            $writer->close();
+
+            return response()->download($tempPath, $filename, [
+                'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            ])->deleteFileAfterSend(true);
+
+        } catch (\Throwable $e) {
+            Log::error('ExpenseHubController Excel export error: ' . $e->getMessage());
+
+            // CSV Fallback with UTF-8 BOM
+            $csvHeaders = [
+                'Content-Type'        => 'text/csv; charset=UTF-8',
+                'Content-Disposition' => 'attachment; filename="' . str_replace('.xlsx', '.csv', $filename) . '"',
+                'Pragma'              => 'no-cache',
+                'Cache-Control'       => 'must-revalidate, post-check=0, pre-check=0',
+                'Expires'             => '0',
+            ];
+
+            return response()->stream(function () use ($headers, $rows) {
+                $handle = fopen('php://output', 'w');
+                fprintf($handle, chr(0xEF).chr(0xBB).chr(0xBF));
+                fputcsv($handle, $headers);
+                foreach ($rows as $row) {
+                    fputcsv($handle, $row);
+                }
+                fclose($handle);
+            }, 200, $csvHeaders);
+        }
+    }
+
+    /**
      * Lock Month (Finance Head only)
      */
     public function lockMonth(Request $request)
@@ -809,7 +971,8 @@ class ExpenseHubController extends Controller
         ?string $receiptPath = null,
         ?string $customReceiptDate = null,
         ?string $customSellerName = null,
-        ?string $customDescription = null
+        ?string $customDescription = null,
+        ?string $purcType = null
     ): void {
         try {
             $sourceType   = $decision->source_type;
@@ -1031,12 +1194,20 @@ class ExpenseHubController extends Controller
                     }
                 }
             } elseif ($vatStatus === ExpenseHubVatDecision::STATUS_NO_VAT) {
-                // If marked No-VAT, clear VAT from source model and zero out receipt VAT, while syncing Withholding Tax
+                $targetDate  = $customReceiptDate;
+                $projectId   = null;
+                $vendorName  = $customSellerName;
+                $itemDesc    = $customDescription ?: $decision->custom_item_description;
+
+                // 1. Clear VAT from source model and zero out receipt VAT, while syncing Withholding Tax
                 if ($sourceType === 'expense_request') {
                     $req = ExpenseRequest::find($sourceId);
                     if ($req) {
                         $req->vat_amount = 0;
                         $req->vat_type   = 'none';
+                        if (!empty($decision->custom_fs_no) && empty($req->payment_reference)) {
+                            $req->payment_reference = 'FS: ' . $decision->custom_fs_no . ($decision->custom_mrc_no ? ' | MRC: ' . $decision->custom_mrc_no : '');
+                        }
                         $req->has_withholding    = $hasWht;
                         $req->withholding_rate   = $whtRate;
                         $req->withholding_amount = $whtAmount;
@@ -1044,6 +1215,12 @@ class ExpenseHubController extends Controller
                         if ($whtReceiptNo) $req->withholding_receipt_number = $whtReceiptNo;
                         $req->net_amount = max(0, ($req->gross_amount ?: $req->amount) - $whtAmount);
                         $req->save();
+
+                        $targetDate  = $targetDate ?: ($req->paid_at ? Carbon::parse($req->paid_at)->toDateString() : ($req->created_at ? Carbon::parse($req->created_at)->toDateString() : null));
+                        $projectId   = $projectId ?: $req->project_id;
+                        $vendorName  = $vendorName ?: ($req->user?->name ?: 'Vendor');
+                        $itemDesc    = $itemDesc ?: ($req->description ?: 'Operational Expense / Voucher');
+                        $receiptPath = $receiptPath ?: $req->attachment;
                     }
                 } elseif ($sourceType === 'procurement_payment') {
                     $payment = ProcurementPayment::find($sourceId);
@@ -1070,6 +1247,11 @@ class ExpenseHubController extends Controller
                             if ($whtReceiptNo) $prExpUpdate['withholding_receipt_number'] = $whtReceiptNo;
                             ExpenseRequest::where('purchase_request_id', $payment->purchase_request_id)->update($prExpUpdate);
                         }
+
+                        $targetDate  = $targetDate ?: ($payment->paid_at ? Carbon::parse($payment->paid_at)->toDateString() : ($payment->created_at ? Carbon::parse($payment->created_at)->toDateString() : null));
+                        $projectId   = $projectId ?: $payment->purchaseRequest?->project_id;
+                        $vendorName  = $vendorName ?: ($payment->purchaseRequest?->vendor_name ?: 'Procurement Vendor');
+                        $itemDesc    = $itemDesc ?: ($payment->purchaseRequest?->justification ?: 'Procurement Material Purchase');
                     }
                 } elseif ($sourceType === 'credit_store_payment') {
                     $p = CreditStorePayment::find($sourceId);
@@ -1083,32 +1265,75 @@ class ExpenseHubController extends Controller
                         if ($whtReceiptNo) $p->withholding_receipt_number = $whtReceiptNo;
                         $p->net_amount = max(0, ($p->gross_amount ?: $p->amount) - $whtAmount);
                         $p->save();
+
+                        $targetDate  = $targetDate ?: ($p->payment_date ? Carbon::parse($p->payment_date)->toDateString() : ($p->created_at ? Carbon::parse($p->created_at)->toDateString() : null));
+                        $projectId   = $projectId ?: $p->ledger?->project_id;
+                        $vendorName  = $vendorName ?: ($p->ledger?->supplier_name ?: 'Credit Supplier');
+                        $itemDesc    = $itemDesc ?: ($p->ledger?->item_description ?: 'Credit Store Settlement');
+                        $receiptPath = $receiptPath ?: $p->receipt_path;
                     }
                 }
-                if ($purchasableClass && Schema::hasTable('receipts') && Schema::hasColumn('receipts', 'purchasable_type')) {
-                    $receipt = Receipt::where('purchasable_type', $purchasableClass)
-                        ->where('purchasable_id', $sourceId)
-                        ->first();
+
+                if (!$targetDate) {
+                    $targetDate = now()->toDateString();
+                }
+                if (!$vendorName) {
+                    $vendorName = 'Supplier';
+                }
+                if (!$itemDesc) {
+                    $itemDesc = 'Expense Purchase (0% VAT)';
+                }
+
+                $hasReceiptData = !empty($decision->custom_fs_no) || !empty($decision->custom_seller_tin) || !empty($receiptPath) || !empty($decision->custom_mrc_no);
+
+                // 2. Sync to Receipt (ERCA TAS Purchase / 0% VAT declaration)
+                if (Schema::hasTable('receipts')) {
+                    $receipt = null;
+                    if ($purchasableClass && $sourceId && Schema::hasColumn('receipts', 'purchasable_type')) {
+                        $receipt = Receipt::where('purchasable_type', $purchasableClass)
+                            ->where('purchasable_id', $sourceId)
+                            ->first();
+                    }
                     if (!$receipt && !empty($decision->custom_fs_no)) {
                         $receipt = Receipt::where('fs_no', $decision->custom_fs_no)->first();
                     }
-                    if (!$receipt && !empty($decision->custom_fs_no)) {
+                    if (!$receipt && $hasReceiptData) {
                         $receipt = new Receipt();
-                        $receipt->receipt_number   = 'RCP-HUB-' . now()->format('Ymd') . '-' . strtoupper(substr(uniqid(), -4));
+                        $receipt->receipt_number   = 'RCP-HUB-' . Carbon::parse($targetDate)->format('Ymd') . '-' . strtoupper(substr(uniqid(), -4));
+                    }
+
+                    if ($receipt) {
+                        $isFuel = (str_contains(strtoupper($itemDesc), 'FUEL')
+                            || (isset($req) && str_contains(strtoupper($req->request_number ?? ''), 'FUEL'))
+                            || ($decision->no_vat_reason_code === 'fuel_zero_vat'));
+
+                        $resolvedPurcType = $purcType ?: ($decision->purc_type ?: ($isFuel ? 'PUR_GD' : 'PUR_GD'));
+
                         $receipt->uploaded_by      = $decision->decided_by ?: (Auth::id() ?: 1);
                         $receipt->approved_by      = $decision->decided_by ?: (Auth::id() ?: 1);
-                        $receipt->approved_at      = now();
+                        $receipt->approved_at      = Carbon::parse($targetDate)->setTime(12, 0, 0);
                         $receipt->status           = 'approved';
-                        $receipt->purchasable_type = $purchasableClass;
-                        $receipt->purchasable_id   = $sourceId;
-                        $receipt->category         = 'fuel';
-                        $receipt->description      = $decision->custom_item_description ?: 'No VAT / Tax Exempt Purchase';
-                        $receipt->buyer_tin        = '0038480010';
-                    }
-                    if ($receipt) {
-                        $receipt->vat_amount   = 0;
-                        $receipt->subtotal     = $totalAmount;
-                        $receipt->total_amount = $totalAmount;
+                        if ($purchasableClass && Schema::hasColumn('receipts', 'purchasable_type')) {
+                            $receipt->purchasable_type = $purchasableClass;
+                            $receipt->purchasable_id   = $sourceId;
+                        }
+                        if ($projectId) {
+                            $receipt->project_id   = $projectId;
+                        }
+                        $receipt->category         = $isFuel ? 'fuel' : 'material';
+                        $receipt->description      = $itemDesc;
+                        $receipt->vendor_name      = $vendorName;
+                        $receipt->receipt_date     = Carbon::parse($targetDate)->toDateString();
+                        $receipt->vat_amount       = 0.00;
+                        $receipt->subtotal         = $totalAmount;
+                        $receipt->total_amount     = $totalAmount;
+                        $receipt->currency         = 'ETB';
+                        $receipt->tax_type         = 'no_vat';
+                        $receipt->buyer_tin        = SystemSetting::get('purchaser_tin', '38480010');
+                        if (Schema::hasColumn('receipts', 'no_vat_reason_code')) {
+                            $receipt->no_vat_reason_code = $decision->no_vat_reason_code ?: ($isFuel ? 'fuel_zero_vat' : 'tas_purchase');
+                        }
+
                         if (!empty($decision->custom_fs_no)) {
                             $receipt->fs_no       = $decision->custom_fs_no;
                             $receipt->fs_no_raw   = $decision->custom_fs_no;
@@ -1121,8 +1346,35 @@ class ExpenseHubController extends Controller
                             $receipt->vendor_tin = $decision->custom_seller_tin;
                             $receipt->tin_valid  = true;
                         }
+                        if ($receiptPath) {
+                            $receipt->file_path    = $receiptPath;
+                            $receipt->file_type    = str_ends_with(strtolower($receiptPath), '.pdf') ? 'pdf' : 'image';
+                        }
+
+                        $purchaserDigits = (int)preg_replace('/^0+/', '', preg_replace('/[^0-9]/', '', (string)$receipt->buyer_tin));
+                        if (!$purchaserDigits) $purchaserDigits = 38480010;
+
+                        $sellerDigits = preg_replace('/^0+/', '', preg_replace('/[^0-9]/', '', (string)$receipt->vendor_tin));
+                        $sellerTinVal = ($sellerDigits !== '') ? (int)$sellerDigits : (trim((string)$receipt->vendor_tin) ?: '');
+
+                        $receiptNo = trim((string)($receipt->fs_no_raw ?: ($receipt->fs_no ?: $receipt->receipt_number)));
+
+                        // Exact 9 columns required by pro.doc e-Tax format
+                        $parsedData = [
+                            'purchaser_tin' => $purchaserDigits,
+                            'seller_tin'    => $sellerTinVal,
+                            'amount'        => $totalAmount,
+                            'receipt_no'    => $receiptNo,
+                            'receipt_date'  => EthiopianDate::formatDateEc($receipt->receipt_date, 'd-m-Y'),
+                            'encoding_date' => EthiopianDate::formatDateEc(now(), 'd-m-Y'),
+                            'mrc'           => trim((string)$receipt->mrc_no),
+                            'purc_type'     => $resolvedPurcType,
+                            'encoded_by'    => 'wechacha',
+                        ];
+                        $receipt->parsed_data = json_encode($parsedData);
                         $receipt->save();
 
+                        // 3. Sync to ReceiptItem
                         if (Schema::hasTable('receipt_items')) {
                             $receiptItem = ReceiptItem::where('receipt_id', $receipt->id)->first();
                             if (!$receiptItem) {
@@ -1132,14 +1384,17 @@ class ExpenseHubController extends Controller
                             $receiptItem->item_description = $receipt->description;
                             $receiptItem->vat_category     = 'E';
                             $receiptItem->calendar_type    = 'E';
-                            $receiptItem->purchase_type    = (int)($decision->purchase_type ?: 6);
+                            $receiptItem->purchase_type    = 6; // Exempt / no vat
                             $receiptItem->uom              = $decision->uom ?: '9';
                             $receiptItem->qty              = (float)($decision->quantity ?: 1.0);
                             $receiptItem->unit_price       = (float)($decision->unit_price ?: $totalAmount);
                             $receiptItem->total_value      = $totalAmount;
-                            $receiptItem->vat_amount       = 0;
+                            $receiptItem->vat_amount       = 0.00;
                             $receiptItem->value_after_vat  = $totalAmount;
                             $receiptItem->is_flagged       = false;
+                            if (Schema::hasColumn('receipt_items', 'purc_type')) {
+                                $receiptItem->purc_type    = $resolvedPurcType;
+                            }
                             $receiptItem->save();
                         }
                     }

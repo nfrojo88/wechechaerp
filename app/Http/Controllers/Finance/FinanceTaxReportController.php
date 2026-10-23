@@ -2984,21 +2984,63 @@ class FinanceTaxReportController extends Controller
             'Encoded By',
         ];
 
+        $isTasFiltered = ($request->input('category') === 'tas')
+            || ($request->input('filter') === 'tas')
+            || ($request->input('purchase_category') === 'tas')
+            || $request->boolean('tas_only');
+
+        $isVatFiltered = ($request->input('category') === 'vat')
+            || ($request->input('filter') === 'vat')
+            || ($request->input('purchase_category') === 'vat')
+            || $request->boolean('vat_only');
+
         $ocrItems = collect();
         if (Schema::hasTable('receipt_items')) {
-            $ocrItems = ReceiptItem::with(['receipt', 'receipt.project', 'receipt.uploader'])
-                ->whereHas('receipt', fn($rq) => $rq->whereBetween('receipt_date', [$startDate, $endDate]))
-                ->orderBy('id', 'asc')
-                ->get();
+            $ocrQuery = ReceiptItem::with(['receipt', 'receipt.project', 'receipt.uploader'])
+                ->whereHas('receipt', function ($rq) use ($startDate, $endDate) {
+                    $rq->whereBetween('receipt_date', [$startDate, $endDate])
+                       ->orWhere(function ($sub) use ($startDate, $endDate) {
+                           $sub->whereNull('receipt_date')
+                               ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+                       });
+                });
+
+            if ($isTasFiltered) {
+                $ocrQuery->where(function ($q) {
+                    $q->where('vat_amount', '<=', 0)
+                      ->orWhereHas('receipt', fn($rq) => $rq->where('vat_amount', '<=', 0)->orWhere('tax_type', 'no_vat'));
+                });
+            } elseif ($isVatFiltered) {
+                $ocrQuery->where(function ($q) {
+                    $q->where('vat_amount', '>', 0)
+                      ->orWhereHas('receipt', fn($rq) => $rq->where('vat_amount', '>', 0));
+                });
+            }
+
+            $ocrItems = $ocrQuery->orderBy('id', 'asc')->get();
         }
 
         $standaloneReceipts = collect();
         if (Schema::hasTable('receipts')) {
-            $standaloneReceipts = Receipt::with(['project', 'uploader'])
-                ->whereBetween('receipt_date', [$startDate, $endDate])
-                ->doesntHave('items')
-                ->orderBy('id', 'asc')
-                ->get();
+            $standaloneQuery = Receipt::with(['project', 'uploader'])
+                ->where(function ($rq) use ($startDate, $endDate) {
+                    $rq->whereBetween('receipt_date', [$startDate, $endDate])
+                       ->orWhere(function ($sub) use ($startDate, $endDate) {
+                           $sub->whereNull('receipt_date')
+                               ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+                       });
+                })
+                ->doesntHave('items');
+
+            if ($isTasFiltered) {
+                $standaloneQuery->where(function ($q) {
+                    $q->where('vat_amount', '<=', 0)->orWhere('tax_type', 'no_vat');
+                });
+            } elseif ($isVatFiltered) {
+                $standaloneQuery->where('vat_amount', '>', 0);
+            }
+
+            $standaloneReceipts = $standaloneQuery->orderBy('id', 'asc')->get();
         }
 
         $defaultPurchaserTin = SystemSetting::get('purchaser_tin', SystemSetting::get('company_tin', '38480010'));
@@ -3044,12 +3086,17 @@ class FinanceTaxReportController extends Controller
             }
 
             $parsed = is_string($r->parsed_data ?? null) ? (json_decode($r->parsed_data, true) ?: []) : (array)($r->parsed_data ?? []);
-            $receiptDate = !empty($parsed['receipt_date'])
-                ? EthiopianDate::formatDateEc($parsed['receipt_date'], 'DD/MM/YYYY EC')
-                : ($r && $r->receipt_date ? EthiopianDate::formatDateEc($r->receipt_date, 'DD/MM/YYYY EC') : EthiopianDate::formatDateEc(now(), 'DD/MM/YYYY EC'));
-            $encodingDate = !empty($parsed['encoding_date'])
-                ? EthiopianDate::formatDateEc($parsed['encoding_date'], 'DD/MM/YYYY EC')
-                : (($r && $r->created_at) ? EthiopianDate::formatDateEc($r->created_at, 'DD/MM/YYYY EC') : EthiopianDate::formatDateEc(now(), 'DD/MM/YYYY EC'));
+            $receiptDate = !empty($parsed['receipt_date']) && preg_match('/^\d{2}-\d{2}-\d{4}$/', trim($parsed['receipt_date']))
+                ? trim($parsed['receipt_date'])
+                : (!empty($parsed['receipt_date'])
+                    ? EthiopianDate::formatDateEc($parsed['receipt_date'], 'd-m-Y')
+                    : ($r && $r->receipt_date ? EthiopianDate::formatDateEc($r->receipt_date, 'd-m-Y') : EthiopianDate::formatDateEc(now(), 'd-m-Y')));
+
+            $encodingDate = !empty($parsed['encoding_date']) && preg_match('/^\d{2}-\d{2}-\d{4}$/', trim($parsed['encoding_date']))
+                ? trim($parsed['encoding_date'])
+                : (!empty($parsed['encoding_date'])
+                    ? EthiopianDate::formatDateEc($parsed['encoding_date'], 'd-m-Y')
+                    : (($r && $r->created_at) ? EthiopianDate::formatDateEc($r->created_at, 'd-m-Y') : EthiopianDate::formatDateEc(now(), 'd-m-Y')));
             $mrc = $r && !empty($r->mrc_no) ? trim((string)$r->mrc_no) : (!empty($parsed['mrc']) ? trim((string)$parsed['mrc']) : '');
 
             $purcNorm = QcService::normalizePurchaseType(
@@ -3099,12 +3146,17 @@ class FinanceTaxReportController extends Controller
                 $receiptNo = 'FS' . str_pad($r->fs_no, 8, '0', STR_PAD_LEFT);
             }
 
-            $receiptDate = !empty($parsed['receipt_date'])
-                ? EthiopianDate::formatDateEc($parsed['receipt_date'], 'DD/MM/YYYY EC')
-                : ($r->receipt_date ? EthiopianDate::formatDateEc($r->receipt_date, 'DD/MM/YYYY EC') : EthiopianDate::formatDateEc(now(), 'DD/MM/YYYY EC'));
-            $encodingDate = !empty($parsed['encoding_date'])
-                ? EthiopianDate::formatDateEc($parsed['encoding_date'], 'DD/MM/YYYY EC')
-                : ($r->created_at ? EthiopianDate::formatDateEc($r->created_at, 'DD/MM/YYYY EC') : EthiopianDate::formatDateEc(now(), 'DD/MM/YYYY EC'));
+            $receiptDate = !empty($parsed['receipt_date']) && preg_match('/^\d{2}-\d{2}-\d{4}$/', trim($parsed['receipt_date']))
+                ? trim($parsed['receipt_date'])
+                : (!empty($parsed['receipt_date'])
+                    ? EthiopianDate::formatDateEc($parsed['receipt_date'], 'd-m-Y')
+                    : ($r->receipt_date ? EthiopianDate::formatDateEc($r->receipt_date, 'd-m-Y') : EthiopianDate::formatDateEc(now(), 'd-m-Y')));
+
+            $encodingDate = !empty($parsed['encoding_date']) && preg_match('/^\d{2}-\d{2}-\d{4}$/', trim($parsed['encoding_date']))
+                ? trim($parsed['encoding_date'])
+                : (!empty($parsed['encoding_date'])
+                    ? EthiopianDate::formatDateEc($parsed['encoding_date'], 'd-m-Y')
+                    : ($r->created_at ? EthiopianDate::formatDateEc($r->created_at, 'd-m-Y') : EthiopianDate::formatDateEc(now(), 'd-m-Y')));
             $mrc = trim((string)($r->mrc_no ?: (!empty($parsed['mrc']) ? $parsed['mrc'] : '')));
 
             $purcNorm = QcService::normalizePurchaseType(!empty($parsed['purc_type']) ? $parsed['purc_type'] : $r->category, ($r->description ?? '') . ' ' . $r->vendor_name);
@@ -3160,8 +3212,8 @@ class FinanceTaxReportController extends Controller
                     '',
                     round($gross, 2),
                     $exp->payment_reference ?: $exp->request_number,
-                    $exp->paid_at ? EthiopianDate::formatDateEc($exp->paid_at, 'DD/MM/YYYY EC') : EthiopianDate::formatDateEc($exp->created_at, 'DD/MM/YYYY EC'),
-                    EthiopianDate::formatDateEc($exp->created_at, 'DD/MM/YYYY EC'),
+                    $exp->paid_at ? EthiopianDate::formatDateEc($exp->paid_at, 'd-m-Y') : EthiopianDate::formatDateEc($exp->created_at, 'd-m-Y'),
+                    EthiopianDate::formatDateEc($exp->created_at, 'd-m-Y'),
                     '',
                     'PUR_GD',
                     'wechacha',

@@ -1136,6 +1136,9 @@ class ExpenseHubQueryService
 
     protected function shouldIncludeSource(string $module, array $filters): bool
     {
+        if (!Schema::hasTable($module)) {
+            return false;
+        }
         if (empty($filters['source_module'])) {
             return true;
         }

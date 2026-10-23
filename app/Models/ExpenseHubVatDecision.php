@@ -29,12 +29,14 @@ class ExpenseHubVatDecision extends Model
         'no_vat_reason_code',
         'no_vat_reason_note',
         'vat_category',
+        'purc_type',
         'calendar_type',
         'purchase_type',
         'custom_seller_tin',
         'custom_fs_no',
         'custom_mrc_no',
         'custom_item_description',
+        'custom_receipt_date',
         'uom',
         'quantity',
         'unit_price',
@@ -67,6 +69,8 @@ class ExpenseHubVatDecision extends Model
     public const STATUS_PENDING_DECISION  = 'pending_decision';
 
     public const NO_VAT_REASONS = [
+        'fuel_zero_vat'      => 'Fuel / Petroleum Receipt (0% VAT / TAS Purchase)',
+        'tas_purchase'       => 'TAS Purchase with Fiscal Receipt (0% VAT / Exempt)',
         'no_tin'             => 'Vendor has no valid TIN',
         'no_fiscal_receipt'  => 'No official Fiscal Receipt (FS/Cash Register)',
         'exempt_item'        => 'Legally VAT-Exempt goods/services (Proclamation)',
