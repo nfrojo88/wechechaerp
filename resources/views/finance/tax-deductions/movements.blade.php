@@ -1267,9 +1267,11 @@
                             <div class="card-body p-3">
                                 <div id="movementOcrModalAlert" class="alert d-none py-2 px-3 small rounded-3 mb-3"></div>
 
-                                <form id="movementOcrModalEditForm" onsubmit="saveMovementOcrSlipEdits(event)">
+                                <form id="movementOcrModalEditForm" novalidate onsubmit="saveMovementOcrSlipEdits(event); return false;">
                                     <input type="hidden" id="movement_edit_ocr_item_id" name="id">
                                     <input type="hidden" id="movement_edit_receipt_id" name="receipt_id">
+                                    <input type="hidden" id="movement_edit_expense_request_id" name="expense_request_id">
+                                    <input type="hidden" id="movement_edit_request_number" name="request_number">
 
                                     {{-- Supplier Name --}}
                                     <div class="mb-2.5">
@@ -1485,7 +1487,7 @@
                     <button type="button" class="btn btn-outline-secondary rounded-pill px-3.5 py-1.5" data-bs-dismiss="modal">
                         Close
                     </button>
-                    <button type="submit" form="movementOcrModalEditForm" id="movement_edit_submit_btn" class="btn btn-primary rounded-pill px-4 py-1.5 shadow-sm fw-semibold">
+                    <button type="button" id="movement_edit_submit_btn" onclick="saveMovementOcrSlipEdits(event)" class="btn btn-primary rounded-pill px-4 py-1.5 shadow-sm fw-semibold">
                         <i class="fa-solid fa-floppy-disk me-1.5"></i>Save Changes &amp; Update System
                     </button>
                 </div>
@@ -1794,6 +1796,12 @@
         const rcptIdInput = document.getElementById('movement_edit_receipt_id');
         if (rcptIdInput) rcptIdInput.value = ocr.receipt_id || '';
 
+        const expIdInput = document.getElementById('movement_edit_expense_request_id');
+        if (expIdInput) expIdInput.value = ocr.expense_request_id || '';
+
+        const reqNumInput = document.getElementById('movement_edit_request_number');
+        if (reqNumInput) reqNumInput.value = ocr.request_number || '';
+
         const badgeId = document.getElementById('movement_edit_ocr_badge_id');
         if (badgeId) badgeId.textContent = ocr.id ? ('Invoice #' + ocr.id) : ('Item #' + (idx + 1));
 
@@ -1916,6 +1924,12 @@
 
         const rcptIdInput = document.getElementById('movement_edit_receipt_id');
         if (rcptIdInput) rcptIdInput.value = tas.receipt_id || (tas.id ? ('EXP-' + tas.id) : (tas.request_number || ''));
+
+        const expIdInput = document.getElementById('movement_edit_expense_request_id');
+        if (expIdInput) expIdInput.value = tas.expense_request_id || tas.id || '';
+
+        const reqNumInput = document.getElementById('movement_edit_request_number');
+        if (reqNumInput) reqNumInput.value = tas.request_number || '';
 
         const badgeId = document.getElementById('movement_edit_ocr_badge_id');
         if (badgeId) badgeId.textContent = tas.request_number || ('TAS #' + (idx + 1));
@@ -2158,13 +2172,25 @@
 
     // Save edits via AJAX
     function saveMovementOcrSlipEdits(e) {
-        e.preventDefault();
+        if (e && typeof e.preventDefault === 'function') e.preventDefault();
         const form = document.getElementById('movementOcrModalEditForm');
         if (!form) return;
 
         const submitBtn = document.getElementById('movement_edit_submit_btn');
         const alertBox = document.getElementById('movementOcrModalAlert');
         const origBtnHtml = submitBtn ? submitBtn.innerHTML : '';
+
+        // Client-side validation: Supplier Name is mandatory
+        const sellerInput = document.getElementById('movement_edit_seller_name');
+        if (sellerInput && !sellerInput.value.trim()) {
+            sellerInput.focus();
+            if (alertBox) {
+                alertBox.className = 'alert alert-warning py-2 px-3 small rounded-3 mb-3 d-flex align-items-center gap-2';
+                alertBox.innerHTML = '<i class="fa-solid fa-triangle-exclamation text-warning fs-6"></i> Please enter Supplier / Merchant Name before saving.';
+                alertBox.classList.remove('d-none');
+            }
+            return;
+        }
 
         if (submitBtn) {
             submitBtn.disabled = true;
@@ -2187,7 +2213,22 @@
                 'X-Requested-With': 'XMLHttpRequest'
             }
         })
-        .then(res => res.json())
+        .then(async res => {
+            const isJson = (res.headers.get('content-type') || '').includes('application/json');
+            const data = isJson ? await res.json() : { success: false, message: await res.text() };
+            if (!res.ok) {
+                if (res.status === 419) {
+                    throw new Error('Your session expired. Please refresh the page and try again.');
+                }
+                let errMsg = data.message || ('Server returned HTTP ' + res.status);
+                if (data.errors && typeof data.errors === 'object') {
+                    const errLines = Object.values(data.errors).flat().join('<br>');
+                    if (errLines) errMsg = errLines;
+                }
+                throw new Error(errMsg);
+            }
+            return data;
+        })
         .then(data => {
             if (submitBtn) {
                 submitBtn.disabled = false;

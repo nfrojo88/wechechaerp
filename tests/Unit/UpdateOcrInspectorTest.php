@@ -499,4 +499,110 @@ class UpdateOcrInspectorTest extends TestCase
         $this->assertEquals('0012345678', $receipt->vendor_tin);
         $this->assertTrue((bool)$receipt->tin_valid);
     }
+
+    public function test_tas_purchase_opened_with_exp_prefix_and_no_receipt_saves_and_creates_records()
+    {
+        $exp = ExpenseRequest::create([
+            'request_number'    => 'EXP-FUEL-2026-0276',
+            'amount'            => 1500.00,
+            'vat_amount'        => 0.00,
+            'gross_amount'      => 1500.00,
+            'net_amount'        => 1500.00,
+            'payee'             => 'Total Station',
+            'category'          => 'fuel',
+            'status'            => 'paid',
+        ]);
+
+        $this->assertNull(Receipt::where('purchasable_id', $exp->id)->first());
+
+        // Inspector opened from TAS purchases tab passing EXP-ID and explicit expense_request_id
+        $response = $this->postJson(route('finance.tax-deductions.update-ocr-item'), [
+            'receipt_id'         => 'EXP-' . $exp->id,
+            'expense_request_id' => $exp->id,
+            'request_number'     => $exp->request_number,
+            'seller_name'        => 'TotalEnergies Marketing Ethiopia',
+            'supplier_tin'       => '0099887766',
+            'fs_no'              => '00044556',
+            'mrc_no'             => 'MRC-TEST-99',
+            'receipt_date'       => '2026-03-12',
+            'item_description'   => 'Vehicle Benzene Fuel Refill',
+            'vat_category'       => 'E',
+            'purchase_type'      => 'PUR_GD',
+            'total_value'        => 1500.00,
+            'vat_amount'         => 0.00,
+            'value_after_vat'    => 1500.00,
+        ]);
+
+        $response->assertStatus(200);
+        $response->assertJson([
+            'success' => true,
+            'item'    => [
+                'expense_request_id' => $exp->id,
+                'vendor_tin'         => '0099887766',
+                'vendor_name'        => 'TotalEnergies Marketing Ethiopia',
+                'fs_no'              => '00044556',
+            ]
+        ]);
+
+        $receipt = Receipt::where('purchasable_id', $exp->id)->first();
+        $this->assertNotNull($receipt);
+        $this->assertEquals('TotalEnergies Marketing Ethiopia', $receipt->vendor_name);
+        $this->assertEquals('0099887766', $receipt->vendor_tin);
+        $this->assertEquals('00044556', $receipt->fs_no);
+
+        $vatDec = ExpenseHubVatDecision::where('source_type', 'expense_request')->where('source_id', $exp->id)->first();
+        $this->assertNotNull($vatDec);
+        $this->assertEquals('0099887766', $vatDec->custom_seller_tin);
+        $this->assertEquals('00044556', $vatDec->custom_fs_no);
+        $this->assertEquals('MRC-TEST-99', $vatDec->custom_mrc_no);
+
+        $exp->refresh();
+        $this->assertStringContainsString('FS: 00044556', $exp->payment_reference);
+        $this->assertStringContainsString('TIN: 0099887766', $exp->payment_reference);
+    }
+
+    public function test_tas_purchase_opened_with_only_exp_dash_id_without_explicit_expense_request_id_saves()
+    {
+        $exp = ExpenseRequest::create([
+            'request_number'    => 'EXP-FUEL-2026-0555',
+            'amount'            => 800.00,
+            'vat_amount'        => 0.00,
+            'gross_amount'      => 800.00,
+            'net_amount'        => 800.00,
+            'payee'             => 'Kobil Station',
+            'category'          => 'fuel',
+            'status'            => 'paid',
+        ]);
+
+        // Inspector opened passing only receipt_id = 'EXP-555' (where 555 is exp->id)
+        $response = $this->postJson(route('finance.tax-deductions.update-ocr-item'), [
+            'receipt_id'       => 'EXP-' . $exp->id,
+            'seller_name'      => 'Kobil Station Bole',
+            'supplier_tin'     => '0055443322',
+            'fs_no'            => '00012121',
+            'mrc_no'           => 'MRC-KOB-01',
+            'receipt_date'     => '2026-03-14',
+            'item_description' => 'Diesel Fuel Refill',
+            'vat_category'     => 'E',
+            'purchase_type'    => 'PUR_GD',
+            'total_value'      => 800.00,
+            'vat_amount'       => 0.00,
+            'value_after_vat'  => 800.00,
+        ]);
+
+        $response->assertStatus(200);
+        $response->assertJson([
+            'success' => true,
+            'item'    => [
+                'vendor_tin'  => '0055443322',
+                'vendor_name' => 'Kobil Station Bole',
+                'fs_no'       => '00012121',
+            ]
+        ]);
+
+        $receipt = Receipt::where('purchasable_id', $exp->id)->first();
+        $this->assertNotNull($receipt);
+        $this->assertEquals('0055443322', $receipt->vendor_tin);
+        $this->assertEquals('00012121', $receipt->fs_no);
+    }
 }

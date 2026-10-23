@@ -4469,33 +4469,68 @@ class FinanceTaxReportController extends Controller
         $this->ensureSchema();
 
         $request->validate([
-            'id'               => 'nullable',
-            'receipt_id'       => 'nullable',
-            'seller_name'      => 'nullable|string|max:255',
-            'supplier_tin'     => 'nullable|string|max:50',
-            'receipt_date'     => 'nullable|string',
-            'mrc_no'           => 'nullable|string|max:100',
-            'fs_no'            => 'nullable|string|max:100',
-            'item_description' => 'nullable|string|max:500',
-            'vat_category'     => 'nullable|string|in:G,S,E,g,s,e',
-            'purchase_type'    => 'nullable|max:50',
-            'project_id'       => 'nullable',
-            'category'         => 'nullable|string|max:100',
-            'qty'              => 'nullable|numeric|min:0',
-            'unit_price'       => 'nullable|numeric|min:0',
-            'total_value'      => 'nullable|numeric|min:0',
-            'vat_amount'       => 'nullable|numeric|min:0',
-            'value_after_vat'  => 'nullable|numeric|min:0',
+            'id'                 => 'nullable',
+            'receipt_id'         => 'nullable',
+            'expense_request_id' => 'nullable',
+            'request_number'     => 'nullable|string|max:100',
+            'seller_name'        => 'nullable|string|max:255',
+            'supplier_tin'       => 'nullable|string|max:50',
+            'receipt_date'       => 'nullable|string',
+            'mrc_no'             => 'nullable|string|max:100',
+            'fs_no'              => 'nullable|string|max:100',
+            'item_description'   => 'nullable|string|max:500',
+            'vat_category'       => 'nullable|string',
+            'purchase_type'      => 'nullable',
+            'project_id'         => 'nullable',
+            'category'           => 'nullable|string|max:100',
+            'qty'                => 'nullable|numeric|min:0',
+            'unit_price'         => 'nullable|numeric|min:0',
+            'total_value'        => 'nullable|numeric|min:0',
+            'vat_amount'         => 'nullable|numeric|min:0',
+            'value_after_vat'    => 'nullable|numeric|min:0',
         ]);
 
         try {
-            $rawId        = $request->input('id');
-            $rawReceiptId = $request->input('receipt_id');
+            $rawId            = $request->input('id');
+            $rawReceiptId     = $request->input('receipt_id');
+            $rawExpenseReqId  = $request->input('expense_request_id');
+            $rawRequestNumber = $request->input('request_number');
+            $rawFsNo          = $request->input('fs_no');
 
             $receipt = null;
             $item    = null;
+            $expReq  = null;
 
-            // 1. Resolve parent Receipt first if receipt_id or id is provided
+            // 1. Resolve ExpenseRequest first if explicit expense_request_id or request_number provided
+            if (Schema::hasTable('expense_requests')) {
+                if (!empty($rawExpenseReqId)) {
+                    $cleanExpId = preg_replace('/^EXP-/i', '', (string)$rawExpenseReqId);
+                    if (is_numeric($cleanExpId)) {
+                        $expReq = \App\Models\ExpenseRequest::find($cleanExpId);
+                    }
+                }
+                if (!$expReq && !empty($rawRequestNumber)) {
+                    $expReq = \App\Models\ExpenseRequest::where('request_number', (string)$rawRequestNumber)->first();
+                }
+            }
+
+            // 2. Check if rawReceiptId or rawId points to an ExpenseRequest (e.g. 'EXP-276' or 'EXP-FUEL-2026-0276')
+            if (!$expReq && Schema::hasTable('expense_requests')) {
+                foreach ([$rawReceiptId, $rawId] as $cand) {
+                    if (empty($cand)) continue;
+                    if (preg_match('/^EXP-(\d+)$/i', (string)$cand, $mExp)) {
+                        $expReq = \App\Models\ExpenseRequest::find($mExp[1]);
+                        if ($expReq) break;
+                    }
+                    if (str_starts_with(strtoupper((string)$cand), 'EXP-')) {
+                        $expReq = \App\Models\ExpenseRequest::where('request_number', (string)$cand)->first()
+                            ?: \App\Models\ExpenseRequest::where('request_number', 'like', '%' . $cand . '%')->first();
+                        if ($expReq) break;
+                    }
+                }
+            }
+
+            // 3. Resolve parent Receipt if receipt_id or id is provided
             if (!empty($rawReceiptId)) {
                 $cleanReceiptId = preg_replace('/^REC-/i', '', (string)$rawReceiptId);
                 if (is_numeric($cleanReceiptId)) {
@@ -4530,7 +4565,7 @@ class FinanceTaxReportController extends Controller
                 }
             }
 
-            // 2. Resolve ReceiptItem if numeric id provided
+            // 4. Resolve ReceiptItem if numeric id provided
             if (!empty($rawId) && is_numeric($rawId)) {
                 if ($receipt) {
                     $item = \App\Models\ReceiptItem::where('id', $rawId)->where('receipt_id', $receipt->id)->first();
@@ -4542,7 +4577,7 @@ class FinanceTaxReportController extends Controller
                 }
             }
 
-            // 3. Fallback resolution if receipt still null
+            // 5. Fallback receipt resolution if receipt still null
             if (!$receipt && !empty($rawId)) {
                 $cleanId = preg_replace('/^REC-/i', '', (string)$rawId);
                 if (is_numeric($cleanId)) {
@@ -4553,7 +4588,45 @@ class FinanceTaxReportController extends Controller
                 }
             }
 
-            // 4. Fallback: check if id / receipt_id corresponds to an ExpenseRequest
+            // 6. If we found an expReq but still no receipt, find or create the receipt for it
+            if (!$receipt && $expReq) {
+                $receipt = \App\Models\Receipt::where('purchasable_type', \App\Models\ExpenseRequest::class)
+                    ->where('purchasable_id', $expReq->id)
+                    ->first()
+                    ?: \App\Models\Receipt::where('purchasable_type', 'expense_request')
+                        ->where('purchasable_id', $expReq->id)
+                        ->first()
+                    ?: \App\Models\Receipt::where('receipt_number', $expReq->request_number)->first();
+
+                if (!$receipt) {
+                    $candidateReceiptNo = $expReq->request_number;
+                    if (empty($candidateReceiptNo) || \App\Models\Receipt::where('receipt_number', $candidateReceiptNo)->exists()) {
+                        $candidateReceiptNo = 'RCP-EXP-' . now()->format('Ymd') . '-' . $expReq->id . '-' . strtoupper(substr(uniqid(), -4));
+                    }
+                    $receipt = new \App\Models\Receipt([
+                        'purchasable_type' => \App\Models\ExpenseRequest::class,
+                        'purchasable_id'   => $expReq->id,
+                        'receipt_number'   => $candidateReceiptNo,
+                        'vendor_name'      => $request->seller_name ?: ($expReq->payee ?: 'Vendor'),
+                        'vendor_tin'       => $request->supplier_tin ?: null,
+                        'fs_no'            => $request->fs_no ?: null,
+                        'fs_no_raw'        => $request->fs_no ?: null,
+                        'mrc_no'           => $request->mrc_no ?: null,
+                        'uploaded_by'      => Auth::id() ?: ($expReq->user_id ?: 1),
+                        'project_id'       => $request->project_id ?: $expReq->project_id,
+                        'file_path'        => (string)($expReq->attachment ?? ''),
+                        'file_type'        => 'image',
+                        'category'         => $request->category ?: ($expReq->category ?: 'general'),
+                        'tax_type'         => ((float)($request->vat_amount ?? 0) <= 0) ? 'no_vat' : 'vat_standard',
+                        'subtotal'         => (float)($request->total_value ?: $expReq->amount),
+                        'vat_amount'       => (float)($request->vat_amount ?: $expReq->vat_amount),
+                        'total_amount'     => (float)($request->value_after_vat ?: ($expReq->gross_amount ?: $expReq->amount)),
+                    ]);
+                    $receipt->save();
+                }
+            }
+
+            // 7. Check if id / receipt_id corresponds to an ExpenseRequest as fallback
             if (!$receipt && Schema::hasTable('expense_requests')) {
                 $expReq = \App\Models\ExpenseRequest::where('request_number', (string)$rawReceiptId)
                     ->orWhere('id', is_numeric($rawReceiptId) ? $rawReceiptId : 0)
@@ -4566,34 +4639,106 @@ class FinanceTaxReportController extends Controller
                         ->first()
                         ?: \App\Models\Receipt::where('receipt_number', $expReq->request_number)->first();
                     if (!$receipt) {
+                        $candidateReceiptNo = $expReq->request_number;
+                        if (empty($candidateReceiptNo) || \App\Models\Receipt::where('receipt_number', $candidateReceiptNo)->exists()) {
+                            $candidateReceiptNo = 'RCP-EXP-' . now()->format('Ymd') . '-' . $expReq->id . '-' . strtoupper(substr(uniqid(), -4));
+                        }
                         $receipt = new \App\Models\Receipt([
                             'purchasable_type' => \App\Models\ExpenseRequest::class,
                             'purchasable_id'   => $expReq->id,
-                            'receipt_number'   => $expReq->request_number ?: ('RCP-EXP-' . $expReq->id),
+                            'receipt_number'   => $candidateReceiptNo,
                             'vendor_name'      => $request->seller_name ?: ($expReq->payee ?: 'Vendor'),
-                            'file_path'        => $expReq->attachment ?: '',
-                            'category'         => $expReq->category ?: 'general',
+                            'vendor_tin'       => $request->supplier_tin ?: null,
+                            'fs_no'            => $request->fs_no ?: null,
+                            'fs_no_raw'        => $request->fs_no ?: null,
+                            'mrc_no'           => $request->mrc_no ?: null,
+                            'uploaded_by'      => Auth::id() ?: ($expReq->user_id ?: 1),
+                            'project_id'       => $request->project_id ?: $expReq->project_id,
+                            'file_path'        => (string)($expReq->attachment ?? ''),
+                            'file_type'        => 'image',
+                            'category'         => $request->category ?: ($expReq->category ?: 'general'),
+                            'tax_type'         => ((float)($request->vat_amount ?? 0) <= 0) ? 'no_vat' : 'vat_standard',
                             'subtotal'         => (float)($request->total_value ?: $expReq->amount),
                             'vat_amount'       => (float)($request->vat_amount ?: $expReq->vat_amount),
-                            'total_amount'     => (float)($request->value_after_vat ?: $expReq->gross_amount),
+                            'total_amount'     => (float)($request->value_after_vat ?: ($expReq->gross_amount ?: $expReq->amount)),
                         ]);
                         $receipt->save();
                     }
                 }
             }
 
-            // 5. If receipt exists, ensure it has a ReceiptItem
+            // 8. Fallback resolution via VehicleFuelRequest
+            if (!$receipt && Schema::hasTable('vehicle_fuel_requests')) {
+                $fuelQuery = \App\Models\VehicleFuelRequest::query();
+                if (!empty($rawRequestNumber)) {
+                    $fuelQuery->where('request_number', (string)$rawRequestNumber)->orWhere('request_no', (string)$rawRequestNumber);
+                }
+                if (!empty($rawReceiptId)) {
+                    $fuelQuery->orWhere('request_number', (string)$rawReceiptId)->orWhere('request_no', (string)$rawReceiptId);
+                }
+                $fuel = $fuelQuery->first();
+                if ($fuel && $fuel->expense_request_id) {
+                    $expReq = \App\Models\ExpenseRequest::find($fuel->expense_request_id);
+                    if ($expReq) {
+                        $receipt = \App\Models\Receipt::where('purchasable_type', \App\Models\ExpenseRequest::class)
+                            ->where('purchasable_id', $expReq->id)
+                            ->first();
+                        if (!$receipt) {
+                            $candidateReceiptNo = $expReq->request_number ?: ('RCP-FUEL-' . $fuel->id);
+                            if (\App\Models\Receipt::where('receipt_number', $candidateReceiptNo)->exists()) {
+                                $candidateReceiptNo = 'RCP-EXP-' . now()->format('Ymd') . '-' . $expReq->id . '-' . strtoupper(substr(uniqid(), -4));
+                            }
+                            $receipt = new \App\Models\Receipt([
+                                'purchasable_type' => \App\Models\ExpenseRequest::class,
+                                'purchasable_id'   => $expReq->id,
+                                'receipt_number'   => $candidateReceiptNo,
+                                'vendor_name'      => $request->seller_name ?: ($expReq->payee ?: 'Fuel Station'),
+                                'vendor_tin'       => $request->supplier_tin ?: $fuel->fuel_station_tin,
+                                'fs_no'            => $request->fs_no ?: $fuel->fs_no,
+                                'mrc_no'           => $request->mrc_no ?: $fuel->mrc_no,
+                                'uploaded_by'      => Auth::id() ?: ($expReq->user_id ?: 1),
+                                'project_id'       => $request->project_id ?: $expReq->project_id,
+                                'file_path'        => (string)($expReq->attachment ?? ''),
+                                'file_type'        => 'image',
+                                'category'         => 'fuel',
+                                'tax_type'         => ((float)($request->vat_amount ?? 0) <= 0) ? 'no_vat' : 'vat_standard',
+                                'subtotal'         => (float)($request->total_value ?: $expReq->amount),
+                                'vat_amount'       => (float)($request->vat_amount ?: $expReq->vat_amount),
+                                'total_amount'     => (float)($request->value_after_vat ?: ($expReq->gross_amount ?: $expReq->amount)),
+                            ]);
+                            $receipt->save();
+                        }
+                    }
+                }
+            }
+
+            // 9. Fallback resolution via fs_no match
+            if (!$receipt && !empty($rawFsNo)) {
+                $cleanFs = preg_replace('/\D/', '', (string)$rawFsNo);
+                if (!empty($cleanFs)) {
+                    $receipt = \App\Models\Receipt::where('fs_no', $cleanFs)
+                        ->orWhere('fs_no_raw', (string)$rawFsNo)
+                        ->first();
+                }
+            }
+
+            // 10. If receipt exists, ensure it has a ReceiptItem
             if ($receipt) {
                 if (!$item || $item->receipt_id !== $receipt->id) {
                     $item = $receipt->items()->first();
                 }
                 if (!$item) {
+                    $rawVatCat = strtoupper(trim((string)($request->vat_category ?: '')));
+                    if (!in_array($rawVatCat, ['G', 'S', 'E'])) {
+                        $rawVatCat = ((float)($request->vat_amount ?? 0) > 0) ? 'G' : 'E';
+                    }
                     $item = new \App\Models\ReceiptItem([
                         'receipt_id'       => $receipt->id,
                         'item_description' => $request->item_description ?: ($receipt->description ?: 'Purchased Goods/Services'),
-                        'vat_category'     => strtoupper((string)($request->vat_category ?: 'G')),
+                        'vat_category'     => $rawVatCat,
                         'calendar_type'    => 'G',
                         'purchase_type'    => is_numeric($request->purchase_type) ? (int)$request->purchase_type : 3,
+                        'purc_type'        => (string)($request->purchase_type ?: 'PUR_GD'),
                         'uom'              => '9',
                         'qty'              => (float)($request->qty ?: 1),
                         'unit_price'       => (float)($request->unit_price ?: ($request->total_value ?: 0)),
@@ -4628,11 +4773,19 @@ class FinanceTaxReportController extends Controller
             $unitPrice = round((float)($request->unit_price ?: ($qty > 0 ? ($totalVal / $qty) : $totalVal)), 2);
 
             $purchaseTypeInt = is_numeric($request->purchase_type) ? (int)$request->purchase_type : 3;
-            $vatCategory = strtoupper((string)($request->vat_category ?: ($item->vat_category ?: ($vat > 0 ? 'G' : 'E'))));
+            $rawVatCat = strtoupper(trim((string)($request->vat_category ?: '')));
+            if (in_array($rawVatCat, ['G', 'S', 'E'])) {
+                $vatCategory = $rawVatCat;
+            } else {
+                $vatCategory = $item->vat_category ?: ($vat > 0 ? 'G' : 'E');
+            }
 
             $item->item_description = $request->item_description ?: ($item->item_description ?: 'Purchased Goods/Services');
             $item->vat_category     = $vatCategory;
             $item->purchase_type    = $purchaseTypeInt;
+            if (Schema::hasColumn('receipt_items', 'purc_type')) {
+                $item->purc_type    = (string)($request->purchase_type ?: ($item->purc_type ?: 'PUR_GD'));
+            }
             $item->qty              = $qty;
             $item->unit_price       = $unitPrice;
             $item->total_value      = $totalVal;
@@ -4682,6 +4835,7 @@ class FinanceTaxReportController extends Controller
             if ($request->filled('item_description')) {
                 $receiptUpdates['description'] = $request->item_description;
             }
+            $receiptUpdates['tax_type'] = ($vat <= 0) ? 'no_vat' : 'vat_standard';
 
             // Merge with parsed_data JSON so that e-Tax exports and movements views immediately reflect the latest edits
             $parsed = is_string($receipt->parsed_data) ? (json_decode($receipt->parsed_data, true) ?: []) : (array)($receipt->parsed_data ?? []);
@@ -4731,8 +4885,8 @@ class FinanceTaxReportController extends Controller
 
             // Sync linked ExpenseRequest and ExpenseHubVatDecision
             try {
-                $linkedExp = null;
-                if ($receipt->purchasable_type && (str_contains($receipt->purchasable_type, 'ExpenseRequest') || $receipt->purchasable_type === 'expense_request') && $receipt->purchasable_id) {
+                $linkedExp = $expReq;
+                if (!$linkedExp && $receipt->purchasable_type && (str_contains($receipt->purchasable_type, 'ExpenseRequest') || $receipt->purchasable_type === 'expense_request') && $receipt->purchasable_id) {
                     $linkedExp = \App\Models\ExpenseRequest::find($receipt->purchasable_id);
                 }
                 if (!$linkedExp && !empty($receipt->receipt_number)) {
@@ -4756,33 +4910,56 @@ class FinanceTaxReportController extends Controller
                     if ($parsedDate) {
                         $linkedExp->created_at = Carbon::parse($parsedDate)->setTime(12, 0, 0);
                     }
-                    if ($receipt->fs_no) {
-                        $linkedExp->payment_reference = 'FS: ' . $receipt->fs_no . ($receipt->mrc_no ? ' | MRC: ' . $receipt->mrc_no : '');
+                    $refParts = [];
+                    if (!empty($receipt->fs_no)) {
+                        $refParts[] = 'FS: ' . $receipt->fs_no;
+                    }
+                    if (!empty($receipt->vendor_tin)) {
+                        $refParts[] = 'TIN: ' . $receipt->vendor_tin;
+                    }
+                    if (!empty($receipt->mrc_no)) {
+                        $refParts[] = 'MRC: ' . $receipt->mrc_no;
+                    }
+                    if (!empty($refParts)) {
+                        $linkedExp->payment_reference = implode(' | ', $refParts);
                     }
                     $linkedExp->save();
 
                     if (Schema::hasTable('expense_hub_vat_decisions')) {
-                        $vatDec = \App\Models\ExpenseHubVatDecision::where('source_type', 'expense_request')
-                            ->where('source_id', $linkedExp->id)
-                            ->first();
-                        if ($vatDec) {
-                            if ($receipt->fs_no) $vatDec->custom_fs_no = $receipt->fs_no;
-                            if ($receipt->vendor_tin) $vatDec->custom_seller_tin = $receipt->vendor_tin;
-                            if ($receipt->mrc_no) $vatDec->custom_mrc_no = $receipt->mrc_no;
-                            if ($request->filled('purchase_type')) $vatDec->purc_type = (string)$request->purchase_type;
-                            $vatDec->vat_amount = $vat;
-                            if ($vat <= 0) $vatDec->vat_status = 'no_vat';
-                            $vatDec->save();
+                        $vatDec = \App\Models\ExpenseHubVatDecision::firstOrNew([
+                            'source_type' => 'expense_request',
+                            'source_id'   => $linkedExp->id,
+                        ]);
+                        if ($receipt->fs_no) $vatDec->custom_fs_no = $receipt->fs_no;
+                        if ($receipt->vendor_tin) $vatDec->custom_seller_tin = $receipt->vendor_tin;
+                        if ($receipt->mrc_no) $vatDec->custom_mrc_no = $receipt->mrc_no;
+                        if ($request->filled('purchase_type')) $vatDec->purc_type = (string)$request->purchase_type;
+                        $vatDec->vat_amount = $vat;
+                        $vatDec->base_amount = $totalVal;
+                        $vatDec->total_amount = $valAfter;
+                        if ($vat <= 0) {
+                            $vatDec->decision = 'no_vat';
+                            $vatDec->vat_status = 'no_vat';
                         }
+                        $vatDec->save();
                     }
 
                     if (Schema::hasTable('vehicle_fuel_requests')) {
                         $fuelReq = \App\Models\VehicleFuelRequest::where('expense_request_id', $linkedExp->id)->first()
                             ?: \App\Models\VehicleFuelRequest::where('request_number', $linkedExp->request_number)->first();
                         if ($fuelReq) {
-                            if (!empty($receipt->vendor_tin)) $fuelReq->fuel_station_tin = $receipt->vendor_tin;
-                            if (!empty($receipt->fs_no)) $fuelReq->fs_no = $receipt->fs_no;
-                            if (!empty($receipt->mrc_no)) $fuelReq->mrc_no = $receipt->mrc_no;
+                            if (!empty($receipt->vendor_tin) && Schema::hasColumn('vehicle_fuel_requests', 'fuel_station_tin')) {
+                                $fuelReq->fuel_station_tin = $receipt->vendor_tin;
+                            }
+                            if (!empty($receipt->fs_no) && Schema::hasColumn('vehicle_fuel_requests', 'fs_no')) {
+                                $fuelReq->fs_no = $receipt->fs_no;
+                            }
+                            if (!empty($receipt->mrc_no) && Schema::hasColumn('vehicle_fuel_requests', 'mrc_no')) {
+                                $fuelReq->mrc_no = $receipt->mrc_no;
+                            }
+                            if ($request->filled('seller_name') && Schema::hasColumn('vehicle_fuel_requests', 'fuel_station_name')) {
+                                $fuelReq->fuel_station_name = trim((string)$request->seller_name);
+                            }
                             $fuelReq->save();
                         }
                     }
@@ -4815,29 +4992,31 @@ class FinanceTaxReportController extends Controller
                 'success' => true,
                 'message' => "Invoice / Receipt #{$receipt->id} updated successfully and reconciled with system tax records.",
                 'item'    => [
-                    'id'               => $item->id,
-                    'receipt_id'       => $receipt->id,
-                    'vendor_name'      => $receipt->vendor_name ?: 'Unknown Vendor',
-                    'vendor_tin'       => $receipt->vendor_tin ?: '-',
-                    'seller_tin'       => $receipt->vendor_tin ?: '-',
-                    'tin_valid'        => (bool)($receipt->tin_valid ?? (strlen(preg_replace('/\D/', '', $receipt->vendor_tin ?? '')) === 10)),
-                    'fs_no'            => $receipt->fs_no ?: '-',
-                    'fs_no_raw'        => $receipt->fs_no_raw ?: ($receipt->fs_no ?: '-'),
-                    'fs_no_valid'      => (bool)($receipt->fs_no_valid ?? (strlen(preg_replace('/\D/', '', $receipt->fs_no ?? '')) === 8)),
-                    'mrc_no'           => $receipt->mrc_no ?: '-',
-                    'receipt_date_ymd' => $receipt->receipt_date ? Carbon::parse($receipt->receipt_date)->format('Y-m-d') : '',
-                    'receipt_date_ec'  => $receipt->receipt_date ? EthiopianDate::formatDateEc($receipt->receipt_date, 'DD/MM/YYYY EC') : '',
-                    'item_description' => $item->item_description,
-                    'vat_category'     => $item->vat_category ?: 'G',
-                    'purchase_type'    => (string)($item->purchase_type ?: 3),
-                    'purc_type'        => (string)($item->purchase_type ?: 3),
-                    'project_id'       => $receipt->project_id,
-                    'project_name'     => $receipt->project?->name ?: 'General',
-                    'category'         => $receipt->category ?: 'materials',
-                    'base_value'       => (float)$item->total_value,
-                    'vat_amount'       => (float)$item->vat_amount,
-                    'total_value'      => (float)$item->value_after_vat,
-                    'value_after_vat'  => (float)$item->value_after_vat,
+                    'id'                 => $item->id,
+                    'receipt_id'         => $receipt->id,
+                    'expense_request_id' => $linkedExp?->id,
+                    'request_number'     => $linkedExp?->request_number ?: $receipt->receipt_number,
+                    'vendor_name'        => $receipt->vendor_name ?: 'Unknown Vendor',
+                    'vendor_tin'         => $receipt->vendor_tin ?: '-',
+                    'seller_tin'         => $receipt->vendor_tin ?: '-',
+                    'tin_valid'          => (bool)($receipt->tin_valid ?? (strlen(preg_replace('/\D/', '', $receipt->vendor_tin ?? '')) === 10)),
+                    'fs_no'              => $receipt->fs_no ?: '-',
+                    'fs_no_raw'          => $receipt->fs_no_raw ?: ($receipt->fs_no ?: '-'),
+                    'fs_no_valid'        => (bool)($receipt->fs_no_valid ?? (strlen(preg_replace('/\D/', '', $receipt->fs_no ?? '')) === 8)),
+                    'mrc_no'             => $receipt->mrc_no ?: '-',
+                    'receipt_date_ymd'   => $receipt->receipt_date ? Carbon::parse($receipt->receipt_date)->format('Y-m-d') : '',
+                    'receipt_date_ec'    => $receipt->receipt_date ? EthiopianDate::formatDateEc($receipt->receipt_date, 'DD/MM/YYYY EC') : '',
+                    'item_description'   => $item->item_description,
+                    'vat_category'       => $item->vat_category ?: 'G',
+                    'purchase_type'      => (string)($item->purchase_type ?: 3),
+                    'purc_type'          => (string)($item->purchase_type ?: 3),
+                    'project_id'         => $receipt->project_id,
+                    'project_name'       => $receipt->project?->name ?: 'General',
+                    'category'           => $receipt->category ?: 'materials',
+                    'base_value'         => (float)$item->total_value,
+                    'vat_amount'         => (float)$item->vat_amount,
+                    'total_value'        => (float)$item->value_after_vat,
+                    'value_after_vat'    => (float)$item->value_after_vat,
                 ]
             ]);
         } catch (\Throwable $e) {
