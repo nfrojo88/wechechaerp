@@ -110,35 +110,33 @@
                 <div class="d-flex align-items-center gap-2 flex-wrap w-100 w-xl-auto justify-content-xl-end">
                     {{-- Primary Tax Settlement Actions Group --}}
                     <div class="d-flex align-items-center gap-2 flex-wrap">
-                        <div class="btn-group shadow-sm rounded-pill overflow-hidden" role="group">
-                            {{-- Settle VAT (Payable to ERCA) or Credit Carried Forward --}}
-                            @if(!empty($netVatDetails['is_payable']))
-                                <button type="button" class="btn btn-danger text-white btn-sm px-3 py-2 fw-semibold d-inline-flex align-items-center gap-1.5" data-bs-toggle="modal" data-bs-target="#payVatModal">
-                                    <i class="fa-solid fa-file-invoice-dollar"></i>
-                                    <span>Settle VAT</span>
-                                    <span class="badge bg-white text-danger rounded-pill ms-1 font-monospace">
-                                        ETB {{ number_format($netVatDetails['payable_amount'] ?? $netVatDetails['amount_payable'] ?? abs($netVatDetails['net'] ?? 0), 2) }}
-                                    </span>
-                                </button>
-                            @else
-                                <button type="button" class="btn btn-outline-success btn-sm px-3 py-2 fw-semibold d-inline-flex align-items-center gap-1.5" disabled title="Credit carried forward to next month">
-                                    <i class="fa-solid fa-arrow-turn-up"></i>
-                                    <span>Credit carried forward</span>
-                                    <span class="badge bg-success text-white rounded-pill ms-1 font-monospace">
-                                        {{ $netVatDetails['signed_net_formatted'] ?? '0.00' }}
-                                    </span>
-                                </button>
-                            @endif
-
-                            {{-- Pay 3% Withholding Tax --}}
-                            <button type="button" class="btn btn-danger btn-sm px-3 py-2 fw-semibold d-inline-flex align-items-center gap-1.5" data-bs-toggle="modal" data-bs-target="#payWithholdingModal">
-                                <i class="fa-solid fa-hand-holding-dollar"></i>
-                                <span>Pay 3% WHT</span>
+                        {{-- Settle VAT (Payable to ERCA) or Credit Carried Forward --}}
+                        @if(!empty($netVatDetails['is_payable']))
+                            <button type="button" class="btn btn-danger text-white btn-sm rounded-pill px-3 py-2 fw-semibold shadow-sm d-inline-flex align-items-center gap-1.5" data-bs-toggle="modal" data-bs-target="#payVatModal">
+                                <i class="fa-solid fa-file-invoice-dollar"></i>
+                                <span>Settle VAT</span>
                                 <span class="badge bg-white text-danger rounded-pill ms-1 font-monospace">
-                                    ETB {{ number_format($unsettledWhtAmount, 2) }}
+                                    ETB {{ number_format($netVatDetails['payable_amount'] ?? $netVatDetails['amount_payable'] ?? abs($netVatDetails['net'] ?? 0), 2) }}
                                 </span>
                             </button>
-                        </div>
+                        @else
+                            <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2 rounded-pill fw-semibold d-inline-flex align-items-center gap-1.5 shadow-2xs" title="Credit carried forward to next month">
+                                <i class="fa-solid fa-arrow-turn-up text-success"></i>
+                                <span>Credit Carried Forward:</span>
+                                <span class="font-monospace fw-bold">
+                                    {{ $netVatDetails['signed_net_formatted'] ?? '0.00' }}
+                                </span>
+                            </span>
+                        @endif
+
+                        {{-- Pay 3% Withholding Tax --}}
+                        <button type="button" class="btn btn-danger btn-sm rounded-pill px-3 py-2 fw-semibold shadow-sm d-inline-flex align-items-center gap-1.5" data-bs-toggle="modal" data-bs-target="#payWithholdingModal">
+                            <i class="fa-solid fa-hand-holding-dollar"></i>
+                            <span>Pay 3% WHT</span>
+                            <span class="badge bg-white text-danger rounded-pill ms-1 font-monospace">
+                                ETB {{ number_format($unsettledWhtAmount, 2) }}
+                            </span>
+                        </button>
 
                         {{-- Clear VAT & Withholding (Start from Zero) --}}
                         <button type="button" class="btn btn-warning text-dark btn-sm rounded-pill px-3 py-2 shadow-sm fw-bold d-inline-flex align-items-center gap-1.5" data-bs-toggle="modal" data-bs-target="#adminClearTaxModal" title="Clear VAT & Withholding for a month to start active cycle from zero (0.00 ETB)">
@@ -270,6 +268,8 @@
                 </div>
             </div>
         </div>
+    </div>
+
     {{-- ── ERCA Line 100 Monthly Declaration Card ─────────────────────────────── --}}
     <div class="card border-0 shadow-sm rounded-4 mb-4 bg-white overflow-hidden border-top border-4 border-primary">
         <div class="card-header bg-white border-bottom py-3 px-3 px-md-4 d-flex flex-column flex-lg-row justify-content-between align-items-start align-items-lg-center gap-3">
@@ -2448,12 +2448,6 @@
                                             </button>
                                             <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none text-muted" onclick="autoExtractBaseFromTotal()">
                                                 <i class="fa-solid fa-wand-magic-sparkles me-1 text-success"></i>Total &rarr; Base (/1.15)
-                                            </button>
-                                        </div>
-                                    </div>
-                                            </button>
-                                            <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none text-muted" onclick="autoExtractBaseFromTotal()">
-                                                <i class="fa-solid fa-wand-magic-sparkles me-1 text-success"></i>Total &rarr; Extract Base (/1.15)
                                             </button>
                                         </div>
                                     </div>
