@@ -585,20 +585,29 @@ class FinanceTaxReportController extends Controller
                 $rq->where(function ($sub) use ($fromDate, $toDate) {
                     $sub->whereDate('receipt_date', '>=', Carbon::parse($fromDate))
                         ->whereDate('receipt_date', '<=', Carbon::parse($toDate))
-                        ->orWhere(function ($fallback) use ($fromDate, $toDate) {
-                            $fallback->whereNull('receipt_date')
-                                     ->whereDate('created_at', '>=', Carbon::parse($fromDate))
-                                     ->whereDate('created_at', '<=', Carbon::parse($toDate));
-                        });
+                        ->orWhereDate('created_at', '>=', Carbon::parse($fromDate))
+                        ->orWhereDate('created_at', '<=', Carbon::parse($toDate));
                 });
             } else {
                 $rq->where(function ($sub) use ($periodStartDate, $periodEndDate, $periodStart, $periodEnd) {
                     $sub->whereBetween('receipt_date', [$periodStartDate, $periodEndDate])
                         ->orWhereBetween('receipt_date', [$periodStart, $periodEnd])
-                        ->orWhere(function ($fallback) use ($periodStart, $periodEnd) {
-                            $fallback->whereNull('receipt_date')
-                                     ->whereBetween('created_at', [$periodStart, $periodEnd]);
+                        ->orWhereBetween('created_at', [$periodStart, $periodEnd]);
+
+                    if (Schema::hasTable('expense_requests')) {
+                        $sub->orWhereExists(function ($ex) use ($periodStart, $periodEnd) {
+                            $ex->select(DB::raw(1))
+                               ->from('expense_requests')
+                               ->where(function ($w) {
+                                   $w->whereColumn('expense_requests.id', 'receipts.purchasable_id')
+                                     ->orWhereColumn('expense_requests.request_number', 'receipts.receipt_number');
+                               })
+                               ->where(function ($mq) use ($periodStart, $periodEnd) {
+                                   $mq->whereBetween('paid_at', [$periodStart, $periodEnd])
+                                      ->orWhereBetween('created_at', [$periodStart, $periodEnd]);
+                               });
                         });
+                    }
                 });
             }
         };
@@ -1047,7 +1056,10 @@ class FinanceTaxReportController extends Controller
 
         $availableEthYears  = EthiopianDate::getYears();
         $availableEthMonths = EthiopianDate::getMonths();
-        $vatOnly = $request->has('vat_only') ? $request->boolean('vat_only') : true;
+        $ocrFilter = $request->input('ocr_filter', '');
+        $vatOnly = $request->has('vat_only') 
+            ? $request->boolean('vat_only') 
+            : (!in_array($ocrFilter, ['all', 'tas']));
         $movementsData = $this->calculateMonthMovementsData($selectedEthYear, $selectedEthMonth, $vatOnly);
 
         // Previous and Next month navigation
@@ -1289,6 +1301,11 @@ class FinanceTaxReportController extends Controller
             }
             if (!$r && !empty($item->receipt_id) && Schema::hasTable('receipts')) {
                 $r = Receipt::find($item->receipt_id);
+            }
+            if (!$r && !empty($item->payment_reference) && Schema::hasTable('receipts')) {
+                if (preg_match('/FS[:\s]+([0-9a-zA-Z_-]+)/i', $item->payment_reference, $mFs)) {
+                    $r = Receipt::where('fs_no', $mFs[1])->orWhere('fs_no_raw', $mFs[1])->latest('id')->first();
+                }
             }
             $dec = $item->relationLoaded('expenseHubVatDecision') ? $item->expenseHubVatDecision : null;
             if (!$dec && Schema::hasTable('expense_hub_vat_decisions')) {
@@ -1705,12 +1722,25 @@ class FinanceTaxReportController extends Controller
                 $existingReceiptIds = $formattedExpenses->pluck('receipt_id')->filter()->all();
 
                 $tasReceipts = Receipt::with(['project', 'uploader'])
-                    ->where(function ($rq) use ($startDate, $endDate) {
-                        $rq->whereBetween('receipt_date', [$startDate, $endDate])
-                           ->orWhere(function ($sub) use ($startDate, $endDate) {
-                               $sub->whereNull('receipt_date')
-                                   ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
-                           });
+                    ->where(function ($rq) use ($startDate, $endDate, $start, $end) {
+                        $rq->where(function ($sub) use ($startDate, $endDate, $start, $end) {
+                            $sub->whereBetween('receipt_date', [$startDate, $endDate])
+                                ->orWhereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+                            if (Schema::hasTable('expense_requests')) {
+                                $sub->orWhereExists(function ($ex) use ($start, $end) {
+                                    $ex->select(DB::raw(1))
+                                       ->from('expense_requests')
+                                       ->where(function ($w) {
+                                           $w->whereColumn('expense_requests.id', 'receipts.purchasable_id')
+                                             ->orWhereColumn('expense_requests.request_number', 'receipts.receipt_number');
+                                       })
+                                       ->where(function ($mq) use ($start, $end) {
+                                           $mq->whereBetween('paid_at', [$start, $end])
+                                              ->orWhereBetween('created_at', [$start, $end]);
+                                       });
+                                });
+                            }
+                        });
                     })
                     ->where(function ($q) {
                         $q->where('vat_amount', '<=', 0)
@@ -1798,12 +1828,25 @@ class FinanceTaxReportController extends Controller
         if (Schema::hasTable('receipt_items')) {
             try {
                 $ocrQuery = \App\Models\ReceiptItem::with(['receipt', 'receipt.project', 'receipt.uploader'])
-                    ->whereHas('receipt', function ($rq) use ($startDate, $endDate) {
-                        $rq->whereBetween('receipt_date', [$startDate, $endDate])
-                           ->orWhere(function ($sub) use ($startDate, $endDate) {
-                               $sub->whereNull('receipt_date')
-                                   ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
-                           });
+                    ->whereHas('receipt', function ($rq) use ($startDate, $endDate, $start, $end) {
+                        $rq->where(function ($sub) use ($startDate, $endDate, $start, $end) {
+                            $sub->whereBetween('receipt_date', [$startDate, $endDate])
+                                ->orWhereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+                            if (Schema::hasTable('expense_requests')) {
+                                $sub->orWhereExists(function ($ex) use ($start, $end) {
+                                    $ex->select(DB::raw(1))
+                                       ->from('expense_requests')
+                                       ->where(function ($w) {
+                                           $w->whereColumn('expense_requests.id', 'receipts.purchasable_id')
+                                             ->orWhereColumn('expense_requests.request_number', 'receipts.receipt_number');
+                                       })
+                                       ->where(function ($mq) use ($start, $end) {
+                                           $mq->whereBetween('paid_at', [$start, $end])
+                                              ->orWhereBetween('created_at', [$start, $end]);
+                                       });
+                                });
+                            }
+                        });
                     })
                     ->orderBy('id', 'asc');
 
@@ -1819,12 +1862,25 @@ class FinanceTaxReportController extends Controller
             try {
                 $srQuery = \App\Models\Receipt::with(['project', 'uploader'])
                     ->doesntHave('items')
-                    ->where(function ($rq) use ($startDate, $endDate) {
-                        $rq->whereBetween('receipt_date', [$startDate, $endDate])
-                           ->orWhere(function ($sub) use ($startDate, $endDate) {
-                               $sub->whereNull('receipt_date')
-                                   ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
-                           });
+                    ->where(function ($rq) use ($startDate, $endDate, $start, $end) {
+                        $rq->where(function ($sub) use ($startDate, $endDate, $start, $end) {
+                            $sub->whereBetween('receipt_date', [$startDate, $endDate])
+                                ->orWhereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+                            if (Schema::hasTable('expense_requests')) {
+                                $sub->orWhereExists(function ($ex) use ($start, $end) {
+                                    $ex->select(DB::raw(1))
+                                       ->from('expense_requests')
+                                       ->where(function ($w) {
+                                           $w->whereColumn('expense_requests.id', 'receipts.purchasable_id')
+                                             ->orWhereColumn('expense_requests.request_number', 'receipts.receipt_number');
+                                       })
+                                       ->where(function ($mq) use ($start, $end) {
+                                           $mq->whereBetween('paid_at', [$start, $end])
+                                              ->orWhereBetween('created_at', [$start, $end]);
+                                       });
+                                });
+                            }
+                        });
                     });
 
                 $standaloneReceipts = $srQuery->get();
@@ -4911,22 +4967,36 @@ class FinanceTaxReportController extends Controller
             $rawDate = trim((string)$request->input('receipt_date'));
             $parsedDate = null;
             if (!empty($rawDate)) {
-                // If it is standard YYYY-MM-DD from an HTML <input type="date">
-                if (preg_match('/^(\d{4})-(\d{1,2})-(\d{1,2})$/', $rawDate, $mYmd) && (int)$mYmd[1] >= 1990) {
-                    try {
-                        $parsedDate = Carbon::createFromDate((int)$mYmd[1], (int)$mYmd[2], (int)$mYmd[3])->format('Y-m-d');
-                    } catch (\Throwable $e) {
-                        $parsedDate = null;
-                    }
-                } else {
-                    // Try parsing Ethiopian calendar date (e.g. DD/MM/YYYY EC, DD-MM-YYYY EC)
+                // 1. Check if DD/MM/YYYY or DD-MM-YYYY (Ethiopian format like 12/02/2019)
+                if (preg_match('/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/', $rawDate, $mDmy)) {
                     $parsedDate = EthiopianDate::parseEcToGregorian($rawDate);
-                    if (!$parsedDate) {
+                }
+                // 2. Check if YYYY-MM-DD
+                elseif (preg_match('/^(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})$/', $rawDate, $mYmd)) {
+                    $yr = (int)$mYmd[1];
+                    $mo = (int)$mYmd[2];
+                    $da = (int)$mYmd[3];
+                    $curEthYear = EthiopianDate::currentYear();
+                    // If year is in Ethiopian era (e.g. 2010..2024, distinct from Gregorian 2025+)
+                    if ($yr >= ($curEthYear - 8) && $yr <= ($curEthYear + 2) && $yr < 2025) {
+                        $parsedDate = EthiopianDate::toGregorian($yr, $mo, $da);
+                    } else {
                         try {
-                            $parsedDate = Carbon::parse($rawDate)->format('Y-m-d');
+                            $parsedDate = Carbon::createFromDate($yr, $mo, $da)->format('Y-m-d');
                         } catch (\Throwable $e) {
                             $parsedDate = null;
                         }
+                    }
+                }
+
+                if (!$parsedDate) {
+                    $parsedDate = EthiopianDate::parseEcToGregorian($rawDate);
+                }
+                if (!$parsedDate) {
+                    try {
+                        $parsedDate = Carbon::parse($rawDate)->format('Y-m-d');
+                    } catch (\Throwable $e) {
+                        $parsedDate = null;
                     }
                 }
                 if ($parsedDate) {
@@ -5017,6 +5087,15 @@ class FinanceTaxReportController extends Controller
                 }
 
                 if ($linkedExp) {
+                    if (!$receipt->purchasable_id || !$receipt->purchasable_type) {
+                        $receipt->purchasable_type = \App\Models\ExpenseRequest::class;
+                        $receipt->purchasable_id   = $linkedExp->id;
+                        $receipt->save();
+                    }
+                    if (Schema::hasColumn('expense_requests', 'receipt_id') && empty($linkedExp->receipt_id)) {
+                        $linkedExp->receipt_id = $receipt->id;
+                    }
+
                     $linkedExp->amount       = $totalVal;
                     $linkedExp->vat_amount   = $vat;
                     $linkedExp->gross_amount = $valAfter;
@@ -5028,13 +5107,7 @@ class FinanceTaxReportController extends Controller
                             $linkedExp->account_name = $cleanSeller;
                         }
                     }
-                    if ($parsedDate) {
-                        $newDateTime = Carbon::parse($parsedDate)->setTime(12, 0, 0);
-                        $linkedExp->created_at = $newDateTime;
-                        if ($linkedExp->paid_at) {
-                            $linkedExp->paid_at = $newDateTime;
-                        }
-                    }
+                    // Do NOT overwrite accounting payment dates created_at or paid_at on ExpenseRequest
                     if (Schema::hasColumn('expense_requests', 'vat_type')) {
                         $linkedExp->vat_type = ($vat > 0) ? 'exclusive' : 'none';
                     }
@@ -5071,6 +5144,12 @@ class FinanceTaxReportController extends Controller
                         if ($receipt->vendor_tin) $vatDec->custom_seller_tin = $receipt->vendor_tin;
                         if ($receipt->mrc_no) $vatDec->custom_mrc_no = $receipt->mrc_no;
                         if ($request->filled('purchase_type')) $vatDec->purc_type = (string)$request->purchase_type;
+                        if ($request->filled('item_description') && Schema::hasColumn('expense_hub_vat_decisions', 'custom_item_description')) {
+                            $vatDec->custom_item_description = (string)$request->item_description;
+                        }
+                        if ($parsedDate && Schema::hasColumn('expense_hub_vat_decisions', 'custom_receipt_date')) {
+                            $vatDec->custom_receipt_date = $parsedDate;
+                        }
                         $vatDec->vat_amount = $vat;
                         $vatDec->base_amount = $totalVal;
                         $vatDec->total_amount = $valAfter;
@@ -5165,6 +5244,8 @@ class FinanceTaxReportController extends Controller
                     'mrc_no'             => $receipt->mrc_no ?: '-',
                     'receipt_date_ymd'   => $receipt->receipt_date ? Carbon::parse($receipt->receipt_date)->format('Y-m-d') : '',
                     'receipt_date_ec'    => $receipt->receipt_date ? EthiopianDate::formatDateEc($receipt->receipt_date, 'DD/MM/YYYY EC') : '',
+                    'date_ec'            => $receipt->receipt_date ? EthiopianDate::formatDateEc($receipt->receipt_date, 'DD/MM/YYYY EC') : '-',
+                    'date_gc'            => $receipt->receipt_date ? Carbon::parse($receipt->receipt_date)->format('M d, Y') : '-',
                     'item_description'   => $item->item_description,
                     'vat_category'       => $item->vat_category ?: 'G',
                     'purchase_type'      => (string)($item->purchase_type ?: 3),

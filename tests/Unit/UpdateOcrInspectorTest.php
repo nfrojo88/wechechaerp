@@ -935,4 +935,163 @@ class UpdateOcrInspectorTest extends TestCase
         $this->assertEquals('Updated Merchant PLC', $receipt->vendor_name);
         $this->assertEquals('vat_standard', $receipt->tax_type);
     }
+
+    public function test_receipt_22_saved_with_outside_month_or_ethiopian_date_persists_on_month_movements_reload()
+    {
+        // 1. Create linked expense request in Month 2 of Ethiopian year 2019 (October 2026)
+        $exp = ExpenseRequest::create([
+            'request_number'    => 'REQ-20261008-QHKA',
+            'amount'            => 478.26,
+            'vat_amount'        => 71.74,
+            'gross_amount'      => 550.00,
+            'net_amount'        => 550.00,
+            'payee'             => 'Initial Payee',
+            'category'          => 'fuel',
+            'status'            => 'paid',
+            'created_at'        => '2026-10-23 10:00:00',
+            'paid_at'           => '2026-10-23 11:00:00',
+        ]);
+
+        // 2. Receipt #22 created on 2026-10-23
+        $receipt = Receipt::create([
+            'id'             => 22,
+            'receipt_number' => 'RCP-20261023-0022',
+            'purchasable_type' => ExpenseRequest::class,
+            'purchasable_id' => $exp->id,
+            'vendor_name'    => 'Initial Fuel Station',
+            'vendor_tin'     => '0011223344',
+            'fs_no'          => '00011223',
+            'receipt_date'   => null,
+            'subtotal'       => 478.26,
+            'vat_amount'     => 71.74,
+            'total_amount'   => 550.00,
+            'created_at'     => '2026-10-23 12:15:36',
+        ]);
+
+        $item = ReceiptItem::create([
+            'receipt_id'       => $receipt->id,
+            'item_description' => 'Vehicle Benzene Fuel Refill',
+            'vat_category'     => 'G',
+            'purchase_type'    => 3,
+            'qty'              => 1,
+            'unit_price'       => 478.26,
+            'total_value'      => 478.26,
+            'vat_amount'       => 71.74,
+            'value_after_vat'  => 550.00,
+            'created_at'       => '2026-10-23 12:15:36',
+        ]);
+
+        // 3. User inspects Receipt #22, enters updated vendor and receipt date 2026-10-08 (or Ethiopian date 2019-02-12)
+        $response = $this->postJson(route('finance.tax-deductions.update-ocr-item'), [
+            'id'               => $item->id,
+            'receipt_id'       => $receipt->id,
+            'expense_request_id' => $exp->id,
+            'request_number'   => $exp->request_number,
+            'seller_name'      => 'TotalEnergies Marketing Ethiopia Bole',
+            'supplier_tin'     => '0098765432',
+            'fs_no'            => '00099887',
+            'mrc_no'           => 'MRC-TOTAL-22',
+            'receipt_date'     => '2026-10-08', // Outside Month 2 date boundary (Meskerem 28), but created/paid in Month 2
+            'item_description' => 'Vehicle Benzene Fuel Refill 550 ETB',
+            'total_value'      => 478.26,
+            'vat_amount'       => 71.74,
+            'value_after_vat'  => 550.00,
+            'vat_category'     => 'G',
+            'purchase_type'    => '3',
+        ]);
+
+        $response->assertStatus(200);
+        $response->assertJson([
+            'success' => true,
+            'item' => [
+                'receipt_id'  => $receipt->id,
+                'vendor_name' => 'TotalEnergies Marketing Ethiopia Bole',
+                'vendor_tin'  => '0098765432',
+                'fs_no'       => '00099887',
+                'mrc_no'      => 'MRC-TOTAL-22',
+                'base_value'  => 478.26,
+                'vat_amount'  => 71.74,
+                'total_value' => 550,
+            ]
+        ]);
+
+        // Verify ExpenseRequest accounting payment date was NOT destroyed
+        $exp->refresh();
+        $this->assertEquals('2026-10-23 11:00:00', $exp->paid_at->toDateTimeString(), 'ExpenseRequest paid_at must not be overwritten');
+
+        // 4. Reload movements page for Month 2 (ethiopian_year=2019, ethiopian_month=2)
+        $controller = new \App\Http\Controllers\Finance\FinanceTaxReportController();
+        $view = $controller->movementsPage(new \Illuminate\Http\Request([
+            'ethiopian_year'  => 2019,
+            'ethiopian_month' => 2,
+            'tab'             => 'ocr',
+        ]));
+
+        $this->assertInstanceOf(\Illuminate\View\View::class, $view);
+        $movementsData = $view->getData()['movementsData'];
+
+        // Assert Receipt #22 is STILL INCLUDED on movements page reload despite receipt_date being 2026-10-08
+        $allOcr = collect($movementsData['all_ocr_items'] ?? []);
+        $ocrVat = collect($movementsData['vat_ocr_items'] ?? []);
+
+        $matchAll = $allOcr->firstWhere('receipt_id', $receipt->id);
+        $this->assertNotNull($matchAll, 'Receipt #22 must NOT disappear from all_ocr_items upon reload of Month 2');
+        $this->assertEquals('TotalEnergies Marketing Ethiopia Bole', $matchAll['vendor_name']);
+        $this->assertEquals('0098765432', $matchAll['vendor_tin']);
+        $this->assertEquals('00099887', $matchAll['fs_no']);
+        $this->assertEquals(478.26, (float)$matchAll['base_value']);
+        $this->assertEquals(71.74, (float)$matchAll['vat_amount']);
+        $this->assertEquals(550.00, (float)$matchAll['value_after_vat']);
+
+        $matchVat = $ocrVat->firstWhere('receipt_id', $receipt->id);
+        $this->assertNotNull($matchVat, 'Receipt #22 must NOT disappear from vat_ocr_items upon reload of Month 2');
+
+        // Assert linked expense in expenses list also reflects the latest vendor and amounts
+        $expenses = collect($movementsData['expenses'] ?? []);
+        $matchExp = $expenses->firstWhere('id', $exp->id);
+        $this->assertNotNull($matchExp, 'Expense must remain present in Month 2 expenses');
+        $this->assertEquals('TotalEnergies Marketing Ethiopia Bole', $matchExp['payee']);
+        $this->assertEquals('0098765432', $matchExp['seller_tin']);
+        $this->assertEquals('00099887', $matchExp['fs_no']);
+    }
+
+    public function test_ethiopian_calendar_date_parsing_converts_properly_without_7_year_time_travel()
+    {
+        $receipt = Receipt::create([
+            'receipt_number' => 'RCP-TEST-ETH-DATE',
+            'subtotal'       => 100.00,
+            'vat_amount'     => 15.00,
+            'total_amount'   => 115.00,
+        ]);
+
+        $item = ReceiptItem::create([
+            'receipt_id'       => $receipt->id,
+            'item_description' => 'Test Item',
+            'vat_category'     => 'G',
+            'purchase_type'    => 3,
+            'qty'              => 1,
+            'unit_price'       => 100.00,
+            'total_value'      => 100.00,
+            'vat_amount'       => 15.00,
+            'value_after_vat'  => 115.00,
+        ]);
+
+        // User enters Ethiopian date "2019-02-12" (meaning 12/02/2019 EC, Tikimt 12, 2019 EC = Oct 22, 2026 GC)
+        $response = $this->postJson(route('finance.tax-deductions.update-ocr-item'), [
+            'id'               => $item->id,
+            'receipt_id'       => $receipt->id,
+            'receipt_date'     => '2019-02-12',
+            'total_value'      => 100.00,
+            'vat_amount'       => 15.00,
+            'value_after_vat'  => 115.00,
+            'vat_category'     => 'G',
+            'purchase_type'    => '3',
+        ]);
+
+        $response->assertStatus(200);
+
+        $receipt->refresh();
+        // It must NOT be saved as 2019-02-12 Gregorian (February 2019, 7 years ago), but 2026-10-22 Gregorian!
+        $this->assertEquals('2026-10-22', \Carbon\Carbon::parse($receipt->receipt_date)->format('Y-m-d'));
+    }
 }

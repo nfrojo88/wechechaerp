@@ -4923,7 +4923,7 @@
                                 <small class="d-block text-success-emphasis">All ledger records, e-Tax tables and fiscal numbers are synchronized.</small>
                             </div>
                         </div>
-                        <button type="button" class="btn btn-xs btn-outline-success rounded-pill px-2.5 py-1 fw-semibold shadow-xs" onclick="window.location.reload()">
+                        <button type="button" class="btn btn-xs btn-outline-success rounded-pill px-2.5 py-1 fw-semibold shadow-xs" onclick="reloadVatSlipView()">
                             <i class="fa-solid fa-rotate me-1"></i>Refresh View
                         </button>
                     `;
@@ -5068,7 +5068,7 @@
                     vatModalEl._hasReloadOnHideListener = true;
                     vatModalEl.addEventListener('hidden.bs.modal', function () {
                         if (window._hasVatSlipEditsSaved) {
-                            window.location.reload();
+                            reloadVatSlipView();
                         }
                     });
                 }
@@ -5089,6 +5089,13 @@
                 alertBox.innerHTML = '<i class="fa-solid fa-triangle-exclamation text-danger fs-6"></i> Error saving changes: ' + err.message;
             }
         });
+    }
+
+    function reloadVatSlipView() {
+        const url = new URL(window.location.href);
+        url.searchParams.set('tab', 'vat');
+        url.searchParams.set('vat_source', 'ocr');
+        window.location.href = url.toString();
     }
 
     // ── Cache & Preview for Monthly Scanned OCR Receipts ─────────────────────

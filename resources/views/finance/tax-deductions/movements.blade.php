@@ -1662,6 +1662,12 @@
 
     function filterPageOcrCategory(type) {
         _activePageOcrFilter = type;
+        try {
+            sessionStorage.setItem('movements_ocr_category', type);
+            const url = new URL(window.location.href);
+            url.searchParams.set('ocr_filter', type);
+            window.history.replaceState({ ocr_filter: type }, '', url.toString());
+        } catch (e) {}
         const rows = document.querySelectorAll('#pageOcrTable tbody tr');
         let totalBase = 0, totalVat = 0, totalAfter = 0, visibleCount = 0;
 
@@ -2536,9 +2542,13 @@
     }
 
     function reloadMovementsView(forceTab) {
-        const tab = forceTab || _getActiveTabName() || 'ocr';
+        const tab = forceTab || _getActiveTabName() || sessionStorage.getItem('movements_active_tab') || 'ocr';
         const url = new URL(window.location.href);
         url.searchParams.set('tab', tab);
+        const ocrFilter = _activePageOcrFilter || sessionStorage.getItem('movements_ocr_category');
+        if (ocrFilter) {
+            url.searchParams.set('ocr_filter', ocrFilter);
+        }
         window.location.href = url.toString();
     }
 
@@ -2580,6 +2590,12 @@
             if (tabBtn && window.bootstrap && bootstrap.Tab) {
                 bootstrap.Tab.getOrCreateInstance(tabBtn).show();
             }
+        }
+
+        // Restore active OCR filter if saved
+        const urlFilter = urlParams.get('ocr_filter') || sessionStorage.getItem('movements_ocr_category');
+        if (urlFilter && (urlFilter === 'all' || urlFilter === 'tas' || urlFilter === 'vat')) {
+            filterPageOcrCategory(urlFilter);
         }
 
         // Auto-refresh when modal closes after saving changes
