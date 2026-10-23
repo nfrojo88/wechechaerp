@@ -3166,6 +3166,13 @@
                             </button>
                         </li>
                         <li class="nav-item" role="presentation">
+                            <button class="nav-link rounded-pill fw-semibold small d-inline-flex align-items-center gap-1.5" id="pills-tas-tab" data-bs-toggle="pill" data-bs-target="#pills-tas" type="button" role="tab">
+                                <i class="fa-solid fa-file-invoice text-primary"></i>
+                                <span>TAS Purchases (0% VAT)</span>
+                                <span class="badge bg-primary-subtle text-primary rounded-pill ms-1" id="mTabTasBadge">0</span>
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
                             <button class="nav-link rounded-pill fw-semibold small d-inline-flex align-items-center gap-1.5" id="pills-ocr-tab" data-bs-toggle="pill" data-bs-target="#pills-ocr" type="button" role="tab">
                                 <i class="fa-solid fa-receipt text-primary"></i>
                                 <span>Scanned OCR Receipts</span>
@@ -3369,7 +3376,65 @@
                             </div>
                         </div>
 
-                        {{-- ── TAB 3: SCANNED OCR RECEIPTS ─────────────────────── --}}
+                        {{-- ── TAB 3: TAS PURCHASES (0% VAT / e-Tax Format pro.doc) ─────── --}}
+                        <div class="tab-pane fade" id="pills-tas" role="tabpanel">
+                            <div class="card border-0 shadow-sm rounded-4 overflow-hidden bg-white">
+                                <div class="card-header bg-white border-bottom py-3 px-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span class="badge bg-primary-subtle text-primary p-2 rounded-3"><i class="fa-solid fa-file-invoice fs-6"></i></span>
+                                        <div>
+                                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                                <h6 class="fw-bold mb-0 text-dark">TAS Purchases (0% VAT / Fuel Receipts — e-Tax Format)</h6>
+                                                <span class="badge bg-primary text-white rounded-pill small fw-semibold px-2.5 py-0.5">
+                                                    <i class="fa-solid fa-receipt me-1"></i>0% VAT e-Tax Declaration
+                                                </span>
+                                            </div>
+                                            <small class="text-muted">Purchases with 0% VAT (Fuel vouchers, exempt receipts, cash register slips) declared under Ethiopian e-Tax (pro.doc 9-column standard)</small>
+                                        </div>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <button type="button" class="btn btn-sm btn-primary text-white rounded-pill px-3 fw-semibold shadow-xs text-nowrap d-inline-flex align-items-center gap-1.5" onclick="exportMovementsExcel('purchase_tas')">
+                                            <i class="fa-solid fa-file-excel"></i>
+                                            <span>Export Purchase TAS (9 Cols)</span>
+                                        </button>
+                                        <div style="min-width: 220px;">
+                                            <input type="text" class="form-control form-control-sm rounded-pill" placeholder="Search FS #, vendor TIN, payee..." onkeyup="filterMovementTable('mTasTable', this.value)">
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="table-responsive">
+                                    <table class="table table-hover align-middle mb-0" id="mTasTable">
+                                        <thead class="sticky-header text-muted text-uppercase fw-bold" style="font-size: 0.68rem;">
+                                            <tr>
+                                                <th class="ps-3 py-2.5">#</th>
+                                                <th class="py-2.5">1. Purchaser TIN</th>
+                                                <th class="py-2.5">2. Seller TIN</th>
+                                                <th class="py-2.5 text-end">3. Amount (ETB)</th>
+                                                <th class="py-2.5">4. Receipt / FS #</th>
+                                                <th class="py-2.5">5. Receipt Date</th>
+                                                <th class="py-2.5">6. Encoding Date</th>
+                                                <th class="py-2.5">7. Machine MRC</th>
+                                                <th class="py-2.5 text-center">8. PurcType</th>
+                                                <th class="py-2.5">9. Encoded By</th>
+                                                <th class="py-2.5 text-center pe-3">Receipt Slip</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="mTasTableBody" class="divide-y">
+                                            {{-- Rows inserted via JS --}}
+                                        </tbody>
+                                        <tfoot class="sticky-footer fw-bold border-top">
+                                            <tr>
+                                                <td colspan="3" class="ps-3 py-2 text-uppercase small text-muted" id="mTasTotalLabel">Total TAS Purchases</td>
+                                                <td class="text-end py-2 font-monospace text-dark" id="mTasTotalAmount">ETB 0.00</td>
+                                                <td colspan="7" class="pe-3"></td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        {{-- ── TAB 4: SCANNED OCR RECEIPTS ─────────────────────── --}}
                         <div class="tab-pane fade" id="pills-ocr" role="tabpanel">
                             <div class="card border-0 shadow-sm rounded-4 overflow-hidden bg-white">
                                 <div class="card-header bg-white border-bottom py-3 px-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -3379,18 +3444,21 @@
                                             <div class="d-flex align-items-center gap-2">
                                                 <h6 class="fw-bold mb-0 text-dark">Scanned OCR Receipts (ERCA Cash Register Invoices)</h6>
                                                 <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill small fw-semibold px-2.5 py-0.5">
-                                                    <i class="fa-solid fa-percent me-1"></i>Only VAT Receipts
+                                                    <i class="fa-solid fa-shield-check me-1"></i>Verified Receipts
                                                 </span>
                                             </div>
-                                            <small class="text-muted">Itemized receipts with verified 15% VAT, Vendor TIN, FS Numbers, and Machine MRC</small>
+                                            <small class="text-muted">Itemized receipts with verified 15% VAT or 0% TAS, Vendor TIN, FS Numbers, and Machine MRC</small>
                                         </div>
                                     </div>
                                     <div class="d-flex align-items-center gap-2">
                                         <div class="btn-group btn-group-sm shadow-xs rounded-pill p-0.5 bg-light border me-1" role="group">
-                                            <button type="button" class="btn btn-sm rounded-pill px-2.5 py-1 fw-semibold btn-success text-white shadow-xs" id="btnFilterOcrVatOnly" onclick="toggleOcrVatFilter(true)" title="Show Only Receipts with 15% VAT">
+                                            <button type="button" class="btn btn-sm rounded-pill px-2.5 py-1 fw-semibold btn-success text-white shadow-xs" id="btnFilterOcrVatOnly" onclick="setMovementOcrFilter('vat')" title="Show Only Receipts with 15% VAT">
                                                 <i class="fa-solid fa-percent me-1"></i>Only VAT Receipts
                                             </button>
-                                            <button type="button" class="btn btn-sm rounded-pill px-2.5 py-1 fw-semibold text-muted" id="btnFilterOcrAll" onclick="toggleOcrVatFilter(false)" title="Show All Scanned Invoices (including 0% VAT / exempt)">
+                                            <button type="button" class="btn btn-sm rounded-pill px-2.5 py-1 fw-semibold text-muted" id="btnFilterOcrTas" onclick="setMovementOcrFilter('tas')" title="Show Receipts with 0% VAT (TAS / Exempt)">
+                                                <i class="fa-solid fa-receipt me-1"></i>TAS Receipts (0% VAT)
+                                            </button>
+                                            <button type="button" class="btn btn-sm rounded-pill px-2.5 py-1 fw-semibold text-muted" id="btnFilterOcrAll" onclick="setMovementOcrFilter('all')" title="Show All Scanned Invoices (including 0% VAT / exempt)">
                                                 <i class="fa-solid fa-list me-1"></i>All Scanned
                                             </button>
                                         </div>
@@ -5381,23 +5449,88 @@
         let expenseRows = '';
         if (data.expenses && data.expenses.length > 0) {
             data.expenses.forEach((exp, idx) => {
+                const isVat = Boolean(exp.is_vat_purchase || parseFloat(exp.vat_amount || 0) > 0);
+                const isFuel = Boolean(exp.is_fuel);
+                const slip = exp.receipt_slip_url || exp.attachment_url;
                 expenseRows += `
                     <tr>
                         <td class="ps-3 font-monospace small text-muted">${idx + 1}</td>
                         <td><span class="fw-bold font-monospace text-dark d-block">${exp.date_ec}</span><small class="text-muted" style="font-size:0.75rem;">${exp.date_gc}</small></td>
-                        <td><span class="badge bg-light text-dark border font-monospace">${exp.request_number}</span></td>
-                        <td><span class="fw-semibold text-dark">${exp.payee}</span></td>
+                        <td>
+                            <div class="d-flex align-items-center gap-1 flex-wrap">
+                                <span class="badge bg-light text-dark border font-monospace">${exp.request_number}</span>
+                                ${isVat ? `<span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill font-monospace" style="font-size:0.62rem;">VAT Purchase</span>` : `<span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill font-monospace" style="font-size:0.62rem;">TAS (0% VAT)</span>`}
+                                ${isFuel ? `<span class="badge bg-warning text-dark border border-warning-subtle rounded-pill font-monospace" style="font-size:0.62rem;"><i class="fa-solid fa-gas-pump me-0.5"></i>Fuel</span>` : ''}
+                            </div>
+                            ${exp.payment_reference && exp.payment_reference !== '-' ? `<small class="text-muted d-block font-monospace">Ref: ${exp.payment_reference}</small>` : ''}
+                            ${exp.fs_no && exp.fs_no !== '-' ? `<small class="text-primary font-monospace d-block" style="font-size:0.68rem;">FS #: ${exp.fs_no}</small>` : ''}
+                            ${exp.mrc_no && exp.mrc_no !== '-' ? `<small class="text-muted font-monospace d-block" style="font-size:0.65rem;">MRC: ${exp.mrc_no}</small>` : ''}
+                        </td>
+                        <td>
+                            <span class="fw-semibold text-dark d-block">${exp.payee}</span>
+                            ${exp.seller_tin && exp.seller_tin !== '-' ? `<small class="text-muted font-monospace d-block" style="font-size:0.7rem;">TIN: ${exp.seller_tin}</small>` : ''}
+                        </td>
                         <td><span class="badge bg-info-subtle text-info border border-info-subtle rounded-pill small">${exp.category}</span><small class="text-muted d-block" style="font-size:0.75rem;">${exp.project_name}</small></td>
                         <td class="small text-muted"><i class="fa-solid fa-wallet me-1 text-danger"></i>${exp.account_name}</td>
                         <td class="text-end font-monospace">ETB ${formatMoney(exp.base_amount)}</td>
                         <td class="text-end font-monospace text-success fw-semibold">ETB ${formatMoney(exp.vat_amount)}</td>
                         <td class="text-end font-monospace text-danger">${exp.withholding_amount > 0 ? '- ETB ' + formatMoney(exp.withholding_amount) : '-'}</td>
-                        <td class="text-end font-monospace text-dark fw-bold pe-3">ETB ${formatMoney(exp.net_disbursed)}</td>
+                        <td class="text-end font-monospace text-dark fw-bold pe-3">
+                            <div>ETB ${formatMoney(exp.net_disbursed)}</div>
+                            ${slip ? `<a href="${slip}" target="_blank" class="btn btn-xs btn-outline-info rounded-pill px-2 py-0.5 d-inline-flex align-items-center gap-1 shadow-2xs mt-1" style="font-size:0.62rem;" title="View Slip"><i class="fa-solid fa-receipt"></i><span>Slip</span></a>` : ''}
+                        </td>
                     </tr>
                 `;
             });
         } else {
             expenseRows = `<tr><td colspan="10" class="text-center py-4 text-muted"><i class="fa-solid fa-folder-open me-2 text-secondary"></i>No purchases or paid expenses recorded for this month.</td></tr>`;
+        }
+
+        let tasRows = '';
+        if (data.tas_purchases && data.tas_purchases.length > 0) {
+            data.tas_purchases.forEach((tas, idx) => {
+                const amt = parseFloat(tas.amount || tas.base_amount || 0);
+                const slip = tas.receipt_slip_url || tas.attachment_url;
+                const isPdf = slip && slip.toLowerCase().includes('.pdf');
+                const isFuel = Boolean(tas.is_fuel);
+
+                tasRows += `
+                    <tr>
+                        <td class="ps-3 font-monospace small text-muted">${idx + 1}</td>
+                        <td><span class="badge bg-light text-dark border font-monospace">${tas.purchaser_tin || '0038480010'}</span></td>
+                        <td>
+                            <div class="d-flex align-items-center gap-1 flex-wrap">
+                                <span class="fw-bold font-monospace text-dark">${tas.seller_tin || '-'}</span>
+                                ${isFuel ? `<span class="badge bg-warning text-dark border border-warning-subtle rounded-pill font-monospace" style="font-size:0.62rem;"><i class="fa-solid fa-gas-pump me-0.5"></i>Fuel</span>` : ''}
+                            </div>
+                            <small class="text-muted d-block text-truncate" style="max-width: 160px;">${tas.payee || tas.seller_name || 'Vendor'}</small>
+                        </td>
+                        <td class="text-end font-monospace fw-bold text-dark">ETB ${formatMoney(amt)}</td>
+                        <td>
+                            <span class="badge bg-light text-primary border font-monospace">${tas.fs_no || tas.request_number || '-'}</span>
+                            ${tas.request_number && tas.request_number !== tas.fs_no ? `<small class="text-muted d-block font-monospace" style="font-size:0.7rem;">${tas.request_number}</small>` : ''}
+                        </td>
+                        <td>
+                            <span class="fw-bold font-monospace text-dark d-block">${tas.receipt_date_ec || tas.date_ec || '-'}</span>
+                            ${tas.date_gc ? `<small class="text-muted" style="font-size:0.7rem;">${tas.date_gc}</small>` : ''}
+                        </td>
+                        <td><span class="font-monospace text-muted d-block">${tas.encoding_date_ec || '-'}</span></td>
+                        <td><span class="badge bg-light text-secondary border font-monospace">${tas.mrc_no || '-'}</span></td>
+                        <td class="text-center font-monospace small"><span class="badge bg-secondary-subtle text-secondary rounded-pill">${tas.purc_type || '3'}</span></td>
+                        <td><span class="small text-muted font-monospace">${tas.encoded_by || 'wechacha'}</span></td>
+                        <td class="text-center pe-3">
+                            ${slip ? `
+                                <a href="${slip}" target="_blank" class="btn btn-xs ${isPdf ? 'btn-outline-danger' : 'btn-outline-primary'} rounded-pill px-2.5 py-1 d-inline-flex align-items-center gap-1 shadow-2xs" title="View Scanned Fuel / Purchase Slip">
+                                    <i class="fa-solid ${isPdf ? 'fa-file-pdf text-danger' : 'fa-receipt text-primary'}"></i>
+                                    <span>${isPdf ? 'PDF' : 'Slip'}</span>
+                                </a>
+                            ` : `<span class="badge bg-light text-muted border" style="font-size:0.65rem;">No Slip</span>`}
+                        </td>
+                    </tr>
+                `;
+            });
+        } else {
+            tasRows = `<tr><td colspan="11" class="text-center py-4 text-muted"><i class="fa-solid fa-folder-open me-2 text-secondary"></i>No TAS purchases (0% VAT receipts or fuel expenses) recorded for this month.</td></tr>`;
         }
 
         let ocrRows = '';
@@ -5555,6 +5688,11 @@
                             </button>
                         </li>
                         <li class="nav-item">
+                            <button class="nav-link fw-semibold small" id="drawer-tas-tab-${monthNum}" data-bs-toggle="tab" data-bs-target="#drawer-tas-${monthNum}" type="button" role="tab">
+                                <i class="fa-solid fa-file-invoice text-primary me-1"></i>TAS Purchases (0% VAT) (${(data.tas_purchases || []).length})
+                            </button>
+                        </li>
+                        <li class="nav-item">
                             <button class="nav-link fw-semibold small" id="drawer-ocr-tab-${monthNum}" data-bs-toggle="tab" data-bs-target="#drawer-ocr-${monthNum}" type="button" role="tab">
                                 <i class="fa-solid fa-receipt text-primary me-1"></i>Scanned OCR Invoices (${s.ocr_count})
                             </button>
@@ -5625,6 +5763,37 @@
                                             <td class="text-end py-2 font-monospace text-success">ETB ${formatMoney(s.input_vat)}</td>
                                             <td class="text-end py-2 font-monospace text-danger">- ETB ${formatMoney(s.withholding_tax)}</td>
                                             <td class="text-end py-2 font-monospace text-dark pe-3">ETB ${formatMoney(s.net_disbursed)}</td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- TAS Purchases Tab (0% VAT - 9 Columns e-Tax Declaration pro.doc) -->
+                        <div class="tab-pane fade" id="drawer-tas-${monthNum}" role="tabpanel">
+                            <div class="table-responsive" style="max-height: 380px;">
+                                <table class="table table-hover table-sm align-middle mb-0">
+                                    <thead class="bg-light sticky-top text-muted text-uppercase fw-bold" style="font-size: 0.68rem;">
+                                        <tr>
+                                            <th class="ps-3 py-2">#</th>
+                                            <th class="py-2">1. Purchaser TIN</th>
+                                            <th class="py-2">2. Seller TIN</th>
+                                            <th class="py-2 text-end">3. Amount (ETB)</th>
+                                            <th class="py-2">4. Receipt / FS #</th>
+                                            <th class="py-2">5. Receipt Date</th>
+                                            <th class="py-2">6. Encoding Date</th>
+                                            <th class="py-2">7. Machine MRC</th>
+                                            <th class="py-2 text-center">8. PurcType</th>
+                                            <th class="py-2">9. Encoded By</th>
+                                            <th class="py-2 text-center pe-3">Receipt Slip</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y">${tasRows}</tbody>
+                                    <tfoot class="bg-light fw-bold">
+                                        <tr>
+                                            <td colspan="3" class="ps-3 py-2 small text-uppercase text-muted">Total TAS Purchases (${(data.tas_purchases || []).length} items)</td>
+                                            <td class="text-end py-2 font-monospace text-dark">ETB ${formatMoney(s.tas_purchases_base || 0)}</td>
+                                            <td colspan="7" class="pe-3"></td>
                                         </tr>
                                     </tfoot>
                                 </table>
@@ -5864,6 +6033,9 @@
         // Tab count badges
         document.getElementById('mTabIncomeBadge').innerText = s.income_count;
         document.getElementById('mTabExpenseBadge').innerText = s.expense_count;
+        if (document.getElementById('mTabTasBadge')) {
+            document.getElementById('mTabTasBadge').innerText = (data.tas_purchases || []).length;
+        }
         document.getElementById('mTabOcrBadge').innerText = s.ocr_count;
 
         // 1. Render Incomes Table (Where Income Came From)
@@ -5967,10 +6139,77 @@
 
         renderMovementExpenseTable('all');
 
-        // 3. Render OCR Invoices Table (Defaults strictly to VAT receipts)
+        // 2b. Render TAS Purchases Table (0% VAT - 9 Columns e-Tax Declaration pro.doc)
+        window._movementTasCache = data.tas_purchases || [];
+        const tasTbody = document.getElementById('mTasTableBody');
+        if (tasTbody) {
+            tasTbody.innerHTML = '';
+            let tasTotalAmt = 0;
+            if (data.tas_purchases && data.tas_purchases.length > 0) {
+                data.tas_purchases.forEach((tas, idx) => {
+                    const amt = parseFloat(tas.amount || tas.base_amount || 0);
+                    tasTotalAmt += amt;
+                    const slipUrl = tas.receipt_slip_url || tas.attachment_url;
+                    const isPdf = slipUrl && slipUrl.toLowerCase().includes('.pdf');
+                    const isFuel = Boolean(tas.is_fuel);
+
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td class="ps-3 text-muted font-monospace small">${idx + 1}</td>
+                        <td><span class="badge bg-light text-dark border font-monospace">${tas.purchaser_tin || '0038480010'}</span></td>
+                        <td>
+                            <div class="d-flex align-items-center gap-1 flex-wrap">
+                                <span class="fw-bold font-monospace text-dark">${tas.seller_tin || '-'}</span>
+                                ${isFuel ? `<span class="badge bg-warning text-dark border border-warning-subtle rounded-pill font-monospace" style="font-size:0.62rem;"><i class="fa-solid fa-gas-pump me-0.5"></i>Fuel</span>` : ''}
+                            </div>
+                            <small class="text-muted d-block text-truncate" style="max-width: 170px;">${tas.payee || tas.seller_name || 'Vendor'}</small>
+                        </td>
+                        <td class="text-end font-monospace fw-bold text-dark">ETB ${formatMoney(amt)}</td>
+                        <td>
+                            <span class="badge bg-light text-primary border font-monospace">${tas.fs_no || tas.request_number || '-'}</span>
+                            ${tas.request_number && tas.request_number !== tas.fs_no ? `<small class="text-muted d-block font-monospace" style="font-size:0.7rem;">${tas.request_number}</small>` : ''}
+                        </td>
+                        <td>
+                            <span class="fw-bold font-monospace text-dark d-block">${tas.receipt_date_ec || tas.date_ec || '-'}</span>
+                            ${tas.date_gc ? `<small class="text-muted" style="font-size:0.7rem;">${tas.date_gc}</small>` : ''}
+                        </td>
+                        <td><span class="font-monospace text-muted d-block">${tas.encoding_date_ec || '-'}</span></td>
+                        <td><span class="badge bg-light text-secondary border font-monospace">${tas.mrc_no || '-'}</span></td>
+                        <td class="text-center font-monospace small"><span class="badge bg-secondary-subtle text-secondary rounded-pill">${tas.purc_type || '3'}</span></td>
+                        <td><span class="small text-muted font-monospace">${tas.encoded_by || 'wechacha'}</span></td>
+                        <td class="text-center pe-3">
+                            ${slipUrl ? `
+                                <a href="${slipUrl}" target="_blank" class="btn btn-xs ${isPdf ? 'btn-outline-danger' : 'btn-outline-primary'} rounded-pill px-2.5 py-1 d-inline-flex align-items-center gap-1 shadow-2xs" title="View Scanned Fuel / Purchase Slip">
+                                    <i class="fa-solid ${isPdf ? 'fa-file-pdf text-danger' : 'fa-receipt text-primary'}"></i>
+                                    <span>${isPdf ? 'PDF Slip' : 'See Slip'}</span>
+                                </a>
+                            ` : `<span class="badge bg-light text-muted border" style="font-size:0.68rem;">No Slip</span>`}
+                        </td>
+                    `;
+                    tasTbody.appendChild(tr);
+                });
+            } else {
+                tasTbody.innerHTML = `
+                    <tr>
+                        <td colspan="11" class="text-center py-4 text-muted">
+                            <i class="fa-solid fa-folder-open me-2 text-secondary"></i>No TAS purchases (0% VAT receipts or fuel expenses) recorded for this Ethiopian month.
+                        </td>
+                    </tr>
+                `;
+            }
+            const tasTotalEl = document.getElementById('mTasTotalAmount');
+            if (tasTotalEl) tasTotalEl.innerText = 'ETB ' + formatMoney(tasTotalAmt);
+            const tasTotalLbl = document.getElementById('mTasTotalLabel');
+            if (tasTotalLbl) tasTotalLbl.innerText = `Total TAS Purchases (${(data.tas_purchases || []).length} items)`;
+        }
+
+        // 3. Render OCR Invoices Table (Supports Only VAT, TAS 0% VAT, and All Scanned)
+        window._movementOcrCache['modal_vat'] = data.vat_ocr_items || [];
+        window._movementOcrCache['modal_tas'] = data.tas_ocr_items || [];
+        window._movementOcrCache['modal_all'] = data.all_ocr_items || data.ocr_items || [];
         window._movementOcrCache['modal'] = data.ocr_items || [];
-        window._ocrVatOnly = true;
-        renderMovementOcrTable(true);
+        window._movementOcrFilter = 'vat';
+        renderMovementOcrTable('vat');
 
         // 4. Render ERCA Line 100 Audit Tab
         document.getElementById('mAuditPeriodBadge').innerText = `${m.title}`;
@@ -6068,6 +6307,9 @@
                 totalWht  += wht;
                 totalNet  += net;
 
+                const isFuel = Boolean(exp.is_fuel);
+                const slip = exp.receipt_slip_url || exp.attachment_url;
+
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td class="ps-3 text-muted font-monospace small">${idx + 1}</td>
@@ -6082,12 +6324,16 @@
                                 ? `<span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill font-monospace" style="font-size:0.65rem;"><i class="fa-solid fa-percent me-0.5"></i>VAT Purchase</span>`
                                 : `<span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill font-monospace" style="font-size:0.65rem;"><i class="fa-solid fa-receipt me-0.5"></i>TAS Purchase (0% VAT)</span>`
                             }
+                            ${isFuel ? `<span class="badge bg-warning text-dark border border-warning-subtle rounded-pill font-monospace" style="font-size:0.62rem;"><i class="fa-solid fa-gas-pump me-0.5"></i>Fuel (TAS)</span>` : ''}
                             ${exp.source_type === 'petty_cash' ? `<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-pill small" style="font-size:0.65rem;"><i class="fa-solid fa-coins me-0.5"></i>Petty Cash</span>` : (exp.source_type === 'direct_expense' ? `<span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle rounded-pill small" style="font-size:0.65rem;">Direct</span>` : '')}
                         </div>
                         ${exp.payment_reference && exp.payment_reference !== '-' ? `<small class="text-muted d-block font-monospace">Ref: ${exp.payment_reference}</small>` : ''}
+                        ${exp.fs_no && exp.fs_no !== '-' ? `<small class="text-primary font-monospace d-block" style="font-size:0.7rem;"><i class="fa-solid fa-barcode me-0.5"></i>FS #: ${exp.fs_no}</small>` : ''}
+                        ${exp.mrc_no && exp.mrc_no !== '-' ? `<small class="text-muted font-monospace d-block" style="font-size:0.68rem;">MRC: ${exp.mrc_no}</small>` : ''}
                     </td>
                     <td>
                         <span class="fw-semibold text-dark d-block">${exp.payee}</span>
+                        ${exp.seller_tin && exp.seller_tin !== '-' ? `<small class="text-muted font-monospace d-block" style="font-size:0.72rem;">TIN: ${exp.seller_tin}</small>` : ''}
                     </td>
                     <td>
                         <span class="badge bg-info-subtle text-info border border-info-subtle rounded-pill small">${exp.category}</span>
@@ -6099,7 +6345,10 @@
                     <td class="text-end font-monospace">ETB ${formatMoney(base)}</td>
                     <td class="text-end font-monospace text-success fw-semibold">ETB ${formatMoney(vat)}</td>
                     <td class="text-end font-monospace text-danger">${wht > 0 ? '- ETB ' + formatMoney(wht) : '-'}</td>
-                    <td class="text-end font-monospace text-dark fw-bold pe-3">ETB ${formatMoney(net)}</td>
+                    <td class="text-end pe-3">
+                        <div class="font-monospace text-dark fw-bold">ETB ${formatMoney(net)}</div>
+                        ${slip ? `<a href="${slip}" target="_blank" class="btn btn-xs btn-outline-info rounded-pill px-2 py-0.5 d-inline-flex align-items-center gap-1 shadow-2xs mt-1" style="font-size:0.65rem;" title="View Receipt / Voucher Slip"><i class="fa-solid fa-receipt"></i><span>Slip</span></a>` : ''}
+                    </td>
                 `;
                 expenseTbody.appendChild(tr);
             });
@@ -6126,13 +6375,13 @@
         document.getElementById('mExpenseTotalNet').innerText  = 'ETB ' + formatMoney(totalNet);
     }
 
-    // ── VAT-Only vs All Scanned Filter for Modal OCR Table ─────────────────────
-    window._ocrVatOnly = true;
+    // ── VAT-Only vs TAS (0% VAT) vs All Scanned Filter for Modal OCR Table ─────────────────────
+    window._ocrFilterType = 'vat';
 
-    function toggleOcrVatFilter(vatOnly) {
-        window._ocrVatOnly = vatOnly;
+    function setMovementOcrFilter(type) {
+        window._ocrFilterType = type;
 
-        if (!vatOnly && !window._movementOcrCache['modal_all'] && currentMovementsData && currentMovementsData.month) {
+        if (type === 'all' && !window._movementOcrCache['modal_all'] && currentMovementsData && currentMovementsData.month) {
             const ethYear = currentMovementsData.month.year;
             const ethMonth = currentMovementsData.month.month;
             const url = "{{ route('finance.tax-deductions.month-movements') }}?ethiopian_year=" + ethYear + "&ethiopian_month=" + ethMonth + "&vat_only=0";
@@ -6144,46 +6393,52 @@
             .then(data => {
                 if (data.success && data.ocr_items) {
                     window._movementOcrCache['modal_all'] = data.ocr_items;
-                    renderMovementOcrTable(vatOnly);
+                    renderMovementOcrTable(type);
                 }
             })
             .catch(err => {
                 console.error("Failed to fetch all scanned items", err);
-                renderMovementOcrTable(vatOnly);
+                renderMovementOcrTable(type);
             });
             return;
         }
 
-        renderMovementOcrTable(vatOnly);
+        renderMovementOcrTable(type);
     }
 
-    function renderMovementOcrTable(vatOnly) {
-        window._ocrVatOnly = vatOnly;
+    function toggleOcrVatFilter(vatOnly) {
+        setMovementOcrFilter(vatOnly ? 'vat' : 'all');
+    }
+
+    function renderMovementOcrTable(filterType) {
+        if (typeof filterType === 'boolean') {
+            filterType = filterType ? 'vat' : 'all';
+        }
+        window._ocrFilterType = filterType || 'vat';
+
         const btnVatOnly = document.getElementById('btnFilterOcrVatOnly');
+        const btnTas = document.getElementById('btnFilterOcrTas');
         const btnAll = document.getElementById('btnFilterOcrAll');
 
-        if (btnVatOnly && btnAll) {
-            if (vatOnly) {
-                btnVatOnly.className = 'btn btn-sm rounded-pill px-2.5 py-1 fw-semibold btn-success text-white shadow-xs';
-                btnAll.className = 'btn btn-sm rounded-pill px-2.5 py-1 fw-semibold text-muted';
-            } else {
-                btnVatOnly.className = 'btn btn-sm rounded-pill px-2.5 py-1 fw-semibold text-muted';
-                btnAll.className = 'btn btn-sm rounded-pill px-2.5 py-1 fw-semibold btn-secondary text-white shadow-xs';
-            }
-        }
+        if (btnVatOnly) btnVatOnly.className = 'btn btn-sm rounded-pill px-2.5 py-1 fw-semibold ' + (window._ocrFilterType === 'vat' ? 'btn-success text-white shadow-xs' : 'text-muted');
+        if (btnTas) btnTas.className = 'btn btn-sm rounded-pill px-2.5 py-1 fw-semibold ' + (window._ocrFilterType === 'tas' ? 'btn-primary text-white shadow-xs' : 'text-muted');
+        if (btnAll) btnAll.className = 'btn btn-sm rounded-pill px-2.5 py-1 fw-semibold ' + (window._ocrFilterType === 'all' ? 'btn-secondary text-white shadow-xs' : 'text-muted');
 
         // Determine source list
         let sourceList = [];
-        if (!vatOnly && window._movementOcrCache['modal_all']) {
-            sourceList = window._movementOcrCache['modal_all'];
+        if (window._ocrFilterType === 'vat') {
+            sourceList = (window._movementOcrCache['modal_vat'] && window._movementOcrCache['modal_vat'].length > 0)
+                ? window._movementOcrCache['modal_vat']
+                : (window._movementOcrCache['modal'] || []).filter(ocr => (parseFloat(ocr.vat_amount || 0) > 0 && !ocr.is_no_vat));
+        } else if (window._ocrFilterType === 'tas') {
+            sourceList = (window._movementOcrCache['modal_tas'] && window._movementOcrCache['modal_tas'].length > 0)
+                ? window._movementOcrCache['modal_tas']
+                : (window._movementOcrCache['modal_all'] || window._movementOcrCache['modal'] || []).filter(ocr => (parseFloat(ocr.vat_amount || 0) <= 0 || ocr.is_no_vat));
         } else {
-            sourceList = window._movementOcrCache['modal'] || [];
+            sourceList = window._movementOcrCache['modal_all'] || window._movementOcrCache['modal'] || [];
         }
 
-        // Filter items: when vatOnly is true, only include rows with vat_amount > 0 and not is_no_vat
-        const items = vatOnly
-            ? sourceList.filter(ocr => (parseFloat(ocr.vat_amount) > 0 && !ocr.is_no_vat))
-            : sourceList;
+        const items = sourceList;
 
         // Update Tab & Button Badges
         const ocrBadge = document.getElementById('mTabOcrBadge');

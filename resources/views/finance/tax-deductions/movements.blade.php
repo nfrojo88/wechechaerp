@@ -273,6 +273,14 @@
             </button>
         </li>
         <li class="nav-item" role="presentation">
+            <button class="nav-link {{ $activeTab === 'tas' ? 'active' : '' }} rounded-pill fw-semibold small d-inline-flex align-items-center gap-1.5" 
+                    id="page-tas-tab" data-bs-toggle="pill" data-bs-target="#page-tas" type="button" role="tab">
+                <i class="fa-solid fa-file-invoice text-primary"></i>
+                <span>TAS Purchases (0% VAT)</span>
+                <span class="badge bg-primary-subtle text-primary rounded-pill ms-1">{{ $movementsData['tas_purchases_count'] ?? count($movementsData['tas_purchases'] ?? []) }}</span>
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
             <button class="nav-link {{ $activeTab === 'ocr' ? 'active' : '' }} rounded-pill fw-semibold small d-inline-flex align-items-center gap-1.5" 
                     id="page-ocr-tab" data-bs-toggle="pill" data-bs-target="#page-ocr" type="button" role="tab">
                 <i class="fa-solid fa-receipt text-primary"></i>
@@ -554,6 +562,11 @@
                                                     <i class="fa-solid fa-receipt me-0.5"></i>TAS Purchase (0% VAT)
                                                 </span>
                                             @endif
+                                            @if(!empty($exp['is_fuel']))
+                                                <span class="badge bg-warning text-dark border border-warning-subtle rounded-pill font-monospace" style="font-size:0.65rem;">
+                                                    <i class="fa-solid fa-gas-pump me-0.5"></i>Fuel (TAS)
+                                                </span>
+                                            @endif
                                             @if(($exp['source_type'] ?? '') === 'petty_cash')
                                                 <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-pill small" style="font-size:0.65rem;"><i class="fa-solid fa-coins me-0.5"></i>Petty Cash</span>
                                             @elseif(($exp['source_type'] ?? '') === 'direct_expense')
@@ -563,9 +576,18 @@
                                         @if(!empty($exp['payment_reference']) && $exp['payment_reference'] !== '-')
                                             <small class="text-muted d-block font-monospace">Ref: {{ $exp['payment_reference'] }}</small>
                                         @endif
+                                        @if(!empty($exp['fs_no']) && $exp['fs_no'] !== '-')
+                                            <small class="text-primary font-monospace d-block" style="font-size:0.7rem;"><i class="fa-solid fa-barcode me-0.5"></i>FS #: {{ $exp['fs_no'] }}</small>
+                                        @endif
+                                        @if(!empty($exp['mrc_no']) && $exp['mrc_no'] !== '-')
+                                            <small class="text-muted font-monospace d-block" style="font-size:0.68rem;">MRC: {{ $exp['mrc_no'] }}</small>
+                                        @endif
                                     </td>
                                     <td>
                                         <span class="fw-semibold text-dark d-block">{{ $exp['payee'] ?? 'Vendor' }}</span>
+                                        @if(!empty($exp['seller_tin']) && $exp['seller_tin'] !== '-')
+                                            <small class="text-muted font-monospace d-block" style="font-size:0.72rem;">TIN: {{ $exp['seller_tin'] }}</small>
+                                        @endif
                                     </td>
                                     <td>
                                         <span class="badge bg-info-subtle text-info border border-info-subtle rounded-pill small">{{ $exp['category'] ?? 'General' }}</span>
@@ -577,7 +599,18 @@
                                     <td class="text-end font-monospace">ETB {{ number_format($expBase, 2) }}</td>
                                     <td class="text-end font-monospace text-success fw-semibold">ETB {{ number_format($expVat, 2) }}</td>
                                     <td class="text-end font-monospace text-danger">{{ $expWht > 0 ? '- ETB ' . number_format($expWht, 2) : '-' }}</td>
-                                    <td class="text-end font-monospace text-dark fw-bold pe-3">ETB {{ number_format($expNet, 2) }}</td>
+                                    <td class="text-end pe-3">
+                                        <div class="font-monospace text-dark fw-bold">ETB {{ number_format($expNet, 2) }}</div>
+                                        @php
+                                            $expSlip = $exp['receipt_slip_url'] ?? ($exp['attachment_url'] ?? null);
+                                        @endphp
+                                        @if(!empty($expSlip))
+                                            <a href="{{ $expSlip }}" target="_blank" class="btn btn-xs btn-outline-info rounded-pill px-2 py-0.5 d-inline-flex align-items-center gap-1 shadow-2xs mt-1" style="font-size:0.65rem;" title="View Receipt / Voucher Slip">
+                                                <i class="fa-solid fa-receipt"></i>
+                                                <span>Slip</span>
+                                            </a>
+                                        @endif
+                                    </td>
                                 </tr>
                             @empty
                                 <tr>
@@ -601,7 +634,163 @@
             </div>
         </div>
 
-        {{-- ── TAB 3: SCANNED OCR RECEIPTS ───────────────────────────────────── --}}
+        {{-- ── TAB 3: TAS PURCHASES (0% VAT / e-Tax Declaration pro.doc) ──────── --}}
+        <div class="tab-pane fade {{ $activeTab === 'tas' ? 'show active' : '' }}" id="page-tas" role="tabpanel">
+            <div class="card border-0 shadow-sm rounded-4 overflow-hidden bg-white">
+                <div class="card-header bg-white border-bottom py-3 px-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="badge bg-primary-subtle text-primary p-2 rounded-3"><i class="fa-solid fa-file-invoice fs-6"></i></span>
+                        <div>
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <h6 class="fw-bold mb-0 text-dark">TAS Purchases (0% VAT / Fuel Receipts — e-Tax Format)</h6>
+                                <span class="badge bg-primary text-white rounded-pill small fw-semibold px-2.5 py-0.5">
+                                    <i class="fa-solid fa-receipt me-1"></i>0% VAT e-Tax Declaration
+                                </span>
+                            </div>
+                            <small class="text-muted">Purchases with 0% VAT (Fuel vouchers, exempt receipts, cash register slips) declared under Ethiopian e-Tax (pro.doc 9-column standard)</small>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center gap-2 d-print-none flex-wrap">
+                        <a href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_tas', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}" 
+                           class="btn btn-sm btn-primary text-white rounded-pill px-3 py-1.5 fw-semibold shadow-xs d-inline-flex align-items-center gap-1.5">
+                            <i class="fa-solid fa-file-excel"></i>
+                            <span>Export Purchase TAS Excel (9 Cols)</span>
+                        </a>
+                        <div style="min-width: 220px;">
+                            <input type="text" class="form-control form-control-sm rounded-pill" placeholder="Search FS #, vendor TIN, payee..." onkeyup="filterLocalTable('pageTasTable', this.value)">
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Summary Banner --}}
+                <div class="row g-2 px-3 pt-3 pb-2 bg-light bg-opacity-50 border-bottom">
+                    <div class="col-sm-6 col-md-3">
+                        <div class="card border border-primary-subtle bg-primary-subtle bg-opacity-25 rounded-3 p-2.5">
+                            <small class="text-muted d-block text-uppercase fw-bold" style="font-size:0.65rem;">Total TAS Purchases</small>
+                            <span class="fw-bold font-monospace text-primary fs-6">{{ count($movementsData['tas_purchases'] ?? []) }} Receipts / Vouchers</span>
+                        </div>
+                    </div>
+                    <div class="col-sm-6 col-md-3">
+                        <div class="card border border-primary-subtle bg-primary-subtle bg-opacity-25 rounded-3 p-2.5">
+                            <small class="text-muted d-block text-uppercase fw-bold" style="font-size:0.65rem;">Expenditure Amount</small>
+                            <span class="fw-bold font-monospace text-dark fs-6">ETB {{ number_format($movementsData['tas_purchases_total_amount'] ?? ($movementsData['summary']['tas_purchases_base'] ?? 0), 2) }}</span>
+                        </div>
+                    </div>
+                    <div class="col-sm-6 col-md-3">
+                        <div class="card border border-secondary-subtle bg-white rounded-3 p-2.5">
+                            <small class="text-muted d-block text-uppercase fw-bold" style="font-size:0.65rem;">VAT Rate / Impact</small>
+                            <span class="fw-bold font-monospace text-secondary fs-6">0% VAT (Exempt in TAS)</span>
+                        </div>
+                    </div>
+                    <div class="col-sm-6 col-md-3">
+                        <div class="card border border-warning-subtle bg-warning-subtle bg-opacity-25 rounded-3 p-2.5">
+                            <small class="text-muted d-block text-uppercase fw-bold" style="font-size:0.65rem;">Official e-Tax Specification</small>
+                            <span class="badge bg-warning text-dark rounded-pill fw-bold" style="font-size:0.7rem;"><i class="fa-solid fa-file-lines me-1"></i>pro.doc 9 Columns Standard</span>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Table with 9 Columns --}}
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0" id="pageTasTable">
+                        <thead class="table-light text-muted text-uppercase fw-bold" style="font-size: 0.68rem;">
+                            <tr>
+                                <th class="ps-3 py-2.5">#</th>
+                                <th class="py-2.5">1. Purchaser TIN</th>
+                                <th class="py-2.5">2. Seller TIN</th>
+                                <th class="py-2.5 text-end">3. Amount (ETB)</th>
+                                <th class="py-2.5">4. Receipt / FS #</th>
+                                <th class="py-2.5">5. Receipt Date</th>
+                                <th class="py-2.5">6. Encoding Date</th>
+                                <th class="py-2.5">7. Machine MRC</th>
+                                <th class="py-2.5 text-center">8. PurcType</th>
+                                <th class="py-2.5">9. Encoded By</th>
+                                <th class="py-2.5 text-center pe-3 d-print-none">Receipt Slip</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y">
+                            @php
+                                $tasTotalAmount = 0;
+                            @endphp
+                            @forelse($movementsData['tas_purchases'] ?? [] as $idx => $tas)
+                                @php
+                                    $tAmt = (float)($tas['amount'] ?? ($tas['base_amount'] ?? 0));
+                                    $tasTotalAmount += $tAmt;
+                                    $slipUrl = $tas['receipt_slip_url'] ?? ($tas['attachment_url'] ?? null);
+                                    $isFuel = !empty($tas['is_fuel']);
+                                    $isPdf = $slipUrl && str_contains(strtolower($slipUrl), '.pdf');
+                                @endphp
+                                <tr>
+                                    <td class="ps-3 text-muted font-monospace small">{{ $idx + 1 }}</td>
+                                    <td>
+                                        <span class="badge bg-light text-dark border font-monospace">{{ $tas['purchaser_tin'] ?? '0038480010' }}</span>
+                                    </td>
+                                    <td>
+                                        <div class="d-flex align-items-center gap-1 flex-wrap">
+                                            <span class="fw-bold font-monospace text-dark">{{ $tas['seller_tin'] ?: '-' }}</span>
+                                            @if($isFuel)
+                                                <span class="badge bg-warning text-dark border border-warning-subtle rounded-pill font-monospace" style="font-size:0.62rem;"><i class="fa-solid fa-gas-pump me-0.5"></i>Fuel</span>
+                                            @endif
+                                        </div>
+                                        <small class="text-muted d-block text-truncate" style="max-width: 170px;">{{ $tas['payee'] ?? ($tas['seller_name'] ?? 'Vendor') }}</small>
+                                    </td>
+                                    <td class="text-end font-monospace fw-bold text-dark">ETB {{ number_format($tAmt, 2) }}</td>
+                                    <td>
+                                        <span class="badge bg-light text-primary border font-monospace">{{ $tas['fs_no'] ?: ($tas['request_number'] ?? '-') }}</span>
+                                        @if(!empty($tas['request_number']) && $tas['request_number'] !== ($tas['fs_no'] ?? ''))
+                                            <small class="text-muted d-block font-monospace" style="font-size:0.7rem;">{{ $tas['request_number'] }}</small>
+                                        @endif
+                                    </td>
+                                    <td>
+                                        <span class="fw-bold font-monospace text-dark d-block">{{ $tas['receipt_date_ec'] ?: ($tas['date_ec'] ?? '-') }}</span>
+                                        @if(!empty($tas['date_gc']))
+                                            <small class="text-muted" style="font-size:0.7rem;">{{ $tas['date_gc'] }}</small>
+                                        @endif
+                                    </td>
+                                    <td>
+                                        <span class="font-monospace text-muted d-block">{{ $tas['encoding_date_ec'] ?: '-' }}</span>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-light text-secondary border font-monospace">{{ $tas['mrc_no'] ?: '-' }}</span>
+                                    </td>
+                                    <td class="text-center font-monospace small">
+                                        <span class="badge bg-secondary-subtle text-secondary rounded-pill">{{ $tas['purc_type'] ?? '3' }}</span>
+                                    </td>
+                                    <td>
+                                        <span class="small text-muted font-monospace">{{ $tas['encoded_by'] ?? 'wechacha' }}</span>
+                                    </td>
+                                    <td class="text-center pe-3 d-print-none">
+                                        @if($slipUrl)
+                                            <a href="{{ $slipUrl }}" target="_blank" class="btn btn-xs {{ $isPdf ? 'btn-outline-danger' : 'btn-outline-primary' }} rounded-pill px-2.5 py-1 d-inline-flex align-items-center gap-1 shadow-2xs" title="View Scanned Fuel / Purchase Slip">
+                                                <i class="fa-solid {{ $isPdf ? 'fa-file-pdf text-danger' : 'fa-receipt text-primary' }}"></i>
+                                                <span>{{ $isPdf ? 'PDF Slip' : 'See Slip' }}</span>
+                                            </a>
+                                        @else
+                                            <span class="badge bg-light text-muted border" style="font-size:0.68rem;">No Slip</span>
+                                        @endif
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="11" class="text-center py-4 text-muted">
+                                        <i class="fa-solid fa-folder-open me-2 text-secondary"></i>No TAS purchases (0% VAT receipts or fuel expenses) recorded for this Ethiopian month.
+                                    </td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                        <tfoot class="table-light fw-bold border-top">
+                            <tr>
+                                <td colspan="3" class="ps-3 py-2 text-uppercase small text-muted">Total TAS Purchases ({{ count($movementsData['tas_purchases'] ?? []) }} items)</td>
+                                <td class="text-end py-2 font-monospace text-dark">ETB {{ number_format($tasTotalAmount, 2) }}</td>
+                                <td colspan="7" class="pe-3 d-print-none"></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        {{-- ── TAB 4: SCANNED OCR RECEIPTS ───────────────────────────────────── --}}
         <div class="tab-pane fade {{ $activeTab === 'ocr' ? 'show active' : '' }}" id="page-ocr" role="tabpanel">
             <div class="card border-0 shadow-sm rounded-4 overflow-hidden bg-white">
                 <div class="card-header bg-white border-bottom py-3 px-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -611,22 +800,35 @@
                             <div class="d-flex align-items-center gap-2">
                                 <h6 class="fw-bold mb-0 text-dark">Scanned OCR Receipts (ERCA Cash Register Invoices)</h6>
                                 <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill small fw-semibold px-2.5 py-0.5">
-                                    <i class="fa-solid fa-shield-check me-1"></i>Only VAT Receipts
+                                    <i class="fa-solid fa-shield-check me-1"></i>Verified Receipts
                                 </span>
                             </div>
-                            <small class="text-muted">Itemized receipts with verified 15% VAT, Vendor TIN, FS Numbers, and Machine MRC</small>
+                            <small class="text-muted">Itemized receipts with verified 15% VAT or 0% TAS, Vendor TIN, FS Numbers, and Machine MRC</small>
                         </div>
                     </div>
-                    <div class="d-flex align-items-center gap-2 d-print-none">
+                    <div class="d-flex align-items-center gap-2 d-print-none flex-wrap">
                         <div class="btn-group btn-group-sm shadow-xs rounded-pill p-0.5 bg-light border me-1" role="group">
-                            <a href="{{ route('finance.tax-deductions.movements', array_merge(request()->query(), ['ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth, 'tab' => 'ocr', 'vat_only' => 1])) }}" 
-                               class="btn btn-sm rounded-pill px-2.5 py-1 fw-semibold {{ ($vatOnly ?? true) ? 'btn-success text-white shadow-xs' : 'text-muted' }}" title="Show Only Receipts with 15% VAT">
-                                <i class="fa-solid fa-percent me-1"></i>Only VAT Receipts ({{ count($movementsData['ocr_items'] ?? []) }})
-                            </a>
-                            <a href="{{ route('finance.tax-deductions.movements', array_merge(request()->query(), ['ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth, 'tab' => 'ocr', 'vat_only' => 0])) }}" 
-                               class="btn btn-sm rounded-pill px-2.5 py-1 fw-semibold {{ !($vatOnly ?? true) ? 'btn-secondary text-white shadow-xs' : 'text-muted' }}" title="Show All Scanned Invoices (including 0% VAT / exempt)">
-                                <i class="fa-solid fa-list me-1"></i>All Scanned
-                            </a>
+                            <button type="button" 
+                                    class="btn btn-sm rounded-pill px-2.5 py-1 fw-semibold {{ ($vatOnly ?? true) ? 'btn-success text-white shadow-xs' : 'text-muted' }}" 
+                                    id="btnPageOcrVat" 
+                                    onclick="filterPageOcrCategory('vat')" 
+                                    title="Show Only Receipts with 15% VAT">
+                                <i class="fa-solid fa-percent me-1"></i>Only VAT Receipts ({{ $movementsData['summary']['ocr_vat_count'] ?? count($movementsData['vat_ocr_items'] ?? []) }})
+                            </button>
+                            <button type="button" 
+                                    class="btn btn-sm rounded-pill px-2.5 py-1 fw-semibold text-muted" 
+                                    id="btnPageOcrTas" 
+                                    onclick="filterPageOcrCategory('tas')" 
+                                    title="Show Receipts with 0% VAT (TAS / Exempt)">
+                                <i class="fa-solid fa-receipt me-1"></i>TAS Receipts (0% VAT) ({{ $movementsData['summary']['ocr_tas_count'] ?? count($movementsData['tas_ocr_items'] ?? []) }})
+                            </button>
+                            <button type="button" 
+                                    class="btn btn-sm rounded-pill px-2.5 py-1 fw-semibold {{ !($vatOnly ?? true) ? 'btn-secondary text-white shadow-xs' : 'text-muted' }}" 
+                                    id="btnPageOcrAll" 
+                                    onclick="filterPageOcrCategory('all')" 
+                                    title="Show All Scanned Invoices (including 0% VAT / exempt)">
+                                <i class="fa-solid fa-list me-1"></i>All Scanned ({{ $movementsData['summary']['ocr_all_count'] ?? count($movementsData['all_ocr_items'] ?? ($movementsData['ocr_items'] ?? [])) }})
+                            </button>
                         </div>
                         <div class="btn-group shadow-xs rounded-pill overflow-hidden">
                             <a href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_tas', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}" 
@@ -677,11 +879,14 @@
                                     $ocrSumAfter += $a;
                                     $hasSlip = !empty($ocr['file_url']);
                                     $isPdf = !empty($ocr['is_pdf']);
+                                    $isVatReceipt = !empty($ocr['is_vat_receipt']) || $v > 0;
                                 @endphp
                                 <tr id="page-ocr-row-{{ $ocr['id'] }}"
                                     data-idx="{{ $idx }}"
                                     data-id="{{ $ocr['id'] }}"
-                                    data-receipt-id="{{ $ocr['receipt_id'] ?? '' }}">
+                                    data-receipt-id="{{ $ocr['receipt_id'] ?? '' }}"
+                                    data-is-vat="{{ $isVatReceipt ? '1' : '0' }}"
+                                    data-ocr-category="{{ $isVatReceipt ? 'vat' : 'tas' }}">
                                     <td class="ps-3 text-muted font-monospace small">{{ $idx + 1 }}</td>
                                     <td>
                                         <span class="fw-bold font-monospace text-dark d-block cell-date-ec">{{ $ocr['date_ec'] ?? '-' }}</span>
@@ -708,7 +913,14 @@
                                         <span class="cell-desc">{{ $ocr['item_description'] ?? '-' }}</span>
                                     </td>
                                     <td class="text-end font-monospace"><span class="cell-base">ETB {{ number_format($b, 2) }}</span></td>
-                                    <td class="text-end font-monospace text-success fw-semibold"><span class="cell-vat">ETB {{ number_format($v, 2) }}</span></td>
+                                    <td class="text-end font-monospace">
+                                        @if($isVatReceipt)
+                                            <span class="cell-vat text-success fw-semibold">ETB {{ number_format($v, 2) }}</span>
+                                        @else
+                                            <span class="badge bg-light text-muted border font-monospace" style="font-size:0.68rem;">0% VAT (TAS)</span>
+                                            <span class="cell-vat d-none">0.00</span>
+                                        @endif
+                                    </td>
                                     <td class="text-end font-monospace text-dark fw-bold"><span class="cell-total">ETB {{ number_format($a, 2) }}</span></td>
                                     <td class="text-center pe-3 d-print-none">
                                         <button type="button" class="btn btn-xs {{ $hasSlip ? ($isPdf ? 'btn-outline-danger' : 'btn-outline-info') : 'btn-outline-primary' }} rounded-pill px-2.5 py-1 d-inline-flex align-items-center gap-1.5 shadow-xs" 
@@ -1262,6 +1474,63 @@
         if (footVat)  footVat.textContent  = 'ETB ' + totalVat.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
         if (footWht)  footWht.textContent  = (totalWht > 0 ? '- ETB ' : 'ETB ') + totalWht.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
         if (footNet)  footNet.textContent  = 'ETB ' + totalNet.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    }
+
+    // Toggle between Only VAT Receipts (15%), TAS Receipts (0% VAT), and All Scanned OCR Invoices
+    let _activePageOcrFilter = '{{ ($vatOnly ?? true) ? "vat" : "all" }}';
+
+    function filterPageOcrCategory(type) {
+        _activePageOcrFilter = type;
+        const rows = document.querySelectorAll('#pageOcrTable tbody tr');
+        let totalBase = 0, totalVat = 0, totalAfter = 0, visibleCount = 0;
+
+        rows.forEach(tr => {
+            const isVat = tr.getAttribute('data-is-vat') === '1';
+            let matches = true;
+            if (type === 'vat') matches = isVat;
+            else if (type === 'tas') matches = !isVat;
+            else matches = true;
+
+            if (matches) {
+                tr.style.display = '';
+                visibleCount++;
+                const baseSpan = tr.querySelector('.cell-base');
+                const vatSpan = tr.querySelector('.cell-vat');
+                const totalSpan = tr.querySelector('.cell-total');
+                if (baseSpan) {
+                    const bVal = parseFloat(baseSpan.textContent.replace(/[^0-9.-]/g, ''));
+                    if (!isNaN(bVal)) totalBase += bVal;
+                }
+                if (vatSpan) {
+                    const vVal = parseFloat(vatSpan.textContent.replace(/[^0-9.-]/g, ''));
+                    if (!isNaN(vVal)) totalVat += vVal;
+                }
+                if (totalSpan) {
+                    const aVal = parseFloat(totalSpan.textContent.replace(/[^0-9.-]/g, ''));
+                    if (!isNaN(aVal)) totalAfter += aVal;
+                }
+            } else {
+                tr.style.display = 'none';
+            }
+        });
+
+        // Update active filter button styles
+        ['vat', 'tas', 'all'].forEach(t => {
+            const btn = document.getElementById(t === 'vat' ? 'btnPageOcrVat' : (t === 'tas' ? 'btnPageOcrTas' : 'btnPageOcrAll'));
+            if (!btn) return;
+            if (t === type) {
+                btn.className = 'btn btn-sm rounded-pill px-2.5 py-1 fw-semibold ' + (t === 'vat' ? 'btn-success text-white shadow-xs' : (t === 'tas' ? 'btn-primary text-white shadow-xs' : 'btn-secondary text-white shadow-xs'));
+            } else {
+                btn.className = 'btn btn-sm rounded-pill px-2.5 py-1 fw-semibold text-muted';
+            }
+        });
+
+        const sumBaseEl = document.getElementById('pageOcrSumBase');
+        const sumVatEl = document.getElementById('pageOcrSumVat');
+        const sumAfterEl = document.getElementById('pageOcrSumAfter');
+        if (sumBaseEl) sumBaseEl.textContent = 'ETB ' + totalBase.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        if (sumVatEl) sumVatEl.textContent = 'ETB ' + totalVat.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        if (sumAfterEl) sumAfterEl.textContent = 'ETB ' + totalAfter.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
     // Slip Modal Zoom & Rotate

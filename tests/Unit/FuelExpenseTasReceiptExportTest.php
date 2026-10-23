@@ -443,4 +443,86 @@ class FuelExpenseTasReceiptExportTest extends TestCase
         $this->assertEquals(200, $response->getStatusCode());
         $this->assertStringContainsString('Purchase_TAS', $response->headers->get('content-disposition'));
     }
+
+    /**
+     * Test: Financial Movements & Tax Audit returns TAS purchases with full 9-column pro.doc attributes.
+     */
+    public function test_financial_movements_shows_tas_purchases_with_pro_doc_attributes()
+    {
+        // 1. Create fuel expense EXP-FUEL-2026-0276 with 0% VAT
+        $fuelExpense = ExpenseRequest::create([
+            'request_number' => 'EXP-FUEL-2026-0276',
+            'project_id'     => $this->project->id,
+            'category'       => 'Fuel',
+            'description'    => 'Vehicle Fuel: Diesel station slip for Toyota Hilux',
+            'amount'         => 17565.22,
+            'gross_amount'   => 17565.22,
+            'vat_amount'     => 0.00,
+            'vat_type'       => 'none',
+            'status'         => ExpenseRequest::STATUS_PAID,
+            'paid_at'        => Carbon::parse('2026-08-15'),
+            'payment_reference' => 'FS: FS00003898 | MRC: DDB0000032',
+        ]);
+
+        $receipt = Receipt::create([
+            'receipt_number'   => 'RCP-HUB-20260815-F0276',
+            'uploaded_by'      => $this->financeUser->id,
+            'approved_by'      => $this->financeUser->id,
+            'status'           => 'approved',
+            'purchasable_type' => ExpenseRequest::class,
+            'purchasable_id'   => $fuelExpense->id,
+            'project_id'       => $this->project->id,
+            'vendor_name'      => 'TotalEnergies Station',
+            'vendor_tin'       => '5201',
+            'buyer_tin'        => '38480010',
+            'fs_no'            => 'FS00003898',
+            'fs_no_raw'        => 'FS00003898',
+            'mrc_no'           => 'DDB0000032',
+            'receipt_date'     => '2026-08-15',
+            'subtotal'         => 17565.22,
+            'vat_amount'       => 0.00,
+            'total_amount'     => 17565.22,
+            'category'         => 'fuel',
+            'tax_type'         => 'no_vat',
+            'parsed_data'      => json_encode([
+                'purchaser_tin' => 38480010,
+                'seller_tin'    => '5201',
+                'amount'        => 17565.22,
+                'receipt_no'    => 'FS00003898',
+                'receipt_date'  => '15-08-2026',
+                'encoding_date' => '26-08-2026',
+                'mrc'           => 'DDB0000032',
+                'purc_type'     => 'PUR_GD',
+                'encoded_by'    => 'wechacha',
+            ]),
+        ]);
+
+        $taxController = app(FinanceTaxReportController::class);
+        $ethDate = EthiopianDate::toEthiopian(Carbon::parse('2026-08-15'));
+        $request = Request::create(route('finance.tax-deductions.month-movements'), 'GET', [
+            'ethiopian_year'  => $ethDate['year'],
+            'ethiopian_month' => $ethDate['month'],
+        ]);
+
+        $response = $taxController->monthMovements($request);
+        $this->assertEquals(200, $response->getStatusCode());
+        $data = $response->getData(true);
+        $this->assertTrue($data['success']);
+
+        // Assert tas_purchases list contains EXP-FUEL-2026-0276
+        $tasList = collect($data['tas_purchases']);
+        $this->assertNotEmpty($tasList);
+
+        $found = $tasList->firstWhere('request_number', 'EXP-FUEL-2026-0276');
+        $this->assertNotNull($found, 'Fuel expense EXP-FUEL-2026-0276 must be present in tas_purchases.');
+        $this->assertTrue($found['is_tas_purchase']);
+        $this->assertEquals(0.00, (float)$found['vat_amount']);
+        $this->assertEquals(17565.22, (float)$found['base_amount']);
+        $this->assertEquals('FS00003898', $found['fs_no']);
+        $this->assertEquals('DDB0000032', $found['mrc_no']);
+        $this->assertEquals('5201', (string)$found['seller_tin']);
+        $this->assertEquals('38480010', (string)$found['purchaser_tin']);
+        $this->assertEquals('PUR_GD', $found['purc_type']);
+        $this->assertEquals('wechacha', $found['encoded_by']);
+    }
 }

@@ -1217,7 +1217,15 @@ class FinanceTaxReportController extends Controller
         // Includes: All paid ExpenseRequests (created or paid in month), PettyCashMaterialPurchases, and direct project expenses
         $expenses = collect();
         if (Schema::hasTable('expense_requests')) {
-            $expenses = ExpenseRequest::with(['project', 'user', 'bankAccount', 'chartOfAccount', 'paidBy'])
+            $withRelations = ['project', 'user', 'bankAccount', 'chartOfAccount', 'paidBy'];
+            if (Schema::hasTable('receipts') && method_exists(ExpenseRequest::class, 'receipt')) {
+                $withRelations[] = 'receipt';
+            }
+            if (Schema::hasTable('expense_hub_vat_decisions') && method_exists(ExpenseRequest::class, 'expenseHubVatDecision')) {
+                $withRelations[] = 'expenseHubVatDecision';
+            }
+
+            $expenses = ExpenseRequest::with($withRelations)
                 ->where(function ($q) {
                     $q->whereIn('status', [ExpenseRequest::STATUS_PAID, 'paid', 'PAID'])
                       ->orWhereNotNull('paid_at');
@@ -1238,7 +1246,16 @@ class FinanceTaxReportController extends Controller
                 ->get();
         }
 
-        $formattedExpenses = $expenses->map(function ($item) {
+        $defaultPurchaserDigits = 38480010;
+        if (Schema::hasTable('system_settings')) {
+            try {
+                $defaultPurchaserTin = SystemSetting::get('purchaser_tin', SystemSetting::get('company_tin', '38480010'));
+                $dDigits = (int)preg_replace('/^0+/', '', preg_replace('/[^0-9]/', '', (string)$defaultPurchaserTin));
+                if ($dDigits) $defaultPurchaserDigits = $dDigits;
+            } catch (\Throwable $e) {}
+        }
+
+        $formattedExpenses = $expenses->map(function ($item) use ($defaultPurchaserDigits) {
             $gross = (float)($item->gross_amount > 0 ? $item->gross_amount : $item->amount);
             $vatType = $item->vat_type ?? 'none';
             $vatRate = (float)($item->vat_rate ?? 15.00);
@@ -1283,6 +1300,67 @@ class FinanceTaxReportController extends Controller
             $payee = $item->account_name ?: ($item->user?->name ?: 'Vendor / Payee');
             $itemDate = $item->paid_at ?: $item->created_at;
 
+            // Extract linked Receipt and ExpenseHubVatDecision for TAS / e-Tax details
+            $r = $item->relationLoaded('receipt') ? $item->receipt : null;
+            if (!$r && Schema::hasTable('receipts')) {
+                $r = Receipt::where('purchasable_type', ExpenseRequest::class)->where('purchasable_id', $item->id)->first()
+                    ?: Receipt::where('receipt_number', $item->request_number)->first();
+            }
+            $dec = $item->relationLoaded('expenseHubVatDecision') ? $item->expenseHubVatDecision : null;
+            if (!$dec && Schema::hasTable('expense_hub_vat_decisions')) {
+                $dec = ExpenseHubVatDecision::where('source_type', 'expense_request')->where('source_id', $item->id)->first();
+            }
+            $parsed = is_string($r?->parsed_data ?? null) ? (json_decode($r->parsed_data, true) ?: []) : (array)($r?->parsed_data ?? []);
+
+            $fsNo = $r?->fs_no ?: ($dec?->custom_fs_no ?: (!empty($parsed['receipt_no']) ? $parsed['receipt_no'] : null));
+            if (empty($fsNo) && !empty($item->payment_reference) && preg_match('/FS[:\s]+([^\s|]+)/i', $item->payment_reference, $mFs)) {
+                $fsNo = $mFs[1];
+            }
+
+            $mrcNo = $r?->mrc_no ?: ($dec?->custom_mrc_no ?: (!empty($parsed['mrc']) ? $parsed['mrc'] : null));
+            if (empty($mrcNo) && !empty($item->payment_reference) && preg_match('/MRC[:\s]+([^\s|]+)/i', $item->payment_reference, $mMrc)) {
+                $mrcNo = $mMrc[1];
+            }
+
+            $sellerTin = $r?->vendor_tin ?: ($dec?->custom_seller_tin ?: (!empty($parsed['seller_tin']) ? $parsed['seller_tin'] : null));
+            $purchaserTin = $r?->buyer_tin ?: (!empty($parsed['purchaser_tin']) ? $parsed['purchaser_tin'] : $defaultPurchaserDigits);
+
+            $purcType = $dec?->purc_type ?: (!empty($parsed['purc_type']) ? $parsed['purc_type'] : null);
+            if (empty($purcType)) {
+                $purcNorm = QcService::normalizePurchaseType(
+                    $item->category ?: 'general',
+                    ($item->description ?? '') . ' ' . ($payee ?? '')
+                );
+                $purcType = $purcNorm['type'] ?? 'PUR_GD';
+            }
+
+            $encodedBy = !empty($parsed['encoded_by']) ? $parsed['encoded_by'] : ((Schema::hasTable('system_settings') ? SystemSetting::get('etax_encoded_by') : null) ?: 'wechacha');
+            $receiptDateEc = !empty($parsed['receipt_date']) ? $parsed['receipt_date'] : ($itemDate ? EthiopianDate::formatDateEc($itemDate, 'd-m-Y') : EthiopianDate::formatDateEc(now(), 'd-m-Y'));
+            $encodingDateEc = !empty($parsed['encoding_date']) ? $parsed['encoding_date'] : EthiopianDate::formatDateEc($item->created_at ?: now(), 'd-m-Y');
+
+            $receiptSlipUrl = null;
+            if ($r?->file_path) {
+                try {
+                    $receiptSlipUrl = $r->file_url ?: \App\Services\FileUploadService::url($r->file_path);
+                } catch (\Throwable $e) {
+                    $receiptSlipUrl = asset('storage/' . ltrim($r->file_path, '/'));
+                }
+            } elseif (!empty($item->attachment)) {
+                try {
+                    $receiptSlipUrl = \App\Services\FileUploadService::url($item->attachment);
+                } catch (\Throwable $e) {
+                    $receiptSlipUrl = asset('storage/' . ltrim($item->attachment, '/'));
+                }
+            } elseif (!empty($item->attachment_url)) {
+                $receiptSlipUrl = $item->attachment_url;
+            }
+
+            $isFuel = (str_contains(strtoupper($item->request_number ?? ''), 'FUEL')
+                || str_contains(strtoupper($item->category ?? ''), 'FUEL')
+                || str_contains(strtoupper($item->description ?? ''), 'FUEL')
+                || ($dec?->no_vat_reason_code === 'fuel_zero_vat')
+                || ($r?->category === 'fuel'));
+
             return [
                 'id'                 => $item->id,
                 'request_number'     => $item->request_number,
@@ -1302,7 +1380,7 @@ class FinanceTaxReportController extends Controller
                 'withholding_amount' => $whtAmount,
                 'net_disbursed'      => $netDisbursed,
                 'description'        => $item->description ?: '-',
-                'attachment_url'     => $item->attachment_url,
+                'attachment_url'     => $receiptSlipUrl ?: $item->attachment_url,
                 'status'             => $item->status,
                 'is_settled'         => (bool)$item->vat_settled,
                 'source_type'             => 'expense_request',
@@ -1312,6 +1390,17 @@ class FinanceTaxReportController extends Controller
                 'purchase_category'       => ($vatAmount > 0 ? 'vat_purchase' : 'tas_purchase'),
                 'purchase_category_label' => ($vatAmount > 0 ? 'VAT Purchase (15%)' : 'TAS Purchase (0% VAT)'),
                 'purchase_category_badge' => ($vatAmount > 0 ? 'bg-success-subtle text-success border border-success-subtle' : 'bg-primary-subtle text-primary border border-primary-subtle'),
+                'fs_no'                   => $fsNo ?: '-',
+                'mrc_no'                  => $mrcNo ?: '-',
+                'seller_tin'              => $sellerTin ?: '-',
+                'purchaser_tin'           => $purchaserTin ?: $defaultPurchaserDigits,
+                'purc_type'               => $purcType,
+                'encoded_by'              => $encodedBy,
+                'receipt_date_ec'         => $receiptDateEc,
+                'encoding_date_ec'        => $encodingDateEc,
+                'receipt_id'              => $r?->id,
+                'receipt_slip_url'        => $receiptSlipUrl,
+                'is_fuel'                 => $isFuel,
             ];
         });
 
@@ -1408,6 +1497,17 @@ class FinanceTaxReportController extends Controller
                         'purchase_category'       => 'tas_purchase',
                         'purchase_category_label' => 'TAS Purchase (0% VAT)',
                         'purchase_category_badge' => 'bg-primary-subtle text-primary border border-primary-subtle',
+                        'fs_no'                   => $p->fs_no ?: ($p->receipt_no ?: '-'),
+                        'mrc_no'                  => $p->mrc_no ?: '-',
+                        'seller_tin'              => $p->supplier_tin ?: '-',
+                        'purchaser_tin'           => $defaultPurchaserDigits,
+                        'purc_type'               => 'PUR_GD',
+                        'encoded_by'              => 'wechacha',
+                        'receipt_date_ec'         => $pDate ? EthiopianDate::formatDateEc($pDate, 'd-m-Y') : EthiopianDate::formatDateEc(now(), 'd-m-Y'),
+                        'encoding_date_ec'        => EthiopianDate::formatDateEc($p->created_at ?: now(), 'd-m-Y'),
+                        'receipt_id'              => null,
+                        'receipt_slip_url'        => $attachmentUrl,
+                        'is_fuel'                 => false,
                     ]);
                 }
             } catch (\Throwable $e) {
@@ -1480,10 +1580,109 @@ class FinanceTaxReportController extends Controller
                         'purchase_category'       => 'tas_purchase',
                         'purchase_category_label' => 'TAS Purchase (0% VAT)',
                         'purchase_category_badge' => 'bg-primary-subtle text-primary border border-primary-subtle',
+                        'fs_no'                   => '-',
+                        'mrc_no'                  => '-',
+                        'seller_tin'              => '-',
+                        'purchaser_tin'           => $defaultPurchaserDigits,
+                        'purc_type'               => 'PUR_GD',
+                        'encoded_by'              => 'wechacha',
+                        'receipt_date_ec'         => $deDate ? EthiopianDate::formatDateEc($deDate, 'd-m-Y') : EthiopianDate::formatDateEc(now(), 'd-m-Y'),
+                        'encoding_date_ec'        => EthiopianDate::formatDateEc($de->created_at ?: now(), 'd-m-Y'),
+                        'receipt_id'              => null,
+                        'receipt_slip_url'        => $attachmentUrl,
+                        'is_fuel'                 => false,
                     ]);
                 }
             } catch (\Throwable $e) {
                 Log::warning("monthMovements direct expenses mapping error: " . $e->getMessage());
+            }
+        }
+
+        // Include standalone TAS Receipts in this month (0% VAT, e.g. OCR cash register invoices or fuel slips)
+        if (Schema::hasTable('receipts')) {
+            try {
+                $existingVouchers = $formattedExpenses->pluck('request_number')->filter()->all();
+                $existingReceiptIds = $formattedExpenses->pluck('receipt_id')->filter()->all();
+
+                $tasReceipts = Receipt::with(['project', 'uploader'])
+                    ->where(function ($rq) use ($startDate, $endDate) {
+                        $rq->whereBetween('receipt_date', [$startDate, $endDate])
+                           ->orWhere(function ($sub) use ($startDate, $endDate) {
+                               $sub->whereNull('receipt_date')
+                                   ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+                           });
+                    })
+                    ->where(function ($q) {
+                        $q->where('vat_amount', '<=', 0)
+                          ->orWhere('tax_type', 'no_vat')
+                          ->orWhere('category', 'fuel');
+                    })
+                    ->get();
+
+                foreach ($tasReceipts as $tr) {
+                    if (in_array($tr->id, $existingReceiptIds) || in_array($tr->receipt_number, $existingVouchers)) {
+                        continue;
+                    }
+
+                    $parsed = is_string($tr->parsed_data ?? null) ? (json_decode($tr->parsed_data, true) ?: []) : (array)($tr->parsed_data ?? []);
+                    $trDate = $tr->receipt_date ?: $tr->created_at;
+                    $trGross = (float)($tr->total_amount > 0 ? $tr->total_amount : $tr->subtotal);
+
+                    $slipUrl = null;
+                    if ($tr->file_path) {
+                        try {
+                            $slipUrl = $tr->file_url ?: \App\Services\FileUploadService::url($tr->file_path);
+                        } catch (\Throwable $e) {
+                            $slipUrl = asset('storage/' . ltrim($tr->file_path, '/'));
+                        }
+                    }
+
+                    $purcType = !empty($parsed['purc_type']) ? $parsed['purc_type'] : ($tr->category === 'fuel' ? 'PUR_GD' : 'PUR_GD');
+
+                    $formattedExpenses->push([
+                        'id'                      => 'REC-' . $tr->id,
+                        'request_number'          => $tr->receipt_number ?: ('RCP-' . $tr->id),
+                        'payment_reference'       => $tr->fs_no ? ('FS: ' . $tr->fs_no) : '-',
+                        'date_ec'                 => $trDate ? EthiopianDate::formatDateEc($trDate, 'DD/MM/YYYY EC') : '-',
+                        'date_gc'                 => $trDate ? Carbon::parse($trDate)->format('M d, Y') : '-',
+                        'raw_date'                => $trDate ? Carbon::parse($trDate)->toDateTimeString() : '',
+                        'payee'                   => $tr->vendor_name ?: 'Supplier / Merchant',
+                        'project_name'            => $tr->project?->name ?: 'General',
+                        'category'                => ucfirst($tr->category ?: 'General Receipt'),
+                        'account_name'            => 'Cash / Register Receipt',
+                        'base_amount'             => $trGross,
+                        'vat_type'                => 'none',
+                        'vat_rate'                => 0.0,
+                        'vat_amount'              => 0.0,
+                        'has_withholding'         => false,
+                        'withholding_amount'      => 0.0,
+                        'net_disbursed'           => $trGross,
+                        'description'             => $tr->description ?: 'TAS Purchase Receipt (0% VAT)',
+                        'attachment_url'          => $slipUrl,
+                        'status'                  => 'approved',
+                        'is_settled'              => false,
+                        'source_type'             => 'receipt',
+                        'source_label'            => 'Scanned Receipt',
+                        'is_vat_purchase'         => false,
+                        'is_tas_purchase'         => true,
+                        'purchase_category'       => 'tas_purchase',
+                        'purchase_category_label' => 'TAS Purchase (0% VAT)',
+                        'purchase_category_badge' => 'bg-primary-subtle text-primary border border-primary-subtle',
+                        'fs_no'                   => $tr->fs_no ?: ($tr->fs_no_raw ?: '-'),
+                        'mrc_no'                  => $tr->mrc_no ?: (!empty($parsed['mrc']) ? $parsed['mrc'] : '-'),
+                        'seller_tin'              => $tr->vendor_tin ?: (!empty($parsed['seller_tin']) ? $parsed['seller_tin'] : '-'),
+                        'purchaser_tin'           => $tr->buyer_tin ?: (!empty($parsed['purchaser_tin']) ? $parsed['purchaser_tin'] : $defaultPurchaserDigits),
+                        'purc_type'               => $purcType,
+                        'encoded_by'              => !empty($parsed['encoded_by']) ? $parsed['encoded_by'] : 'wechacha',
+                        'receipt_date_ec'         => !empty($parsed['receipt_date']) ? $parsed['receipt_date'] : ($trDate ? EthiopianDate::formatDateEc($trDate, 'd-m-Y') : EthiopianDate::formatDateEc(now(), 'd-m-Y')),
+                        'encoding_date_ec'        => !empty($parsed['encoding_date']) ? $parsed['encoding_date'] : EthiopianDate::formatDateEc($tr->created_at ?: now(), 'd-m-Y'),
+                        'receipt_id'              => $tr->id,
+                        'receipt_slip_url'        => $slipUrl,
+                        'is_fuel'                 => ($tr->category === 'fuel'),
+                    ]);
+                }
+            } catch (\Throwable $e) {
+                Log::warning("monthMovements standalone TAS receipts error: " . $e->getMessage());
             }
         }
 
@@ -1492,7 +1691,7 @@ class FinanceTaxReportController extends Controller
             return $item['raw_date'] ?? $item['date_gc'] ?? '';
         })->values();
 
-        // 3. OCR Scanned Receipts in this Ethiopian month (strictly VAT receipts when vatOnly = true)
+        // 3. OCR Scanned Receipts in this Ethiopian month
         $ocrItems = collect();
         if (Schema::hasTable('receipt_items')) {
             try {
@@ -1505,23 +1704,6 @@ class FinanceTaxReportController extends Controller
                            });
                     })
                     ->orderBy('id', 'asc');
-
-                if ($vatOnly) {
-                    $ocrQuery->where('vat_amount', '>', 0)
-                        ->where(function ($q) {
-                            $q->whereNull('vat_category')->orWhere('vat_category', '!=', 'E');
-                        })
-                        ->where(function ($q) {
-                            $q->whereNull('purchase_type')->orWhere('purchase_type', '!=', 6);
-                        })
-                        ->whereHas('receipt', function ($rq) {
-                            $rq->where(function ($sub) {
-                                $sub->whereNull('tax_type')->orWhere('tax_type', '!=', 'no_vat');
-                            })->where(function ($sub) {
-                                $sub->whereNull('no_vat_reason_code')->orWhere('no_vat_reason_code', '');
-                            });
-                        });
-                }
 
                 $ocrItems = $ocrQuery->get();
             } catch (\Throwable $e) {
@@ -1542,22 +1724,6 @@ class FinanceTaxReportController extends Controller
                                    ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
                            });
                     });
-
-                if ($vatOnly) {
-                    $srQuery->where(function ($q) {
-                        $q->where('vat_amount', '>', 0)
-                          ->orWhere(function ($sub) {
-                              $sub->where('tax_type', 'vat')
-                                  ->where(function ($amt) {
-                                      $amt->where('subtotal', '>', 0)->orWhere('total_amount', '>', 0);
-                                  });
-                          });
-                    })->where(function ($q) {
-                        $q->whereNull('tax_type')->orWhere('tax_type', '!=', 'no_vat');
-                    })->where(function ($q) {
-                        $q->whereNull('no_vat_reason_code')->orWhere('no_vat_reason_code', '');
-                    });
-                }
 
                 $standaloneReceipts = $srQuery->get();
 
@@ -1583,11 +1749,6 @@ class FinanceTaxReportController extends Controller
                             $subtotal = $total;
                             $vat = 0.0;
                         }
-                    }
-
-                    // Strict check: if vatOnly requested, skip non-VAT standalone receipts
-                    if ($vatOnly && ($vat <= 0 || $isNoVatExplicit)) {
-                        continue;
                     }
 
                     $virtualItem = new \App\Models\ReceiptItem([
@@ -1653,10 +1814,6 @@ class FinanceTaxReportController extends Controller
                         $receiptTotal = $gross;
                     }
 
-                    if ($vatOnly && $vatAmount <= 0) {
-                        continue;
-                    }
-
                     $vReceipt = new \App\Models\Receipt([
                         'vendor_name'    => $ledger?->supplier_name ?: 'Credit Vendor',
                         'vendor_tin'     => '-',
@@ -1700,21 +1857,7 @@ class FinanceTaxReportController extends Controller
             }
         }
 
-        // Strictly filter to only VAT receipts if vatOnly is requested
-        if ($vatOnly) {
-            $ocrItems = $ocrItems->filter(function ($item) {
-                $vatVal = (float)$item->vat_amount;
-                $r = $item->receipt;
-                $taxType = strtolower((string)($r?->tax_type ?? ''));
-                $hasNoVatReason = !empty($r?->no_vat_reason_code);
-                $isExempt = ($item->vat_category === 'E') || ((int)$item->purchase_type === 6 && $vatVal <= 0);
-                $isFuelNoVat = ($r?->category === 'fuel' && $vatVal <= 0);
-
-                return $vatVal > 0 && $taxType !== 'no_vat' && !$hasNoVatReason && !$isExempt && !$isFuelNoVat;
-            });
-        }
-
-        $formattedOcrItems = $ocrItems->map(function ($ocr) {
+        $formattedAllOcrItems = $ocrItems->map(function ($ocr) use ($defaultPurchaserDigits) {
             $r = $ocr->receipt;
             $date = $r?->receipt_date ?: $ocr->created_at;
 
@@ -1750,17 +1893,32 @@ class FinanceTaxReportController extends Controller
                 || ((int)$ocr->purchase_type === 6 && $vatVal <= 0)
                 || ($r?->category === 'fuel' && $vatVal <= 0);
 
+            $parsed = is_string($r?->parsed_data ?? null) ? (json_decode($r->parsed_data, true) ?: []) : (array)($r?->parsed_data ?? []);
+
+            $fsNo = $r?->fs_no ?: ($r?->fs_no_raw ?: (!empty($parsed['receipt_no']) ? $parsed['receipt_no'] : '-'));
+            $mrcNo = $r?->mrc_no ?: (!empty($parsed['mrc']) ? $parsed['mrc'] : '-');
+            $sellerTin = $r?->vendor_tin ?: (!empty($parsed['seller_tin']) ? $parsed['seller_tin'] : '-');
+            $purchaserTin = $r?->buyer_tin ?: (!empty($parsed['purchaser_tin']) ? $parsed['purchaser_tin'] : $defaultPurchaserDigits);
+            $purcType = !empty($parsed['purc_type']) ? $parsed['purc_type'] : ($ocr->purc_type ?: ($isNoVat ? 'PUR_GD' : 'PUR_GD'));
+            $encodedBy = !empty($parsed['encoded_by']) ? $parsed['encoded_by'] : ((Schema::hasTable('system_settings') ? SystemSetting::get('etax_encoded_by') : null) ?: 'wechacha');
+
             return [
                 'id'               => $ocr->id,
                 'receipt_id'       => $r?->id,
                 'receipt_number'   => $r?->receipt_number ?: ('REC-' . $ocr->id),
-                'fs_no'            => $r?->fs_no ?: ($r?->fs_no_raw ?: '-'),
-                'mrc_no'           => $r?->mrc_no ?: '-',
+                'fs_no'            => $fsNo,
+                'mrc_no'           => $mrcNo,
                 'vendor_name'      => $r?->vendor_name ?: 'Vendor',
-                'vendor_tin'       => $r?->vendor_tin ?: '-',
-                'buyer_tin'        => $r?->buyer_tin ?: '0038480010',
+                'vendor_tin'       => $sellerTin,
+                'seller_tin'       => $sellerTin,
+                'buyer_tin'        => $purchaserTin,
+                'purchaser_tin'    => $purchaserTin,
+                'purc_type'        => $purcType,
+                'encoded_by'       => $encodedBy,
                 'date_ec'          => $date ? EthiopianDate::formatDateEc($date, 'DD/MM/YYYY EC') : '-',
                 'date_gc'          => $date ? Carbon::parse($date)->format('M d, Y') : '-',
+                'receipt_date_ec'  => !empty($parsed['receipt_date']) ? $parsed['receipt_date'] : ($date ? EthiopianDate::formatDateEc($date, 'd-m-Y') : '-'),
+                'encoding_date_ec' => !empty($parsed['encoding_date']) ? $parsed['encoding_date'] : (($r && $r->created_at) ? EthiopianDate::formatDateEc($r->created_at, 'd-m-Y') : '-'),
                 'receipt_date_ymd' => $date ? Carbon::parse($date)->format('Y-m-d') : '',
                 'project_id'       => $r?->project_id,
                 'project_name'     => $r?->project?->name ?: 'General',
@@ -1781,10 +1939,15 @@ class FinanceTaxReportController extends Controller
             ];
         });
 
+        $formattedVatOcrItems = $formattedAllOcrItems->filter(fn($it) => $it['is_vat_receipt'])->values();
+        $formattedTasOcrItems = $formattedAllOcrItems->filter(fn($it) => !$it['is_vat_receipt'])->values();
+
+        $formattedOcrItems = $vatOnly ? $formattedVatOcrItems : $formattedAllOcrItems;
+
         $expPurchasesBase = (float)$formattedExpenses->sum('base_amount');
         $expInputVat      = (float)$formattedExpenses->sum('vat_amount');
-        $ocrPurchasesBase = (float)$formattedOcrItems->sum('base_value');
-        $ocrInputVat      = (float)$formattedOcrItems->sum('vat_amount');
+        $ocrPurchasesBase = (float)$formattedVatOcrItems->sum('base_value');
+        $ocrInputVat      = (float)$formattedVatOcrItems->sum('vat_amount');
 
         $effectivePurchasesBase = max($expPurchasesBase, $ocrPurchasesBase);
         $effectiveInputVat      = max($expInputVat, $ocrInputVat);
@@ -1976,6 +2139,9 @@ class FinanceTaxReportController extends Controller
                 'tas_purchases_wht'      => (float)$formattedExpenses->where('is_tas_purchase', true)->sum('withholding_amount'),
                 'tas_purchases_net'      => (float)$formattedExpenses->where('is_tas_purchase', true)->sum('net_disbursed'),
                 'ocr_count'              => $formattedOcrItems->count(),
+                'ocr_vat_count'          => $formattedVatOcrItems->count(),
+                'ocr_tas_count'          => $formattedTasOcrItems->count(),
+                'ocr_all_count'          => $formattedAllOcrItems->count(),
                 'total_count'            => $formattedIncomes->count() + $formattedExpenses->count() + $formattedOcrItems->count(),
             ],
             'vat_only'      => $vatOnly,
@@ -1983,7 +2149,12 @@ class FinanceTaxReportController extends Controller
             'expenses'      => $formattedExpenses->values(),
             'vat_purchases' => $formattedExpenses->where('is_vat_purchase', true)->values(),
             'tas_purchases' => $formattedExpenses->where('is_tas_purchase', true)->values(),
+            'tas_purchases_count' => $formattedExpenses->where('is_tas_purchase', true)->count(),
+            'tas_purchases_total_amount' => (float)$formattedExpenses->where('is_tas_purchase', true)->sum('base_amount'),
             'ocr_items'     => $formattedOcrItems->values(),
+            'vat_ocr_items' => $formattedVatOcrItems->values(),
+            'tas_ocr_items' => $formattedTasOcrItems->values(),
+            'all_ocr_items' => $formattedAllOcrItems->values(),
         ];
     }
 
