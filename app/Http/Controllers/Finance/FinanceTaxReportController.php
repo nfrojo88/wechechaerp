@@ -1276,6 +1276,36 @@ class FinanceTaxReportController extends Controller
         }
 
         $formattedExpenses = $expenses->map(function ($item) use ($defaultPurchaserDigits) {
+            // Extract linked Receipt and ExpenseHubVatDecision for TAS / e-Tax details
+            $r = $item->relationLoaded('receipt') ? $item->receipt : null;
+            if (!$r && Schema::hasTable('receipts')) {
+                $r = Receipt::where(function ($rq) use ($item) {
+                        $rq->whereIn('purchasable_type', [ExpenseRequest::class, 'App\\Models\\ExpenseRequest', 'expense_request', 'expense'])
+                           ->where('purchasable_id', $item->id);
+                    })
+                    ->orWhere('receipt_number', $item->request_number)
+                    ->latest('id')
+                    ->first();
+            }
+            if (!$r && !empty($item->receipt_id) && Schema::hasTable('receipts')) {
+                $r = Receipt::find($item->receipt_id);
+            }
+            $dec = $item->relationLoaded('expenseHubVatDecision') ? $item->expenseHubVatDecision : null;
+            if (!$dec && Schema::hasTable('expense_hub_vat_decisions')) {
+                $dec = ExpenseHubVatDecision::where(function ($dq) use ($item) {
+                        $dq->whereIn('source_type', ['expense_request', 'expense', ExpenseRequest::class])
+                           ->where('source_id', $item->id);
+                    })->latest('id')->first();
+            }
+            $parsed = is_string($r?->parsed_data ?? null) ? (json_decode($r->parsed_data, true) ?: []) : (array)($r?->parsed_data ?? []);
+
+            $payee = $r?->vendor_name
+                ?: (!empty($parsed['seller_name']) ? $parsed['seller_name'] : null)
+                ?: (!empty($parsed['vendor_name']) ? $parsed['vendor_name'] : null)
+                ?: ($item->payee ?: ($item->account_name ?: ($item->user?->name ?: 'Vendor / Payee')));
+
+            $itemDate = $r?->receipt_date ?: ($item->paid_at ?: $item->created_at);
+
             $gross = (float)($item->gross_amount > 0 ? $item->gross_amount : $item->amount);
             $vatType = $item->vat_type ?? 'none';
             $vatRate = (float)($item->vat_rate ?? 15.00);
@@ -1283,7 +1313,14 @@ class FinanceTaxReportController extends Controller
             $baseAmount = $gross;
             $vatAmount  = 0.0;
 
-            if ((float)$item->vat_amount > 0 && $vatType === 'exclusive') {
+            if ($r && (float)$r->total_amount > 0) {
+                $baseAmount = (float)$r->subtotal;
+                $vatAmount  = (float)$r->vat_amount;
+                $gross      = (float)$r->total_amount;
+            } elseif ($dec && $dec->vat_status === 'no_vat') {
+                $vatAmount  = 0.0;
+                $baseAmount = $gross;
+            } elseif ((float)$item->vat_amount > 0 && $vatType === 'exclusive') {
                 $vatAmount  = (float)$item->vat_amount;
                 $baseAmount = $gross;
             } elseif ($vatType === 'inclusive') {
@@ -1316,21 +1353,6 @@ class FinanceTaxReportController extends Controller
             } elseif (!empty($item->payment_method)) {
                 $accountName = ucfirst(str_replace('_', ' ', $item->payment_method));
             }
-
-            $payee = $item->account_name ?: ($item->user?->name ?: 'Vendor / Payee');
-            $itemDate = $item->paid_at ?: $item->created_at;
-
-            // Extract linked Receipt and ExpenseHubVatDecision for TAS / e-Tax details
-            $r = $item->relationLoaded('receipt') ? $item->receipt : null;
-            if (!$r && Schema::hasTable('receipts')) {
-                $r = Receipt::where('purchasable_type', ExpenseRequest::class)->where('purchasable_id', $item->id)->first()
-                    ?: Receipt::where('receipt_number', $item->request_number)->first();
-            }
-            $dec = $item->relationLoaded('expenseHubVatDecision') ? $item->expenseHubVatDecision : null;
-            if (!$dec && Schema::hasTable('expense_hub_vat_decisions')) {
-                $dec = ExpenseHubVatDecision::where('source_type', 'expense_request')->where('source_id', $item->id)->first();
-            }
-            $parsed = is_string($r?->parsed_data ?? null) ? (json_decode($r->parsed_data, true) ?: []) : (array)($r?->parsed_data ?? []);
 
             $fsNo = $r?->fs_no ?: ($dec?->custom_fs_no ?: (!empty($parsed['receipt_no']) ? $parsed['receipt_no'] : null));
             if (empty($fsNo) && !empty($item->payment_reference) && preg_match('/FS[:\s]+([^\s|]+)/i', $item->payment_reference, $mFs)) {
@@ -4865,14 +4887,25 @@ class FinanceTaxReportController extends Controller
                 $receiptUpdates['fs_no_raw']   = trim((string)$request->fs_no);
                 $receiptUpdates['fs_no_valid'] = (strlen($cleanFs) === 8);
             }
+            $rawDate = trim((string)$request->input('receipt_date'));
             $parsedDate = null;
-            if ($request->filled('receipt_date')) {
-                $parsedDate = EthiopianDate::parseEcToGregorian($request->receipt_date);
-                if (!$parsedDate) {
+            if (!empty($rawDate)) {
+                // If it is standard YYYY-MM-DD from an HTML <input type="date">
+                if (preg_match('/^(\d{4})-(\d{1,2})-(\d{1,2})$/', $rawDate, $mYmd) && (int)$mYmd[1] >= 1990) {
                     try {
-                        $parsedDate = Carbon::parse($request->receipt_date)->format('Y-m-d');
+                        $parsedDate = Carbon::createFromDate((int)$mYmd[1], (int)$mYmd[2], (int)$mYmd[3])->format('Y-m-d');
                     } catch (\Throwable $e) {
                         $parsedDate = null;
+                    }
+                } else {
+                    // Try parsing Ethiopian calendar date (e.g. DD/MM/YYYY EC, DD-MM-YYYY EC)
+                    $parsedDate = EthiopianDate::parseEcToGregorian($rawDate);
+                    if (!$parsedDate) {
+                        try {
+                            $parsedDate = Carbon::parse($rawDate)->format('Y-m-d');
+                        } catch (\Throwable $e) {
+                            $parsedDate = null;
+                        }
                     }
                 }
                 if ($parsedDate) {
@@ -4958,10 +4991,30 @@ class FinanceTaxReportController extends Controller
                     $linkedExp->gross_amount = $valAfter;
                     $linkedExp->net_amount   = max(0, $valAfter - (float)$linkedExp->withholding_amount);
                     if ($request->filled('seller_name')) {
-                        $linkedExp->payee = trim((string)$request->seller_name);
+                        $cleanSeller = trim((string)$request->seller_name);
+                        $linkedExp->payee = $cleanSeller;
+                        if (Schema::hasColumn('expense_requests', 'account_name')) {
+                            $linkedExp->account_name = $cleanSeller;
+                        }
                     }
                     if ($parsedDate) {
-                        $linkedExp->created_at = Carbon::parse($parsedDate)->setTime(12, 0, 0);
+                        $newDateTime = Carbon::parse($parsedDate)->setTime(12, 0, 0);
+                        $linkedExp->created_at = $newDateTime;
+                        if ($linkedExp->paid_at) {
+                            $linkedExp->paid_at = $newDateTime;
+                        }
+                    }
+                    if (Schema::hasColumn('expense_requests', 'vat_type')) {
+                        $linkedExp->vat_type = ($vat > 0) ? 'exclusive' : 'none';
+                    }
+                    if (Schema::hasColumn('expense_requests', 'vat_rate')) {
+                        $linkedExp->vat_rate = ($vat > 0) ? 15.00 : 0.00;
+                    }
+                    if ($request->filled('item_description')) {
+                        $linkedExp->description = trim((string)$request->item_description);
+                    }
+                    if ($request->filled('category')) {
+                        $linkedExp->category = trim((string)$request->category);
                     }
                     $refParts = [];
                     if (!empty($receipt->fs_no)) {

@@ -102,6 +102,9 @@ class UpdateOcrInspectorTest extends TestCase
             $table->foreignId('user_id')->nullable();
             $table->string('category')->nullable();
             $table->string('payee')->nullable();
+            $table->string('account_name')->nullable();
+            $table->string('vat_type')->nullable();
+            $table->decimal('vat_rate', 5, 2)->default(15.00);
             $table->text('description')->nullable();
             $table->decimal('amount', 18, 2);
             $table->decimal('gross_amount', 18, 2)->nullable();
@@ -604,5 +607,73 @@ class UpdateOcrInspectorTest extends TestCase
         $this->assertNotNull($receipt);
         $this->assertEquals('0055443322', $receipt->vendor_tin);
         $this->assertEquals('00012121', $receipt->fs_no);
+    }
+
+    public function test_inspector_saved_changes_persist_on_month_movements_page_reload()
+    {
+        $exp = ExpenseRequest::create([
+            'request_number'    => 'EXP-FUEL-2026-0888',
+            'amount'            => 1000.00,
+            'gross_amount'      => 1000.00,
+            'net_amount'        => 1000.00,
+            'vat_amount'        => 130.43,
+            'vat_type'          => 'inclusive',
+            'vat_rate'          => 15.00,
+            'payee'             => 'Old Employee Requester',
+            'account_name'      => 'Old Employee Account',
+            'category'          => 'fuel',
+            'status'            => 'paid',
+            'created_at'        => '2026-10-15 10:00:00',
+            'paid_at'           => '2026-10-15 10:00:00', // Month 2 of Ethiopian Year 2019
+        ]);
+
+        // User edits in the Inspector modal and saves
+        $response = $this->postJson(route('finance.tax-deductions.update-ocr-item'), [
+            'receipt_id'       => 'EXP-' . $exp->id,
+            'seller_name'      => 'TotalEnergies Marketing Ethiopia',
+            'supplier_tin'     => '0012345678',
+            'fs_no'            => '00055667',
+            'mrc_no'           => 'MRC-REV-01',
+            'receipt_date'     => '2026-10-18', // YYYY-MM-DD from <input type="date">
+            'item_description' => 'Vehicle Benzene Refill',
+            'vat_category'     => 'E',
+            'purchase_type'    => 'PUR_GD',
+            'total_value'      => 1000.00,
+            'vat_amount'       => 0.00,
+            'value_after_vat'  => 1000.00,
+        ]);
+
+        $response->assertStatus(200);
+
+        // Verify receipt_date was NOT corrupted to year 2034
+        $receipt = Receipt::where('purchasable_id', $exp->id)->first();
+        $this->assertNotNull($receipt);
+        $this->assertEquals('2026-10-18', \Carbon\Carbon::parse($receipt->receipt_date)->format('Y-m-d'));
+        $this->assertEquals('TotalEnergies Marketing Ethiopia', $receipt->vendor_name);
+        $this->assertEquals('0012345678', $receipt->vendor_tin);
+        $this->assertEquals('00055667', $receipt->fs_no);
+
+        // Now simulate page reload: load movementsPage for Ethiopian year 2019, month 2
+        $controller = new \App\Http\Controllers\Finance\FinanceTaxReportController();
+        $view = $controller->movementsPage(new \Illuminate\Http\Request([
+            'ethiopian_year'  => 2019,
+            'ethiopian_month' => 2,
+        ]));
+
+        $this->assertInstanceOf(\Illuminate\View\View::class, $view);
+        $movementsData = $view->getData()['movementsData'];
+
+        // Assert TAS Purchases reflects all updated values on reload
+        $tasItems = collect($movementsData['tas_purchases']);
+        $match = $tasItems->firstWhere('request_number', 'EXP-FUEL-2026-0888');
+
+        $this->assertNotNull($match, 'Updated TAS purchase must be present on page reload');
+        $this->assertEquals('TotalEnergies Marketing Ethiopia', $match['payee'], 'Payee must reflect updated seller name');
+        $this->assertEquals('0012345678', $match['seller_tin'], 'Seller TIN must reflect updated value');
+        $this->assertEquals('00055667', $match['fs_no'], 'FS # must reflect updated value');
+        $this->assertEquals('MRC-REV-01', $match['mrc_no'], 'MRC # must reflect updated value');
+        $this->assertEquals(0.00, (float)$match['vat_amount'], 'VAT amount must remain 0.00 (TAS 0% VAT)');
+        $this->assertEquals(1000.00, (float)$match['base_amount'], 'Base amount must be preserved');
+        $this->assertEquals('Oct 18, 2026', $match['date_gc'], 'Date must reflect updated Gregorian receipt date');
     }
 }
