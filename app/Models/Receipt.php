@@ -43,6 +43,8 @@ class Receipt extends Model
         'approved_at',
         'notes',
         'qc_notes',
+        'tax_type',
+        'no_vat_reason_code',
         'purchasable_type',
         'purchasable_id',
     ];

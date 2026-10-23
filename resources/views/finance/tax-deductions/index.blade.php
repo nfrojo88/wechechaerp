@@ -1166,6 +1166,9 @@
                                 @endphp
                                 <tr id="ocr-row-{{ $ocrItem->id }}"
                                     data-id="{{ $ocrItem->id }}"
+                                    data-receipt-id="{{ $rcp?->id ?? '' }}"
+                                    data-expense-request-id="{{ $rcp?->expense_request_id ?? '' }}"
+                                    data-request-number="{{ $rcp?->expenseRequest?->request_number ?? '' }}"
                                     data-slip-url="{{ $slipUrl ?? '' }}"
                                     data-vendor-name="{{ e($rcp?->vendor_name ?? '') }}"
                                     data-vendor-tin="{{ e($tin) }}"
@@ -2290,6 +2293,9 @@
 
                                 <form id="ocrModalEditForm" onsubmit="saveOcrSlipEdits(event)">
                                     <input type="hidden" id="edit_ocr_item_id" name="id">
+                                    <input type="hidden" id="edit_receipt_id" name="receipt_id">
+                                    <input type="hidden" id="edit_expense_request_id" name="expense_request_id">
+                                    <input type="hidden" id="edit_request_number" name="request_number">
 
                                     {{-- Supplier Name --}}
                                     <div class="mb-2.5">
@@ -4623,6 +4629,9 @@
         };
 
         const id = tr.dataset.id || fallbackId || '';
+        const receiptId = tr.dataset.receiptId || '';
+        const expenseRequestId = tr.dataset.expenseRequestId || '';
+        const requestNumber = tr.dataset.requestNumber || '';
         const slipUrl = tr.dataset.slipUrl || '';
         const vendor = tr.dataset.vendorName || '';
         const tin = tr.dataset.vendorTin || '';
@@ -4643,6 +4652,15 @@
         // Populate Left Edit Form
         const idInput = document.getElementById('edit_ocr_item_id');
         if (idInput) idInput.value = id;
+
+        const receiptIdInput = document.getElementById('edit_receipt_id');
+        if (receiptIdInput) receiptIdInput.value = receiptId;
+
+        const expenseReqIdInput = document.getElementById('edit_expense_request_id');
+        if (expenseReqIdInput) expenseReqIdInput.value = expenseRequestId;
+
+        const reqNumInput = document.getElementById('edit_request_number');
+        if (reqNumInput) reqNumInput.value = requestNumber;
 
         const badgeId = document.getElementById('edit_ocr_badge_id');
         if (badgeId) badgeId.textContent = id ? ('Invoice #' + id) : 'Line Item';
@@ -4758,6 +4776,15 @@
         const idInput = document.getElementById('edit_ocr_item_id');
         if (idInput) idInput.value = ocr.id || '';
 
+        const receiptIdInput = document.getElementById('edit_receipt_id');
+        if (receiptIdInput) receiptIdInput.value = ocr.receipt_id || '';
+
+        const expenseReqIdInput = document.getElementById('edit_expense_request_id');
+        if (expenseReqIdInput) expenseReqIdInput.value = ocr.expense_request_id || '';
+
+        const reqNumInput = document.getElementById('edit_request_number');
+        if (reqNumInput) reqNumInput.value = ocr.request_number || '';
+
         const badgeId = document.getElementById('edit_ocr_badge_id');
         if (badgeId) badgeId.textContent = ocr.id ? ('Invoice #' + ocr.id) : 'Line Item';
 
@@ -4786,7 +4813,10 @@
                 try {
                     const parsed = new Date(ocr.date_gc);
                     if (!isNaN(parsed.getTime())) {
-                        ymd = parsed.toISOString().split('T')[0];
+                        const yr = parsed.getFullYear();
+                        const mo = String(parsed.getMonth() + 1).padStart(2, '0');
+                        const da = String(parsed.getDate()).padStart(2, '0');
+                        ymd = `${yr}-${mo}-${da}`;
                     }
                 } catch (e) {}
             }

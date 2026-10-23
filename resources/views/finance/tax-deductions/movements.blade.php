@@ -967,12 +967,13 @@
                                 $ocrSumBase = 0;
                                 $ocrSumVat = 0;
                                 $ocrSumAfter = 0;
+                                $allOcrList = $movementsData['all_ocr_items'] ?? ($movementsData['ocr_items'] ?? []);
                             @endphp
-                            @forelse($movementsData['ocr_items'] ?? [] as $idx => $ocr)
+                            @forelse($allOcrList as $idx => $ocr)
                                 @php
                                     $b = (float)($ocr['base_value'] ?? 0);
                                     $v = (float)($ocr['vat_amount'] ?? 0);
-                                    $a = (float)($ocr['value_after_vat'] ?? 0);
+                                    $a = (float)($ocr['value_after_vat'] ?? ($ocr['total_value'] ?? 0));
                                     $ocrSumBase += $b;
                                     $ocrSumVat  += $v;
                                     $ocrSumAfter += $a;
@@ -985,7 +986,8 @@
                                     data-id="{{ $ocr['id'] }}"
                                     data-receipt-id="{{ $ocr['receipt_id'] ?? '' }}"
                                     data-is-vat="{{ $isVatReceipt ? '1' : '0' }}"
-                                    data-ocr-category="{{ $isVatReceipt ? 'vat' : 'tas' }}">
+                                    data-ocr-category="{{ $isVatReceipt ? 'vat' : 'tas' }}"
+                                    style="{{ (($vatOnly ?? true) && !$isVatReceipt) ? 'display: none;' : '' }}">
                                     <td class="ps-3 text-muted font-monospace small">{{ $idx + 1 }}</td>
                                     <td>
                                         <span class="fw-bold font-monospace text-dark d-block cell-date-ec">{{ $ocr['date_ec'] ?? '-' }}</span>
@@ -1501,7 +1503,7 @@
 @push('scripts')
 <script>
     // Cached items for live inspector and table sync
-    window._pageOcrItems = @json($movementsData['ocr_items'] ?? []);
+    window._pageOcrItems = @json($movementsData['all_ocr_items'] ?? ($movementsData['ocr_items'] ?? []));
     window._pageTasPurchases = @json($movementsData['tas_purchases'] ?? []);
 
     // Toggle TAS Purchases by Seller TIN status: 'all', 'with_tin', 'missing_tin'
@@ -1833,7 +1835,10 @@
                 try {
                     const parsed = new Date(ocr.date_gc);
                     if (!isNaN(parsed.getTime())) {
-                        ymd = parsed.toISOString().split('T')[0];
+                        const yr = parsed.getFullYear();
+                        const mo = String(parsed.getMonth() + 1).padStart(2, '0');
+                        const da = String(parsed.getDate()).padStart(2, '0');
+                        ymd = `${yr}-${mo}-${da}`;
                     }
                 } catch (e) {}
             }
@@ -1963,12 +1968,15 @@
 
         const dateInput = document.getElementById('movement_edit_receipt_date');
         if (dateInput) {
-            let ymd = '';
-            if (tas.date_gc) {
+            let ymd = tas.receipt_date_ymd || '';
+            if (!ymd && tas.date_gc) {
                 try {
                     const parsed = new Date(tas.date_gc);
                     if (!isNaN(parsed.getTime())) {
-                        ymd = parsed.toISOString().split('T')[0];
+                        const yr = parsed.getFullYear();
+                        const mo = String(parsed.getMonth() + 1).padStart(2, '0');
+                        const da = String(parsed.getDate()).padStart(2, '0');
+                        ymd = `${yr}-${mo}-${da}`;
                     }
                 } catch (e) {}
             }
@@ -2249,7 +2257,7 @@
                                 <small class="d-block text-success-emphasis">All ledger records, e-Tax tables and fiscal numbers are synchronized.</small>
                             </div>
                         </div>
-                        <button type="button" class="btn btn-xs btn-outline-success rounded-pill px-2.5 py-1 fw-semibold shadow-xs" onclick="window.location.reload()">
+                        <button type="button" class="btn btn-xs btn-outline-success rounded-pill px-2.5 py-1 fw-semibold shadow-xs" onclick="reloadMovementsView()">
                             <i class="fa-solid fa-rotate me-1"></i>Refresh View
                         </button>
                     `;
@@ -2483,7 +2491,7 @@
                     modalEl._hasReloadOnHideListener = true;
                     modalEl.addEventListener('hidden.bs.modal', function () {
                         if (window._hasMovementOcrEditsSaved) {
-                            window.location.reload();
+                            reloadMovementsView();
                         }
                     });
                 }
@@ -2520,6 +2528,20 @@
         });
     }
 
+    function _getActiveTabName() {
+        const activeBtn = document.querySelector('#movementsPageTab button.active');
+        if (!activeBtn) return 'ocr';
+        const target = activeBtn.getAttribute('data-bs-target') || '';
+        return target.replace('#page-', '') || 'ocr';
+    }
+
+    function reloadMovementsView(forceTab) {
+        const tab = forceTab || _getActiveTabName() || 'ocr';
+        const url = new URL(window.location.href);
+        url.searchParams.set('tab', tab);
+        window.location.href = url.toString();
+    }
+
     // Backward compatibility helper
     function openSlipModal(url, title, isPdf = false) {
         const foundIdx = (window._pageOcrItems || []).findIndex(it => it.file_url === url);
@@ -2530,6 +2552,47 @@
             _setPageSlipPreview(url);
         }
     }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        // Tab switching and URL/session persistence
+        const tabBtns = document.querySelectorAll('#movementsPageTab button[data-bs-toggle="pill"]');
+        tabBtns.forEach(btn => {
+            btn.addEventListener('shown.bs.tab', function (e) {
+                const target = e.target.getAttribute('data-bs-target') || '';
+                const tabKey = target.replace('#page-', '') || 'income';
+                try {
+                    sessionStorage.setItem('movements_active_tab', tabKey);
+                    const url = new URL(window.location.href);
+                    url.searchParams.set('tab', tabKey);
+                    window.history.replaceState({ tab: tabKey }, '', url.toString());
+                    const formTabInput = document.querySelector('form input[name="tab"]');
+                    if (formTabInput) formTabInput.value = tabKey;
+                } catch (err) {}
+            });
+        });
+
+        // Restore active tab if specified in URL or sessionStorage
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlTab = urlParams.get('tab');
+        const savedTab = urlTab || sessionStorage.getItem('movements_active_tab');
+        if (savedTab) {
+            const tabBtn = document.getElementById('page-' + savedTab + '-tab');
+            if (tabBtn && window.bootstrap && bootstrap.Tab) {
+                bootstrap.Tab.getOrCreateInstance(tabBtn).show();
+            }
+        }
+
+        // Auto-refresh when modal closes after saving changes
+        const modalEl = document.getElementById('movementSlipModal');
+        if (modalEl && !modalEl._hasReloadListener) {
+            modalEl._hasReloadListener = true;
+            modalEl.addEventListener('hidden.bs.modal', function () {
+                if (window._hasMovementOcrEditsSaved) {
+                    reloadMovementsView();
+                }
+            });
+        }
+    });
 </script>
 @endpush
 

@@ -676,4 +676,214 @@ class UpdateOcrInspectorTest extends TestCase
         $this->assertEquals(1000.00, (float)$match['base_amount'], 'Base amount must be preserved');
         $this->assertEquals('Oct 18, 2026', $match['date_gc'], 'Date must reflect updated Gregorian receipt date');
     }
+
+    public function test_scanned_ocr_receipt_inspector_adjust_persists_on_month_movements_page_reload()
+    {
+        $project = Project::create([
+            'name' => 'HQ Renovation',
+            'status' => 'active',
+        ]);
+
+        $receipt = Receipt::create([
+            'receipt_number' => 'OCR-20261015-001',
+            'vendor_name'    => 'Old Scanned Merchant',
+            'vendor_tin'     => '1234567890',
+            'fs_no'          => '11223344',
+            'mrc_no'         => 'MRC-OLD-55',
+            'receipt_date'   => '2026-10-15', // Ethiopian month 2, 2019
+            'subtotal'       => 2000.00,
+            'vat_amount'     => 300.00,
+            'total_amount'   => 2300.00,
+            'category'       => 'materials',
+            'tax_type'       => 'vat_standard',
+            'parsed_data'    => [
+                'receipt_no' => '11223344',
+                'seller_tin' => '1234567890',
+                'seller_name'=> 'Old Scanned Merchant',
+            ],
+        ]);
+
+        $item = ReceiptItem::create([
+            'receipt_id'       => $receipt->id,
+            'item_description' => 'Old Extracted Items',
+            'vat_category'     => 'G',
+            'purchase_type'    => 3,
+            'purc_type'        => 'PUR_GD',
+            'qty'              => 1,
+            'unit_price'       => 2000.00,
+            'total_value'      => 2000.00,
+            'vat_amount'       => 300.00,
+            'value_after_vat'  => 2300.00,
+        ]);
+
+        // User adjusts slip details in "Fiscal Declaration & System Adjustment" modal
+        $response = $this->postJson(route('finance.tax-deductions.update-ocr-item'), [
+            'id'               => $item->id,
+            'receipt_id'       => $receipt->id,
+            'seller_name'      => 'Bole Building Supplies PLC',
+            'supplier_tin'     => '0098765432',
+            'fs_no'            => '00889900',
+            'mrc_no'           => 'MRC-BOLE-01',
+            'receipt_date'     => '2026-10-16', // Ethiopian month 2, 2019
+            'item_description' => 'Reinforced Concrete Steel & Cement',
+            'project_id'       => $project->id,
+            'category'         => 'materials',
+            'vat_category'     => 'G',
+            'purchase_type'    => '1',
+            'total_value'      => 4000.00,
+            'vat_amount'       => 600.00,
+            'value_after_vat'  => 4600.00,
+        ]);
+
+        $response->assertStatus(200);
+        $response->assertJson([
+            'success' => true,
+            'item'    => [
+                'vendor_name' => 'Bole Building Supplies PLC',
+                'vendor_tin'  => '0098765432',
+                'fs_no'       => '00889900',
+                'mrc_no'      => 'MRC-BOLE-01',
+            ]
+        ]);
+
+        // Verify database records updated
+        $receipt->refresh();
+        $item->refresh();
+
+        $this->assertEquals('Bole Building Supplies PLC', $receipt->vendor_name);
+        $this->assertEquals('0098765432', $receipt->vendor_tin);
+        $this->assertEquals('00889900', $receipt->fs_no);
+        $this->assertEquals('MRC-BOLE-01', $receipt->mrc_no);
+        $this->assertEquals('2026-10-16', \Carbon\Carbon::parse($receipt->receipt_date)->format('Y-m-d'));
+        $this->assertEquals(4000.00, (float)$receipt->subtotal);
+        $this->assertEquals(600.00, (float)$receipt->vat_amount);
+        $this->assertEquals(4600.00, (float)$receipt->total_amount);
+
+        // Now reload movementsPage for Ethiopian Month 2, 2019 with tab=ocr
+        $controller = new \App\Http\Controllers\Finance\FinanceTaxReportController();
+        $view = $controller->movementsPage(new \Illuminate\Http\Request([
+            'ethiopian_year'  => 2019,
+            'ethiopian_month' => 2,
+            'tab'             => 'ocr',
+        ]));
+
+        $this->assertInstanceOf(\Illuminate\View\View::class, $view);
+        $this->assertEquals('ocr', $view->getData()['activeTab']);
+
+        $movementsData = $view->getData()['movementsData'];
+        $allOcr = collect($movementsData['all_ocr_items'] ?? []);
+        $ocrItems = collect($movementsData['ocr_items'] ?? []);
+
+        // Assert item exists in both all_ocr_items and ocr_items with latest values
+        $matchedAll = $allOcr->firstWhere('id', $item->id);
+        $this->assertNotNull($matchedAll, 'Adjusted OCR item must persist in all_ocr_items upon reload');
+        $this->assertEquals('Bole Building Supplies PLC', $matchedAll['vendor_name']);
+        $this->assertEquals('0098765432', $matchedAll['vendor_tin']);
+        $this->assertEquals('00889900', $matchedAll['fs_no']);
+        $this->assertEquals('MRC-BOLE-01', $matchedAll['mrc_no']);
+        $this->assertEquals(4000.00, (float)$matchedAll['base_value']);
+        $this->assertEquals(600.00, (float)$matchedAll['vat_amount']);
+        $this->assertEquals(4600.00, (float)$matchedAll['value_after_vat']);
+
+        $matchedVat = $ocrItems->firstWhere('id', $item->id);
+        $this->assertNotNull($matchedVat, 'Adjusted OCR item must persist in ocr_items upon reload');
+        $this->assertEquals('Bole Building Supplies PLC', $matchedVat['vendor_name']);
+        $this->assertEquals('0098765432', $matchedVat['vendor_tin']);
+        $this->assertEquals('00889900', $matchedVat['fs_no']);
+    }
+
+    public function test_scanned_ocr_receipt_converted_to_zero_vat_persists_in_all_ocr_items_on_reload()
+    {
+        $receipt = Receipt::create([
+            'receipt_number' => 'OCR-20261017-002',
+            'vendor_name'    => 'Fuel Station Central',
+            'vendor_tin'     => '0033221100',
+            'fs_no'          => '00778899',
+            'receipt_date'   => '2026-10-17', // Ethiopian month 2, 2019
+            'subtotal'       => 1500.00,
+            'vat_amount'     => 225.00,
+            'total_amount'   => 1725.00,
+            'category'       => 'fuel',
+            'tax_type'       => 'vat_standard',
+        ]);
+
+        $item = ReceiptItem::create([
+            'receipt_id'       => $receipt->id,
+            'item_description' => 'Diesel Fuel Refill',
+            'vat_category'     => 'G',
+            'purchase_type'    => 3,
+            'qty'              => 1,
+            'unit_price'       => 1500.00,
+            'total_value'      => 1500.00,
+            'vat_amount'       => 225.00,
+            'value_after_vat'  => 1725.00,
+        ]);
+
+        // User changes VAT to 0 (converting to 0% VAT TAS fuel receipt)
+        $response = $this->postJson(route('finance.tax-deductions.update-ocr-item'), [
+            'id'               => $item->id,
+            'receipt_id'       => $receipt->id,
+            'seller_name'      => 'Fuel Station Central Revised',
+            'supplier_tin'     => '0033221100',
+            'fs_no'            => '00778899',
+            'mrc_no'           => 'MRC-FUEL-01',
+            'receipt_date'     => '2026-10-17',
+            'item_description' => 'Diesel Fuel 0% VAT Fuel Receipt',
+            'category'         => 'fuel',
+            'vat_category'     => 'E',
+            'purchase_type'    => 'PUR_GD',
+            'total_value'      => 1500.00,
+            'vat_amount'       => 0.00,
+            'value_after_vat'  => 1500.00,
+        ]);
+
+        $response->assertStatus(200);
+
+        $receipt->refresh();
+        $this->assertEquals('no_vat', $receipt->tax_type, 'Receipt tax_type must be set to no_vat when VAT is 0');
+        $this->assertEquals(0.00, (float)$receipt->vat_amount);
+        $this->assertEquals(1500.00, (float)$receipt->total_amount);
+
+        // Reload movements page: verify it is NOT dropped from all_ocr_items
+        $controller = new \App\Http\Controllers\Finance\FinanceTaxReportController();
+        $view = $controller->movementsPage(new \Illuminate\Http\Request([
+            'ethiopian_year'  => 2019,
+            'ethiopian_month' => 2,
+            'tab'             => 'ocr',
+        ]));
+
+        $movementsData = $view->getData()['movementsData'];
+        $allOcr = collect($movementsData['all_ocr_items'] ?? []);
+
+        $found = $allOcr->firstWhere('id', $item->id);
+        $this->assertNotNull($found, 'Zero-VAT converted OCR receipt must NOT disappear from all_ocr_items on reload');
+        $this->assertEquals(0.00, (float)$found['vat_amount']);
+        $this->assertEquals('Fuel Station Central Revised', $found['vendor_name']);
+        $this->assertTrue((bool)$found['is_no_vat']);
+    }
+
+    public function test_movements_page_respects_tab_parameter()
+    {
+        $controller = new \App\Http\Controllers\Finance\FinanceTaxReportController();
+
+        $viewOcr = $controller->movementsPage(new \Illuminate\Http\Request([
+            'ethiopian_year'  => 2019,
+            'ethiopian_month' => 2,
+            'tab'             => 'ocr',
+        ]));
+        $this->assertEquals('ocr', $viewOcr->getData()['activeTab']);
+
+        $viewTas = $controller->movementsPage(new \Illuminate\Http\Request([
+            'ethiopian_year'  => 2019,
+            'ethiopian_month' => 2,
+            'tab'             => 'tas',
+        ]));
+        $this->assertEquals('tas', $viewTas->getData()['activeTab']);
+
+        $viewDefault = $controller->movementsPage(new \Illuminate\Http\Request([
+            'ethiopian_year'  => 2019,
+            'ethiopian_month' => 2,
+        ]));
+        $this->assertEquals('income', $viewDefault->getData()['activeTab']);
+    }
 }

@@ -2002,40 +2002,51 @@ class FinanceTaxReportController extends Controller
             $purcType = !empty($parsed['purc_type']) ? $parsed['purc_type'] : ($ocr->purc_type ?: ($isNoVat ? 'PUR_GD' : 'PUR_GD'));
             $encodedBy = !empty($parsed['encoded_by']) ? $parsed['encoded_by'] : ((Schema::hasTable('system_settings') ? SystemSetting::get('etax_encoded_by') : null) ?: 'wechacha');
 
+            $vendorName = $r?->vendor_name
+                ?: (!empty($parsed['seller_name']) ? $parsed['seller_name'] : (!empty($parsed['vendor_name']) ? $parsed['vendor_name'] : 'Vendor'));
+
+            $linkedExpId = $r?->purchasable_type && (str_contains($r->purchasable_type, 'ExpenseRequest') || $r->purchasable_type === 'expense_request')
+                ? $r->purchasable_id
+                : null;
+            $reqNo = $r?->receipt_number ?: ('REC-' . $ocr->id);
+
             return [
-                'id'               => $ocr->id,
-                'receipt_id'       => $r?->id,
-                'receipt_number'   => $r?->receipt_number ?: ('REC-' . $ocr->id),
-                'fs_no'            => $fsNo,
-                'mrc_no'           => $mrcNo,
-                'vendor_name'      => $r?->vendor_name ?: 'Vendor',
-                'vendor_tin'       => $sellerTin,
-                'seller_tin'       => $sellerTin,
-                'buyer_tin'        => $purchaserTin,
-                'purchaser_tin'    => $purchaserTin,
-                'purc_type'        => $purcType,
-                'encoded_by'       => $encodedBy,
-                'date_ec'          => $date ? EthiopianDate::formatDateEc($date, 'DD/MM/YYYY EC') : '-',
-                'date_gc'          => $date ? Carbon::parse($date)->format('M d, Y') : '-',
-                'receipt_date_ec'  => !empty($parsed['receipt_date']) ? $parsed['receipt_date'] : ($date ? EthiopianDate::formatDateEc($date, 'd-m-Y') : '-'),
-                'encoding_date_ec' => !empty($parsed['encoding_date']) ? $parsed['encoding_date'] : (($r && $r->created_at) ? EthiopianDate::formatDateEc($r->created_at, 'd-m-Y') : '-'),
-                'receipt_date_ymd' => $date ? Carbon::parse($date)->format('Y-m-d') : '',
-                'project_id'       => $r?->project_id,
-                'project_name'     => $r?->project?->name ?: 'General',
-                'category'         => $r?->category ?: ($ocr->vat_category ?: 'General'),
-                'item_description' => $ocr->item_description ?: ($r?->description ?: 'Purchased Goods/Services'),
-                'vat_category'     => $ocr->vat_category ?: 'G',
-                'purchase_type'    => (int)($ocr->purchase_type ?: 3),
-                'tin_valid'        => (bool)($r?->tin_valid ?? (strlen(preg_replace('/\D/', '', $r?->vendor_tin ?? '')) === 10)),
-                'fs_no_valid'      => (bool)($r?->fs_no_valid ?? (strlen(preg_replace('/\D/', '', $r?->fs_no ?? '')) === 8)),
-                'base_value'       => $baseVal,
-                'vat_amount'       => $vatVal,
-                'value_after_vat'  => $afterVal,
-                'file_url'         => $fileUrl,
-                'file_type'        => $isPdf ? 'pdf' : ($r?->file_type ?: 'image'),
-                'is_pdf'           => $isPdf,
-                'is_vat_receipt'   => ($vatVal > 0 && !$isNoVat),
-                'is_no_vat'        => $isNoVat,
+                'id'                 => $ocr->id,
+                'receipt_id'         => $r?->id,
+                'expense_request_id' => $linkedExpId,
+                'request_number'     => $reqNo,
+                'receipt_number'     => $reqNo,
+                'fs_no'              => $fsNo,
+                'mrc_no'             => $mrcNo,
+                'vendor_name'        => $vendorName,
+                'vendor_tin'         => $sellerTin,
+                'seller_tin'         => $sellerTin,
+                'buyer_tin'          => $purchaserTin,
+                'purchaser_tin'      => $purchaserTin,
+                'purc_type'          => $purcType,
+                'encoded_by'         => $encodedBy,
+                'date_ec'            => $date ? EthiopianDate::formatDateEc($date, 'DD/MM/YYYY EC') : '-',
+                'date_gc'            => $date ? Carbon::parse($date)->format('M d, Y') : '-',
+                'receipt_date_ec'    => !empty($parsed['receipt_date']) ? $parsed['receipt_date'] : ($date ? EthiopianDate::formatDateEc($date, 'd-m-Y') : '-'),
+                'encoding_date_ec'   => !empty($parsed['encoding_date']) ? $parsed['encoding_date'] : (($r && $r->created_at) ? EthiopianDate::formatDateEc($r->created_at, 'd-m-Y') : '-'),
+                'receipt_date_ymd'   => $date ? Carbon::parse($date)->format('Y-m-d') : '',
+                'project_id'         => $r?->project_id,
+                'project_name'       => $r?->project?->name ?: 'General',
+                'category'           => $r?->category ?: ($ocr->vat_category ?: 'General'),
+                'item_description'   => $ocr->item_description ?: ($r?->description ?: 'Purchased Goods/Services'),
+                'vat_category'       => $ocr->vat_category ?: 'G',
+                'purchase_type'      => (int)($ocr->purchase_type ?: 3),
+                'tin_valid'          => (bool)($r?->tin_valid ?? (strlen(preg_replace('/\D/', '', $r?->vendor_tin ?? '')) === 10)),
+                'fs_no_valid'        => (bool)($r?->fs_no_valid ?? (strlen(preg_replace('/\D/', '', $r?->fs_no ?? '')) === 8)),
+                'base_value'         => $baseVal,
+                'vat_amount'         => $vatVal,
+                'total_value'        => $afterVal,
+                'value_after_vat'    => $afterVal,
+                'file_url'           => $fileUrl,
+                'file_type'          => $isPdf ? 'pdf' : ($r?->file_type ?: 'image'),
+                'is_pdf'             => $isPdf,
+                'is_vat_receipt'     => ($vatVal > 0 && !$isNoVat),
+                'is_no_vat'          => $isNoVat,
             ];
         });
 
@@ -4954,6 +4965,7 @@ class FinanceTaxReportController extends Controller
             }
             $receiptUpdates['parsed_data'] = $parsed;
 
+            $receiptUpdates['tax_type'] = ($vat <= 0) ? 'no_vat' : 'vat_standard';
             if ($receipt->items()->count() <= 1) {
                 $receiptUpdates['subtotal']     = $totalVal;
                 $receiptUpdates['vat_amount']   = $vat;
@@ -4961,6 +4973,8 @@ class FinanceTaxReportController extends Controller
             }
 
             $receipt->update($receiptUpdates);
+            $receipt->tax_type = ($vat <= 0) ? 'no_vat' : 'vat_standard';
+            $receipt->save();
 
             if ($receipt->items()->count() > 1) {
                 $receipt->subtotal     = round($receipt->items()->sum('total_value'), 2);
@@ -5145,6 +5159,8 @@ class FinanceTaxReportController extends Controller
                     'vat_amount'         => (float)$item->vat_amount,
                     'total_value'        => (float)$item->value_after_vat,
                     'value_after_vat'    => (float)$item->value_after_vat,
+                    'is_vat_receipt'     => ($vat > 0 && $vatCategory !== 'E'),
+                    'is_no_vat'          => ($vat <= 0 || $vatCategory === 'E'),
                 ]
             ]);
         } catch (\Throwable $e) {

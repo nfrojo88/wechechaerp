@@ -17,6 +17,7 @@ class ReceiptItem extends Model
         'vat_category',
         'calendar_type',
         'purchase_type',
+        'purc_type',
         'uom',
         'qty',
         'unit_price',
