@@ -232,9 +232,10 @@ class StoreManagerController extends Controller
 
         if ($selectedStoreId) {
             // Single Store View
-            $query = Inventory::with('product', 'store')
+            $query = Inventory::with(['product', 'store'])
                 ->where('store_id', $selectedStoreId)
-                ->whereHas('store', fn($q) => $q->where('is_active', true));
+                ->whereHas('store', fn($q) => $q->where('is_active', true))
+                ->whereHas('product');
 
             if ($search) {
                 $query->whereHas('product', fn($q) => $q->where('name', 'like', "%{$search}%")
@@ -280,7 +281,8 @@ class StoreManagerController extends Controller
         } else {
             // All Stores Grouped View (1 row per product with total on hand & store breakdown)
             $query = Inventory::with(['product', 'store'])
-                ->whereHas('store', fn($q) => $q->where('is_active', true));
+                ->whereHas('store', fn($q) => $q->where('is_active', true))
+                ->whereHas('product');
 
             if ($search) {
                 $query->whereHas('product', fn($q) => $q->where('name', 'like', "%{$search}%")
@@ -312,15 +314,15 @@ class StoreManagerController extends Controller
                 $totalOnHand = (float) $items->sum('quantity_on_hand');
                 $totalReserved = (float) $items->sum('quantity_reserved');
                 $totalMinStock = (float) $items->sum('min_stock');
-                $product = $first->product;
+                $product = $first?->product;
 
-                $catStr = strtolower($product->category ?? '');
+                $catStr = strtolower($product?->category ?? '');
                 $isFixedAsset = str_contains($catStr, 'fixed') || str_contains($catStr, 'asset') || str_contains($catStr, 'equipment');
 
                 $effectiveCost = (float) (
-                    $first->unit_cost ?: (
-                        DB::table('material_prices')->where('product_id', $first->product_id)->orderByDesc('effective_date')->orderByDesc('id')->value('price') ?: (
-                            DB::table('purchase_order_items')->where('product_id', $first->product_id)->orderByDesc('id')->value('unit_price') ?: ($product->unit_price ?? 0)
+                    $first?->unit_cost ?: (
+                        DB::table('material_prices')->where('product_id', $first?->product_id)->orderByDesc('effective_date')->orderByDesc('id')->value('price') ?: (
+                            DB::table('purchase_order_items')->where('product_id', $first?->product_id)->orderByDesc('id')->value('unit_price') ?: ($product?->unit_price ?? 0)
                         )
                     )
                 );
@@ -341,14 +343,14 @@ class StoreManagerController extends Controller
                 })->values();
 
                 return [
-                    'product_id'       => $first->product_id,
-                    'product_name'     => $product->name ?? 'N/A',
-                    'product_code'     => $product->sku ?: ($product->code ?? ''),
-                    'product_category' => $product->category ?? 'General Material',
+                    'product_id'       => $first?->product_id,
+                    'product_name'     => $product?->name ?? 'N/A',
+                    'product_code'     => $product?->sku ?: ($product?->code ?? ''),
+                    'product_category' => $product?->category ?? 'General Material',
                     'is_fixed_asset'   => $isFixedAsset,
                     'is_consumable'    => !$isFixedAsset,
-                    'product_unit'     => $product->unit ?? 'pcs',
-                    'product_desc'     => $product->description ?? 'No additional specification provided.',
+                    'product_unit'     => $product?->unit ?? 'pcs',
+                    'product_desc'     => $product?->description ?? 'No additional specification provided.',
                     'total_on_hand'    => $totalOnHand,
                     'total_reserved'   => $totalReserved,
                     'total_available'  => max(0, $totalOnHand - $totalReserved),
@@ -527,11 +529,11 @@ class StoreManagerController extends Controller
                 $formattedItem = [
                     'id'               => $item->id,
                     'product_id'       => $item->product_id,
-                    'product_name'     => $prod->name,
-                    'sku'              => $prod->sku ?? $prod->code ?? '-',
-                    'category'         => $prod->category ?? ($isFixedAsset ? 'Fixed Asset' : 'Consumable'),
+                    'product_name'     => $prod?->name ?? 'N/A',
+                    'sku'              => $prod?->sku ?? $prod?->code ?? '-',
+                    'category'         => $prod?->category ?? ($isFixedAsset ? 'Fixed Asset' : 'Consumable'),
                     'is_fixed_asset'   => $isFixedAsset,
-                    'unit'             => $prod->unit ?? 'pcs',
+                    'unit'             => $prod?->unit ?? 'pcs',
                     'on_hand'          => $onHand,
                     'reserved'         => $reserved,
                     'available'        => $available,

@@ -28,6 +28,8 @@ class InventoryAlphabeticalAndSkuTest extends TestCase
         } catch (\Throwable $e) {}
 
         Schema::dropIfExists('inventory');
+        Schema::dropIfExists('material_prices');
+        Schema::dropIfExists('purchase_order_items');
         Schema::dropIfExists('products');
         Schema::dropIfExists('stores');
         Schema::dropIfExists('users');
@@ -61,6 +63,19 @@ class InventoryAlphabeticalAndSkuTest extends TestCase
             $table->boolean('is_active')->default(true);
             $table->timestamps();
             $table->softDeletes();
+        });
+
+        Schema::create('material_prices', function ($table) {
+            $table->id();
+            $table->foreignId('product_id')->nullable();
+            $table->date('effective_date')->nullable();
+            $table->decimal('price', 15, 2)->default(0);
+        });
+
+        Schema::create('purchase_order_items', function ($table) {
+            $table->id();
+            $table->foreignId('product_id')->nullable();
+            $table->decimal('unit_price', 15, 2)->default(0);
         });
 
         Schema::create('inventory', function ($table) {
@@ -138,5 +153,21 @@ class InventoryAlphabeticalAndSkuTest extends TestCase
         $this->assertCount(1, $inventoryItems);
         $this->assertEquals('Soap Holder', $inventoryItems->first()->product->name);
         $this->assertEquals('MAT-0279', $inventoryItems->first()->product->sku);
+    }
+
+    public function test_store_manager_inventory_all_handles_null_product_gracefully()
+    {
+        $p1 = Product::create(['name' => 'Valid Material', 'sku' => 'MAT-9999', 'category' => 'Consumable']);
+        Inventory::create(['store_id' => $this->store->id, 'product_id' => $p1->id, 'quantity_on_hand' => 10]);
+
+        // Create an inventory item referencing a non-existent or soft-deleted product
+        Inventory::create(['store_id' => $this->store->id, 'product_id' => 99999, 'quantity_on_hand' => 5]);
+
+        $controller = app(\App\Http\Controllers\StoreManagerController::class);
+        $request = new Request();
+
+        // Must not throw "Attempt to read property 'sku' on null"
+        $view = $controller->allInventory($request);
+        $this->assertNotNull($view);
     }
 }
