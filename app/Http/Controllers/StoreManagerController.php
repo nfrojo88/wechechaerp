@@ -237,7 +237,9 @@ class StoreManagerController extends Controller
                 ->whereHas('store', fn($q) => $q->where('is_active', true));
 
             if ($search) {
-                $query->whereHas('product', fn($q) => $q->where('name', 'like', "%{$search}%")->orWhere('code', 'like', "%{$search}%"));
+                $query->whereHas('product', fn($q) => $q->where('name', 'like', "%{$search}%")
+                    ->orWhere('code', 'like', "%{$search}%")
+                    ->orWhere('sku', 'like', "%{$search}%"));
             }
 
             if ($lowStockOnly) {
@@ -260,7 +262,20 @@ class StoreManagerController extends Controller
                 });
             }
 
-            $inventory = $query->orderBy('quantity_on_hand', 'desc')->paginate(25)->withQueryString();
+            $sortOrder = $request->query('sort', 'name');
+            if ($sortOrder === 'stock_desc') {
+                $query->orderBy('quantity_on_hand', 'desc');
+            } elseif ($sortOrder === 'sku') {
+                $query->join('products', 'inventory.product_id', '=', 'products.id')
+                    ->orderBy('products.sku', 'asc')
+                    ->select('inventory.*');
+            } else {
+                $query->join('products', 'inventory.product_id', '=', 'products.id')
+                    ->orderBy('products.name', 'asc')
+                    ->select('inventory.*');
+            }
+
+            $inventory = $query->paginate(25)->withQueryString();
             $isGrouped = false;
         } else {
             // All Stores Grouped View (1 row per product with total on hand & store breakdown)
@@ -268,7 +283,9 @@ class StoreManagerController extends Controller
                 ->whereHas('store', fn($q) => $q->where('is_active', true));
 
             if ($search) {
-                $query->whereHas('product', fn($q) => $q->where('name', 'like', "%{$search}%")->orWhere('code', 'like', "%{$search}%"));
+                $query->whereHas('product', fn($q) => $q->where('name', 'like', "%{$search}%")
+                    ->orWhere('code', 'like', "%{$search}%")
+                    ->orWhere('sku', 'like', "%{$search}%"));
             }
 
             if ($categoryFilter === 'consumable') {
@@ -326,7 +343,7 @@ class StoreManagerController extends Controller
                 return [
                     'product_id'       => $first->product_id,
                     'product_name'     => $product->name ?? 'N/A',
-                    'product_code'     => $product->code ?? '',
+                    'product_code'     => $product->sku ?: ($product->code ?? ''),
                     'product_category' => $product->category ?? 'General Material',
                     'is_fixed_asset'   => $isFixedAsset,
                     'is_consumable'    => !$isFixedAsset,
@@ -347,7 +364,14 @@ class StoreManagerController extends Controller
                 $grouped = $grouped->filter(fn($item) => $item['total_on_hand'] <= $item['total_min_stock']);
             }
 
-            $sorted = $grouped->sortByDesc('total_on_hand')->values();
+            $sortOrder = $request->query('sort', 'name');
+            if ($sortOrder === 'stock_desc') {
+                $sorted = $grouped->sortByDesc('total_on_hand')->values();
+            } elseif ($sortOrder === 'sku') {
+                $sorted = $grouped->sortBy('product_code', SORT_NATURAL | SORT_FLAG_CASE)->values();
+            } else {
+                $sorted = $grouped->sortBy('product_name', SORT_NATURAL | SORT_FLAG_CASE)->values();
+            }
 
             // Paginator for grouped items
             $page = Paginator::resolveCurrentPage() ?: 1;

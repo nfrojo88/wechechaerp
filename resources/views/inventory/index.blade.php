@@ -17,6 +17,13 @@
     <div class="card-body">
         <form method="GET" class="row g-2 align-items-end">
             <div class="col-md-3">
+                <label class="form-label small">Search Name / SKU</label>
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text bg-white"><i class="fa-solid fa-magnifying-glass text-muted"></i></span>
+                    <input type="text" name="search" value="{{ request('search') }}" class="form-control" placeholder="Search product or SKU...">
+                </div>
+            </div>
+            <div class="col-md-2">
                 <label class="form-label small">Store</label>
                 <select name="store_id" class="form-select form-select-sm">
                     <option value="">All Stores</option>
@@ -33,21 +40,26 @@
                     <option value="">All Products</option>
                     @foreach($products as $p)
                     <option value="{{ $p->id }}" @selected(request('product_id') == $p->id)>
-                        {{ $p->name }}
+                        {{ $p->name }} ({{ $p->sku ?: ($p->code ?: '—') }})
                     </option>
                     @endforeach
                 </select>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <div class="form-check mt-4">
                     <input class="form-check-input" type="checkbox" name="low_stock" value="1"
                            id="lowStock" @checked(request('low_stock'))>
                     <label class="form-check-label" for="lowStock">Low Stock Only</label>
                 </div>
             </div>
-            <div class="col-md-3 d-flex gap-2">
-                <button type="submit" class="btn btn-primary btn-sm">Filter</button>
-                <a href="{{ route('inventory.index') }}" class="btn btn-outline-secondary btn-sm">Reset</a>
+            <div class="col-md-2 d-flex gap-1.5 justify-content-end">
+                <button type="submit" class="btn btn-primary btn-sm px-2.5">Filter</button>
+                <a href="{{ route('inventory.index', array_merge(request()->query(), ['sort' => 'name', 'direction' => (request('sort') === 'name' && request('direction') === 'asc') ? 'desc' : 'asc'])) }}" 
+                   class="btn btn-sm {{ (!request('sort') || request('sort') === 'name') ? 'btn-success text-white' : 'btn-outline-secondary' }}" 
+                   title="Sort Alphabetically (A-Z)">
+                    <i class="fa-solid fa-arrow-down-a-z me-1"></i>A-Z
+                </a>
+                <a href="{{ route('inventory.index') }}" class="btn btn-outline-secondary btn-sm px-2">Reset</a>
             </div>
         </form>
     </div>
@@ -60,7 +72,18 @@
                 <thead class="table-light">
                     <tr>
                         <th>Store</th>
-                        <th>Product</th>
+                        <th>
+                            <a href="{{ route('inventory.index', array_merge(request()->query(), ['sort' => 'name', 'direction' => (request('sort') === 'name' && request('direction') === 'asc') ? 'desc' : 'asc'])) }}" class="text-dark text-decoration-none d-inline-flex align-items-center gap-1">
+                                <span>Product</span>
+                                <i class="fa-solid {{ request('direction') === 'desc' && request('sort') === 'name' ? 'fa-arrow-down-z-a text-primary' : 'fa-arrow-down-a-z text-primary' }} small"></i>
+                            </a>
+                        </th>
+                        <th>
+                            <a href="{{ route('inventory.index', array_merge(request()->query(), ['sort' => 'sku', 'direction' => (request('sort') === 'sku' && request('direction') === 'asc') ? 'desc' : 'asc'])) }}" class="text-dark text-decoration-none d-inline-flex align-items-center gap-1">
+                                <span>SKU Code</span>
+                                <i class="fa-solid fa-barcode text-muted small"></i>
+                            </a>
+                        </th>
                         <th>Category</th>
                         <th>On Hand</th>
                         <th>Reserved</th>
@@ -90,12 +113,17 @@
                             )
                         );
                         $totalVal = $item->quantity_on_hand * $effectiveCost;
+                        $skuCode = $item->product->sku ?: ($item->product->code ?: '—');
                     @endphp
                     <tr class="{{ $isLow ? 'table-warning' : '' }}">
                         <td>{{ $item->store->name }}</td>
                         <td>
-                            <div class="fw-semibold">{{ $item->product->name }}</div>
-                            <div class="text-muted small">{{ $item->product->code }}</div>
+                            <div class="fw-semibold text-dark">{{ $item->product->name }}</div>
+                        </td>
+                        <td>
+                            <span class="badge bg-light text-primary border font-monospace px-2 py-1">
+                                <i class="fa-solid fa-barcode me-1 text-muted"></i>{{ $skuCode }}
+                            </span>
                         </td>
                         <td>{{ $item->product->category }}</td>
                         <td>{{ number_format($item->quantity_on_hand, 3) }} <small class="text-muted">{{ $item->product->unit }}</small></td>

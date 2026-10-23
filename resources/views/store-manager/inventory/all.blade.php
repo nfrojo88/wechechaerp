@@ -293,10 +293,13 @@
                             else { $sBg='success'; $sText='Available'; }
                             $unitStr = $item->product->unit ?? 'pcs';
                         @endphp
+                        @php
+                            $rowSku = $item->product?->sku ?: ($item->product?->code ?: '');
+                        @endphp
                         <tr class="single-product-row" style="cursor:pointer;"
                             data-product-id="{{ $item->product_id }}"
                             data-name="{{ $item->product->name ?? 'N/A' }}"
-                            data-code="{{ $item->product->code ?? '' }}"
+                            data-code="{{ $rowSku }}"
                             data-store="{{ $item->store->name ?? 'N/A' }}"
                             data-store-id="{{ $item->store_id }}"
                             data-store-type="{{ $item->store->type ?? 'Site Store' }}"
@@ -323,8 +326,8 @@
                                 @else
                                     <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 ms-1"><i class="fas fa-box me-1"></i>Consumable</span>
                                 @endif
-                                @if($item->product && $item->product->code)
-                                    <br><small class="text-muted"><i class="fas fa-barcode me-1"></i>{{ $item->product->code }}</small>
+                                @if($rowSku)
+                                    <br><small class="text-muted"><i class="fas fa-barcode me-1"></i>{{ $rowSku }}</small>
                                 @endif
                             </td>
                             <td>

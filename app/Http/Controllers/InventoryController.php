@@ -19,25 +19,51 @@ class InventoryController extends Controller
     {
         $this->authorize('viewAny', Inventory::class);
 
-        $query = Inventory::with('store', 'product');
+        $query = Inventory::with(['store', 'product'])
+            ->join('products', 'inventory.product_id', '=', 'products.id')
+            ->whereNull('products.deleted_at')
+            ->select('inventory.*');
 
         if ($request->filled('store_id')) {
-            $query->where('store_id', $request->store_id);
+            $query->where('inventory.store_id', $request->store_id);
         }
         if ($request->filled('product_id')) {
-            $query->where('product_id', $request->product_id);
+            $query->where('inventory.product_id', $request->product_id);
         }
         if ($request->filled('low_stock')) {
-            $query->whereColumn('quantity_on_hand', '<=', 'min_stock');
+            $query->whereColumn('inventory.quantity_on_hand', '<=', 'inventory.min_stock');
+        }
+        if ($request->filled('search')) {
+            $s = trim($request->search);
+            $query->where(function ($q) use ($s) {
+                $q->where('products.name', 'like', "%{$s}%")
+                  ->orWhere('products.sku', 'like', "%{$s}%")
+                  ->orWhere('products.code', 'like', "%{$s}%")
+                  ->orWhere('products.category', 'like', "%{$s}%");
+            });
+        }
+
+        // Alphabetical sorting by product name (A-Z) by default
+        $sort = $request->query('sort', 'name');
+        $direction = strtolower($request->query('direction', 'asc')) === 'desc' ? 'desc' : 'asc';
+
+        if ($sort === 'sku') {
+            $query->orderBy('products.sku', $direction);
+        } elseif ($sort === 'category') {
+            $query->orderBy('products.category', $direction);
+        } elseif ($sort === 'quantity') {
+            $query->orderBy('inventory.quantity_on_hand', $direction);
+        } else {
+            $query->orderBy('products.name', $direction);
         }
 
         /** @var \Illuminate\Pagination\LengthAwarePaginator $inventory */
-        $inventory = $query->paginate(20);
+        $inventory = $query->paginate(25);
         $inventory->withQueryString();
         $stores    = Store::where('is_active', true)->orderBy('name')->get();
         $products  = Product::where('is_active', true)->orderBy('name')->get();
 
-        return view('inventory.index', compact('inventory', 'stores', 'products'));
+        return view('inventory.index', compact('inventory', 'stores', 'products', 'sort', 'direction'));
     }
 
     public function show(Inventory $inventory)
