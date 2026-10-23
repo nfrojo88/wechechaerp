@@ -3249,7 +3249,18 @@
                                             <small class="text-muted">Creditable business expenditures, 15% Input VAT, and 3% Withholding Deductions</small>
                                         </div>
                                     </div>
-                                    <div class="d-flex align-items-center gap-2">
+                                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                                        <div class="btn-group btn-group-sm shadow-xs rounded-pill p-0.5 bg-light border me-1" role="group">
+                                            <button type="button" class="btn btn-sm rounded-pill px-2.5 py-1 fw-semibold btn-danger text-white shadow-xs" id="btnModalExpenseAll" onclick="setMovementExpenseFilter('all')" title="Show All Purchases & Expenses">
+                                                <i class="fa-solid fa-list me-1"></i>All Purchases (<span id="countModalExpenseAll">0</span>)
+                                            </button>
+                                            <button type="button" class="btn btn-sm rounded-pill px-2.5 py-1 fw-semibold text-muted" id="btnModalExpenseVat" onclick="setMovementExpenseFilter('vat')" title="Purchases with 15% Input VAT">
+                                                <i class="fa-solid fa-percent me-1"></i>VAT Purchases (<span id="countModalExpenseVat">0</span>)
+                                            </button>
+                                            <button type="button" class="btn btn-sm rounded-pill px-2.5 py-1 fw-semibold text-muted" id="btnModalExpenseTas" onclick="setMovementExpenseFilter('tas')" title="Purchases with 0% VAT (Declared in TAS)">
+                                                <i class="fa-solid fa-receipt me-1"></i>TAS Purchases (0% VAT) (<span id="countModalExpenseTas">0</span>)
+                                            </button>
+                                        </div>
                                         <div class="btn-group shadow-xs rounded-pill overflow-hidden">
                                             <button type="button" class="btn btn-sm btn-outline-primary fw-semibold px-3 text-nowrap d-inline-flex align-items-center gap-1" onclick="exportMovementsExcel('purchase_tas')">
                                                 <i class="fa-solid fa-file-excel"></i>
@@ -3260,8 +3271,68 @@
                                                 <span>Purchase VAT</span>
                                             </button>
                                         </div>
-                                        <div style="min-width: 250px;">
+                                        <div style="min-width: 200px;">
                                             <input type="text" class="form-control form-control-sm rounded-pill" placeholder="Search payee, voucher #, category..." onkeyup="filterMovementTable('mExpenseTable', this.value)">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {{-- Dedicated KPI cards separating VAT Purchases and TAS Purchases --}}
+                                <div class="row g-2 px-3 pt-3 pb-2 bg-light bg-opacity-50 border-bottom">
+                                    <div class="col-md-6">
+                                        <div class="card border border-success-subtle bg-success-subtle bg-opacity-25 rounded-3 p-2.5 h-100">
+                                            <div class="d-flex align-items-center justify-content-between mb-1.5">
+                                                <span class="badge bg-success text-white rounded-pill px-2.5 py-1 small fw-bold">
+                                                    <i class="fa-solid fa-percent me-1"></i>VAT Purchases (15% VAT)
+                                                </span>
+                                                <span class="text-success fw-bold font-monospace small" id="mKpiVatPurchasesCount">0 Vouchers / Receipts</span>
+                                            </div>
+                                            <div class="d-flex justify-content-between align-items-baseline text-nowrap gap-2 flex-wrap">
+                                                <div>
+                                                    <small class="text-muted d-block" style="font-size:0.7rem;">Base (Excl. VAT)</small>
+                                                    <span class="fw-bold font-monospace text-dark" id="mKpiVatPurchasesBase">ETB 0.00</span>
+                                                </div>
+                                                <div>
+                                                    <small class="text-success d-block" style="font-size:0.7rem;">15% Input VAT</small>
+                                                    <span class="fw-bold font-monospace text-success" id="mKpiVatPurchasesVat">+ ETB 0.00</span>
+                                                </div>
+                                                <div>
+                                                    <small class="text-muted d-block" style="font-size:0.7rem;">3% WHT</small>
+                                                    <span class="fw-bold font-monospace text-danger" id="mKpiVatPurchasesWht">- ETB 0.00</span>
+                                                </div>
+                                                <div>
+                                                    <small class="text-dark d-block" style="font-size:0.7rem;">Net Disbursed</small>
+                                                    <span class="fw-bold font-monospace text-dark" id="mKpiVatPurchasesNet">ETB 0.00</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="card border border-primary-subtle bg-primary-subtle bg-opacity-25 rounded-3 p-2.5 h-100">
+                                            <div class="d-flex align-items-center justify-content-between mb-1.5">
+                                                <span class="badge bg-primary text-white rounded-pill px-2.5 py-1 small fw-bold">
+                                                    <i class="fa-solid fa-receipt me-1"></i>TAS Purchases (0% VAT Receipts)
+                                                </span>
+                                                <span class="text-primary fw-bold font-monospace small" id="mKpiTasPurchasesCount">0 Vouchers / Receipts</span>
+                                            </div>
+                                            <div class="d-flex justify-content-between align-items-baseline text-nowrap gap-2 flex-wrap">
+                                                <div>
+                                                    <small class="text-muted d-block" style="font-size:0.7rem;">Expenditure Base</small>
+                                                    <span class="fw-bold font-monospace text-dark" id="mKpiTasPurchasesBase">ETB 0.00</span>
+                                                </div>
+                                                <div>
+                                                    <small class="text-muted d-block" style="font-size:0.7rem;">VAT (0% / Exempt)</small>
+                                                    <span class="fw-bold font-monospace text-secondary">ETB 0.00</span>
+                                                </div>
+                                                <div>
+                                                    <small class="text-muted d-block" style="font-size:0.7rem;">3% WHT</small>
+                                                    <span class="fw-bold font-monospace text-danger" id="mKpiTasPurchasesWht">- ETB 0.00</span>
+                                                </div>
+                                                <div>
+                                                    <small class="text-dark d-block" style="font-size:0.7rem;">Net Disbursed</small>
+                                                    <span class="fw-bold font-monospace text-dark" id="mKpiTasPurchasesNet">ETB 0.00</span>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -3286,7 +3357,7 @@
                                         </tbody>
                                         <tfoot class="sticky-footer fw-bold border-top">
                                             <tr>
-                                                <td colspan="6" class="ps-3 py-2 text-uppercase small text-muted">Total Purchases &amp; Deductions</td>
+                                                <td colspan="6" class="ps-3 py-2 text-uppercase small text-muted" id="mExpenseTotalLabel">Total Purchases &amp; Deductions</td>
                                                 <td class="text-end py-2 font-monospace text-dark" id="mExpenseTotalBase">ETB 0.00</td>
                                                 <td class="text-end py-2 font-monospace text-success" id="mExpenseTotalVat">ETB 0.00</td>
                                                 <td class="text-end py-2 font-monospace text-danger" id="mExpenseTotalWht">- ETB 0.00</td>
@@ -5863,55 +5934,38 @@
             document.getElementById('mIncomeTotalNet').innerText = 'ETB ' + formatMoney(s.income_net || s.gross_income);
         }
 
-        // 2. Render Expenses Table (Purchases & Expenditures)
-        const expenseTbody = document.getElementById('mExpenseTableBody');
-        expenseTbody.innerHTML = '';
-        if (data.expenses && data.expenses.length > 0) {
-            data.expenses.forEach((exp, idx) => {
-                const tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td class="ps-3 text-muted font-monospace small">${idx + 1}</td>
-                    <td>
-                        <span class="fw-bold font-monospace text-dark d-block">${exp.date_ec}</span>
-                        <small class="text-muted" style="font-size:0.75rem;">${exp.date_gc}</small>
-                    </td>
-                    <td>
-                        <div class="d-flex align-items-center gap-1 flex-wrap">
-                            <span class="badge bg-light text-dark border font-monospace">${exp.request_number}</span>
-                            ${exp.source_type === 'petty_cash' ? `<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-pill small" style="font-size:0.65rem;"><i class="fa-solid fa-coins me-0.5"></i>Petty Cash</span>` : (exp.source_type === 'direct_expense' ? `<span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle rounded-pill small" style="font-size:0.65rem;">Direct</span>` : '')}
-                        </div>
-                        ${exp.payment_reference && exp.payment_reference !== '-' ? `<small class="text-muted d-block font-monospace">Ref: ${exp.payment_reference}</small>` : ''}
-                    </td>
-                    <td>
-                        <span class="fw-semibold text-dark d-block">${exp.payee}</span>
-                    </td>
-                    <td>
-                        <span class="badge bg-info-subtle text-info border border-info-subtle rounded-pill small">${exp.category}</span>
-                        <small class="text-muted d-block" style="font-size:0.75rem;">${exp.project_name}</small>
-                    </td>
-                    <td class="small text-muted">
-                        <i class="fa-solid fa-wallet me-1 text-danger"></i>${exp.account_name}
-                    </td>
-                    <td class="text-end font-monospace">ETB ${formatMoney(exp.base_amount)}</td>
-                    <td class="text-end font-monospace text-success fw-semibold">ETB ${formatMoney(exp.vat_amount)}</td>
-                    <td class="text-end font-monospace text-danger">${exp.withholding_amount > 0 ? '- ETB ' + formatMoney(exp.withholding_amount) : '-'}</td>
-                    <td class="text-end font-monospace text-dark fw-bold pe-3">ETB ${formatMoney(exp.net_disbursed)}</td>
-                `;
-                expenseTbody.appendChild(tr);
-            });
-        } else {
-            expenseTbody.innerHTML = `
-                <tr>
-                    <td colspan="10" class="text-center py-4 text-muted">
-                        <i class="fa-solid fa-folder-open me-2 text-secondary"></i>No purchases or paid expenses recorded for this Ethiopian month.
-                    </td>
-                </tr>
-            `;
+        // 2. Render Expenses Table (Purchases & Expenditures: Separated by VAT Purchases and TAS Purchases)
+        window._movementExpenseCache = data.expenses || [];
+        window._movementExpenseSummary = s;
+        window._movementExpenseFilter = 'all';
+
+        // Update counts on filter buttons
+        if (document.getElementById('countModalExpenseAll')) {
+            document.getElementById('countModalExpenseAll').innerText = (data.expenses || []).length;
         }
-        document.getElementById('mExpenseTotalBase').innerText = 'ETB ' + formatMoney(s.purchases_base);
-        document.getElementById('mExpenseTotalVat').innerText = 'ETB ' + formatMoney(s.input_vat);
-        document.getElementById('mExpenseTotalWht').innerText = '- ETB ' + formatMoney(s.withholding_tax);
-        document.getElementById('mExpenseTotalNet').innerText = 'ETB ' + formatMoney(s.net_disbursed);
+        if (document.getElementById('countModalExpenseVat')) {
+            document.getElementById('countModalExpenseVat').innerText = (data.vat_purchases || []).length;
+        }
+        if (document.getElementById('countModalExpenseTas')) {
+            document.getElementById('countModalExpenseTas').innerText = (data.tas_purchases || []).length;
+        }
+
+        // Update dedicated KPI cards
+        if (document.getElementById('mKpiVatPurchasesCount')) {
+            document.getElementById('mKpiVatPurchasesCount').innerText = `${s.vat_purchases_count || 0} Vouchers / Receipts`;
+            document.getElementById('mKpiVatPurchasesBase').innerText = 'ETB ' + formatMoney(s.vat_purchases_base || 0);
+            document.getElementById('mKpiVatPurchasesVat').innerText = '+ ETB ' + formatMoney(s.vat_purchases_vat || 0);
+            document.getElementById('mKpiVatPurchasesWht').innerText = (s.vat_purchases_wht > 0 ? '- ETB ' : 'ETB ') + formatMoney(s.vat_purchases_wht || 0);
+            document.getElementById('mKpiVatPurchasesNet').innerText = 'ETB ' + formatMoney(s.vat_purchases_net || 0);
+        }
+        if (document.getElementById('mKpiTasPurchasesCount')) {
+            document.getElementById('mKpiTasPurchasesCount').innerText = `${s.tas_purchases_count || 0} Vouchers / Receipts`;
+            document.getElementById('mKpiTasPurchasesBase').innerText = 'ETB ' + formatMoney(s.tas_purchases_base || 0);
+            document.getElementById('mKpiTasPurchasesWht').innerText = (s.tas_purchases_wht > 0 ? '- ETB ' : 'ETB ') + formatMoney(s.tas_purchases_wht || 0);
+            document.getElementById('mKpiTasPurchasesNet').innerText = 'ETB ' + formatMoney(s.tas_purchases_net || 0);
+        }
+
+        renderMovementExpenseTable('all');
 
         // 3. Render OCR Invoices Table (Defaults strictly to VAT receipts)
         window._movementOcrCache['modal'] = data.ocr_items || [];
@@ -5966,6 +6020,110 @@
             <i class="fa-solid fa-circle-check text-success me-1"></i>
             Total <strong>${s.total_count}</strong> transactions loaded: <strong>${s.income_count}</strong> income receipts &bull; <strong>${s.expense_count}</strong> expense vouchers &bull; <strong>${s.ocr_count}</strong> scanned OCR invoices.
         `;
+    }
+
+    // ── VAT Purchases vs TAS Purchases (0% VAT) Filter for Movements Expense Table ──
+    window._movementExpenseFilter = 'all';
+
+    function setMovementExpenseFilter(type) {
+        window._movementExpenseFilter = type;
+        
+        ['all', 'vat', 'tas'].forEach(t => {
+            const btn = document.getElementById(t === 'all' ? 'btnModalExpenseAll' : (t === 'vat' ? 'btnModalExpenseVat' : 'btnModalExpenseTas'));
+            if (!btn) return;
+            if (t === type) {
+                btn.className = 'btn btn-sm rounded-pill px-2.5 py-1 fw-semibold ' + (t === 'vat' ? 'btn-success text-white shadow-xs' : (t === 'tas' ? 'btn-primary text-white shadow-xs' : 'btn-danger text-white shadow-xs'));
+            } else {
+                btn.className = 'btn btn-sm rounded-pill px-2.5 py-1 fw-semibold text-muted';
+            }
+        });
+
+        renderMovementExpenseTable(type);
+    }
+
+    function renderMovementExpenseTable(filterType) {
+        const rawList = window._movementExpenseCache || [];
+        const list = rawList.filter(exp => {
+            if (filterType === 'vat') return Boolean(exp.is_vat_purchase || parseFloat(exp.vat_amount || 0) > 0);
+            if (filterType === 'tas') return Boolean(exp.is_tas_purchase || (!exp.is_vat_purchase && parseFloat(exp.vat_amount || 0) <= 0));
+            return true;
+        });
+
+        const expenseTbody = document.getElementById('mExpenseTableBody');
+        if (!expenseTbody) return;
+        expenseTbody.innerHTML = '';
+
+        let totalBase = 0, totalVat = 0, totalWht = 0, totalNet = 0;
+
+        if (list && list.length > 0) {
+            list.forEach((exp, idx) => {
+                const isVat = Boolean(exp.is_vat_purchase || parseFloat(exp.vat_amount || 0) > 0);
+                const base = parseFloat(exp.base_amount || 0);
+                const vat  = parseFloat(exp.vat_amount || 0);
+                const wht  = parseFloat(exp.withholding_amount || 0);
+                const net  = parseFloat(exp.net_disbursed || 0);
+
+                totalBase += base;
+                totalVat  += vat;
+                totalWht  += wht;
+                totalNet  += net;
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="ps-3 text-muted font-monospace small">${idx + 1}</td>
+                    <td>
+                        <span class="fw-bold font-monospace text-dark d-block">${exp.date_ec}</span>
+                        <small class="text-muted" style="font-size:0.75rem;">${exp.date_gc}</small>
+                    </td>
+                    <td>
+                        <div class="d-flex align-items-center gap-1 flex-wrap">
+                            <span class="badge bg-light text-dark border font-monospace">${exp.request_number}</span>
+                            ${isVat 
+                                ? `<span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill font-monospace" style="font-size:0.65rem;"><i class="fa-solid fa-percent me-0.5"></i>VAT Purchase</span>`
+                                : `<span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill font-monospace" style="font-size:0.65rem;"><i class="fa-solid fa-receipt me-0.5"></i>TAS Purchase (0% VAT)</span>`
+                            }
+                            ${exp.source_type === 'petty_cash' ? `<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-pill small" style="font-size:0.65rem;"><i class="fa-solid fa-coins me-0.5"></i>Petty Cash</span>` : (exp.source_type === 'direct_expense' ? `<span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle rounded-pill small" style="font-size:0.65rem;">Direct</span>` : '')}
+                        </div>
+                        ${exp.payment_reference && exp.payment_reference !== '-' ? `<small class="text-muted d-block font-monospace">Ref: ${exp.payment_reference}</small>` : ''}
+                    </td>
+                    <td>
+                        <span class="fw-semibold text-dark d-block">${exp.payee}</span>
+                    </td>
+                    <td>
+                        <span class="badge bg-info-subtle text-info border border-info-subtle rounded-pill small">${exp.category}</span>
+                        <small class="text-muted d-block" style="font-size:0.75rem;">${exp.project_name}</small>
+                    </td>
+                    <td class="small text-muted">
+                        <i class="fa-solid fa-wallet me-1 text-danger"></i>${exp.account_name}
+                    </td>
+                    <td class="text-end font-monospace">ETB ${formatMoney(base)}</td>
+                    <td class="text-end font-monospace text-success fw-semibold">ETB ${formatMoney(vat)}</td>
+                    <td class="text-end font-monospace text-danger">${wht > 0 ? '- ETB ' + formatMoney(wht) : '-'}</td>
+                    <td class="text-end font-monospace text-dark fw-bold pe-3">ETB ${formatMoney(net)}</td>
+                `;
+                expenseTbody.appendChild(tr);
+            });
+        } else {
+            const typeLabel = filterType === 'vat' ? 'VAT purchases' : (filterType === 'tas' ? 'TAS purchases (0% VAT)' : 'purchases or paid expenses');
+            expenseTbody.innerHTML = `
+                <tr>
+                    <td colspan="10" class="text-center py-4 text-muted">
+                        <i class="fa-solid fa-folder-open me-2 text-secondary"></i>No ${typeLabel} recorded for this Ethiopian month.
+                    </td>
+                </tr>
+            `;
+        }
+
+        const footLabel = document.getElementById('mExpenseTotalLabel');
+        if (footLabel) {
+            footLabel.textContent = filterType === 'vat'
+                ? `Total VAT Purchases (${list.length} items)`
+                : (filterType === 'tas' ? `Total TAS Purchases (${list.length} items)` : `Total Purchases & Deductions (${list.length} items)`);
+        }
+        document.getElementById('mExpenseTotalBase').innerText = 'ETB ' + formatMoney(totalBase);
+        document.getElementById('mExpenseTotalVat').innerText  = 'ETB ' + formatMoney(totalVat);
+        document.getElementById('mExpenseTotalWht').innerText  = (totalWht > 0 ? '- ETB ' : 'ETB ') + formatMoney(totalWht);
+        document.getElementById('mExpenseTotalNet').innerText  = 'ETB ' + formatMoney(totalNet);
     }
 
     // ── VAT-Only vs All Scanned Filter for Modal OCR Table ─────────────────────

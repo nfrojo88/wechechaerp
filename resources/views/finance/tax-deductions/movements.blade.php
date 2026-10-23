@@ -416,7 +416,18 @@
                             <small class="text-muted">Creditable business expenditures, 15% Input VAT, and 3% Withholding Deductions</small>
                         </div>
                     </div>
-                    <div class="d-flex align-items-center gap-2 d-print-none">
+                    <div class="d-flex align-items-center gap-2 d-print-none flex-wrap">
+                        <div class="btn-group btn-group-sm shadow-xs rounded-pill p-0.5 bg-light border me-1" role="group">
+                            <button type="button" class="btn btn-sm rounded-pill px-2.5 py-1 fw-semibold btn-danger text-white shadow-xs btn-expense-filter" id="btnExpenseFilter-all" onclick="filterExpensePurchaseType('all')" title="Show All Purchases & Expenses">
+                                <i class="fa-solid fa-list me-1"></i>All Purchases ({{ count($movementsData['expenses'] ?? []) }})
+                            </button>
+                            <button type="button" class="btn btn-sm rounded-pill px-2.5 py-1 fw-semibold text-muted btn-expense-filter" id="btnExpenseFilter-vat" onclick="filterExpensePurchaseType('vat')" title="Purchases with 15% Input VAT">
+                                <i class="fa-solid fa-percent me-1"></i>VAT Purchases ({{ count($movementsData['vat_purchases'] ?? []) }})
+                            </button>
+                            <button type="button" class="btn btn-sm rounded-pill px-2.5 py-1 fw-semibold text-muted btn-expense-filter" id="btnExpenseFilter-tas" onclick="filterExpensePurchaseType('tas')" title="Purchases with 0% VAT (Declared in TAS)">
+                                <i class="fa-solid fa-receipt me-1"></i>TAS Purchases (0% VAT) ({{ count($movementsData['tas_purchases'] ?? []) }})
+                            </button>
+                        </div>
                         <div class="btn-group shadow-xs rounded-pill overflow-hidden">
                             <a href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_tas', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}" 
                                class="btn btn-sm btn-outline-primary fw-semibold px-3 text-nowrap d-inline-flex align-items-center gap-1">
@@ -429,11 +440,72 @@
                                 <span>Purchase VAT</span>
                             </a>
                         </div>
-                        <div style="min-width: 250px;">
+                        <div style="min-width: 200px;">
                             <input type="text" class="form-control form-control-sm rounded-pill" placeholder="Search payee, voucher #, category..." onkeyup="filterLocalTable('pageExpenseTable', this.value)">
                         </div>
                     </div>
                 </div>
+
+                {{-- Dedicated KPI cards separating VAT Purchases and TAS Purchases --}}
+                <div class="row g-2 px-3 pt-3 pb-2 bg-light bg-opacity-50 border-bottom">
+                    <div class="col-md-6">
+                        <div class="card border border-success-subtle bg-success-subtle bg-opacity-25 rounded-3 p-2.5 h-100">
+                            <div class="d-flex align-items-center justify-content-between mb-1.5">
+                                <span class="badge bg-success text-white rounded-pill px-2.5 py-1 small fw-bold">
+                                    <i class="fa-solid fa-percent me-1"></i>VAT Purchases (15% VAT)
+                                </span>
+                                <span class="text-success fw-bold font-monospace small" id="kpiVatPurchasesCount">{{ $movementsData['summary']['vat_purchases_count'] ?? count($movementsData['vat_purchases'] ?? []) }} Vouchers / Receipts</span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-baseline text-nowrap gap-2 flex-wrap">
+                                <div>
+                                    <small class="text-muted d-block" style="font-size:0.7rem;">Base (Excl. VAT)</small>
+                                    <span class="fw-bold font-monospace text-dark" id="kpiVatPurchasesBase">ETB {{ number_format($movementsData['summary']['vat_purchases_base'] ?? 0, 2) }}</span>
+                                </div>
+                                <div>
+                                    <small class="text-success d-block" style="font-size:0.7rem;">15% Input VAT</small>
+                                    <span class="fw-bold font-monospace text-success" id="kpiVatPurchasesVat">+ ETB {{ number_format($movementsData['summary']['vat_purchases_vat'] ?? 0, 2) }}</span>
+                                </div>
+                                <div>
+                                    <small class="text-muted d-block" style="font-size:0.7rem;">3% WHT</small>
+                                    <span class="fw-bold font-monospace text-danger" id="kpiVatPurchasesWht">{{ ($movementsData['summary']['vat_purchases_wht'] ?? 0) > 0 ? '- ETB ' . number_format($movementsData['summary']['vat_purchases_wht'] ?? 0, 2) : '-' }}</span>
+                                </div>
+                                <div>
+                                    <small class="text-dark d-block" style="font-size:0.7rem;">Net Disbursed</small>
+                                    <span class="fw-bold font-monospace text-dark" id="kpiVatPurchasesNet">ETB {{ number_format($movementsData['summary']['vat_purchases_net'] ?? 0, 2) }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card border border-primary-subtle bg-primary-subtle bg-opacity-25 rounded-3 p-2.5 h-100">
+                            <div class="d-flex align-items-center justify-content-between mb-1.5">
+                                <span class="badge bg-primary text-white rounded-pill px-2.5 py-1 small fw-bold">
+                                    <i class="fa-solid fa-receipt me-1"></i>TAS Purchases (0% VAT Receipts)
+                                </span>
+                                <span class="text-primary fw-bold font-monospace small" id="kpiTasPurchasesCount">{{ $movementsData['summary']['tas_purchases_count'] ?? count($movementsData['tas_purchases'] ?? []) }} Vouchers / Receipts</span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-baseline text-nowrap gap-2 flex-wrap">
+                                <div>
+                                    <small class="text-muted d-block" style="font-size:0.7rem;">Expenditure Base</small>
+                                    <span class="fw-bold font-monospace text-dark" id="kpiTasPurchasesBase">ETB {{ number_format($movementsData['summary']['tas_purchases_base'] ?? 0, 2) }}</span>
+                                </div>
+                                <div>
+                                    <small class="text-muted d-block" style="font-size:0.7rem;">VAT (0% / Exempt)</small>
+                                    <span class="fw-bold font-monospace text-secondary">ETB 0.00</span>
+                                </div>
+                                <div>
+                                    <small class="text-muted d-block" style="font-size:0.7rem;">3% WHT</small>
+                                    <span class="fw-bold font-monospace text-danger" id="kpiTasPurchasesWht">{{ ($movementsData['summary']['tas_purchases_wht'] ?? 0) > 0 ? '- ETB ' . number_format($movementsData['summary']['tas_purchases_wht'] ?? 0, 2) : '-' }}</span>
+                                </div>
+                                <div>
+                                    <small class="text-dark d-block" style="font-size:0.7rem;">Net Disbursed</small>
+                                    <span class="fw-bold font-monospace text-dark" id="kpiTasPurchasesNet">ETB {{ number_format($movementsData['summary']['tas_purchases_net'] ?? 0, 2) }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="table-responsive">
                     <table class="table table-hover align-middle mb-0" id="pageExpenseTable">
                         <thead class="table-light text-muted text-uppercase fw-bold" style="font-size: 0.7rem;">
@@ -457,8 +529,14 @@
                                     $expVat  = (float)($exp['vat_amount'] ?? 0);
                                     $expWht  = (float)($exp['withholding_amount'] ?? 0);
                                     $expNet  = (float)($exp['net_disbursed'] ?? ($expBase + $expVat - $expWht));
+                                    $isVatExp = !empty($exp['is_vat_purchase']) || $expVat > 0;
                                 @endphp
-                                <tr>
+                                <tr class="expense-row" 
+                                    data-purchase-category="{{ $isVatExp ? 'vat' : 'tas' }}"
+                                    data-base="{{ $expBase }}"
+                                    data-vat="{{ $expVat }}"
+                                    data-wht="{{ $expWht }}"
+                                    data-net="{{ $expNet }}">
                                     <td class="ps-3 text-muted font-monospace small">{{ $idx + 1 }}</td>
                                     <td>
                                         <span class="fw-bold font-monospace text-dark d-block">{{ $exp['date_ec'] ?? '-' }}</span>
@@ -467,6 +545,15 @@
                                     <td>
                                         <div class="d-flex align-items-center gap-1 flex-wrap">
                                             <span class="badge bg-light text-dark border font-monospace">{{ $exp['request_number'] ?? '-' }}</span>
+                                            @if($isVatExp)
+                                                <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill font-monospace" style="font-size:0.65rem;">
+                                                    <i class="fa-solid fa-percent me-0.5"></i>VAT Purchase
+                                                </span>
+                                            @else
+                                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill font-monospace" style="font-size:0.65rem;">
+                                                    <i class="fa-solid fa-receipt me-0.5"></i>TAS Purchase (0% VAT)
+                                                </span>
+                                            @endif
                                             @if(($exp['source_type'] ?? '') === 'petty_cash')
                                                 <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-pill small" style="font-size:0.65rem;"><i class="fa-solid fa-coins me-0.5"></i>Petty Cash</span>
                                             @elseif(($exp['source_type'] ?? '') === 'direct_expense')
@@ -502,11 +589,11 @@
                         </tbody>
                         <tfoot class="table-light fw-bold border-top">
                             <tr>
-                                <td colspan="6" class="ps-3 py-2 text-uppercase small text-muted">Total Purchases &amp; Deductions</td>
-                                <td class="text-end py-2 font-monospace text-dark">ETB {{ number_format($purchasesBase, 2) }}</td>
-                                <td class="text-end py-2 font-monospace text-success">ETB {{ number_format($inputVat, 2) }}</td>
-                                <td class="text-end py-2 font-monospace text-danger">- ETB {{ number_format($wht, 2) }}</td>
-                                <td class="text-end py-2 font-monospace text-dark pe-3">ETB {{ number_format($netDisbursed, 2) }}</td>
+                                <td colspan="6" class="ps-3 py-2 text-uppercase small text-muted" id="pageExpenseFootLabel">Total Purchases &amp; Deductions</td>
+                                <td class="text-end py-2 font-monospace text-dark" id="pageExpenseFootBase">ETB {{ number_format($purchasesBase, 2) }}</td>
+                                <td class="text-end py-2 font-monospace text-success" id="pageExpenseFootVat">ETB {{ number_format($inputVat, 2) }}</td>
+                                <td class="text-end py-2 font-monospace text-danger" id="pageExpenseFootWht">- ETB {{ number_format($wht, 2) }}</td>
+                                <td class="text-end py-2 font-monospace text-dark pe-3" id="pageExpenseFootNet">ETB {{ number_format($netDisbursed, 2) }}</td>
                             </tr>
                         </tfoot>
                     </table>
@@ -1107,9 +1194,74 @@
         const q = (query || '').toLowerCase().trim();
 
         trs.forEach(tr => {
+            const rowMatchesCategory = (_activeExpenseFilter === 'all' || tr.getAttribute('data-purchase-category') === _activeExpenseFilter);
+            if (!rowMatchesCategory && tableId === 'pageExpenseTable') {
+                tr.style.display = 'none';
+                return;
+            }
             const text = tr.innerText.toLowerCase();
             tr.style.display = text.includes(q) ? '' : 'none';
         });
+    }
+
+    // Toggle between All Purchases, VAT Purchases (15% VAT), and TAS Purchases (0% VAT)
+    let _activeExpenseFilter = 'all';
+
+    function filterExpensePurchaseType(type) {
+        _activeExpenseFilter = type;
+        const rows = document.querySelectorAll('#pageExpenseTable tbody tr.expense-row');
+        let totalBase = 0, totalVat = 0, totalWht = 0, totalNet = 0, visibleCount = 0;
+
+        rows.forEach(tr => {
+            const rowType = tr.getAttribute('data-purchase-category');
+            const matchesType = (type === 'all' || rowType === type);
+            if (matchesType) {
+                tr.style.display = '';
+                visibleCount++;
+                totalBase += parseFloat(tr.getAttribute('data-base') || 0);
+                totalVat  += parseFloat(tr.getAttribute('data-vat') || 0);
+                totalWht  += parseFloat(tr.getAttribute('data-wht') || 0);
+                totalNet  += parseFloat(tr.getAttribute('data-net') || 0);
+            } else {
+                tr.style.display = 'none';
+            }
+        });
+
+        // Update active filter button styles
+        ['all', 'vat', 'tas'].forEach(t => {
+            const btn = document.getElementById('btnExpenseFilter-' + t);
+            if (!btn) return;
+            if (t === type) {
+                btn.classList.remove('text-muted');
+                if (t === 'vat') {
+                    btn.classList.add('btn-success', 'text-white', 'shadow-xs');
+                } else if (t === 'tas') {
+                    btn.classList.add('btn-primary', 'text-white', 'shadow-xs');
+                } else {
+                    btn.classList.add('btn-danger', 'text-white', 'shadow-xs');
+                }
+            } else {
+                btn.classList.remove('btn-danger', 'btn-success', 'btn-primary', 'text-white', 'shadow-xs');
+                btn.classList.add('text-muted');
+            }
+        });
+
+        // Update footers
+        const footLabel = document.getElementById('pageExpenseFootLabel');
+        const footBase  = document.getElementById('pageExpenseFootBase');
+        const footVat   = document.getElementById('pageExpenseFootVat');
+        const footWht   = document.getElementById('pageExpenseFootWht');
+        const footNet   = document.getElementById('pageExpenseFootNet');
+
+        if (footLabel) {
+            footLabel.textContent = type === 'vat' 
+                ? `Total VAT Purchases (${visibleCount} items)` 
+                : (type === 'tas' ? `Total TAS Purchases (${visibleCount} items)` : `Total Purchases & Deductions (${visibleCount} items)`);
+        }
+        if (footBase) footBase.textContent = 'ETB ' + totalBase.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        if (footVat)  footVat.textContent  = 'ETB ' + totalVat.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        if (footWht)  footWht.textContent  = (totalWht > 0 ? '- ETB ' : 'ETB ') + totalWht.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        if (footNet)  footNet.textContent  = 'ETB ' + totalNet.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
     }
 
     // Slip Modal Zoom & Rotate

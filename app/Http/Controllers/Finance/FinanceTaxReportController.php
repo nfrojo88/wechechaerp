@@ -1305,8 +1305,13 @@ class FinanceTaxReportController extends Controller
                 'attachment_url'     => $item->attachment_url,
                 'status'             => $item->status,
                 'is_settled'         => (bool)$item->vat_settled,
-                'source_type'        => 'expense_request',
-                'source_label'       => 'Expense Voucher',
+                'source_type'             => 'expense_request',
+                'source_label'            => 'Expense Voucher',
+                'is_vat_purchase'         => ($vatAmount > 0),
+                'is_tas_purchase'         => ($vatAmount <= 0),
+                'purchase_category'       => ($vatAmount > 0 ? 'vat_purchase' : 'tas_purchase'),
+                'purchase_category_label' => ($vatAmount > 0 ? 'VAT Purchase (15%)' : 'TAS Purchase (0% VAT)'),
+                'purchase_category_badge' => ($vatAmount > 0 ? 'bg-success-subtle text-success border border-success-subtle' : 'bg-primary-subtle text-primary border border-primary-subtle'),
             ];
         });
 
@@ -1396,8 +1401,13 @@ class FinanceTaxReportController extends Controller
                         'attachment_url'     => $attachmentUrl,
                         'status'             => $p->status ?: 'completed',
                         'is_settled'         => false,
-                        'source_type'        => 'petty_cash',
-                        'source_label'       => 'Petty Cash',
+                        'source_type'             => 'petty_cash',
+                        'source_label'            => 'Petty Cash',
+                        'is_vat_purchase'         => false,
+                        'is_tas_purchase'         => true,
+                        'purchase_category'       => 'tas_purchase',
+                        'purchase_category_label' => 'TAS Purchase (0% VAT)',
+                        'purchase_category_badge' => 'bg-primary-subtle text-primary border border-primary-subtle',
                     ]);
                 }
             } catch (\Throwable $e) {
@@ -1463,8 +1473,13 @@ class FinanceTaxReportController extends Controller
                         'attachment_url'     => $attachmentUrl,
                         'status'             => $de->status ?: 'approved',
                         'is_settled'         => false,
-                        'source_type'        => 'direct_expense',
-                        'source_label'       => 'Direct Expense',
+                        'source_type'             => 'direct_expense',
+                        'source_label'            => 'Direct Expense',
+                        'is_vat_purchase'         => false,
+                        'is_tas_purchase'         => true,
+                        'purchase_category'       => 'tas_purchase',
+                        'purchase_category_label' => 'TAS Purchase (0% VAT)',
+                        'purchase_category_badge' => 'bg-primary-subtle text-primary border border-primary-subtle',
                     ]);
                 }
             } catch (\Throwable $e) {
@@ -1950,13 +1965,25 @@ class FinanceTaxReportController extends Controller
                 'ocr_total'              => round($ocrPurchasesBase + $ocrInputVat, 2),
                 'income_count'           => $formattedIncomes->count(),
                 'expense_count'          => $formattedExpenses->count(),
+                'vat_purchases_count'    => $formattedExpenses->where('is_vat_purchase', true)->count(),
+                'vat_purchases_base'     => (float)$formattedExpenses->where('is_vat_purchase', true)->sum('base_amount'),
+                'vat_purchases_vat'      => (float)$formattedExpenses->where('is_vat_purchase', true)->sum('vat_amount'),
+                'vat_purchases_wht'      => (float)$formattedExpenses->where('is_vat_purchase', true)->sum('withholding_amount'),
+                'vat_purchases_net'      => (float)$formattedExpenses->where('is_vat_purchase', true)->sum('net_disbursed'),
+                'tas_purchases_count'    => $formattedExpenses->where('is_tas_purchase', true)->count(),
+                'tas_purchases_base'     => (float)$formattedExpenses->where('is_tas_purchase', true)->sum('base_amount'),
+                'tas_purchases_vat'      => 0.0,
+                'tas_purchases_wht'      => (float)$formattedExpenses->where('is_tas_purchase', true)->sum('withholding_amount'),
+                'tas_purchases_net'      => (float)$formattedExpenses->where('is_tas_purchase', true)->sum('net_disbursed'),
                 'ocr_count'              => $formattedOcrItems->count(),
                 'total_count'            => $formattedIncomes->count() + $formattedExpenses->count() + $formattedOcrItems->count(),
             ],
-            'vat_only'  => $vatOnly,
-            'incomes'   => $formattedIncomes->values(),
-            'expenses'  => $formattedExpenses->values(),
-            'ocr_items' => $formattedOcrItems->values(),
+            'vat_only'      => $vatOnly,
+            'incomes'       => $formattedIncomes->values(),
+            'expenses'      => $formattedExpenses->values(),
+            'vat_purchases' => $formattedExpenses->where('is_vat_purchase', true)->values(),
+            'tas_purchases' => $formattedExpenses->where('is_tas_purchase', true)->values(),
+            'ocr_items'     => $formattedOcrItems->values(),
         ];
     }
 

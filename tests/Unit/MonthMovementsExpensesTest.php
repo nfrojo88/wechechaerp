@@ -373,5 +373,24 @@ class MonthMovementsExpensesTest extends TestCase
         $this->assertEquals(345.00, (float)$data['summary']['withholding_tax']);
         // Net Disbursed = (11500 + 1500 - 345) + 2000 = 14655
         $this->assertEquals(14655.00, (float)$data['summary']['net_disbursed']);
+
+        // Assert VAT vs TAS purchases separation
+        $this->assertEquals(1, $data['summary']['vat_purchases_count']);
+        $this->assertEquals(11500.00, (float)$data['summary']['vat_purchases_base']);
+        $this->assertEquals(1500.00, (float)$data['summary']['vat_purchases_vat']);
+
+        $this->assertEquals(1, $data['summary']['tas_purchases_count']);
+        $this->assertEquals(2000.00, (float)$data['summary']['tas_purchases_base']);
+        $this->assertEquals(0.0, (float)$data['summary']['tas_purchases_vat']);
+
+        $this->assertCount(1, $data['vat_purchases']);
+        $this->assertEquals('EXP-SUM-01', $data['vat_purchases'][0]['request_number']);
+        $this->assertTrue($data['vat_purchases'][0]['is_vat_purchase']);
+        $this->assertFalse($data['vat_purchases'][0]['is_tas_purchase']);
+
+        $this->assertCount(1, $data['tas_purchases']);
+        $this->assertEquals('PCMP-SUM-01', $data['tas_purchases'][0]['request_number']);
+        $this->assertFalse($data['tas_purchases'][0]['is_vat_purchase']);
+        $this->assertTrue($data['tas_purchases'][0]['is_tas_purchase']);
     }
 }
