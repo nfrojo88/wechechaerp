@@ -143,8 +143,6 @@ class UpdateOcrInspectorTest extends TestCase
             $table->decimal('total_amount', 15, 2)->default(0);
             $table->string('currency', 10)->default('ETB');
             $table->string('category')->default('materials');
-            $table->string('tax_type')->nullable();
-            $table->string('no_vat_reason_code')->nullable();
             $table->text('description')->nullable();
             $table->string('file_path')->nullable();
             $table->string('file_type', 20)->default('image');
@@ -157,7 +155,6 @@ class UpdateOcrInspectorTest extends TestCase
             $table->foreignId('receipt_id');
             $table->text('item_description')->nullable();
             $table->string('vat_category', 10)->default('G');
-            $table->string('purc_type', 20)->default('PUR_GD');
             $table->string('calendar_type', 10)->default('G');
             $table->integer('purchase_type')->default(3);
             $table->string('uom', 50)->default('9');
@@ -290,7 +287,7 @@ class UpdateOcrInspectorTest extends TestCase
             'vat_amount'     => 0.00,
             'total_amount'   => 850.00,
             'category'       => 'fuel',
-            'tax_type'       => 'no_vat',
+            'parsed_data'    => ['tax_type' => 'no_vat'],
         ]);
 
         $item = ReceiptItem::create([
@@ -695,8 +692,8 @@ class UpdateOcrInspectorTest extends TestCase
             'vat_amount'     => 300.00,
             'total_amount'   => 2300.00,
             'category'       => 'materials',
-            'tax_type'       => 'vat_standard',
             'parsed_data'    => [
+                'tax_type'   => 'vat_standard',
                 'receipt_no' => '11223344',
                 'seller_tin' => '1234567890',
                 'seller_name'=> 'Old Scanned Merchant',
@@ -804,7 +801,7 @@ class UpdateOcrInspectorTest extends TestCase
             'vat_amount'     => 225.00,
             'total_amount'   => 1725.00,
             'category'       => 'fuel',
-            'tax_type'       => 'vat_standard',
+            'parsed_data'    => ['tax_type' => 'vat_standard'],
         ]);
 
         $item = ReceiptItem::create([
@@ -885,5 +882,57 @@ class UpdateOcrInspectorTest extends TestCase
             'ethiopian_month' => 2,
         ]));
         $this->assertEquals('income', $viewDefault->getData()['activeTab']);
+    }
+
+    public function test_save_does_not_fail_when_tax_type_column_missing_from_receipts_table()
+    {
+        $this->assertFalse(Schema::hasColumn('receipts', 'tax_type'), 'Precondition: receipts table must NOT have tax_type column');
+
+        $receipt = Receipt::create([
+            'receipt_number' => 'RCP-TEST-NO-COL-001',
+            'subtotal'       => 400.00,
+            'vat_amount'     => 60.00,
+            'total_amount'   => 460.00,
+            'vendor_name'    => 'Initial Merchant',
+        ]);
+
+        $item = ReceiptItem::create([
+            'receipt_id'       => $receipt->id,
+            'item_description' => 'Initial Description',
+            'vat_category'     => 'G',
+            'purchase_type'    => 3,
+            'qty'              => 1,
+            'unit_price'       => 400.00,
+            'total_value'      => 400.00,
+            'vat_amount'       => 60.00,
+            'value_after_vat'  => 460.00,
+        ]);
+
+        // Exact payload user submitted: id=22, total_value=478.26, vat_amount=71.74, value_after_vat=550
+        $response = $this->postJson(route('finance.tax-deductions.update-ocr-item'), [
+            'id'               => $item->id,
+            'receipt_id'       => $receipt->id,
+            'seller_name'      => 'Updated Merchant PLC',
+            'supplier_tin'     => '0012345678',
+            'fs_no'            => '00088899',
+            'mrc_no'           => 'MRC-TEST-88',
+            'receipt_date'     => '2026-10-23',
+            'item_description' => 'Updated Item Description',
+            'total_value'      => 478.26,
+            'vat_amount'       => 71.74,
+            'value_after_vat'  => 550.00,
+            'vat_category'     => 'G',
+            'purchase_type'    => '1',
+        ]);
+
+        $response->assertStatus(200);
+        $response->assertJson(['success' => true]);
+
+        $receipt->refresh();
+        $this->assertEquals(478.26, (float)$receipt->subtotal);
+        $this->assertEquals(71.74, (float)$receipt->vat_amount);
+        $this->assertEquals(550.00, (float)$receipt->total_amount);
+        $this->assertEquals('Updated Merchant PLC', $receipt->vendor_name);
+        $this->assertEquals('vat_standard', $receipt->tax_type);
     }
 }

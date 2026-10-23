@@ -1714,8 +1714,10 @@ class FinanceTaxReportController extends Controller
                     })
                     ->where(function ($q) {
                         $q->where('vat_amount', '<=', 0)
-                          ->orWhere('tax_type', 'no_vat')
                           ->orWhere('category', 'fuel');
+                        if (Schema::hasColumn('receipts', 'tax_type')) {
+                            $q->orWhere('tax_type', 'no_vat');
+                        }
                     })
                     ->get();
 
@@ -3290,7 +3292,12 @@ class FinanceTaxReportController extends Controller
             if ($isTasFiltered) {
                 $ocrQuery->where(function ($q) {
                     $q->where('vat_amount', '<=', 0)
-                      ->orWhereHas('receipt', fn($rq) => $rq->where('vat_amount', '<=', 0)->orWhere('tax_type', 'no_vat'));
+                      ->orWhereHas('receipt', function ($rq) {
+                          $rq->where('vat_amount', '<=', 0);
+                          if (Schema::hasColumn('receipts', 'tax_type')) {
+                              $rq->orWhere('tax_type', 'no_vat');
+                          }
+                      });
                 });
             } elseif ($isVatFiltered) {
                 $ocrQuery->where(function ($q) {
@@ -3316,7 +3323,10 @@ class FinanceTaxReportController extends Controller
 
             if ($isTasFiltered) {
                 $standaloneQuery->where(function ($q) {
-                    $q->where('vat_amount', '<=', 0)->orWhere('tax_type', 'no_vat');
+                    $q->where('vat_amount', '<=', 0);
+                    if (Schema::hasColumn('receipts', 'tax_type')) {
+                        $q->orWhere('tax_type', 'no_vat');
+                    }
                 });
             } elseif ($isVatFiltered) {
                 $standaloneQuery->where('vat_amount', '>', 0);
@@ -4692,7 +4702,7 @@ class FinanceTaxReportController extends Controller
                         'file_path'        => (string)($expReq->attachment ?? ''),
                         'file_type'        => 'image',
                         'category'         => $request->category ?: ($expReq->category ?: 'general'),
-                        'tax_type'         => ((float)($request->vat_amount ?? 0) <= 0) ? 'no_vat' : 'vat_standard',
+                        'parsed_data'      => ['tax_type' => ((float)($request->vat_amount ?? 0) <= 0) ? 'no_vat' : 'vat_standard', 'purc_type' => (string)($request->purchase_type ?: 'PUR_GD')],
                         'subtotal'         => (float)($request->total_value ?: $expReq->amount),
                         'vat_amount'       => (float)($request->vat_amount ?: $expReq->vat_amount),
                         'total_amount'     => (float)($request->value_after_vat ?: ($expReq->gross_amount ?: $expReq->amount)),
@@ -4732,7 +4742,7 @@ class FinanceTaxReportController extends Controller
                             'file_path'        => (string)($expReq->attachment ?? ''),
                             'file_type'        => 'image',
                             'category'         => $request->category ?: ($expReq->category ?: 'general'),
-                            'tax_type'         => ((float)($request->vat_amount ?? 0) <= 0) ? 'no_vat' : 'vat_standard',
+                            'parsed_data'      => ['tax_type' => ((float)($request->vat_amount ?? 0) <= 0) ? 'no_vat' : 'vat_standard', 'purc_type' => (string)($request->purchase_type ?: 'PUR_GD')],
                             'subtotal'         => (float)($request->total_value ?: $expReq->amount),
                             'vat_amount'       => (float)($request->vat_amount ?: $expReq->vat_amount),
                             'total_amount'     => (float)($request->value_after_vat ?: ($expReq->gross_amount ?: $expReq->amount)),
@@ -4784,7 +4794,7 @@ class FinanceTaxReportController extends Controller
                                     'file_path'        => (string)($expReq->attachment ?? ''),
                                     'file_type'        => 'image',
                                     'category'         => 'fuel',
-                                    'tax_type'         => ((float)($request->vat_amount ?? 0) <= 0) ? 'no_vat' : 'vat_standard',
+                                    'parsed_data'      => ['tax_type' => ((float)($request->vat_amount ?? 0) <= 0) ? 'no_vat' : 'vat_standard', 'purc_type' => (string)($request->purchase_type ?: 'PUR_GD')],
                                     'subtotal'         => (float)($request->total_value ?: $expReq->amount),
                                     'vat_amount'       => (float)($request->vat_amount ?: $expReq->vat_amount),
                                     'total_amount'     => (float)($request->value_after_vat ?: ($expReq->gross_amount ?: $expReq->amount)),
@@ -4932,7 +4942,6 @@ class FinanceTaxReportController extends Controller
             if ($request->filled('item_description')) {
                 $receiptUpdates['description'] = $request->item_description;
             }
-            $receiptUpdates['tax_type'] = ($vat <= 0) ? 'no_vat' : 'vat_standard';
 
             // Merge with parsed_data JSON so that e-Tax exports and movements views immediately reflect the latest edits
             $parsed = is_string($receipt->parsed_data) ? (json_decode($receipt->parsed_data, true) ?: []) : (array)($receipt->parsed_data ?? []);
@@ -4963,9 +4972,19 @@ class FinanceTaxReportController extends Controller
             if ($request->filled('item_description')) {
                 $parsed['item_description'] = $request->item_description;
             }
+            $parsed['tax_type'] = ($vat <= 0) ? 'no_vat' : 'vat_standard';
+            if ($vat <= 0) {
+                $parsed['no_vat_reason_code'] = $parsed['no_vat_reason_code'] ?? 'fuel_zero_vat';
+            }
             $receiptUpdates['parsed_data'] = $parsed;
 
-            $receiptUpdates['tax_type'] = ($vat <= 0) ? 'no_vat' : 'vat_standard';
+            if (Schema::hasColumn('receipts', 'tax_type')) {
+                $receiptUpdates['tax_type'] = ($vat <= 0) ? 'no_vat' : 'vat_standard';
+            }
+            if (Schema::hasColumn('receipts', 'no_vat_reason_code') && $vat <= 0) {
+                $receiptUpdates['no_vat_reason_code'] = 'fuel_zero_vat';
+            }
+
             if ($receipt->items()->count() <= 1) {
                 $receiptUpdates['subtotal']     = $totalVal;
                 $receiptUpdates['vat_amount']   = $vat;
@@ -4973,8 +4992,6 @@ class FinanceTaxReportController extends Controller
             }
 
             $receipt->update($receiptUpdates);
-            $receipt->tax_type = ($vat <= 0) ? 'no_vat' : 'vat_standard';
-            $receipt->save();
 
             if ($receipt->items()->count() > 1) {
                 $receipt->subtotal     = round($receipt->items()->sum('total_value'), 2);

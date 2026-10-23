@@ -17,7 +17,6 @@ class ReceiptItem extends Model
         'vat_category',
         'calendar_type',
         'purchase_type',
-        'purc_type',
         'uom',
         'qty',
         'unit_price',
@@ -127,5 +126,22 @@ class ReceiptItem extends Model
         }
 
         return $errors;
+    }
+
+    public function getPurcTypeAttribute($value)
+    {
+        if ($value !== null && $value !== '') {
+            return $value;
+        }
+        $r = $this->receipt;
+        $parsed = is_string($r?->parsed_data) ? (json_decode($r->parsed_data, true) ?: []) : (array)($r?->parsed_data ?? []);
+        return $parsed['purc_type'] ?? 'PUR_GD';
+    }
+
+    public function setPurcTypeAttribute($value)
+    {
+        if (\Illuminate\Support\Facades\Schema::hasColumn($this->getTable(), 'purc_type')) {
+            $this->attributes['purc_type'] = $value;
+        }
     }
 }

@@ -43,8 +43,6 @@ class Receipt extends Model
         'approved_at',
         'notes',
         'qc_notes',
-        'tax_type',
-        'no_vat_reason_code',
         'purchasable_type',
         'purchasable_id',
     ];
@@ -149,6 +147,49 @@ class Receipt extends Model
             return \App\Services\FileUploadService::url($this->file_path);
         } catch (\Throwable $e) {
             return asset('storage/' . ltrim($this->file_path, '/'));
+        }
+    }
+
+    public function getTaxTypeAttribute($value)
+    {
+        if ($value !== null && $value !== '') {
+            return $value;
+        }
+        $parsed = is_string($this->parsed_data) ? (json_decode($this->parsed_data, true) ?: []) : (array)($this->parsed_data ?? []);
+        if (!empty($parsed['tax_type'])) {
+            return $parsed['tax_type'];
+        }
+        return ((float)$this->vat_amount <= 0 || $this->category === 'fuel') ? 'no_vat' : 'vat_standard';
+    }
+
+    public function setTaxTypeAttribute($value)
+    {
+        if (\Illuminate\Support\Facades\Schema::hasColumn($this->getTable(), 'tax_type')) {
+            $this->attributes['tax_type'] = $value;
+        } else {
+            $parsed = is_string($this->parsed_data) ? (json_decode($this->parsed_data, true) ?: []) : (array)($this->parsed_data ?? []);
+            $parsed['tax_type'] = $value;
+            $this->parsed_data = $parsed;
+        }
+    }
+
+    public function getNoVatReasonCodeAttribute($value)
+    {
+        if ($value !== null && $value !== '') {
+            return $value;
+        }
+        $parsed = is_string($this->parsed_data) ? (json_decode($this->parsed_data, true) ?: []) : (array)($this->parsed_data ?? []);
+        return $parsed['no_vat_reason_code'] ?? null;
+    }
+
+    public function setNoVatReasonCodeAttribute($value)
+    {
+        if (\Illuminate\Support\Facades\Schema::hasColumn($this->getTable(), 'no_vat_reason_code')) {
+            $this->attributes['no_vat_reason_code'] = $value;
+        } else {
+            $parsed = is_string($this->parsed_data) ? (json_decode($this->parsed_data, true) ?: []) : (array)($this->parsed_data ?? []);
+            $parsed['no_vat_reason_code'] = $value;
+            $this->parsed_data = $parsed;
         }
     }
 }
