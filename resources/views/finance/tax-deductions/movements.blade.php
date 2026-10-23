@@ -1263,6 +1263,7 @@
                                             <select class="form-select form-select-sm" id="movement_edit_vat_category" name="vat_category">
                                                 <option value="G">Goods (G)</option>
                                                 <option value="S">Services (S)</option>
+                                                <option value="E">Exempt / Zero VAT (E - TAS)</option>
                                             </select>
                                         </div>
                                         <div class="col-6">
@@ -1276,6 +1277,8 @@
                                                 <option value="4">4 - Subcontracting Services</option>
                                                 <option value="5">5 - Utilities &amp; Telecommunications</option>
                                                 <option value="6">6 - Other Taxable Inward Supplies</option>
+                                                <option value="PUR_GD">PUR_GD - e-Tax Goods (TAS Standard)</option>
+                                                <option value="PUR_SVC">PUR_SVC - e-Tax Services (TAS Standard)</option>
                                             </select>
                                         </div>
                                     </div>
@@ -1284,7 +1287,7 @@
                                     <div class="p-2.5 bg-light rounded-3 border mb-0">
                                         <div class="d-flex align-items-center justify-content-between mb-2">
                                             <span class="small fw-bold text-dark">
-                                                <i class="fa-solid fa-calculator text-primary me-1"></i>Financial Reconciliation (15% VAT)
+                                                <i class="fa-solid fa-calculator text-primary me-1"></i>Financial Reconciliation
                                             </span>
                                             <span class="badge bg-secondary-subtle text-secondary" style="font-size:0.68rem;">Live Synced</span>
                                         </div>
@@ -1297,14 +1300,14 @@
                                                 </div>
                                             </div>
                                             <div class="col-4">
-                                                <label class="form-label small fw-semibold text-info mb-0.5" style="font-size:0.7rem;">15% VAT</label>
+                                                <label class="form-label small fw-semibold text-info mb-0.5" style="font-size:0.7rem;">VAT Amount</label>
                                                 <div class="input-group input-group-sm">
                                                     <span class="input-group-text px-1 text-info" style="font-size:0.7rem;">+</span>
                                                     <input type="number" step="0.01" min="0" class="form-control font-monospace fw-bold text-info" id="movement_edit_vat_amount" name="vat_amount" required oninput="recalcMovementFromVat(this.value)">
                                                 </div>
                                             </div>
                                             <div class="col-4">
-                                                <label class="form-label small fw-semibold text-success mb-0.5" style="font-size:0.7rem;">Total with VAT</label>
+                                                <label class="form-label small fw-semibold text-success mb-0.5" style="font-size:0.7rem;">Total Value</label>
                                                 <div class="input-group input-group-sm">
                                                     <span class="input-group-text px-1 text-success" style="font-size:0.7rem;">=</span>
                                                     <input type="number" step="0.01" min="0" class="form-control font-monospace fw-bold text-success" id="movement_edit_value_after_vat" name="value_after_vat" required oninput="recalcMovementFromTotal(this.value)">
@@ -1313,10 +1316,13 @@
                                         </div>
                                         <div class="d-flex justify-content-between align-items-center mt-2 pt-1 border-top" style="font-size:0.72rem;">
                                             <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none text-muted" onclick="autoCalcMovementVatFromBase()">
-                                                <i class="fa-solid fa-wand-magic-sparkles me-1 text-primary"></i>Base &rarr; Auto VAT (15%)
+                                                <i class="fa-solid fa-wand-magic-sparkles me-1 text-primary"></i>Base &rarr; 15% VAT
+                                            </button>
+                                            <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none text-primary fw-semibold" onclick="setMovementZeroVat()">
+                                                <i class="fa-solid fa-receipt me-1"></i>0% VAT (TAS Purchase)
                                             </button>
                                             <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none text-muted" onclick="autoExtractMovementBaseFromTotal()">
-                                                <i class="fa-solid fa-wand-magic-sparkles me-1 text-success"></i>Total &rarr; Extract Base (/1.15)
+                                                <i class="fa-solid fa-wand-magic-sparkles me-1 text-success"></i>Total &rarr; Base (/1.15)
                                             </button>
                                         </div>
                                     </div>
@@ -1776,7 +1782,10 @@
     // Financial live calculations
     function recalcMovementFromBase(val) {
         const base = parseFloat(val) || 0;
-        const vat = Math.round(base * 0.15 * 100) / 100;
+        const vatCat = document.getElementById('movement_edit_vat_category');
+        const isZeroVat = vatCat && vatCat.value === 'E';
+
+        const vat = isZeroVat ? 0 : Math.round(base * 0.15 * 100) / 100;
         const total = Math.round((base + vat) * 100) / 100;
 
         const vatInput = document.getElementById('movement_edit_vat_amount');
@@ -1798,8 +1807,11 @@
 
     function recalcMovementFromTotal(val) {
         const total = parseFloat(val) || 0;
-        const base = Math.round((total / 1.15) * 100) / 100;
-        const vat = Math.round((total - base) * 100) / 100;
+        const vatCat = document.getElementById('movement_edit_vat_category');
+        const isZeroVat = vatCat && vatCat.value === 'E';
+
+        const base = isZeroVat ? total : Math.round((total / 1.15) * 100) / 100;
+        const vat = isZeroVat ? 0 : Math.round((total - base) * 100) / 100;
 
         const baseInput = document.getElementById('movement_edit_total_value');
         const vatInput = document.getElementById('movement_edit_vat_amount');
@@ -1808,8 +1820,32 @@
     }
 
     function autoCalcMovementVatFromBase() {
+        const vatCat = document.getElementById('movement_edit_vat_category');
+        if (vatCat && vatCat.value === 'E') {
+            vatCat.value = 'G';
+        }
         const baseInput = document.getElementById('movement_edit_total_value');
         if (baseInput) recalcMovementFromBase(baseInput.value);
+    }
+
+    function setMovementZeroVat() {
+        const baseInput = document.getElementById('movement_edit_total_value');
+        const vatInput = document.getElementById('movement_edit_vat_amount');
+        const totalInput = document.getElementById('movement_edit_value_after_vat');
+        const vatCat = document.getElementById('movement_edit_vat_category');
+        const purcType = document.getElementById('movement_edit_purchase_type');
+
+        const base = parseFloat(baseInput?.value || 0);
+        const total = parseFloat(totalInput?.value || 0);
+        const amount = base > 0 ? base : total;
+
+        if (baseInput) baseInput.value = amount.toFixed(2);
+        if (vatInput) vatInput.value = '0.00';
+        if (totalInput) totalInput.value = amount.toFixed(2);
+        if (vatCat) vatCat.value = 'E';
+        if (purcType && (purcType.value === '3' || !purcType.value)) {
+            purcType.value = 'PUR_GD';
+        }
     }
 
     function autoExtractMovementBaseFromTotal() {
@@ -1856,10 +1892,23 @@
             }
 
             if (data.success && data.item) {
+                window._hasMovementOcrEditsSaved = true;
                 const itm = data.item;
+
                 if (alertBox) {
-                    alertBox.className = 'alert alert-success py-2 px-3 small rounded-3 mb-3 d-flex align-items-center gap-2';
-                    alertBox.innerHTML = '<i class="fa-solid fa-circle-check fs-6 text-success"></i> ' + (data.message || 'Invoice successfully updated & reconciled with system.');
+                    alertBox.className = 'alert alert-success py-2 px-3 small rounded-3 mb-3 d-flex align-items-center justify-content-between gap-2';
+                    alertBox.innerHTML = `
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="fa-solid fa-circle-check fs-6 text-success"></i>
+                            <div>
+                                <span class="fw-semibold">${data.message || 'Invoice successfully updated & reconciled with system.'}</span>
+                                <small class="d-block text-success-emphasis">All ledger records, e-Tax tables and fiscal numbers are synchronized.</small>
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-xs btn-outline-success rounded-pill px-2.5 py-1 fw-semibold shadow-xs" onclick="window.location.reload()">
+                            <i class="fa-solid fa-rotate me-1"></i>Refresh View
+                        </button>
+                    `;
                 }
 
                 // Update cache
@@ -1868,9 +1917,17 @@
                     window._pageOcrItems[cacheIdx] = Object.assign(window._pageOcrItems[cacheIdx], itm);
                 }
 
-                // Update table row in DOM
-                const tr = document.getElementById('page-ocr-row-' + itm.id) || (itm.receipt_id ? document.querySelector(`tr[data-receipt-id="${itm.receipt_id}"]`) : null);
+                // Update table row in Scanned OCR Receipts DOM
+                const submittedId = form.elements['id'] ? form.elements['id'].value : null;
+                const tr = document.getElementById('page-ocr-row-' + itm.id) 
+                    || (itm.receipt_id ? document.querySelector(`tr[data-receipt-id="${itm.receipt_id}"]`) : null)
+                    || (submittedId ? document.getElementById('page-ocr-row-' + submittedId) : null);
+
                 if (tr) {
+                    tr.id = 'page-ocr-row-' + itm.id;
+                    tr.setAttribute('data-id', itm.id);
+                    if (itm.receipt_id) tr.setAttribute('data-receipt-id', itm.receipt_id);
+
                     const cellDateEc = tr.querySelector('.cell-date-ec');
                     if (cellDateEc) cellDateEc.textContent = itm.receipt_date_ec || '—';
 
@@ -1909,7 +1966,15 @@
                     if (cellBase) cellBase.textContent = 'ETB ' + parseFloat(itm.base_value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
                     const cellVat = tr.querySelector('.cell-vat');
-                    if (cellVat) cellVat.textContent = 'ETB ' + parseFloat(itm.vat_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                    if (cellVat) {
+                        if (parseFloat(itm.vat_amount || 0) > 0) {
+                            cellVat.className = 'cell-vat text-success fw-semibold';
+                            cellVat.textContent = 'ETB ' + parseFloat(itm.vat_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                        } else {
+                            cellVat.className = 'badge bg-light text-muted border font-monospace';
+                            cellVat.textContent = '0% VAT (TAS)';
+                        }
+                    }
 
                     const cellTotal = tr.querySelector('.cell-total');
                     if (cellTotal) cellTotal.textContent = 'ETB ' + parseFloat(itm.total_value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -1917,6 +1982,75 @@
                     tr.style.transition = 'background-color 0.4s ease';
                     tr.style.backgroundColor = '#d1e7dd';
                     setTimeout(() => { tr.style.backgroundColor = ''; }, 2000);
+                }
+
+                // Update matching rows in TAS Purchases Table (#pageTasTable)
+                const tasRows = document.querySelectorAll('#pageTasTable tbody tr');
+                tasRows.forEach(tasTr => {
+                    const rowRcptId = tasTr.getAttribute('data-receipt-id');
+                    const rowFs = tasTr.getAttribute('data-fs');
+                    const matchById = rowRcptId && (rowRcptId == itm.id || rowRcptId == itm.receipt_id || rowRcptId == ('REC-' + itm.receipt_id));
+                    const matchByFs = rowFs && itm.fs_no && rowFs === itm.fs_no;
+
+                    if (matchById || matchByFs) {
+                        const fsBadge = tasTr.querySelector('.cell-tas-fs') || tasTr.querySelector('td:nth-child(5) .badge');
+                        const sellerTin = tasTr.querySelector('.cell-tas-tin') || tasTr.querySelector('td:nth-child(3) .fw-bold');
+                        const sellerName = tasTr.querySelector('.cell-tas-vendor') || tasTr.querySelector('td:nth-child(3) small');
+                        const amtCell = tasTr.querySelector('.cell-tas-amount') || tasTr.querySelector('td:nth-child(4)');
+                        const mrcBadge = tasTr.querySelector('.cell-tas-mrc') || tasTr.querySelector('td:nth-child(8) .badge');
+                        const dateEc = tasTr.querySelector('.cell-tas-date-ec') || tasTr.querySelector('td:nth-child(6) span');
+
+                        if (fsBadge && itm.fs_no && itm.fs_no !== '-') fsBadge.textContent = itm.fs_no;
+                        if (sellerTin && itm.vendor_tin) sellerTin.textContent = itm.vendor_tin;
+                        if (sellerName && itm.vendor_name) sellerName.textContent = itm.vendor_name;
+                        if (amtCell && itm.total_value !== undefined) amtCell.textContent = 'ETB ' + parseFloat(itm.total_value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                        if (mrcBadge && itm.mrc_no && itm.mrc_no !== '-') mrcBadge.textContent = itm.mrc_no;
+                        if (dateEc && itm.receipt_date_ec) dateEc.textContent = itm.receipt_date_ec;
+
+                        tasTr.style.transition = 'background-color 0.4s ease';
+                        tasTr.style.backgroundColor = '#d1e7dd';
+                        setTimeout(() => { tasTr.style.backgroundColor = ''; }, 2000);
+                    }
+                });
+
+                // Update matching rows in Expenses Table (#pageExpenseTable)
+                const expRows = document.querySelectorAll('#pageExpenseTable tbody tr');
+                expRows.forEach(expTr => {
+                    const rowRcptId = expTr.getAttribute('data-receipt-id');
+                    const rowFs = expTr.getAttribute('data-fs');
+                    const matchById = rowRcptId && (rowRcptId == itm.id || rowRcptId == itm.receipt_id || rowRcptId == ('REC-' + itm.receipt_id));
+                    const matchByFs = rowFs && itm.fs_no && rowFs === itm.fs_no;
+
+                    if (matchById || matchByFs) {
+                        const payeeSpan = expTr.querySelector('td:nth-child(4) .fw-semibold');
+                        const tinSmall = expTr.querySelector('td:nth-child(4) small');
+                        const fsSmall = expTr.querySelector('td:nth-child(3) .text-primary');
+                        const baseCell = expTr.querySelector('td:nth-child(7)');
+                        const vatCell = expTr.querySelector('td:nth-child(8)');
+                        const netCell = expTr.querySelector('td:nth-child(10)');
+
+                        if (payeeSpan && itm.vendor_name) payeeSpan.textContent = itm.vendor_name;
+                        if (tinSmall && itm.vendor_tin) tinSmall.textContent = 'TIN: ' + itm.vendor_tin;
+                        if (fsSmall && itm.fs_no && itm.fs_no !== '-') fsSmall.innerHTML = '<i class="fa-solid fa-barcode me-0.5"></i>FS #: ' + itm.fs_no;
+                        if (baseCell && itm.base_value !== undefined) baseCell.textContent = 'ETB ' + parseFloat(itm.base_value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                        if (vatCell && itm.vat_amount !== undefined) vatCell.textContent = 'ETB ' + parseFloat(itm.vat_amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                        if (netCell && itm.total_value !== undefined) netCell.textContent = 'ETB ' + parseFloat(itm.total_value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+                        expTr.style.transition = 'background-color 0.4s ease';
+                        expTr.style.backgroundColor = '#d1e7dd';
+                        setTimeout(() => { expTr.style.backgroundColor = ''; }, 2000);
+                    }
+                });
+
+                // Attach modal auto-refresh on close if edits were saved
+                const modalEl = document.getElementById('movementSlipModal');
+                if (modalEl && !modalEl._hasReloadOnHideListener) {
+                    modalEl._hasReloadOnHideListener = true;
+                    modalEl.addEventListener('hidden.bs.modal', function () {
+                        if (window._hasMovementOcrEditsSaved) {
+                            window.location.reload();
+                        }
+                    });
                 }
 
                 // Recompute totals in table footer

@@ -2382,6 +2382,7 @@
                                             <select class="form-select form-select-sm" id="edit_vat_category" name="vat_category">
                                                 <option value="G">Goods (G)</option>
                                                 <option value="S">Services (S)</option>
+                                                <option value="E">Exempt / Zero VAT (E - TAS)</option>
                                             </select>
                                         </div>
                                         <div class="col-6">
@@ -2395,6 +2396,8 @@
                                                 <option value="4">4 - Subcontracting Services</option>
                                                 <option value="5">5 - Utilities &amp; Telecommunications</option>
                                                 <option value="6">6 - Other Taxable Inward Supplies</option>
+                                                <option value="PUR_GD">PUR_GD - e-Tax Goods (TAS Standard)</option>
+                                                <option value="PUR_SVC">PUR_SVC - e-Tax Services (TAS Standard)</option>
                                             </select>
                                         </div>
                                     </div>
@@ -2403,7 +2406,7 @@
                                     <div class="p-2.5 bg-light rounded-3 border mb-0">
                                         <div class="d-flex align-items-center justify-content-between mb-2">
                                             <span class="small fw-bold text-dark">
-                                                <i class="fa-solid fa-calculator text-primary me-1"></i>Financial Reconciliation (15% VAT)
+                                                <i class="fa-solid fa-calculator text-primary me-1"></i>Financial Reconciliation
                                             </span>
                                             <span class="badge bg-secondary-subtle text-secondary" style="font-size:0.68rem;">Live Synced</span>
                                         </div>
@@ -2416,14 +2419,14 @@
                                                 </div>
                                             </div>
                                             <div class="col-4">
-                                                <label class="form-label small fw-semibold text-info mb-0.5" style="font-size:0.7rem;">15% VAT (N)</label>
+                                                <label class="form-label small fw-semibold text-info mb-0.5" style="font-size:0.7rem;">VAT Amount (N)</label>
                                                 <div class="input-group input-group-sm">
                                                     <span class="input-group-text px-1 text-info" style="font-size:0.7rem;">+</span>
                                                     <input type="number" step="0.01" min="0" class="form-control font-monospace fw-bold text-info" id="edit_vat_amount" name="vat_amount" required oninput="recalcFromVat(this.value)">
                                                 </div>
                                             </div>
                                             <div class="col-4">
-                                                <label class="form-label small fw-semibold text-success mb-0.5" style="font-size:0.7rem;">Total with VAT (O)</label>
+                                                <label class="form-label small fw-semibold text-success mb-0.5" style="font-size:0.7rem;">Total Value (O)</label>
                                                 <div class="input-group input-group-sm">
                                                     <span class="input-group-text px-1 text-success" style="font-size:0.7rem;">=</span>
                                                     <input type="number" step="0.01" min="0" class="form-control font-monospace fw-bold text-success" id="edit_value_after_vat" name="value_after_vat" required oninput="recalcFromTotal(this.value)">
@@ -2432,7 +2435,16 @@
                                         </div>
                                         <div class="d-flex justify-content-between align-items-center mt-2 pt-1 border-top" style="font-size:0.72rem;">
                                             <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none text-muted" onclick="autoCalcVatFromBase()">
-                                                <i class="fa-solid fa-wand-magic-sparkles me-1 text-primary"></i>Base &rarr; Auto VAT (15%)
+                                                <i class="fa-solid fa-wand-magic-sparkles me-1 text-primary"></i>Base &rarr; 15% VAT
+                                            </button>
+                                            <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none text-primary fw-semibold" onclick="setZeroVatModal()">
+                                                <i class="fa-solid fa-receipt me-1"></i>0% VAT (TAS Purchase)
+                                            </button>
+                                            <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none text-muted" onclick="autoExtractBaseFromTotal()">
+                                                <i class="fa-solid fa-wand-magic-sparkles me-1 text-success"></i>Total &rarr; Base (/1.15)
+                                            </button>
+                                        </div>
+                                    </div>
                                             </button>
                                             <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none text-muted" onclick="autoExtractBaseFromTotal()">
                                                 <i class="fa-solid fa-wand-magic-sparkles me-1 text-success"></i>Total &rarr; Extract Base (/1.15)
@@ -4474,7 +4486,10 @@
 
     function recalcFromBase(val) {
         const base = parseFloat(val) || 0;
-        const vat = Math.round(base * 0.15 * 100) / 100;
+        const vatCat = document.getElementById('edit_vat_category');
+        const isZeroVat = vatCat && vatCat.value === 'E';
+
+        const vat = isZeroVat ? 0 : Math.round(base * 0.15 * 100) / 100;
         const total = Math.round((base + vat) * 100) / 100;
         const vatEl = document.getElementById('edit_vat_amount');
         const totalEl = document.getElementById('edit_value_after_vat');
@@ -4492,8 +4507,11 @@
 
     function recalcFromTotal(val) {
         const total = parseFloat(val) || 0;
-        const base = Math.round((total / 1.15) * 100) / 100;
-        const vat = Math.round((total - base) * 100) / 100;
+        const vatCat = document.getElementById('edit_vat_category');
+        const isZeroVat = vatCat && vatCat.value === 'E';
+
+        const base = isZeroVat ? total : Math.round((total / 1.15) * 100) / 100;
+        const vat = isZeroVat ? 0 : Math.round((total - base) * 100) / 100;
         const baseEl = document.getElementById('edit_total_value');
         const vatEl = document.getElementById('edit_vat_amount');
         if (baseEl) baseEl.value = base.toFixed(2);
@@ -4501,8 +4519,32 @@
     }
 
     function autoCalcVatFromBase() {
+        const vatCat = document.getElementById('edit_vat_category');
+        if (vatCat && vatCat.value === 'E') {
+            vatCat.value = 'G';
+        }
         const baseInput = document.getElementById('edit_total_value');
         if (baseInput) recalcFromBase(baseInput.value);
+    }
+
+    function setZeroVatModal() {
+        const baseInput = document.getElementById('edit_total_value');
+        const vatInput = document.getElementById('edit_vat_amount');
+        const totalInput = document.getElementById('edit_value_after_vat');
+        const vatCat = document.getElementById('edit_vat_category');
+        const purcType = document.getElementById('edit_purchase_type');
+
+        const base = parseFloat(baseInput?.value || 0);
+        const total = parseFloat(totalInput?.value || 0);
+        const amount = base > 0 ? base : total;
+
+        if (baseInput) baseInput.value = amount.toFixed(2);
+        if (vatInput) vatInput.value = '0.00';
+        if (totalInput) totalInput.value = amount.toFixed(2);
+        if (vatCat) vatCat.value = 'E';
+        if (purcType && (purcType.value === '3' || !purcType.value)) {
+            purcType.value = 'PUR_GD';
+        }
     }
 
     function autoExtractBaseFromTotal() {
@@ -4845,14 +4887,29 @@
             }
 
             if (data.success && data.item) {
+                window._hasVatSlipEditsSaved = true;
                 const itm = data.item;
                 if (alertBox) {
-                    alertBox.className = 'alert alert-success py-2 px-3 small rounded-3 mb-3 d-flex align-items-center gap-2';
-                    alertBox.innerHTML = '<i class="fa-solid fa-circle-check fs-6 text-success"></i> ' + (data.message || 'Invoice successfully updated & reconciled with system.');
+                    alertBox.className = 'alert alert-success py-2 px-3 small rounded-3 mb-3 d-flex align-items-center justify-content-between gap-2';
+                    alertBox.innerHTML = `
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="fa-solid fa-circle-check fs-6 text-success"></i>
+                            <div>
+                                <span class="fw-semibold">${data.message || 'Invoice successfully updated & reconciled with system.'}</span>
+                                <small class="d-block text-success-emphasis">All ledger records, e-Tax tables and fiscal numbers are synchronized.</small>
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-xs btn-outline-success rounded-pill px-2.5 py-1 fw-semibold shadow-xs" onclick="window.location.reload()">
+                            <i class="fa-solid fa-rotate me-1"></i>Refresh View
+                        </button>
+                    `;
                 }
 
                 // Update row in table
-                const tr = document.getElementById('ocr-row-' + itm.id);
+                const submittedId = form.elements['id'] ? form.elements['id'].value : null;
+                const tr = document.getElementById('ocr-row-' + itm.id)
+                    || (itm.receipt_id ? document.querySelector(`tr[data-receipt-id="${itm.receipt_id}"]`) : null)
+                    || (submittedId ? document.getElementById('ocr-row-' + submittedId) : null);
                 if (tr) {
                     tr.dataset.vendorName = itm.vendor_name;
                     tr.dataset.vendorTin = itm.vendor_tin;
@@ -4953,7 +5010,9 @@
                 }
 
                 // Also update row in Movements modal table if present
-                const mtr = document.getElementById('m-ocr-row-' + itm.id);
+                const mtr = document.getElementById('m-ocr-row-' + itm.id)
+                    || (itm.receipt_id ? document.querySelector(`tr[data-m-receipt-id="${itm.receipt_id}"]`) : null)
+                    || (submittedId ? document.getElementById('m-ocr-row-' + submittedId) : null);
                 if (mtr) {
                     const mDateEc = mtr.querySelector('.cell-date-ec');
                     if (mDateEc) mDateEc.textContent = itm.receipt_date_ec || '—';
@@ -4977,6 +5036,17 @@
                     setTimeout(() => {
                         mtr.style.backgroundColor = '';
                     }, 2000);
+                }
+
+                // Auto-refresh page on modal close if edits were saved
+                const vatModalEl = document.getElementById('vatReceiptSlipModal');
+                if (vatModalEl && !vatModalEl._hasReloadOnHideListener) {
+                    vatModalEl._hasReloadOnHideListener = true;
+                    vatModalEl.addEventListener('hidden.bs.modal', function () {
+                        if (window._hasVatSlipEditsSaved) {
+                            window.location.reload();
+                        }
+                    });
                 }
             } else {
                 if (alertBox) {
