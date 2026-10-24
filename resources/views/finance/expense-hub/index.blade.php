@@ -497,6 +497,8 @@
                             @else
                                 @if($canDecideVat && !$item->is_locked)
                                     <button type="button" class="btn btn-xs btn-outline-primary border-dashed rounded-pill px-2 py-0.5 text-xxs"
+                                            data-source-type="{{ $item->source_type }}"
+                                            data-source-id="{{ $item->source_id }}"
                                             onclick="openAddReceiptAction('{{ $item->source_type }}', '{{ $item->source_id }}', this)" title="Add Receipt to this expense">
                                         <i class="fa-solid fa-plus me-0.5"></i> Add
                                     </button>
@@ -534,67 +536,73 @@
                                             <i class="fa-solid fa-sliders me-1"></i> Expense Tax &amp; Receipt
                                         </li>
                                         <li>
-                                            <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center gap-2" href="#"
-                                               onclick="openAddReceiptAction('{{ $item->source_type }}', '{{ $item->source_id }}', this); return false;">
-                                                <div class="bg-primary bg-opacity-10 text-primary rounded-circle p-1.5 d-flex align-items-center justify-content-center" style="width: 28px; height: 28px;">
+                                            <button type="button" class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center gap-2 w-100 text-start"
+                                               data-source-type="{{ $item->source_type }}" data-source-id="{{ $item->source_id }}"
+                                               onclick="openAddReceiptAction('{{ $item->source_type }}', '{{ $item->source_id }}', this)">
+                                                <div class="bg-primary bg-opacity-10 text-primary rounded-circle p-1.5 d-flex align-items-center justify-content-center flex-shrink-0" style="width: 28px; height: 28px;">
                                                     <i class="fa-solid fa-cloud-arrow-up text-xxs"></i>
                                                 </div>
                                                 <div>
                                                     <div class="fw-bold text-dark text-xs">Add Receipt</div>
                                                     <div class="text-xxs text-muted">Upload slip or scan with AI OCR</div>
                                                 </div>
-                                            </a>
+                                            </button>
                                         </li>
                                         <li>
-                                            <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center gap-2" href="#"
-                                               onclick="openAddVatAction('{{ $item->source_type }}', '{{ $item->source_id }}', this); return false;">
-                                                <div class="bg-success bg-opacity-10 text-success rounded-circle p-1.5 d-flex align-items-center justify-content-center" style="width: 28px; height: 28px;">
+                                            <button type="button" class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center gap-2 w-100 text-start"
+                                               data-source-type="{{ $item->source_type }}" data-source-id="{{ $item->source_id }}"
+                                               onclick="openAddVatAction('{{ $item->source_type }}', '{{ $item->source_id }}', this)">
+                                                <div class="bg-success bg-opacity-10 text-success rounded-circle p-1.5 d-flex align-items-center justify-content-center flex-shrink-0" style="width: 28px; height: 28px;">
                                                     <i class="fa-solid fa-percent text-xxs"></i>
                                                 </div>
                                                 <div>
                                                     <div class="fw-bold text-success text-xs">Add VAT Payment</div>
                                                     <div class="text-xxs text-muted">Input VAT at 15% rate</div>
                                                 </div>
-                                            </a>
+                                            </button>
                                         </li>
                                         <li>
-                                            <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center gap-2" href="#"
-                                               onclick="openNonVatAction('{{ $item->source_type }}', '{{ $item->source_id }}', this); return false;">
-                                                <div class="bg-secondary bg-opacity-10 text-secondary rounded-circle p-1.5 d-flex align-items-center justify-content-center" style="width: 28px; height: 28px;">
+                                            <button type="button" class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center gap-2 w-100 text-start"
+                                               data-source-type="{{ $item->source_type }}" data-source-id="{{ $item->source_id }}"
+                                               onclick="openNonVatAction('{{ $item->source_type }}', '{{ $item->source_id }}', this)">
+                                                <div class="bg-secondary bg-opacity-10 text-secondary rounded-circle p-1.5 d-flex align-items-center justify-content-center flex-shrink-0" style="width: 28px; height: 28px;">
                                                     <i class="fa-solid fa-receipt text-xxs"></i>
                                                 </div>
                                                 <div>
                                                     <div class="fw-bold text-dark text-xs">Non-VAT Payment</div>
                                                     <div class="text-xxs text-muted">0% VAT / TAS exempt purchase</div>
                                                 </div>
-                                            </a>
+                                            </button>
                                         </li>
                                         <li>
-                                            <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center gap-2" href="#"
-                                               onclick="openVerifiedWithoutReceiptAction('{{ $item->source_type }}', '{{ $item->source_id }}', this); return false;">
-                                                <div class="bg-info bg-opacity-10 text-info rounded-circle p-1.5 d-flex align-items-center justify-content-center" style="width: 28px; height: 28px;">
+                                            <button type="button" class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center gap-2 w-100 text-start"
+                                               data-source-type="{{ $item->source_type }}" data-source-id="{{ $item->source_id }}"
+                                               onclick="openVerifiedWithoutReceiptAction('{{ $item->source_type }}', '{{ $item->source_id }}', this)">
+                                                <div class="bg-info bg-opacity-10 text-info rounded-circle p-1.5 d-flex align-items-center justify-content-center flex-shrink-0" style="width: 28px; height: 28px;">
                                                     <i class="fa-solid fa-check-double text-xxs"></i>
                                                 </div>
                                                 <div>
                                                     <div class="fw-bold text-info text-xs">Verified Without Receipt</div>
                                                     <div class="text-xxs text-muted">Petty cash / informal vendor / no slip</div>
                                                 </div>
-                                            </a>
+                                            </button>
                                         </li>
                                         <li><hr class="dropdown-divider my-1"></li>
                                         <li>
-                                            <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center gap-2 text-muted" href="#"
-                                               onclick="openExpenseDetailModal('{{ $item->source_type }}', '{{ $item->source_id }}', this); return false;">
+                                            <button type="button" class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center gap-2 text-muted w-100 text-start"
+                                               data-source-type="{{ $item->source_type }}" data-source-id="{{ $item->source_id }}"
+                                               onclick="openExpenseDetailModal('{{ $item->source_type }}', '{{ $item->source_id }}', this)">
                                                 <i class="fa-solid fa-circle-info fa-fw text-secondary"></i>
                                                 <span class="text-dark">View Purpose &amp; Line Items</span>
-                                            </a>
+                                            </button>
                                         </li>
                                         <li>
-                                            <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center gap-2 text-muted" href="#"
-                                               onclick="openDecisionModal('{{ $item->source_type }}', '{{ $item->source_id }}', this); return false;">
+                                            <button type="button" class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center gap-2 text-muted w-100 text-start"
+                                               data-source-type="{{ $item->source_type }}" data-source-id="{{ $item->source_id }}"
+                                               onclick="openDecisionModal('{{ $item->source_type }}', '{{ $item->source_id }}', this)">
                                                 <i class="fa-solid fa-sliders fa-fw text-secondary"></i>
                                                 <span class="text-dark">Full Studio (3% WHT, TAS)</span>
-                                            </a>
+                                            </button>
                                         </li>
                                     </ul>
                                 </div>
@@ -1511,9 +1519,6 @@
                             <option value="pending_decision">Pending Decision</option>
                         </select>
                     </div>
-                            <option value="pending_decision">Pending Decision</option>
-                        </select>
-                    </div>
 
                     <div id="bulkNoVatReasonGroup" class="mb-3 d-none">
                         <label class="form-label text-xs fw-bold">No-VAT Justification <span class="text-danger">*</span></label>
@@ -1646,6 +1651,15 @@ function showModalSafe(modalId) {
         console.error('showModalSafe: element not found', modalId);
         return;
     }
+
+    // Dismiss any open dropdown menus before displaying modal to avoid focus traps
+    try {
+        document.querySelectorAll('.dropdown-menu.show').forEach(m => m.classList.remove('show'));
+        document.querySelectorAll('.dropdown-toggle.show').forEach(b => {
+            b.classList.remove('show');
+            b.setAttribute('aria-expanded', 'false');
+        });
+    } catch(eDrop) {}
 
     // 1. Try Bootstrap 5 Modal
     try {
@@ -2185,107 +2199,149 @@ function openDecisionModalWithOcr(arg1, arg2, buttonEl) {
 
 // ── Quick Actions from Row Menu ──────────────────────────────────────────────
 function openAddReceiptAction(arg1, arg2, buttonEl) {
-    const item = resolveItem(arg1, arg2, buttonEl);
-    if (!item) {
-        console.error('Cannot open Add Receipt: Item not resolved', { arg1, arg2, buttonEl });
-        return;
+    try {
+        const item = resolveItem(arg1, arg2, buttonEl);
+        if (!item) {
+            console.error('Cannot open Add Receipt: Item not resolved', { arg1, arg2, buttonEl });
+            alert('Unable to load expense data for this row. Please refresh and try again.');
+            return;
+        }
+        currentEditingItem = item;
+
+        const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = (val !== null && val !== undefined) ? val : ''; };
+        const setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = (val !== null && val !== undefined) ? val : '—'; };
+
+        setVal('qarSourceType', item.source_type);
+        setVal('qarSourceId', item.source_id);
+        setVal('qarAmount', item.amount);
+        setVal('qarExistingPath', item.receipt_url || '');
+
+        setText('qarRefNo', item.reference_no);
+        setText('qarPayee', item.payee_supplier);
+
+        const rawAmt = typeof item.amount === 'number' ? item.amount : parseFloat(String(item.amount || '0').replace(/,/g, ''));
+        setText('qarAmountDisplay', isNaN(rawAmt) ? '0.00' : rawAmt.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
+
+        setVal('qarSellerName', item.payee_supplier || '');
+        setVal('qarTin', item.tin || '');
+        setVal('qarFsNo', item.fs_no || '');
+
+        const rDate = document.getElementById('qarReceiptDate');
+        if (rDate) {
+            rDate.value = String(item.disbursement_date || '').substring(0, 10);
+        }
+
+        const fileInput = document.getElementById('qarFileInput');
+        if (fileInput) fileInput.value = '';
+        const spinner = document.getElementById('qarOcrSpinner');
+        if (spinner) spinner.classList.add('d-none');
+        const resultBox = document.getElementById('qarOcrResult');
+        if (resultBox) {
+            resultBox.classList.add('d-none');
+            resultBox.innerHTML = '';
+        }
+
+        const alertBox = document.getElementById('qarCurrentReceiptAlert');
+        const alertLink = document.getElementById('qarCurrentReceiptLink');
+        if (alertBox && alertLink) {
+            if (item.receipt_url && typeof item.receipt_url === 'string' && item.receipt_url.trim() !== '') {
+                const rUrl = item.receipt_url.trim();
+                alertLink.href = (rUrl.startsWith('http://') || rUrl.startsWith('https://'))
+                    ? rUrl
+                    : ('{{ asset("storage") }}/' + rUrl.replace(/^\/+/, ''));
+                alertBox.classList.remove('d-none');
+                if (fileInput) fileInput.removeAttribute('required');
+            } else {
+                alertBox.classList.add('d-none');
+                if (fileInput) fileInput.setAttribute('required', 'required');
+            }
+        }
+
+        const optVat = document.getElementById('qarOptVat');
+        const optNoVat = document.getElementById('qarOptNoVat');
+        if (optVat && optNoVat) {
+            if (item.vat_status === 'vat_applies') {
+                optVat.checked = true;
+            } else {
+                optNoVat.checked = true;
+            }
+        }
+
+        showModalSafe('quickAddReceiptModal');
+    } catch (err) {
+        console.error('Error in openAddReceiptAction:', err);
     }
-    currentEditingItem = item;
-
-    document.getElementById('qarSourceType').value = item.source_type;
-    document.getElementById('qarSourceId').value = item.source_id;
-    document.getElementById('qarAmount').value = item.amount;
-    document.getElementById('qarExistingPath').value = item.receipt_url || '';
-
-    document.getElementById('qarRefNo').textContent = item.reference_no;
-    document.getElementById('qarPayee').textContent = item.payee_supplier || '—';
-    document.getElementById('qarAmountDisplay').textContent = parseFloat(item.amount).toLocaleString('en-US', {minimumFractionDigits: 2});
-
-    document.getElementById('qarSellerName').value = item.payee_supplier || '';
-    document.getElementById('qarTin').value = item.tin || '';
-    document.getElementById('qarFsNo').value = item.fs_no || '';
-    document.getElementById('qarReceiptDate').value = item.disbursement_date || '';
-
-    const fileInput = document.getElementById('qarFileInput');
-    if (fileInput) fileInput.value = '';
-    const spinner = document.getElementById('qarOcrSpinner');
-    if (spinner) spinner.classList.add('d-none');
-    const resultBox = document.getElementById('qarOcrResult');
-    if (resultBox) {
-        resultBox.classList.add('d-none');
-        resultBox.innerHTML = '';
-    }
-
-    const alertBox = document.getElementById('qarCurrentReceiptAlert');
-    const alertLink = document.getElementById('qarCurrentReceiptLink');
-    if (item.receipt_url) {
-        alertLink.href = (item.receipt_url.startsWith('http://') || item.receipt_url.startsWith('https://'))
-            ? item.receipt_url
-            : ('{{ asset("storage") }}/' + item.receipt_url.replace(/^\/+/, ''));
-        alertBox.classList.remove('d-none');
-        if (fileInput) fileInput.removeAttribute('required');
-    } else {
-        alertBox.classList.add('d-none');
-        if (fileInput) fileInput.setAttribute('required', 'required');
-    }
-
-    if (item.vat_status === 'vat_applies') {
-        document.getElementById('qarOptVat').checked = true;
-    } else {
-        document.getElementById('qarOptNoVat').checked = true;
-    }
-
-    showModalSafe('quickAddReceiptModal');
 }
 
 function openAddVatAction(arg1, arg2, buttonEl) {
-    const item = resolveItem(arg1, arg2, buttonEl);
-    if (!item) return;
-    openDecisionModal(item);
-    document.getElementById('optVatApplies').checked = true;
-    toggleVatFields();
-    setTimeout(() => {
-        const fsInput = document.getElementById('mFsNo');
-        if (fsInput) fsInput.focus();
-    }, 400);
+    try {
+        const item = resolveItem(arg1, arg2, buttonEl);
+        if (!item) return;
+        openDecisionModal(item);
+        const opt = document.getElementById('optVatApplies');
+        if (opt) opt.checked = true;
+        toggleVatFields();
+        setTimeout(() => {
+            const fsInput = document.getElementById('mFsNo');
+            if (fsInput) fsInput.focus();
+        }, 400);
+    } catch (err) {
+        console.error('Error in openAddVatAction:', err);
+    }
 }
 
 function openNonVatAction(arg1, arg2, buttonEl) {
-    const item = resolveItem(arg1, arg2, buttonEl);
-    if (!item) return;
-    openDecisionModal(item);
-    document.getElementById('optNoVat').checked = true;
-    toggleVatFields();
-    setTimeout(() => {
-        const reasonSelect = document.getElementById('mReasonCode');
-        if (reasonSelect) reasonSelect.focus();
-    }, 400);
+    try {
+        const item = resolveItem(arg1, arg2, buttonEl);
+        if (!item) return;
+        openDecisionModal(item);
+        const opt = document.getElementById('optNoVat');
+        if (opt) opt.checked = true;
+        toggleVatFields();
+        setTimeout(() => {
+            const reasonSelect = document.getElementById('mReasonCode');
+            if (reasonSelect) reasonSelect.focus();
+        }, 400);
+    } catch (err) {
+        console.error('Error in openNonVatAction:', err);
+    }
 }
 
 function openVerifiedWithoutReceiptAction(arg1, arg2, buttonEl) {
-    const item = resolveItem(arg1, arg2, buttonEl);
-    if (!item) {
-        console.error('Cannot open Verified Without Receipt: Item not resolved', { arg1, arg2, buttonEl });
-        return;
-    }
+    try {
+        const item = resolveItem(arg1, arg2, buttonEl);
+        if (!item) {
+            console.error('Cannot open Verified Without Receipt: Item not resolved', { arg1, arg2, buttonEl });
+            alert('Unable to load expense data for this row. Please refresh and try again.');
+            return;
+        }
 
-    document.getElementById('vworSourceType').value = item.source_type;
-    document.getElementById('vworSourceId').value = item.source_id;
-    document.getElementById('vworAmount').value = item.amount;
-    document.getElementById('vworRefNo').textContent = item.reference_no;
-    document.getElementById('vworPayee').textContent = item.payee_supplier || '—';
-    document.getElementById('vworAmountDisplay').textContent = parseFloat(item.amount).toLocaleString('en-US', {minimumFractionDigits: 2});
+        const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = (val !== null && val !== undefined) ? val : ''; };
+        const setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = (val !== null && val !== undefined) ? val : '—'; };
 
-    const reasonSelect = document.getElementById('vworReasonCode');
-    if (reasonSelect) {
-        reasonSelect.value = item.reason_code || 'no_fiscal_receipt';
-    }
-    const noteInput = document.getElementById('vworReasonNote');
-    if (noteInput) {
-        noteInput.value = item.reason_note || 'Audited and verified without receipt (Approved operational expense)';
-    }
+        setVal('vworSourceType', item.source_type);
+        setVal('vworSourceId', item.source_id);
+        setVal('vworAmount', item.amount);
 
-    showModalSafe('verifiedWithoutReceiptModal');
+        setText('vworRefNo', item.reference_no);
+        setText('vworPayee', item.payee_supplier);
+
+        const rawAmt = typeof item.amount === 'number' ? item.amount : parseFloat(String(item.amount || '0').replace(/,/g, ''));
+        setText('vworAmountDisplay', isNaN(rawAmt) ? '0.00' : rawAmt.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
+
+        const reasonSelect = document.getElementById('vworReasonCode');
+        if (reasonSelect) {
+            reasonSelect.value = item.reason_code || 'no_fiscal_receipt';
+        }
+        const noteInput = document.getElementById('vworReasonNote');
+        if (noteInput) {
+            noteInput.value = item.reason_note || 'Audited and verified without receipt (Approved operational expense)';
+        }
+
+        showModalSafe('verifiedWithoutReceiptModal');
+    } catch (err) {
+        console.error('Error in openVerifiedWithoutReceiptAction:', err);
+    }
 }
 
 function runQarOcr() {
