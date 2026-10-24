@@ -610,6 +610,13 @@ class ExpenseHubToTaxLedgerSyncTest extends TestCase
         $allView = $controller->index($allExpReq);
         $this->assertEquals('all_expenses', $allView->getData()['activeTab']);
         $allHtml = $allView->render();
+        $this->assertStringContainsString('window.expenseHubRegistry', $allHtml);
+        $this->assertStringContainsString('btn-view-details', $allHtml);
+        $this->assertStringContainsString('btn-open-ocr', $allHtml);
+        $this->assertStringContainsString('btn-open-decision', $allHtml);
+        $this->assertStringContainsString('data-payee=', $allHtml);
+        $this->assertStringContainsString('openExpenseDetailModal', $allHtml);
         $this->assertStringContainsString('openDecisionModal', $allHtml);
+        $this->assertStringContainsString('openDecisionModalWithOcr', $allHtml);
     }
 }

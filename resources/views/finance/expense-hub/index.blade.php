@@ -316,7 +316,37 @@
                         id="hub-row-{{ $item->source_type }}-{{ $item->source_id }}"
                         data-source-type="{{ $item->source_type }}"
                         data-source-id="{{ $item->source_id }}"
-                        data-item="{{ base64_encode(json_encode($item, JSON_UNESCAPED_UNICODE)) }}">
+                        data-ref-no="{{ $item->reference_no ?? '' }}"
+                        data-payee="{{ $item->payee_supplier ?? '' }}"
+                        data-tin="{{ $item->tin ?? '' }}"
+                        data-amount="{{ $item->amount ?? 0 }}"
+                        data-vat-status="{{ $item->vat_status ?? 'pending_decision' }}"
+                        data-vat-rate="{{ $item->vat_rate ?? 15 }}"
+                        data-is-inclusive="{{ !empty($item->is_inclusive) ? '1' : '0' }}"
+                        data-base-amount="{{ $item->decision_base_amount ?? 0 }}"
+                        data-vat-amount="{{ $item->decision_vat_amount ?? 0 }}"
+                        data-total-amount="{{ $item->decision_total_amount ?? ($item->amount ?? 0) }}"
+                        data-receipt-url="{{ $item->receipt_url ?? '' }}"
+                        data-disbursement-date="{{ $item->disbursement_date ?? '' }}"
+                        data-module-label="{{ $item->source_module_label ?? 'Expense' }}"
+                        data-fs-no="{{ $item->fs_no ?? '' }}"
+                        data-mrc-no="{{ $item->mrc_no ?? '' }}"
+                        data-purpose="{{ $item->purpose_detail ?? ($item->description ?? '') }}"
+                        data-reason-code="{{ $item->reason_code ?? '' }}"
+                        data-reason-note="{{ $item->reason_note ?? '' }}"
+                        data-has-withholding="{{ !empty($item->has_withholding) || (float)($item->withholding_amount ?? 0) > 0 ? '1' : '0' }}"
+                        data-withholding-rate="{{ $item->withholding_rate ?? 3 }}"
+                        data-withholding-amount="{{ $item->withholding_amount ?? 0 }}"
+                        data-withholding-receipt="{{ $item->withholding_receipt ?? '' }}"
+                        data-withholding-receipt-number="{{ $item->withholding_receipt_number ?? '' }}"
+                        data-net-payable-amount="{{ $item->net_payable_amount ?? 0 }}"
+                        data-created-by="{{ $item->created_by_name ?? '' }}"
+                        data-created-at="{{ $item->created_at_formatted ?? '' }}"
+                        data-approved-by="{{ $item->approved_by_name ?? '' }}"
+                        data-approved-at="{{ $item->approved_at_formatted ?? '' }}"
+                        data-paid-by="{{ $item->paid_by_name ?? '' }}"
+                        data-paid-at="{{ $item->paid_at_formatted ?? '' }}"
+                        data-view-url="{{ $item->view_url ?? '' }}">
                         <!-- Checkbox -->
                         <td class="text-center">
                             <input class="form-check-input item-checkbox" type="checkbox" 
@@ -1326,12 +1356,22 @@ let currentEditingItem = null;
 let currentDetailItem = null;
 let lastOcrResult = null;
 
+// Registry populated safely via JSON encoding
+window.expenseHubRegistry = window.expenseHubRegistry || {};
+@if(!empty($paginatedExpenses))
+    @foreach($paginatedExpenses as $pItem)
+window.expenseHubRegistry["{{ $pItem->source_type }}_{{ $pItem->source_id }}"] = @json($pItem);
+    @endforeach
+@endif
+
 function showModalSafe(modalId) {
     const el = (typeof modalId === 'string') ? document.getElementById(modalId) : modalId;
     if (!el) {
         console.error('showModalSafe: element not found', modalId);
         return;
     }
+
+    // 1. Try Bootstrap 5 Modal
     try {
         if (window.bootstrap && window.bootstrap.Modal) {
             const instance = window.bootstrap.Modal.getOrCreateInstance(el);
@@ -1339,19 +1379,20 @@ function showModalSafe(modalId) {
             return;
         }
     } catch (e) {
-        console.warn('Bootstrap Modal getOrCreateInstance failed, falling back:', e);
+        console.warn('Bootstrap 5 modal show error:', e);
     }
 
+    // 2. Try jQuery Modal
     try {
         if (window.$ && typeof window.$(el).modal === 'function') {
             window.$(el).modal('show');
             return;
         }
     } catch (e2) {
-        console.warn('jQuery modal show failed:', e2);
+        console.warn('jQuery modal show error:', e2);
     }
 
-    // Direct DOM fallback
+    // 3. Direct DOM fallback
     el.classList.add('show');
     el.style.display = 'block';
     el.removeAttribute('aria-hidden');
@@ -1396,77 +1437,98 @@ function hideModalSafe(modalId) {
     if (backdrop) backdrop.remove();
 }
 
-function decodeRowItem(row) {
-    if (!row) return null;
-    if (row._decodedItem) return row._decodedItem;
+function extractItemFromRow(tr) {
+    if (!tr) return null;
+    if (tr._extractedItem) return tr._extractedItem;
 
-    const raw = row.getAttribute('data-item');
-    if (!raw) return null;
+    const ds = tr.dataset || {};
+    const item = {
+        source_type: ds.sourceType || '',
+        source_id: ds.sourceId || '',
+        reference_no: ds.refNo || '—',
+        payee_supplier: ds.payee || '',
+        tin: ds.tin || '',
+        amount: parseFloat(ds.amount || 0),
+        vat_status: ds.vatStatus || 'pending_decision',
+        vat_rate: parseFloat(ds.vatRate || 15.00),
+        is_inclusive: ds.isInclusive !== '0',
+        decision_base_amount: parseFloat(ds.baseAmount || 0),
+        decision_vat_amount: parseFloat(ds.vatAmount || 0),
+        decision_total_amount: parseFloat(ds.totalAmount || ds.amount || 0),
+        receipt_url: ds.receiptUrl || '',
+        disbursement_date: ds.disbursementDate || '',
+        source_module_label: ds.moduleLabel || 'Expense',
+        purpose_detail: ds.purpose || '',
+        description: ds.purpose || '',
+        fs_no: ds.fsNo || '',
+        mrc_no: ds.mrcNo || '',
+        has_withholding: ds.hasWithholding === '1',
+        withholding_rate: parseFloat(ds.withholdingRate || 3.00),
+        withholding_amount: parseFloat(ds.withholdingAmount || 0),
+        withholding_receipt: ds.withholdingReceipt || '',
+        withholding_receipt_number: ds.withholdingReceiptNumber || '',
+        net_payable_amount: parseFloat(ds.netPayableAmount || 0),
+        reason_code: ds.reasonCode || '',
+        reason_note: ds.reasonNote || '',
+        purchase_type: parseInt(ds.purchaseType || 3, 10),
+        vat_category: ds.vatCategory || 'G',
+        created_by_name: ds.createdBy || '',
+        created_at_formatted: ds.createdAt || '',
+        approved_by_name: ds.approvedBy || '',
+        approved_at_formatted: ds.approvedAt || '',
+        paid_by_name: ds.paidBy || '',
+        paid_at_formatted: ds.paidAt || '',
+        view_url: ds.viewUrl || '',
+        line_items: []
+    };
 
-    let parsed = null;
-    try {
-        // Standard modern UTF-8 base64 decoding
-        const binString = atob(raw);
-        const bytes = Uint8Array.from(binString, c => c.charCodeAt(0));
-        parsed = JSON.parse(new TextDecoder('utf-8').decode(bytes));
-    } catch (e1) {
-        try {
-            parsed = JSON.parse(decodeURIComponent(escape(atob(raw))));
-        } catch (e2) {
-            try {
-                parsed = JSON.parse(atob(raw));
-            } catch (e3) {
-                try {
-                    parsed = JSON.parse(raw);
-                } catch (e4) {
-                    console.error('Failed to decode row item data:', e4);
-                }
-            }
-        }
-    }
-
-    if (parsed) {
-        row._decodedItem = parsed;
-    }
-    return parsed;
+    tr._extractedItem = item;
+    return item;
 }
 
 function resolveItem(arg1, arg2, buttonEl) {
-    // Case 1: Already an object
+    // 1. Direct object
     if (arg1 && typeof arg1 === 'object') {
         return arg1;
     }
 
-    // Case 2: JSON string
+    // Determine sourceType and sourceId
+    let sourceType = null;
+    let sourceId = null;
+
+    if (arg1 && arg2 !== undefined && arg2 !== null) {
+        sourceType = String(arg1);
+        sourceId = String(arg2);
+    } else if (buttonEl) {
+        sourceType = buttonEl.getAttribute('data-source-type');
+        sourceId = buttonEl.getAttribute('data-source-id');
+    }
+
+    // 2. Look up in window.expenseHubRegistry
+    if (window.expenseHubRegistry && sourceType && sourceId) {
+        const key = sourceType + '_' + sourceId;
+        if (window.expenseHubRegistry[key]) {
+            return window.expenseHubRegistry[key];
+        }
+    }
+
+    // 3. Look up from row element dataset
+    let row = null;
+    if (buttonEl && buttonEl.closest) {
+        row = buttonEl.closest('tr');
+    }
+    if (!row && sourceType && sourceId) {
+        row = document.getElementById('hub-row-' + sourceType + '-' + sourceId);
+    }
+    if (row) {
+        return extractItemFromRow(row);
+    }
+
+    // 4. Fallback if arg1 is stringified JSON
     if (typeof arg1 === 'string' && (arg1.trim().startsWith('{') || arg1.trim().startsWith('['))) {
         try {
             return JSON.parse(arg1);
         } catch (e) {}
-    }
-
-    // Case 3: Locate row by button element or by sourceType + sourceId
-    let row = null;
-    if (buttonEl && buttonEl.closest) {
-        row = buttonEl.closest('tr[data-item]');
-    }
-
-    if (!row && arg1 && arg2 !== undefined && arg2 !== null) {
-        row = document.getElementById('hub-row-' + arg1 + '-' + arg2);
-        if (!row) {
-            row = document.querySelector(`tr[data-source-type="${arg1}"][data-source-id="${arg2}"]`);
-        }
-    }
-
-    if (!row && buttonEl) {
-        const st = buttonEl.getAttribute('data-source-type');
-        const sid = buttonEl.getAttribute('data-source-id');
-        if (st && sid) {
-            row = document.getElementById('hub-row-' + st + '-' + sid) || document.querySelector(`tr[data-source-type="${st}"][data-source-id="${sid}"]`);
-        }
-    }
-
-    if (row) {
-        return decodeRowItem(row);
     }
 
     console.warn('Could not resolve expense item:', { arg1, arg2, buttonEl });
@@ -2253,7 +2315,7 @@ document.addEventListener('DOMContentLoaded', function () {
         cb.addEventListener('change', updateBulkState);
     });
 
-    // Close button fallback for modal dismissal
+    // Close button and action button fallbacks
     document.addEventListener('click', function (e) {
         const closeBtn = e.target.closest('[data-bs-dismiss="modal"], [data-dismiss="modal"]');
         if (closeBtn) {
@@ -2261,6 +2323,28 @@ document.addEventListener('DOMContentLoaded', function () {
             if (modal) {
                 hideModalSafe(modal);
             }
+            return;
+        }
+
+        const detailBtn = e.target.closest('.btn-view-details');
+        if (detailBtn && !detailBtn.getAttribute('onclick')) {
+            e.preventDefault();
+            openExpenseDetailModal(detailBtn.dataset.sourceType, detailBtn.dataset.sourceId, detailBtn);
+            return;
+        }
+
+        const ocrBtn = e.target.closest('.btn-open-ocr');
+        if (ocrBtn && !ocrBtn.getAttribute('onclick')) {
+            e.preventDefault();
+            openDecisionModalWithOcr(ocrBtn.dataset.sourceType, ocrBtn.dataset.sourceId, ocrBtn);
+            return;
+        }
+
+        const decisionBtn = e.target.closest('.btn-open-decision');
+        if (decisionBtn && !decisionBtn.getAttribute('onclick')) {
+            e.preventDefault();
+            openDecisionModal(decisionBtn.dataset.sourceType, decisionBtn.dataset.sourceId, decisionBtn);
+            return;
         }
     });
 });
