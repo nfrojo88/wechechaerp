@@ -78,6 +78,12 @@ class ExpenseHubController extends Controller
                     if (!Schema::hasColumn('expense_hub_vat_decisions', 'purc_type')) {
                         $table->string('purc_type', 20)->default('PUR_GD')->after('vat_category');
                     }
+                    if (!Schema::hasColumn('expense_hub_vat_decisions', 'receipt_path')) {
+                        $table->string('receipt_path', 500)->nullable()->after('custom_fs_no');
+                    }
+                    if (!Schema::hasColumn('expense_hub_vat_decisions', 'is_verified_without_receipt')) {
+                        $table->boolean('is_verified_without_receipt')->default(false)->after('no_vat_reason_note')->index();
+                    }
                 });
             }
 
@@ -341,7 +347,7 @@ class ExpenseHubController extends Controller
         $validated = $request->validate([
             'source_type'                => 'required|string|max:60',
             'source_id'                  => 'required|integer',
-            'vat_status'                 => 'required|in:vat_applies,no_vat,pending_decision',
+            'vat_status'                 => 'required|in:vat_applies,no_vat,pending_decision,verified_no_receipt',
             'amount'                     => 'required|numeric|min:0',
             'vat_rate'                   => 'nullable|numeric|min:0|max:100',
             'is_inclusive'               => 'nullable|boolean',
@@ -351,6 +357,9 @@ class ExpenseHubController extends Controller
             'withholding_receipt'        => 'nullable|string|max:500',
             'withholding_receipt_number' => 'nullable|string|max:100',
             'withholding_receipt_file'   => 'nullable|file|mimes:jpeg,jpg,png,webp,pdf|max:25600',
+            'receipt_file'               => 'nullable|file|mimes:jpeg,jpg,png,webp,pdf|max:25600',
+            'receipt_path'               => 'nullable|string|max:500',
+            'is_verified_without_receipt'=> 'nullable|boolean',
             'no_vat_reason_code'         => 'nullable|string|max:50',
             'no_vat_reason_note'         => 'nullable|string|max:500',
             'vat_category'               => 'nullable|in:G,S',
@@ -362,7 +371,6 @@ class ExpenseHubController extends Controller
             'custom_item_description'    => 'nullable|string|max:255',
             'custom_receipt_date'        => 'nullable|string|max:30',
             'custom_seller_name'         => 'nullable|string|max:255',
-            'receipt_path'               => 'nullable|string|max:500',
             'uom'                        => 'nullable|string|max:20',
             'quantity'                   => 'nullable|numeric|min:0.01',
             'unit_price'                 => 'nullable|numeric|min:0',
@@ -372,6 +380,16 @@ class ExpenseHubController extends Controller
         $amount    = (float) $validated['amount'];
         $vatRate   = isset($validated['vat_rate']) ? (float)$validated['vat_rate'] : 15.00;
         $isInclusive = $request->boolean('is_inclusive', true);
+
+        // Normalize "Verified without receipt"
+        $isVerifiedWithoutReceipt = $request->boolean('is_verified_without_receipt')
+            || $vatStatus === 'verified_no_receipt'
+            || in_array($validated['no_vat_reason_code'] ?? '', ['no_fiscal_receipt', 'informal_vendor'])
+            || str_contains(strtolower($validated['no_vat_reason_note'] ?? ''), 'without receipt');
+
+        if ($vatStatus === 'verified_no_receipt') {
+            $vatStatus = ExpenseHubVatDecision::STATUS_NO_VAT;
+        }
 
         // Check if existing record is locked
         $existing = ExpenseHubVatDecision::where('source_type', $validated['source_type'])
@@ -385,12 +403,12 @@ class ExpenseHubController extends Controller
             ], 422);
         }
 
-        // Handle Withholding Tax Receipt upload
-        $withholdingReceiptPath = $request->input('withholding_receipt') ?: ($existing?->withholding_receipt ?: null);
-        if ($request->hasFile('withholding_receipt_file')) {
-            $withholdingReceiptPath = FileUploadService::upload(
-                $request->file('withholding_receipt_file'),
-                'withholding_receipts'
+        // Handle direct Receipt upload
+        $receiptPath = $request->input('receipt_path') ?: ($existing?->receipt_path ?: null);
+        if ($request->hasFile('receipt_file')) {
+            $receiptPath = FileUploadService::upload(
+                $request->file('receipt_file'),
+                'receipts'
             );
         }
 
@@ -434,8 +452,10 @@ class ExpenseHubController extends Controller
             'base_amount'                => $baseAmount,
             'vat_amount'                 => $vatAmount,
             'total_amount'               => $totalAmount,
-            'no_vat_reason_code'         => $vatStatus === 'no_vat' ? ($validated['no_vat_reason_code'] ?? null) : null,
-            'no_vat_reason_note'         => $vatStatus === 'no_vat' ? ($validated['no_vat_reason_note'] ?? null) : null,
+            'is_verified_without_receipt'=> $isVerifiedWithoutReceipt,
+            'receipt_path'               => $receiptPath,
+            'no_vat_reason_code'         => $vatStatus === 'no_vat' ? ($validated['no_vat_reason_code'] ?? ($isVerifiedWithoutReceipt ? 'no_fiscal_receipt' : null)) : null,
+            'no_vat_reason_note'         => $vatStatus === 'no_vat' ? ($validated['no_vat_reason_note'] ?? ($isVerifiedWithoutReceipt ? 'Audited and verified without receipt (Approved operational expense)' : null)) : null,
             'vat_category'               => $validated['vat_category'] ?? 'G',
             'purc_type'                  => $validated['purc_type'] ?? (($validated['vat_category'] ?? 'G') === 'S' ? 'PUR_SER' : 'PUR_GD'),
             'calendar_type'              => 'E',
@@ -478,7 +498,7 @@ class ExpenseHubController extends Controller
         if ($decision) {
             self::syncVatDecisionToLedger(
                 $decision,
-                $request->input('receipt_path'),
+                $receiptPath ?: $request->input('receipt_path'),
                 $request->input('custom_receipt_date'),
                 $request->input('custom_seller_name'),
                 $request->input('custom_item_description'),
@@ -509,7 +529,7 @@ class ExpenseHubController extends Controller
         $validated = $request->validate([
             'selected_items'     => 'required|array|min:1',
             'selected_items.*'   => 'required|string', // Format: "source_type:source_id:amount"
-            'vat_status'         => 'required|in:vat_applies,no_vat,pending_decision',
+            'vat_status'         => 'required|in:vat_applies,no_vat,pending_decision,verified_no_receipt',
             'vat_rate'           => 'nullable|numeric|min:0|max:100',
             'is_inclusive'       => 'nullable|boolean',
             'has_withholding'    => 'nullable|boolean',
@@ -518,12 +538,16 @@ class ExpenseHubController extends Controller
             'no_vat_reason_note' => 'nullable|string|max:500',
         ]);
 
-        $vatStatus   = $validated['vat_status'];
+        $rawVatStatus = $validated['vat_status'];
+        $isVerifiedWithoutReceipt = ($rawVatStatus === 'verified_no_receipt')
+            || $request->boolean('is_verified_without_receipt')
+            || in_array($validated['no_vat_reason_code'] ?? '', ['no_fiscal_receipt', 'informal_vendor']);
+        $vatStatus   = ($rawVatStatus === 'verified_no_receipt') ? ExpenseHubVatDecision::STATUS_NO_VAT : $rawVatStatus;
         $vatRate     = isset($validated['vat_rate']) ? (float)$validated['vat_rate'] : 15.00;
         $isInclusive = $request->boolean('is_inclusive', true);
         $count = 0;
 
-        DB::transaction(function () use ($validated, $vatStatus, $vatRate, $isInclusive, $user, $request, &$count) {
+        DB::transaction(function () use ($validated, $vatStatus, $isVerifiedWithoutReceipt, $vatRate, $isInclusive, $user, $request, &$count) {
             foreach ($validated['selected_items'] as $itemStr) {
                 $parts = explode(':', $itemStr);
                 if (count($parts) < 3) continue;
@@ -553,16 +577,17 @@ class ExpenseHubController extends Controller
                 }
 
                 $decisionData = [
-                    'vat_status'         => $vatStatus,
-                    'vat_rate'           => $vatRate,
-                    'is_inclusive'       => $isInclusive,
-                    'base_amount'        => $baseAmount,
-                    'vat_amount'         => $vatAmount,
-                    'total_amount'       => $totalAmount,
-                    'no_vat_reason_code' => $vatStatus === 'no_vat' ? ($validated['no_vat_reason_code'] ?? null) : null,
-                    'no_vat_reason_note' => $vatStatus === 'no_vat' ? ($validated['no_vat_reason_note'] ?? null) : null,
-                    'decided_by'         => $user->id,
-                    'decided_at'         => now(),
+                    'vat_status'                  => $vatStatus,
+                    'vat_rate'                    => $vatRate,
+                    'is_inclusive'                => $isInclusive,
+                    'is_verified_without_receipt' => $isVerifiedWithoutReceipt,
+                    'base_amount'                 => $baseAmount,
+                    'vat_amount'                  => $vatAmount,
+                    'total_amount'                => $totalAmount,
+                    'no_vat_reason_code'          => $vatStatus === 'no_vat' ? ($validated['no_vat_reason_code'] ?? ($isVerifiedWithoutReceipt ? 'no_fiscal_receipt' : null)) : null,
+                    'no_vat_reason_note'          => $vatStatus === 'no_vat' ? ($validated['no_vat_reason_note'] ?? ($isVerifiedWithoutReceipt ? 'Audited and verified without receipt' : null)) : null,
+                    'decided_by'                  => $user->id,
+                    'decided_at'                  => now(),
                 ];
 
                 if ($request->has('has_withholding')) {
@@ -1037,7 +1062,12 @@ class ExpenseHubController extends Controller
                         $projectId   = $projectId ?: $req->project_id;
                         $vendorName  = $vendorName ?: ($req->user?->name ?: 'Vendor');
                         $itemDesc    = $itemDesc ?: ($req->description ?: 'Expense Voucher');
-                        $receiptPath = $receiptPath ?: $req->attachment;
+                        if ($receiptPath) {
+                            $req->attachment = $receiptPath;
+                            $req->save();
+                        } else {
+                            $receiptPath = $req->attachment;
+                        }
                     }
                 } elseif ($sourceType === 'procurement_payment') {
                     $payment = ProcurementPayment::with('purchaseRequest')->find($sourceId);
@@ -1058,6 +1088,9 @@ class ExpenseHubController extends Controller
                             $payment->withholding_receipt_number = $whtReceiptNo;
                         }
                         $payment->net_amount = max(0, ($payment->gross_amount ?: $payment->amount) - $whtAmount);
+                        if ($receiptPath && Schema::hasColumn('procurement_payments', 'receipt_path')) {
+                            $payment->receipt_path = $receiptPath;
+                        }
                         $payment->save();
 
                         // Also update linked PR ExpenseRequest if one exists
@@ -1072,6 +1105,7 @@ class ExpenseHubController extends Controller
                             ];
                             if ($whtReceipt) $prExpUpdate['withholding_receipt'] = $whtReceipt;
                             if ($whtReceiptNo) $prExpUpdate['withholding_receipt_number'] = $whtReceiptNo;
+                            if ($receiptPath) $prExpUpdate['attachment'] = $receiptPath;
                             ExpenseRequest::where('purchase_request_id', $payment->purchase_request_id)->update($prExpUpdate);
                         }
 
@@ -1096,6 +1130,9 @@ class ExpenseHubController extends Controller
                             $p->withholding_receipt_number = $whtReceiptNo;
                         }
                         $p->net_amount = max(0, ($p->gross_amount ?: $p->amount) - $whtAmount);
+                        if ($receiptPath && Schema::hasColumn('credit_store_payments', 'receipt_path')) {
+                            $p->receipt_path = $receiptPath;
+                        }
                         $p->save();
 
                         $targetDate  = $targetDate ?: ($p->payment_date ? Carbon::parse($p->payment_date)->toDateString() : ($p->created_at ? Carbon::parse($p->created_at)->toDateString() : null));
@@ -1108,13 +1145,21 @@ class ExpenseHubController extends Controller
                     $pc = PettyCashMaterialPurchase::find($sourceId);
                     if ($pc) {
                         $pc->vat_amount = $vatAmount;
+                        if ($receiptPath) {
+                            if (Schema::hasColumn('petty_cash_material_purchases', 'attachment_path')) {
+                                $pc->attachment_path = $receiptPath;
+                            }
+                            if (Schema::hasColumn('petty_cash_material_purchases', 'receipt_path')) {
+                                $pc->receipt_path = $receiptPath;
+                            }
+                        }
                         $pc->save();
 
                         $targetDate  = $targetDate ?: ($pc->purchase_date ? Carbon::parse($pc->purchase_date)->toDateString() : ($pc->created_at ? Carbon::parse($pc->created_at)->toDateString() : null));
                         $projectId   = $projectId ?: $pc->project_id;
                         $vendorName  = $vendorName ?: ($pc->vendor_name ?: 'Petty Cash Vendor');
                         $itemDesc    = $itemDesc ?: ($pc->item_name ?: 'Petty Cash Purchase');
-                        $receiptPath = $receiptPath ?: $pc->receipt_path;
+                        $receiptPath = $receiptPath ?: ($pc->receipt_path ?: ($pc->attachment_path ?? null));
                     }
                 }
 
@@ -1224,7 +1269,12 @@ class ExpenseHubController extends Controller
                         $projectId   = $projectId ?: $req->project_id;
                         $vendorName  = $vendorName ?: ($req->user?->name ?: 'Vendor');
                         $itemDesc    = $itemDesc ?: ($req->description ?: 'Operational Expense / Voucher');
-                        $receiptPath = $receiptPath ?: $req->attachment;
+                        if ($receiptPath) {
+                            $req->attachment = $receiptPath;
+                            $req->save();
+                        } else {
+                            $receiptPath = $req->attachment;
+                        }
                     }
                 } elseif ($sourceType === 'procurement_payment') {
                     $payment = ProcurementPayment::find($sourceId);
@@ -1237,6 +1287,9 @@ class ExpenseHubController extends Controller
                         if ($whtReceipt) $payment->withholding_receipt = $whtReceipt;
                         if ($whtReceiptNo) $payment->withholding_receipt_number = $whtReceiptNo;
                         $payment->net_amount = max(0, ($payment->gross_amount ?: $payment->amount) - $whtAmount);
+                        if ($receiptPath && Schema::hasColumn('procurement_payments', 'receipt_path')) {
+                            $payment->receipt_path = $receiptPath;
+                        }
                         $payment->save();
 
                         if ($payment->purchase_request_id) {
@@ -1249,6 +1302,7 @@ class ExpenseHubController extends Controller
                             ];
                             if ($whtReceipt) $prExpUpdate['withholding_receipt'] = $whtReceipt;
                             if ($whtReceiptNo) $prExpUpdate['withholding_receipt_number'] = $whtReceiptNo;
+                            if ($receiptPath) $prExpUpdate['attachment'] = $receiptPath;
                             ExpenseRequest::where('purchase_request_id', $payment->purchase_request_id)->update($prExpUpdate);
                         }
 
@@ -1268,6 +1322,9 @@ class ExpenseHubController extends Controller
                         if ($whtReceipt) $p->withholding_receipt = $whtReceipt;
                         if ($whtReceiptNo) $p->withholding_receipt_number = $whtReceiptNo;
                         $p->net_amount = max(0, ($p->gross_amount ?: $p->amount) - $whtAmount);
+                        if ($receiptPath && Schema::hasColumn('credit_store_payments', 'receipt_path')) {
+                            $p->receipt_path = $receiptPath;
+                        }
                         $p->save();
 
                         $targetDate  = $targetDate ?: ($p->payment_date ? Carbon::parse($p->payment_date)->toDateString() : ($p->created_at ? Carbon::parse($p->created_at)->toDateString() : null));
@@ -1275,6 +1332,26 @@ class ExpenseHubController extends Controller
                         $vendorName  = $vendorName ?: ($p->ledger?->supplier_name ?: 'Credit Supplier');
                         $itemDesc    = $itemDesc ?: ($p->ledger?->item_description ?: 'Credit Store Settlement');
                         $receiptPath = $receiptPath ?: $p->receipt_path;
+                    }
+                } elseif ($sourceType === 'petty_cash_purchase') {
+                    $pc = PettyCashMaterialPurchase::find($sourceId);
+                    if ($pc) {
+                        $pc->vat_amount = 0;
+                        if ($receiptPath) {
+                            if (Schema::hasColumn('petty_cash_material_purchases', 'attachment_path')) {
+                                $pc->attachment_path = $receiptPath;
+                            }
+                            if (Schema::hasColumn('petty_cash_material_purchases', 'receipt_path')) {
+                                $pc->receipt_path = $receiptPath;
+                            }
+                        }
+                        $pc->save();
+
+                        $targetDate  = $targetDate ?: ($pc->purchase_date ? Carbon::parse($pc->purchase_date)->toDateString() : ($pc->created_at ? Carbon::parse($pc->created_at)->toDateString() : null));
+                        $projectId   = $projectId ?: $pc->project_id;
+                        $vendorName  = $vendorName ?: ($pc->vendor_name ?: 'Petty Cash Vendor');
+                        $itemDesc    = $itemDesc ?: ($pc->item_name ?: 'Petty Cash Purchase');
+                        $receiptPath = $receiptPath ?: ($pc->receipt_path ?: ($pc->attachment_path ?? null));
                     }
                 }
 

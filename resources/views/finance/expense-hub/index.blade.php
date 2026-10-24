@@ -67,8 +67,13 @@
                 <div class="card-body p-3">
                     <span class="text-muted text-uppercase fw-semibold text-xxs d-block mb-1">No VAT (Exempt/Salary)</span>
                     <h5 class="mb-0 fw-bold text-dark">{{ number_format($summary['no_vat_total'], 2) }}</h5>
-                    <div class="mt-2 text-xxs text-muted">
+                    <div class="mt-2 text-xxs text-muted d-flex justify-content-between align-items-center">
                         <span>Exempt, salaries, informal</span>
+                        @if(($summary['verified_no_receipt_count'] ?? 0) > 0)
+                        <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25" title="Total verified without receipt">
+                            <i class="fa-solid fa-check-double me-0.5"></i> {{ $summary['verified_no_receipt_count'] }} w/o slip
+                        </span>
+                        @endif
                     </div>
                 </div>
             </div>
@@ -214,6 +219,7 @@
                         <option value="">All Statuses</option>
                         <option value="vat_applies" @selected(request('vat_status') === 'vat_applies')>VAT Applies (Inputs)</option>
                         <option value="no_vat" @selected(request('vat_status') === 'no_vat')>No VAT (Exempt/Salary)</option>
+                        <option value="verified_no_receipt" @selected(request('vat_status') === 'verified_no_receipt')>Verified Without Receipt</option>
                         <option value="pending_decision" @selected(request('vat_status') === 'pending_decision')>Pending Decision</option>
                     </select>
                 </div>
@@ -272,6 +278,9 @@
                     <button type="button" class="btn btn-xs btn-outline-secondary rounded-pill px-2.5" onclick="openBulkModal('no_vat')">
                         <i class="fa-solid fa-ban me-1"></i> Bulk: No VAT
                     </button>
+                    <button type="button" class="btn btn-xs btn-outline-info rounded-pill px-2.5" onclick="openBulkModal('verified_no_receipt')">
+                        <i class="fa-solid fa-check-double me-1"></i> Bulk: Verified w/o Receipt
+                    </button>
                     @endif
                 </div>
             </div>
@@ -301,14 +310,21 @@
                 <tbody>
                     @forelse($paginatedExpenses as $item)
                     @php
-                        $statusBadgeClass = match($item->vat_status) {
-                            'vat_applies', \App\Models\ExpenseHubVatDecision::STATUS_VAT_APPLIES => 'bg-success text-white',
-                            'no_vat', \App\Models\ExpenseHubVatDecision::STATUS_NO_VAT           => 'bg-secondary text-white',
+                        $isVerifiedNoReceipt = !empty($item->is_verified_without_receipt);
+                        $statusBadgeClass = match(true) {
+                            $isVerifiedNoReceipt                                                 => 'bg-info bg-opacity-20 text-info border border-info',
+                            $item->vat_status === 'vat_applies',
+                            $item->vat_status === \App\Models\ExpenseHubVatDecision::STATUS_VAT_APPLIES => 'bg-success text-white',
+                            $item->vat_status === 'no_vat',
+                            $item->vat_status === \App\Models\ExpenseHubVatDecision::STATUS_NO_VAT       => 'bg-secondary text-white',
                             default                                                              => 'bg-warning text-dark border border-warning',
                         };
-                        $statusLabel = match($item->vat_status) {
-                            'vat_applies', \App\Models\ExpenseHubVatDecision::STATUS_VAT_APPLIES => 'VAT Applies',
-                            'no_vat', \App\Models\ExpenseHubVatDecision::STATUS_NO_VAT           => 'No VAT',
+                        $statusLabel = match(true) {
+                            $isVerifiedNoReceipt                                                 => 'Verified w/o Receipt',
+                            $item->vat_status === 'vat_applies',
+                            $item->vat_status === \App\Models\ExpenseHubVatDecision::STATUS_VAT_APPLIES => 'VAT Applies',
+                            $item->vat_status === 'no_vat',
+                            $item->vat_status === \App\Models\ExpenseHubVatDecision::STATUS_NO_VAT       => 'No VAT',
                             default                                                              => 'Pending Decision',
                         };
                     @endphp
@@ -321,6 +337,7 @@
                         data-tin="{{ $item->tin ?? '' }}"
                         data-amount="{{ $item->amount ?? 0 }}"
                         data-vat-status="{{ $item->vat_status ?? 'pending_decision' }}"
+                        data-is-verified-without-receipt="{{ !empty($item->is_verified_without_receipt) ? '1' : '0' }}"
                         data-vat-rate="{{ $item->vat_rate ?? 15 }}"
                         data-is-inclusive="{{ !empty($item->is_inclusive) ? '1' : '0' }}"
                         data-base-amount="{{ $item->decision_base_amount ?? 0 }}"
@@ -473,8 +490,19 @@
                                    class="btn btn-xs btn-outline-info rounded-pill px-2 py-0.5" title="View attached receipt / voucher">
                                     <i class="fa-solid fa-paperclip"></i>
                                 </a>
+                            @elseif($isVerifiedNoReceipt)
+                                <span class="badge bg-light text-muted border text-xxs" title="Audited and verified without receipt">
+                                    <i class="fa-solid fa-check-double text-info me-0.5"></i> No Slip
+                                </span>
                             @else
-                                <span class="text-muted text-xxs">—</span>
+                                @if($canDecideVat && !$item->is_locked)
+                                    <button type="button" class="btn btn-xs btn-outline-primary border-dashed rounded-pill px-2 py-0.5 text-xxs"
+                                            onclick="openAddReceiptAction('{{ $item->source_type }}', '{{ $item->source_id }}', this)" title="Add Receipt to this expense">
+                                        <i class="fa-solid fa-plus me-0.5"></i> Add
+                                    </button>
+                                @else
+                                    <span class="text-muted text-xxs">—</span>
+                                @endif
                             @endif
 
                             @if(!empty($item->withholding_receipt))
@@ -487,26 +515,95 @@
 
                         <!-- Action -->
                         <td class="text-end text-nowrap">
-                            <button type="button" class="btn btn-xs btn-outline-info rounded-pill px-2 py-1 text-xs fw-semibold me-1 btn-view-details"
-                                    data-source-type="{{ $item->source_type }}"
-                                    data-source-id="{{ $item->source_id }}"
-                                    onclick="openExpenseDetailModal('{{ $item->source_type }}', '{{ $item->source_id }}', this)" title="View Full Expense Purpose, Line Items &amp; Operational Audit Trail">
-                                <i class="fa-solid fa-circle-info"></i> Details
-                            </button>
-                            @if($canDecideVat)
-                            <button type="button" class="btn btn-xs btn-outline-primary rounded-pill px-2 py-1 text-xs fw-semibold me-1 btn-open-ocr"
-                                    data-source-type="{{ $item->source_type }}"
-                                    data-source-id="{{ $item->source_id }}"
-                                    onclick="openDecisionModalWithOcr('{{ $item->source_type }}', '{{ $item->source_id }}', this)" title="Scan Receipt with AI OCR &amp; Record VAT Decision">
-                                <i class="fa-solid fa-wand-magic-sparkles"></i> OCR
-                            </button>
-                            <button type="button" class="btn btn-xs btn-light border rounded-pill px-2 py-1 text-xs text-dark btn-open-decision"
-                                    data-source-type="{{ $item->source_type }}"
-                                    data-source-id="{{ $item->source_id }}"
-                                    onclick="openDecisionModal('{{ $item->source_type }}', '{{ $item->source_id }}', this)" title="Record / Edit VAT Decision">
-                                <i class="fa-solid fa-sliders"></i>
-                            </button>
-                            @endif
+                            <div class="d-inline-flex align-items-center gap-1">
+                                <button type="button" class="btn btn-xs btn-outline-secondary rounded-pill px-2 py-1 text-xs fw-semibold btn-view-details"
+                                        data-source-type="{{ $item->source_type }}"
+                                        data-source-id="{{ $item->source_id }}"
+                                        onclick="openExpenseDetailModal('{{ $item->source_type }}', '{{ $item->source_id }}', this)" title="View Full Purpose, Line Items &amp; Audit Trail">
+                                    <i class="fa-solid fa-circle-info"></i>
+                                </button>
+
+                                @if($canDecideVat && !$item->is_locked)
+                                <div class="dropdown d-inline-block">
+                                    <button class="btn btn-xs btn-primary dropdown-toggle rounded-pill px-2.5 py-1 text-xs fw-semibold shadow-xs"
+                                            type="button" data-bs-toggle="dropdown" data-bs-auto-close="true" aria-expanded="false">
+                                        <i class="fa-solid fa-bolt me-1"></i> Actions
+                                    </button>
+                                    <ul class="dropdown-menu dropdown-menu-end shadow-lg border-0 rounded-3 p-1.5 text-xs" style="min-width: 250px; z-index: 1055;">
+                                        <li class="dropdown-header text-xxs text-uppercase fw-bold text-muted px-2 py-1">
+                                            <i class="fa-solid fa-sliders me-1"></i> Expense Tax &amp; Receipt
+                                        </li>
+                                        <li>
+                                            <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center gap-2" href="#"
+                                               onclick="openAddReceiptAction('{{ $item->source_type }}', '{{ $item->source_id }}', this); return false;">
+                                                <div class="bg-primary bg-opacity-10 text-primary rounded-circle p-1.5 d-flex align-items-center justify-content-center" style="width: 28px; height: 28px;">
+                                                    <i class="fa-solid fa-cloud-arrow-up text-xxs"></i>
+                                                </div>
+                                                <div>
+                                                    <div class="fw-bold text-dark text-xs">Add Receipt</div>
+                                                    <div class="text-xxs text-muted">Upload slip or scan with AI OCR</div>
+                                                </div>
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center gap-2" href="#"
+                                               onclick="openAddVatAction('{{ $item->source_type }}', '{{ $item->source_id }}', this); return false;">
+                                                <div class="bg-success bg-opacity-10 text-success rounded-circle p-1.5 d-flex align-items-center justify-content-center" style="width: 28px; height: 28px;">
+                                                    <i class="fa-solid fa-percent text-xxs"></i>
+                                                </div>
+                                                <div>
+                                                    <div class="fw-bold text-success text-xs">Add VAT Payment</div>
+                                                    <div class="text-xxs text-muted">Input VAT at 15% rate</div>
+                                                </div>
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center gap-2" href="#"
+                                               onclick="openNonVatAction('{{ $item->source_type }}', '{{ $item->source_id }}', this); return false;">
+                                                <div class="bg-secondary bg-opacity-10 text-secondary rounded-circle p-1.5 d-flex align-items-center justify-content-center" style="width: 28px; height: 28px;">
+                                                    <i class="fa-solid fa-receipt text-xxs"></i>
+                                                </div>
+                                                <div>
+                                                    <div class="fw-bold text-dark text-xs">Non-VAT Payment</div>
+                                                    <div class="text-xxs text-muted">0% VAT / TAS exempt purchase</div>
+                                                </div>
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center gap-2" href="#"
+                                               onclick="openVerifiedWithoutReceiptAction('{{ $item->source_type }}', '{{ $item->source_id }}', this); return false;">
+                                                <div class="bg-info bg-opacity-10 text-info rounded-circle p-1.5 d-flex align-items-center justify-content-center" style="width: 28px; height: 28px;">
+                                                    <i class="fa-solid fa-check-double text-xxs"></i>
+                                                </div>
+                                                <div>
+                                                    <div class="fw-bold text-info text-xs">Verified Without Receipt</div>
+                                                    <div class="text-xxs text-muted">Petty cash / informal vendor / no slip</div>
+                                                </div>
+                                            </a>
+                                        </li>
+                                        <li><hr class="dropdown-divider my-1"></li>
+                                        <li>
+                                            <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center gap-2 text-muted" href="#"
+                                               onclick="openExpenseDetailModal('{{ $item->source_type }}', '{{ $item->source_id }}', this); return false;">
+                                                <i class="fa-solid fa-circle-info fa-fw text-secondary"></i>
+                                                <span class="text-dark">View Purpose &amp; Line Items</span>
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center gap-2 text-muted" href="#"
+                                               onclick="openDecisionModal('{{ $item->source_type }}', '{{ $item->source_id }}', this); return false;">
+                                                <i class="fa-solid fa-sliders fa-fw text-secondary"></i>
+                                                <span class="text-dark">Full Studio (3% WHT, TAS)</span>
+                                            </a>
+                                        </li>
+                                    </ul>
+                                </div>
+                                @elseif($item->is_locked)
+                                <span class="badge bg-light text-muted border text-xxs py-1 px-2" title="Month is locked">
+                                    <i class="fa-solid fa-lock me-1"></i> Locked
+                                </span>
+                                @endif
+                            </div>
                         </td>
                     </tr>
                     @empty
@@ -916,6 +1013,7 @@
                 <input type="hidden" name="withholding_receipt" id="mWithholdingReceiptPath">
                 <input type="hidden" name="custom_item_description" id="mItemDescription">
                 <input type="hidden" name="purc_type" id="mPurcType" value="PUR_GD">
+                <input type="hidden" name="is_verified_without_receipt" id="mIsVerifiedWithoutReceipt" value="0">
 
                 <div class="modal-body p-4">
                     <!-- Item Overview Row with Full Purpose & Audit Trail -->
@@ -972,11 +1070,11 @@
                             <!-- Scan Controls -->
                             <div class="row g-2 align-items-center">
                                 <div class="col-md-7">
-                                    <input type="file" id="mOcrFileInput" accept="image/*,.pdf" class="form-control form-control-sm text-xs bg-white" placeholder="Choose receipt file">
+                                    <input type="file" name="receipt_file" id="mOcrFileInput" accept="image/*,.pdf" class="form-control form-control-sm text-xs bg-white" placeholder="Choose receipt file">
                                 </div>
                                 <div class="col-md-5 d-flex gap-1.5">
                                     <button type="button" id="btnUploadOcrScan" class="btn btn-primary btn-sm flex-fill text-xs shadow-xs" onclick="runOcrUpload()">
-                                        <i class="fa-solid fa-cloud-arrow-up me-1"></i> Scan Upload
+                                        <i class="fa-solid fa-wand-magic-sparkles me-1"></i> Scan Upload
                                     </button>
                                     <button type="button" id="btnAttachedOcrScan" class="btn btn-outline-primary btn-sm flex-fill text-xs d-none" onclick="runOcrAttached()">
                                         <i class="fa-solid fa-paperclip me-1"></i> Scan Attached
@@ -998,7 +1096,7 @@
                     <!-- VAT Decision Radio Group -->
                     <div class="mb-3">
                         <label class="form-label text-xs fw-bold text-uppercase text-muted">Select VAT Classification <span class="text-danger">*</span></label>
-                        <div class="d-flex gap-2">
+                        <div class="d-flex gap-2 flex-wrap">
                             <input type="radio" class="btn-check" name="vat_status" id="optVatApplies" value="vat_applies" onchange="toggleVatFields()">
                             <label class="btn btn-outline-success flex-fill py-2 text-xs fw-semibold" for="optVatApplies">
                                 <i class="fa-solid fa-check me-1"></i> VAT Applies (Input VAT)
@@ -1006,7 +1104,12 @@
 
                             <input type="radio" class="btn-check" name="vat_status" id="optNoVat" value="no_vat" onchange="toggleVatFields()">
                             <label class="btn btn-outline-secondary flex-fill py-2 text-xs fw-semibold" for="optNoVat">
-                                <i class="fa-solid fa-receipt me-1"></i> No VAT / TAS Purchase (0% VAT)
+                                <i class="fa-solid fa-receipt me-1"></i> No VAT / TAS (0%)
+                            </label>
+
+                            <input type="radio" class="btn-check" name="vat_status" id="optVerifiedNoReceipt" value="verified_no_receipt" onchange="toggleVatFields()">
+                            <label class="btn btn-outline-info flex-fill py-2 text-xs fw-semibold" for="optVerifiedNoReceipt">
+                                <i class="fa-solid fa-check-double me-1"></i> Verified Without Receipt
                             </label>
 
                             <input type="radio" class="btn-check" name="vat_status" id="optPending" value="pending_decision" onchange="toggleVatFields()">
@@ -1216,6 +1319,175 @@
     </div>
 </div>
 
+<!-- ── MODAL: QUICK ADD RECEIPT ─────────────────────────────────────────── -->
+<div class="modal fade" id="quickAddReceiptModal" tabindex="-1" aria-labelledby="quickAddReceiptModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-md">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-light py-2.5">
+                <h6 class="modal-title fw-bold text-dark" id="quickAddReceiptModalLabel">
+                    <i class="fa-solid fa-cloud-arrow-up text-primary me-1.5"></i> Add Receipt: <span id="qarRefNo" class="text-primary"></span>
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="quickAddReceiptForm" method="POST" action="{{ route('finance.expense-hub.decision') }}" enctype="multipart/form-data">
+                @csrf
+                <input type="hidden" name="source_type" id="qarSourceType">
+                <input type="hidden" name="source_id" id="qarSourceId">
+                <input type="hidden" name="amount" id="qarAmount">
+                <input type="hidden" name="receipt_path" id="qarExistingPath">
+
+                <div class="modal-body p-3">
+                    <!-- Expense Summary Badge -->
+                    <div class="p-2.5 bg-light rounded-3 border mb-3 text-xs d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <div>
+                            <span class="text-muted text-xxs d-block">Payee / Supplier:</span>
+                            <strong id="qarPayee" class="text-dark"></strong>
+                        </div>
+                        <div class="text-end">
+                            <span class="text-muted text-xxs d-block">Disbursed Amount:</span>
+                            <strong id="qarAmountDisplay" class="text-dark fs-6"></strong> <span class="text-xxs">ETB</span>
+                        </div>
+                    </div>
+
+                    <!-- Current Attached Receipt Preview if any -->
+                    <div id="qarCurrentReceiptAlert" class="d-none alert alert-info py-2 px-3 text-xs mb-3 d-flex justify-content-between align-items-center">
+                        <span><i class="fa-solid fa-paperclip me-1"></i> Receipt is already attached</span>
+                        <a id="qarCurrentReceiptLink" href="#" target="_blank" class="btn btn-xs btn-info text-white">View Current Receipt</a>
+                    </div>
+
+                    <!-- Receipt File Upload Box -->
+                    <div class="mb-3">
+                        <label class="form-label text-xs fw-bold">Select Receipt File (JPG, PNG, PDF up to 25MB) <span class="text-danger">*</span></label>
+                        <input type="file" name="receipt_file" id="qarFileInput" class="form-control form-control-sm text-xs bg-white" accept="image/*,.pdf" required>
+                        <div class="d-flex justify-content-between align-items-center mt-1">
+                            <span class="text-xxs text-muted">Upload cash slip, invoice, or commercial voucher</span>
+                            <button type="button" class="btn btn-xs btn-outline-primary py-0.5 px-2" id="btnQarRunOcr" onclick="runQarOcr()">
+                                <i class="fa-solid fa-wand-magic-sparkles me-1"></i> Scan with AI OCR
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- OCR Progress / Result inside Quick Add -->
+                    <div id="qarOcrSpinner" class="d-none text-center py-2 bg-light rounded mb-2">
+                        <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                        <span class="ms-2 text-xs fw-semibold text-primary">Scanning receipt with AI OCR Vision...</span>
+                    </div>
+                    <div id="qarOcrResult" class="d-none mb-2 p-2 rounded text-xxs"></div>
+
+                    <!-- Classification Option -->
+                    <div class="mb-3">
+                        <label class="form-label text-xs fw-bold">Tax Treatment</label>
+                        <div class="d-flex gap-2">
+                            <input type="radio" class="btn-check" name="vat_status" id="qarOptVat" value="vat_applies" checked>
+                            <label class="btn btn-outline-success flex-fill py-1.5 text-xs fw-semibold" for="qarOptVat">
+                                <i class="fa-solid fa-percent me-1"></i> VAT Applies (15%)
+                            </label>
+
+                            <input type="radio" class="btn-check" name="vat_status" id="qarOptNoVat" value="no_vat">
+                            <label class="btn btn-outline-secondary flex-fill py-1.5 text-xs fw-semibold" for="qarOptNoVat">
+                                <i class="fa-solid fa-receipt me-1"></i> Non-VAT / TAS (0%)
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Metadata Fields -->
+                    <div class="row g-2 mb-2">
+                        <div class="col-6">
+                            <label class="form-label text-xxs fw-semibold text-muted mb-0.5">Fiscal Receipt # (FS No)</label>
+                            <input type="text" name="custom_fs_no" id="qarFsNo" class="form-control form-control-sm font-monospace text-xs" placeholder="e.g. FS00045892">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label text-xxs fw-semibold text-muted mb-0.5">Supplier TIN</label>
+                            <input type="text" name="custom_seller_tin" id="qarTin" class="form-control form-control-sm font-monospace text-xs" placeholder="e.g. 0012345678">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label text-xxs fw-semibold text-muted mb-0.5">Supplier / Merchant Name</label>
+                            <input type="text" name="custom_seller_name" id="qarSellerName" class="form-control form-control-sm text-xs" placeholder="e.g. TotalEnergies">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label text-xxs fw-semibold text-muted mb-0.5">Receipt Date</label>
+                            <input type="date" name="custom_receipt_date" id="qarReceiptDate" class="form-control form-control-sm text-xs">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light py-2">
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-sm btn-primary px-3" id="qarSubmitBtn">
+                        <i class="fa-solid fa-cloud-arrow-up me-1"></i> Save &amp; Attach Receipt
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- ── MODAL: VERIFIED WITHOUT RECEIPT ──────────────────────────────────── -->
+<div class="modal fade" id="verifiedWithoutReceiptModal" tabindex="-1" aria-labelledby="vworModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-info bg-opacity-10 py-2.5 border-bottom border-info border-opacity-25">
+                <h6 class="modal-title fw-bold text-dark" id="vworModalLabel">
+                    <i class="fa-solid fa-check-double text-info me-1.5"></i> Verify Without Receipt
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="vworForm" method="POST" action="{{ route('finance.expense-hub.decision') }}">
+                @csrf
+                <input type="hidden" name="source_type" id="vworSourceType">
+                <input type="hidden" name="source_id" id="vworSourceId">
+                <input type="hidden" name="amount" id="vworAmount">
+                <input type="hidden" name="vat_status" value="no_vat">
+                <input type="hidden" name="is_verified_without_receipt" value="1">
+
+                <div class="modal-body p-3">
+                    <div class="p-2.5 bg-light rounded-3 border mb-3 text-xs">
+                        <div class="d-flex justify-content-between mb-1">
+                            <span class="text-muted text-xxs">Ref:</span>
+                            <strong id="vworRefNo" class="text-dark"></strong>
+                        </div>
+                        <div class="d-flex justify-content-between mb-1">
+                            <span class="text-muted text-xxs">Payee:</span>
+                            <span id="vworPayee" class="text-dark fw-semibold text-truncate" style="max-width: 170px;"></span>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span class="text-muted text-xxs">Amount:</span>
+                            <strong id="vworAmountDisplay" class="text-dark"></strong> ETB
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label text-xs fw-bold">Verification Justification <span class="text-danger">*</span></label>
+                        <select name="no_vat_reason_code" id="vworReasonCode" class="form-select form-select-sm text-xs" required>
+                            <option value="no_fiscal_receipt" selected>No official Fiscal Receipt (FS/Cash Register)</option>
+                            <option value="informal_vendor">Informal / Small-holder Vendor without receipt</option>
+                            <option value="salary_payroll">Employee Salary / Labor Allowance</option>
+                            <option value="exempt_item">Legally VAT-Exempt goods/services</option>
+                            <option value="other">Other audited operational expense</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label text-xs fw-bold">Audit Memo / Note</label>
+                        <input type="text" name="no_vat_reason_note" id="vworReasonNote" class="form-control form-control-sm text-xs"
+                               value="Audited and verified without receipt (Approved operational expense)">
+                    </div>
+
+                    <div class="text-xxs text-muted mt-2 d-flex align-items-center gap-1.5">
+                        <i class="fa-solid fa-shield-halved text-info"></i>
+                        <span>This will record this payment as verified without receipt and clear audit warnings.</span>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light py-2">
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-sm btn-info text-white px-3 fw-semibold" id="vworSubmitBtn">
+                        <i class="fa-solid fa-check-double me-1"></i> Confirm &amp; Verify
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <!-- ── MODAL: BULK VAT DECISION ───────────────────────────────────────────── -->
 <div class="modal fade" id="bulkModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
@@ -1235,6 +1507,10 @@
                         <select name="vat_status" id="bulkStatusSelect" class="form-select form-select-sm" onchange="toggleBulkFields()">
                             <option value="vat_applies">VAT Applies (Inputs)</option>
                             <option value="no_vat">No VAT (Exempt / Salary)</option>
+                            <option value="verified_no_receipt">Verified Without Receipt</option>
+                            <option value="pending_decision">Pending Decision</option>
+                        </select>
+                    </div>
                             <option value="pending_decision">Pending Decision</option>
                         </select>
                     </div>
@@ -1450,6 +1726,7 @@ function extractItemFromRow(tr) {
         tin: ds.tin || '',
         amount: parseFloat(ds.amount || 0),
         vat_status: ds.vatStatus || 'pending_decision',
+        is_verified_without_receipt: ds.isVerifiedWithoutReceipt === '1',
         vat_rate: parseFloat(ds.vatRate || 15.00),
         is_inclusive: ds.isInclusive !== '0',
         decision_base_amount: parseFloat(ds.baseAmount || 0),
@@ -1783,12 +2060,24 @@ function openDecisionModal(arg1, arg2, buttonEl) {
     document.getElementById('mPaidBy').textContent = (item.paid_by_name || '—') + (item.disbursement_date ? (' on ' + item.disbursement_date) : '');
 
     // Populate radio status
-    if (item.vat_status === 'vat_applies') {
+    const mIsVworInput = document.getElementById('mIsVerifiedWithoutReceipt');
+    if (item.is_verified_without_receipt) {
+        const optVwor = document.getElementById('optVerifiedNoReceipt');
+        if (optVwor) {
+            optVwor.checked = true;
+        } else {
+            document.getElementById('optNoVat').checked = true;
+        }
+        if (mIsVworInput) mIsVworInput.value = '1';
+    } else if (item.vat_status === 'vat_applies') {
         document.getElementById('optVatApplies').checked = true;
+        if (mIsVworInput) mIsVworInput.value = '0';
     } else if (item.vat_status === 'no_vat') {
         document.getElementById('optNoVat').checked = true;
+        if (mIsVworInput) mIsVworInput.value = '0';
     } else {
         document.getElementById('optPending').checked = true;
+        if (mIsVworInput) mIsVworInput.value = '0';
     }
 
     // Prefill metadata
@@ -1892,6 +2181,174 @@ function openDecisionModalWithOcr(arg1, arg2, buttonEl) {
             fileInput.click();
         }
     }
+}
+
+// ── Quick Actions from Row Menu ──────────────────────────────────────────────
+function openAddReceiptAction(arg1, arg2, buttonEl) {
+    const item = resolveItem(arg1, arg2, buttonEl);
+    if (!item) {
+        console.error('Cannot open Add Receipt: Item not resolved', { arg1, arg2, buttonEl });
+        return;
+    }
+    currentEditingItem = item;
+
+    document.getElementById('qarSourceType').value = item.source_type;
+    document.getElementById('qarSourceId').value = item.source_id;
+    document.getElementById('qarAmount').value = item.amount;
+    document.getElementById('qarExistingPath').value = item.receipt_url || '';
+
+    document.getElementById('qarRefNo').textContent = item.reference_no;
+    document.getElementById('qarPayee').textContent = item.payee_supplier || '—';
+    document.getElementById('qarAmountDisplay').textContent = parseFloat(item.amount).toLocaleString('en-US', {minimumFractionDigits: 2});
+
+    document.getElementById('qarSellerName').value = item.payee_supplier || '';
+    document.getElementById('qarTin').value = item.tin || '';
+    document.getElementById('qarFsNo').value = item.fs_no || '';
+    document.getElementById('qarReceiptDate').value = item.disbursement_date || '';
+
+    const fileInput = document.getElementById('qarFileInput');
+    if (fileInput) fileInput.value = '';
+    const spinner = document.getElementById('qarOcrSpinner');
+    if (spinner) spinner.classList.add('d-none');
+    const resultBox = document.getElementById('qarOcrResult');
+    if (resultBox) {
+        resultBox.classList.add('d-none');
+        resultBox.innerHTML = '';
+    }
+
+    const alertBox = document.getElementById('qarCurrentReceiptAlert');
+    const alertLink = document.getElementById('qarCurrentReceiptLink');
+    if (item.receipt_url) {
+        alertLink.href = (item.receipt_url.startsWith('http://') || item.receipt_url.startsWith('https://'))
+            ? item.receipt_url
+            : ('{{ asset("storage") }}/' + item.receipt_url.replace(/^\/+/, ''));
+        alertBox.classList.remove('d-none');
+        if (fileInput) fileInput.removeAttribute('required');
+    } else {
+        alertBox.classList.add('d-none');
+        if (fileInput) fileInput.setAttribute('required', 'required');
+    }
+
+    if (item.vat_status === 'vat_applies') {
+        document.getElementById('qarOptVat').checked = true;
+    } else {
+        document.getElementById('qarOptNoVat').checked = true;
+    }
+
+    showModalSafe('quickAddReceiptModal');
+}
+
+function openAddVatAction(arg1, arg2, buttonEl) {
+    const item = resolveItem(arg1, arg2, buttonEl);
+    if (!item) return;
+    openDecisionModal(item);
+    document.getElementById('optVatApplies').checked = true;
+    toggleVatFields();
+    setTimeout(() => {
+        const fsInput = document.getElementById('mFsNo');
+        if (fsInput) fsInput.focus();
+    }, 400);
+}
+
+function openNonVatAction(arg1, arg2, buttonEl) {
+    const item = resolveItem(arg1, arg2, buttonEl);
+    if (!item) return;
+    openDecisionModal(item);
+    document.getElementById('optNoVat').checked = true;
+    toggleVatFields();
+    setTimeout(() => {
+        const reasonSelect = document.getElementById('mReasonCode');
+        if (reasonSelect) reasonSelect.focus();
+    }, 400);
+}
+
+function openVerifiedWithoutReceiptAction(arg1, arg2, buttonEl) {
+    const item = resolveItem(arg1, arg2, buttonEl);
+    if (!item) {
+        console.error('Cannot open Verified Without Receipt: Item not resolved', { arg1, arg2, buttonEl });
+        return;
+    }
+
+    document.getElementById('vworSourceType').value = item.source_type;
+    document.getElementById('vworSourceId').value = item.source_id;
+    document.getElementById('vworAmount').value = item.amount;
+    document.getElementById('vworRefNo').textContent = item.reference_no;
+    document.getElementById('vworPayee').textContent = item.payee_supplier || '—';
+    document.getElementById('vworAmountDisplay').textContent = parseFloat(item.amount).toLocaleString('en-US', {minimumFractionDigits: 2});
+
+    const reasonSelect = document.getElementById('vworReasonCode');
+    if (reasonSelect) {
+        reasonSelect.value = item.reason_code || 'no_fiscal_receipt';
+    }
+    const noteInput = document.getElementById('vworReasonNote');
+    if (noteInput) {
+        noteInput.value = item.reason_note || 'Audited and verified without receipt (Approved operational expense)';
+    }
+
+    showModalSafe('verifiedWithoutReceiptModal');
+}
+
+function runQarOcr() {
+    const fileInput = document.getElementById('qarFileInput');
+    if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+        alert('Please choose a receipt image or PDF file to scan first.');
+        return;
+    }
+
+    const spinner = document.getElementById('qarOcrSpinner');
+    const resultBox = document.getElementById('qarOcrResult');
+    const ocrBtn = document.getElementById('btnQarRunOcr');
+
+    spinner.classList.remove('d-none');
+    resultBox.classList.add('d-none');
+    if (ocrBtn) ocrBtn.disabled = true;
+
+    const fd = new FormData();
+    fd.append('receipt_file', fileInput.files[0]);
+    fd.append('_token', '{{ csrf_token() }}');
+
+    fetch("{{ route('finance.expense-hub.scan-receipt') }}", {
+        method: 'POST',
+        body: fd,
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    })
+    .then(r => r.json())
+    .then(data => {
+        spinner.classList.add('d-none');
+        if (ocrBtn) ocrBtn.disabled = false;
+
+        if (data.success) {
+            if (data.fs_no) document.getElementById('qarFsNo').value = data.fs_no;
+            if (data.supplier_tin) document.getElementById('qarTin').value = data.supplier_tin;
+            if (data.vendor_name) document.getElementById('qarSellerName').value = data.vendor_name;
+            if (data.receipt_date) document.getElementById('qarReceiptDate').value = data.receipt_date;
+            if (data.file_path) document.getElementById('qarExistingPath').value = data.file_path;
+
+            if (data.vat_amount > 0) {
+                document.getElementById('qarOptVat').checked = true;
+            } else if (data.is_no_vat) {
+                document.getElementById('qarOptNoVat').checked = true;
+            }
+
+            resultBox.className = 'alert alert-success py-1.5 px-2 text-xxs mb-2';
+            resultBox.innerHTML = '<i class="fa-solid fa-circle-check text-success me-1"></i> OCR extracted: ' +
+                (data.vendor_name ? '<strong>' + escapeHtml(data.vendor_name) + '</strong> | ' : '') +
+                (data.fs_no ? 'FS: ' + escapeHtml(data.fs_no) + ' | ' : '') +
+                (data.vat_amount > 0 ? 'VAT: ' + data.vat_amount.toFixed(2) + ' ETB' : '0% VAT');
+            resultBox.classList.remove('d-none');
+        } else {
+            resultBox.className = 'alert alert-warning py-1.5 px-2 text-xxs mb-2';
+            resultBox.innerHTML = '<i class="fa-solid fa-triangle-exclamation me-1"></i> ' + (data.message || 'Could not auto-extract fields. Please fill manually.');
+            resultBox.classList.remove('d-none');
+        }
+    })
+    .catch(err => {
+        spinner.classList.add('d-none');
+        if (ocrBtn) ocrBtn.disabled = false;
+        resultBox.className = 'alert alert-danger py-1.5 px-2 text-xxs mb-2';
+        resultBox.innerHTML = '<i class="fa-solid fa-triangle-exclamation me-1"></i> Scan request failed. You can still save manually.';
+        resultBox.classList.remove('d-none');
+    });
 }
 
 function runOcrUpload() {
@@ -2186,16 +2643,32 @@ function toggleVatFields() {
     const status = document.querySelector('input[name="vat_status"]:checked')?.value;
     const vatSec = document.getElementById('vatAppliesSection');
     const noVatSec = document.getElementById('noVatSection');
+    const mIsVworInput = document.getElementById('mIsVerifiedWithoutReceipt');
 
     if (status === 'vat_applies') {
-        vatSec.classList.remove('d-none');
-        noVatSec.classList.add('d-none');
+        vatSec?.classList.remove('d-none');
+        noVatSec?.classList.add('d-none');
+        if (mIsVworInput) mIsVworInput.value = '0';
     } else if (status === 'no_vat') {
-        vatSec.classList.add('d-none');
-        noVatSec.classList.remove('d-none');
+        vatSec?.classList.add('d-none');
+        noVatSec?.classList.remove('d-none');
+        if (mIsVworInput) mIsVworInput.value = '0';
+    } else if (status === 'verified_no_receipt') {
+        vatSec?.classList.add('d-none');
+        noVatSec?.classList.remove('d-none');
+        if (mIsVworInput) mIsVworInput.value = '1';
+        const reasonSelect = document.getElementById('mReasonCode');
+        if (reasonSelect && !reasonSelect.value) {
+            reasonSelect.value = 'no_fiscal_receipt';
+        }
+        const reasonNote = document.getElementById('mReasonNote');
+        if (reasonNote && !reasonNote.value) {
+            reasonNote.value = 'Audited and verified without receipt (Approved operational expense)';
+        }
     } else {
-        vatSec.classList.add('d-none');
-        noVatSec.classList.add('d-none');
+        vatSec?.classList.add('d-none');
+        noVatSec?.classList.add('d-none');
+        if (mIsVworInput) mIsVworInput.value = '0';
     }
 
     recalculateVatPreview();
@@ -2347,6 +2820,89 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
     });
+
+    // Handle AJAX submission for Quick Verified Without Receipt
+    const vworForm = document.getElementById('vworForm');
+    if (vworForm) {
+        vworForm.addEventListener('submit', function (e) {
+            e.preventDefault();
+            const form = this;
+            const submitBtn = document.getElementById('vworSubmitBtn');
+            const originalHtml = submitBtn.innerHTML;
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Verifying...';
+
+            const formData = new FormData(form);
+
+            fetch(form.action, {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json'
+                }
+            })
+            .then(r => r.json())
+            .then(data => {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalHtml;
+                if (data.success) {
+                    hideModalSafe('verifiedWithoutReceiptModal');
+
+                    const sType = formData.get('source_type');
+                    const sId = formData.get('source_id');
+                    const row = document.getElementById('hub-row-' + sType + '-' + sId);
+                    if (row) {
+                        row.dataset.vatStatus = 'no_vat';
+                        row.dataset.isVerifiedWithoutReceipt = '1';
+                        row.dataset.reasonCode = formData.get('no_vat_reason_code');
+                        row.dataset.reasonNote = formData.get('no_vat_reason_note');
+                        row.classList.remove('table-warning');
+
+                        // Update decision badge
+                        const statusBtn = row.querySelector('.btn-open-decision');
+                        if (statusBtn) {
+                            statusBtn.className = 'btn btn-xs rounded-pill px-2.5 py-1 text-xxs fw-semibold bg-info bg-opacity-20 text-info border border-info btn-open-decision';
+                            statusBtn.innerHTML = 'Verified w/o Receipt <i class="fa-solid fa-check-double ms-1"></i>';
+                        }
+                        // Update receipt cell if no receipt
+                        if (!row.dataset.receiptUrl) {
+                            const cells = row.querySelectorAll('td');
+                            if (cells.length >= 10) {
+                                cells[9].innerHTML = '<span class="badge bg-light text-muted border text-xxs" title="Audited and verified without receipt"><i class="fa-solid fa-check-double text-info me-0.5"></i> No Slip</span>';
+                            }
+                        }
+                    }
+                } else {
+                    alert('Error: ' + (data.message || 'Could not verify expense without receipt.'));
+                }
+            })
+            .catch(err => {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalHtml;
+                form.submit();
+            });
+        });
+    }
+
+    // Handle Quick Add Receipt submit button feedback
+    const qarForm = document.getElementById('quickAddReceiptForm');
+    if (qarForm) {
+        qarForm.addEventListener('submit', function (e) {
+            const fileInput = document.getElementById('qarFileInput');
+            const existingPath = document.getElementById('qarExistingPath')?.value;
+            if ((!fileInput.files || fileInput.files.length === 0) && !existingPath) {
+                e.preventDefault();
+                alert('Please choose a receipt file to attach.');
+                return;
+            }
+            const submitBtn = document.getElementById('qarSubmitBtn');
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Uploading &amp; Saving...';
+            }
+        });
+    }
 });
 
 function openBulkModal(targetStatus) {
@@ -2371,19 +2927,23 @@ function openBulkModal(targetStatus) {
 }
 
 function toggleBulkFields() {
-    const st = document.getElementById('bulkStatusSelect').value;
+    const st = document.getElementById('bulkStatusSelect')?.value;
     const noVatGrp = document.getElementById('bulkNoVatReasonGroup');
     const vatRateGrp = document.getElementById('bulkVatRateGroup');
 
-    if (st === 'no_vat') {
-        noVatGrp.classList.remove('d-none');
-        vatRateGrp.classList.add('d-none');
+    if (st === 'no_vat' || st === 'verified_no_receipt') {
+        noVatGrp?.classList.remove('d-none');
+        vatRateGrp?.classList.add('d-none');
+        if (st === 'verified_no_receipt') {
+            const reasonSelect = noVatGrp?.querySelector('select[name="no_vat_reason_code"]');
+            if (reasonSelect) reasonSelect.value = 'no_fiscal_receipt';
+        }
     } else if (st === 'vat_applies') {
-        noVatGrp.classList.add('d-none');
-        vatRateGrp.classList.remove('d-none');
+        noVatGrp?.classList.add('d-none');
+        vatRateGrp?.classList.remove('d-none');
     } else {
-        noVatGrp.classList.add('d-none');
-        vatRateGrp.classList.add('d-none');
+        noVatGrp?.classList.add('d-none');
+        vatRateGrp?.classList.add('d-none');
     }
 }
 </script>

@@ -102,6 +102,8 @@ class ExpenseHubQueryService
         $capexTotal       = 0.0;
         $withholdingTotal = 0.0;
         $withholdingCount = 0;
+        $verifiedNoReceiptTotal = 0.0;
+        $verifiedNoReceiptCount = 0;
 
         foreach ($expenses as $item) {
             $amt = (float) $item->amount;
@@ -116,6 +118,11 @@ class ExpenseHubQueryService
                 $withholdingCount++;
             }
 
+            if (!empty($item->is_verified_without_receipt)) {
+                $verifiedNoReceiptTotal += $amt;
+                $verifiedNoReceiptCount++;
+            }
+
             if ($item->vat_status === ExpenseHubVatDecision::STATUS_VAT_APPLIES) {
                 $vatAppliesTotal += $amt;
                 $totalInputVat += (float) ($item->decision_vat_amount ?? $item->source_vat_amount ?? 0);
@@ -128,16 +135,18 @@ class ExpenseHubQueryService
         }
 
         return [
-            'total_spent'        => $totalSpent,
-            'vat_applies_total'  => $vatAppliesTotal,
-            'total_input_vat'    => $totalInputVat,
-            'no_vat_total'       => $noVatTotal,
-            'pending_total'      => $pendingTotal,
-            'pending_count'      => $pendingCount,
-            'capex_total'        => $capexTotal,
-            'withholding_total'  => $withholdingTotal,
-            'withholding_count'  => $withholdingCount,
-            'total_count'        => $expenses->count(),
+            'total_spent'                => $totalSpent,
+            'vat_applies_total'          => $vatAppliesTotal,
+            'total_input_vat'            => $totalInputVat,
+            'no_vat_total'               => $noVatTotal,
+            'verified_no_receipt_total'  => $verifiedNoReceiptTotal,
+            'verified_no_receipt_count'  => $verifiedNoReceiptCount,
+            'pending_total'              => $pendingTotal,
+            'pending_count'              => $pendingCount,
+            'capex_total'                => $capexTotal,
+            'withholding_total'          => $withholdingTotal,
+            'withholding_count'          => $withholdingCount,
+            'total_count'                => $expenses->count(),
         ];
     }
 
@@ -1042,6 +1051,15 @@ class ExpenseHubQueryService
             }
         }
 
+        $isVerifiedWithoutReceipt = (bool)($decision->is_verified_without_receipt ?? (
+            $vatStatus === ExpenseHubVatDecision::STATUS_NO_VAT && (
+                in_array($reasonCode, ['no_fiscal_receipt', 'informal_vendor']) ||
+                str_contains(strtolower($reasonNote ?? ''), 'without receipt')
+            )
+        ));
+
+        $receiptUrl = $decision?->receipt_path ?: ($data['receipt_url'] ?? null);
+
         // Warnings check (non-blocking)
         $warnings = [];
         if ($vatStatus === ExpenseHubVatDecision::STATUS_VAT_APPLIES) {
@@ -1049,7 +1067,7 @@ class ExpenseHubQueryService
             if (empty($tin) || strlen($cleanTin) !== 10) {
                 $warnings[] = "Missing or invalid 10-digit Vendor TIN ({$tin})";
             }
-            if (empty($fsNo) && empty($data['receipt_url'])) {
+            if (empty($fsNo) && empty($receiptUrl)) {
                 $warnings[] = "No Fiscal Receipt or voucher uploaded";
             }
         }
@@ -1063,6 +1081,8 @@ class ExpenseHubQueryService
             'custom_seller_name'         => $supplierName,
             'tin'                        => $tin,
             'vat_status'                 => $vatStatus,
+            'is_verified_without_receipt'=> $isVerifiedWithoutReceipt,
+            'receipt_url'                => $receiptUrl,
             'vat_rate'                   => $vatRate,
             'is_inclusive'               => $isInclusive,
             'has_withholding'            => $hasWithholding,
@@ -1116,7 +1136,11 @@ class ExpenseHubQueryService
                 }
             }
             if (!empty($filters['vat_status'])) {
-                if ($item->vat_status !== $filters['vat_status']) {
+                if ($filters['vat_status'] === 'verified_no_receipt') {
+                    if (empty($item->is_verified_without_receipt)) {
+                        return false;
+                    }
+                } elseif ($item->vat_status !== $filters['vat_status']) {
                     return false;
                 }
             }

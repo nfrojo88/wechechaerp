@@ -28,6 +28,8 @@ class ExpenseHubVatDecision extends Model
         'total_amount',
         'no_vat_reason_code',
         'no_vat_reason_note',
+        'is_verified_without_receipt',
+        'receipt_path',
         'vat_category',
         'purc_type',
         'calendar_type',
@@ -49,9 +51,10 @@ class ExpenseHubVatDecision extends Model
     ];
 
     protected $casts = [
-        'is_inclusive'       => 'boolean',
-        'is_locked'          => 'boolean',
-        'has_withholding'    => 'boolean',
+        'is_inclusive'                => 'boolean',
+        'is_locked'                   => 'boolean',
+        'is_verified_without_receipt' => 'boolean',
+        'has_withholding'             => 'boolean',
         'withholding_rate'   => 'decimal:2',
         'withholding_amount' => 'decimal:2',
         'net_payable_amount' => 'decimal:2',
