@@ -983,6 +983,7 @@ class ExpenseHubQueryService
             $isLocked     = (bool) $decision->is_locked;
             $purchaseType = (int) $decision->purchase_type;
             $vatCategory  = $decision->vat_category ?: ($data['is_capex'] || $data['category'] === 'material' ? 'G' : 'S');
+            $calendarType = $decision->calendar_type ?: 'E';
             $tin          = $decision->custom_seller_tin ?: $data['tin'];
             $fsNo         = $decision->custom_fs_no;
             $mrcNo        = $decision->custom_mrc_no;
@@ -1005,6 +1006,7 @@ class ExpenseHubQueryService
             $isLocked    = false;
             $purchaseType = $data['default_purchase_type'] ?? ($data['is_capex'] ? 1 : 3);
             $vatCategory  = ($data['is_capex'] || $data['category'] === 'material') ? 'G' : 'S';
+            $calendarType = 'E';
             $reasonCode   = $data['default_reason_code'] ?? null;
             $reasonNote   = $data['default_reason_note'] ?? null;
             $tin          = $data['tin'];
@@ -1077,6 +1079,7 @@ class ExpenseHubQueryService
             'has_decision'               => $hasDecision,
             'purchase_type'              => $purchaseType,
             'vat_category'               => $vatCategory,
+            'calendar_type'              => $calendarType,
             'fs_no'                      => $fsNo,
             'mrc_no'                     => $mrcNo,
             'item_desc'                  => $itemDesc,

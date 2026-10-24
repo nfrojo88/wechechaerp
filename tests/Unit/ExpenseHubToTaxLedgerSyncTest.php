@@ -55,6 +55,7 @@ class ExpenseHubToTaxLedgerSyncTest extends TestCase
 
     protected function setupSchema(): void
     {
+        Schema::dropIfExists('expense_hub_month_locks');
         Schema::dropIfExists('expense_hub_vat_audit_logs');
         Schema::dropIfExists('expense_hub_vat_decisions');
         Schema::dropIfExists('receipt_items');
@@ -238,6 +239,20 @@ class ExpenseHubToTaxLedgerSyncTest extends TestCase
             $table->text('old_values')->nullable();
             $table->text('new_values')->nullable();
             $table->unsignedBigInteger('performed_by');
+            $table->timestamps();
+        });
+
+        Schema::create('expense_hub_month_locks', function ($table) {
+            $table->id();
+            $table->integer('year');
+            $table->integer('month');
+            $table->string('calendar', 10)->default('EC');
+            $table->boolean('is_locked')->default(true);
+            $table->unsignedBigInteger('locked_by')->nullable();
+            $table->timestamp('locked_at')->nullable();
+            $table->unsignedBigInteger('unlocked_by')->nullable();
+            $table->timestamp('unlocked_at')->nullable();
+            $table->text('unlock_reason')->nullable();
             $table->timestamps();
         });
 
@@ -575,5 +590,16 @@ class ExpenseHubToTaxLedgerSyncTest extends TestCase
         $this->assertNotNull($item);
         $this->assertEquals('TotalEnergies Marketing Ethiopia', $item->payee_supplier);
         $this->assertEquals('TotalEnergies Marketing Ethiopia', $item->custom_seller_name);
+        $this->assertEquals('E', $item->calendar_type);
+
+        // Verify Expense Hub tab=vat_report renders without any Undefined property error
+        $vatReportReq = Request::create(route('finance.expense-hub.index'), 'GET', [
+            'tab' => 'vat_report',
+        ]);
+        app()->instance('request', $vatReportReq);
+        $view = $controller->index($vatReportReq);
+        $this->assertEquals('vat_report', $view->getData()['activeTab']);
+        $html = $view->render();
+        $this->assertStringContainsString('TotalEnergies Marketing Ethiopia', $html);
     }
 }

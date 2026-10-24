@@ -537,21 +537,21 @@
                             : \App\Services\EthiopianDate::formatDateEc(now(), 'DD/MM/YYYY EC');
                     @endphp
                     <tr>
-                        <td class="text-center fw-bold">{{ $v->vat_category ?: 'G' }}</td>
-                        <td class="text-center">{{ $v->calendar_type ?: 'E' }}</td>
-                        <td class="text-center"><span class="badge bg-light text-dark border">{{ $v->purchase_type ?: 3 }}</span></td>
-                        <td class="font-monospace fw-semibold">{{ $v->tin ?: '—' }}</td>
-                        <td class="fw-semibold text-dark">{{ $v->payee_supplier }}</td>
+                        <td class="text-center fw-bold">{{ $v->vat_category ?? 'G' }}</td>
+                        <td class="text-center">{{ $v->calendar_type ?? 'E' }}</td>
+                        <td class="text-center"><span class="badge bg-light text-dark border">{{ $v->purchase_type ?? 3 }}</span></td>
+                        <td class="font-monospace fw-semibold">{{ $v->tin ?? '—' }}</td>
+                        <td class="fw-semibold text-dark">{{ $v->payee_supplier ?? '—' }}</td>
                         <td class="text-nowrap">{{ $ethDate }}</td>
-                        <td class="text-muted">{{ $v->mrc_no ?: '—' }}</td>
-                        <td class="fw-semibold">{{ $v->fs_no ?: '—' }}</td>
-                        <td>{{ Str::limit($v->item_desc ?: $v->description, 30) }}</td>
-                        <td class="text-center">{{ $v->uom ?: '9' }}</td>
-                        <td class="text-end">{{ number_format($v->qty, 2) }}</td>
-                        <td class="text-end">{{ number_format($v->unit_price, 2) }}</td>
-                        <td class="text-end fw-semibold">{{ number_format($v->decision_base_amount, 2) }}</td>
-                        <td class="text-end fw-bold text-success">{{ number_format($v->decision_vat_amount, 2) }}</td>
-                        <td class="text-end fw-bold text-dark">{{ number_format($v->decision_total_amount, 2) }}</td>
+                        <td class="text-muted">{{ $v->mrc_no ?? '—' }}</td>
+                        <td class="fw-semibold">{{ $v->fs_no ?? '—' }}</td>
+                        <td>{{ Str::limit($v->item_desc ?? ($v->description ?? ''), 30) }}</td>
+                        <td class="text-center">{{ $v->uom ?? '9' }}</td>
+                        <td class="text-end">{{ number_format($v->qty ?? 1, 2) }}</td>
+                        <td class="text-end">{{ number_format($v->unit_price ?? 0, 2) }}</td>
+                        <td class="text-end fw-semibold">{{ number_format($v->decision_base_amount ?? 0, 2) }}</td>
+                        <td class="text-end fw-bold text-success">{{ number_format($v->decision_vat_amount ?? 0, 2) }}</td>
+                        <td class="text-end fw-bold text-dark">{{ number_format($v->decision_total_amount ?? 0, 2) }}</td>
                     </tr>
                     @empty
                     <tr>
