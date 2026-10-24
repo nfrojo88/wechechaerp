@@ -601,5 +601,15 @@ class ExpenseHubToTaxLedgerSyncTest extends TestCase
         $this->assertEquals('vat_report', $view->getData()['activeTab']);
         $html = $view->render();
         $this->assertStringContainsString('TotalEnergies Marketing Ethiopia', $html);
+
+        // Verify Expense Hub tab=all_expenses renders action buttons
+        $allExpReq = Request::create(route('finance.expense-hub.index'), 'GET', [
+            'tab' => 'all_expenses',
+        ]);
+        app()->instance('request', $allExpReq);
+        $allView = $controller->index($allExpReq);
+        $this->assertEquals('all_expenses', $allView->getData()['activeTab']);
+        $allHtml = $allView->render();
+        $this->assertStringContainsString('openDecisionModal', $allHtml);
     }
 }

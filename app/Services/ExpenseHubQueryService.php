@@ -970,6 +970,7 @@ class ExpenseHubQueryService
     {
         $amount = (float) $data['amount'];
         $decision = $data['decision'] ?? null;
+        unset($data['decision']);
 
         if ($decision) {
             $vatStatus    = $decision->vat_status;
@@ -1087,7 +1088,7 @@ class ExpenseHubQueryService
             'qty'                        => $qty,
             'unit_price'                 => $unitPrice,
             'warnings'                   => $warnings,
-            'decision_model'             => $decision,
+            'decision_id'                => $decision?->id,
         ]);
     }
 

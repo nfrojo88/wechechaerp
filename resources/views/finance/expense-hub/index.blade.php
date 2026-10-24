@@ -312,7 +312,11 @@
                             default                                                              => 'Pending Decision',
                         };
                     @endphp
-                    <tr class="{{ !empty($item->warnings) ? 'table-warning bg-opacity-10' : '' }}">
+                    <tr class="{{ !empty($item->warnings) ? 'table-warning bg-opacity-10' : '' }}"
+                        id="hub-row-{{ $item->source_type }}-{{ $item->source_id }}"
+                        data-source-type="{{ $item->source_type }}"
+                        data-source-id="{{ $item->source_id }}"
+                        data-item="{{ base64_encode(json_encode($item, JSON_UNESCAPED_UNICODE)) }}">
                         <!-- Checkbox -->
                         <td class="text-center">
                             <input class="form-check-input item-checkbox" type="checkbox" 
@@ -396,8 +400,10 @@
                         <!-- VAT Decision Badge (Interactive) -->
                         <td class="text-center">
                             @if($canDecideVat && !$item->is_locked)
-                                <button type="button" class="btn btn-xs rounded-pill px-2.5 py-1 text-xxs fw-semibold {{ $statusBadgeClass }}"
-                                        onclick="openDecisionModal({{ json_encode($item) }})" title="Click to review or edit VAT decision">
+                                <button type="button" class="btn btn-xs rounded-pill px-2.5 py-1 text-xxs fw-semibold {{ $statusBadgeClass }} btn-open-decision"
+                                        data-source-type="{{ $item->source_type }}"
+                                        data-source-id="{{ $item->source_id }}"
+                                        onclick="openDecisionModal('{{ $item->source_type }}', '{{ $item->source_id }}', this)" title="Click to review or edit VAT decision">
                                     {{ $statusLabel }} <i class="fa-solid fa-pen ms-1 opacity-75"></i>
                                 </button>
                             @else
@@ -451,17 +457,23 @@
 
                         <!-- Action -->
                         <td class="text-end text-nowrap">
-                            <button type="button" class="btn btn-xs btn-outline-info rounded-pill px-2 py-1 text-xs fw-semibold me-1"
-                                    onclick="openExpenseDetailModal({{ json_encode($item) }})" title="View Full Expense Purpose, Line Items &amp; Operational Audit Trail">
+                            <button type="button" class="btn btn-xs btn-outline-info rounded-pill px-2 py-1 text-xs fw-semibold me-1 btn-view-details"
+                                    data-source-type="{{ $item->source_type }}"
+                                    data-source-id="{{ $item->source_id }}"
+                                    onclick="openExpenseDetailModal('{{ $item->source_type }}', '{{ $item->source_id }}', this)" title="View Full Expense Purpose, Line Items &amp; Operational Audit Trail">
                                 <i class="fa-solid fa-circle-info"></i> Details
                             </button>
                             @if($canDecideVat)
-                            <button type="button" class="btn btn-xs btn-outline-primary rounded-pill px-2 py-1 text-xs fw-semibold me-1"
-                                    onclick="openDecisionModalWithOcr({{ json_encode($item) }})" title="Scan Receipt with AI OCR &amp; Record VAT Decision">
+                            <button type="button" class="btn btn-xs btn-outline-primary rounded-pill px-2 py-1 text-xs fw-semibold me-1 btn-open-ocr"
+                                    data-source-type="{{ $item->source_type }}"
+                                    data-source-id="{{ $item->source_id }}"
+                                    onclick="openDecisionModalWithOcr('{{ $item->source_type }}', '{{ $item->source_id }}', this)" title="Scan Receipt with AI OCR &amp; Record VAT Decision">
                                 <i class="fa-solid fa-wand-magic-sparkles"></i> OCR
                             </button>
-                            <button type="button" class="btn btn-xs btn-light border rounded-pill px-2 py-1 text-xs text-dark"
-                                    onclick="openDecisionModal({{ json_encode($item) }})" title="Record / Edit VAT Decision">
+                            <button type="button" class="btn btn-xs btn-light border rounded-pill px-2 py-1 text-xs text-dark btn-open-decision"
+                                    data-source-type="{{ $item->source_type }}"
+                                    data-source-id="{{ $item->source_id }}"
+                                    onclick="openDecisionModal('{{ $item->source_type }}', '{{ $item->source_id }}', this)" title="Record / Edit VAT Decision">
                                 <i class="fa-solid fa-sliders"></i>
                             </button>
                             @endif
@@ -1314,6 +1326,153 @@ let currentEditingItem = null;
 let currentDetailItem = null;
 let lastOcrResult = null;
 
+function showModalSafe(modalId) {
+    const el = (typeof modalId === 'string') ? document.getElementById(modalId) : modalId;
+    if (!el) {
+        console.error('showModalSafe: element not found', modalId);
+        return;
+    }
+    try {
+        if (window.bootstrap && window.bootstrap.Modal) {
+            const instance = window.bootstrap.Modal.getOrCreateInstance(el);
+            instance.show();
+            return;
+        }
+    } catch (e) {
+        console.warn('Bootstrap Modal getOrCreateInstance failed, falling back:', e);
+    }
+
+    try {
+        if (window.$ && typeof window.$(el).modal === 'function') {
+            window.$(el).modal('show');
+            return;
+        }
+    } catch (e2) {
+        console.warn('jQuery modal show failed:', e2);
+    }
+
+    // Direct DOM fallback
+    el.classList.add('show');
+    el.style.display = 'block';
+    el.removeAttribute('aria-hidden');
+    el.setAttribute('aria-modal', 'true');
+    document.body.classList.add('modal-open');
+    let backdrop = document.querySelector('.modal-backdrop');
+    if (!backdrop) {
+        backdrop = document.createElement('div');
+        backdrop.className = 'modal-backdrop fade show';
+        backdrop.onclick = function() { hideModalSafe(el); };
+        document.body.appendChild(backdrop);
+    }
+}
+
+function hideModalSafe(modalId) {
+    const el = (typeof modalId === 'string') ? document.getElementById(modalId) : modalId;
+    if (!el) return;
+
+    try {
+        if (window.bootstrap && window.bootstrap.Modal) {
+            const instance = window.bootstrap.Modal.getInstance(el);
+            if (instance) {
+                instance.hide();
+                return;
+            }
+        }
+    } catch (e) {}
+
+    try {
+        if (window.$ && typeof window.$(el).modal === 'function') {
+            window.$(el).modal('hide');
+            return;
+        }
+    } catch (e2) {}
+
+    el.classList.remove('show');
+    el.style.display = 'none';
+    el.setAttribute('aria-hidden', 'true');
+    el.removeAttribute('aria-modal');
+    document.body.classList.remove('modal-open');
+    const backdrop = document.querySelector('.modal-backdrop');
+    if (backdrop) backdrop.remove();
+}
+
+function decodeRowItem(row) {
+    if (!row) return null;
+    if (row._decodedItem) return row._decodedItem;
+
+    const raw = row.getAttribute('data-item');
+    if (!raw) return null;
+
+    let parsed = null;
+    try {
+        // Standard modern UTF-8 base64 decoding
+        const binString = atob(raw);
+        const bytes = Uint8Array.from(binString, c => c.charCodeAt(0));
+        parsed = JSON.parse(new TextDecoder('utf-8').decode(bytes));
+    } catch (e1) {
+        try {
+            parsed = JSON.parse(decodeURIComponent(escape(atob(raw))));
+        } catch (e2) {
+            try {
+                parsed = JSON.parse(atob(raw));
+            } catch (e3) {
+                try {
+                    parsed = JSON.parse(raw);
+                } catch (e4) {
+                    console.error('Failed to decode row item data:', e4);
+                }
+            }
+        }
+    }
+
+    if (parsed) {
+        row._decodedItem = parsed;
+    }
+    return parsed;
+}
+
+function resolveItem(arg1, arg2, buttonEl) {
+    // Case 1: Already an object
+    if (arg1 && typeof arg1 === 'object') {
+        return arg1;
+    }
+
+    // Case 2: JSON string
+    if (typeof arg1 === 'string' && (arg1.trim().startsWith('{') || arg1.trim().startsWith('['))) {
+        try {
+            return JSON.parse(arg1);
+        } catch (e) {}
+    }
+
+    // Case 3: Locate row by button element or by sourceType + sourceId
+    let row = null;
+    if (buttonEl && buttonEl.closest) {
+        row = buttonEl.closest('tr[data-item]');
+    }
+
+    if (!row && arg1 && arg2 !== undefined && arg2 !== null) {
+        row = document.getElementById('hub-row-' + arg1 + '-' + arg2);
+        if (!row) {
+            row = document.querySelector(`tr[data-source-type="${arg1}"][data-source-id="${arg2}"]`);
+        }
+    }
+
+    if (!row && buttonEl) {
+        const st = buttonEl.getAttribute('data-source-type');
+        const sid = buttonEl.getAttribute('data-source-id');
+        if (st && sid) {
+            row = document.getElementById('hub-row-' + st + '-' + sid) || document.querySelector(`tr[data-source-type="${st}"][data-source-id="${sid}"]`);
+        }
+    }
+
+    if (row) {
+        return decodeRowItem(row);
+    }
+
+    console.warn('Could not resolve expense item:', { arg1, arg2, buttonEl });
+    return null;
+}
+
 function escapeHtml(text) {
     if (text === null || text === undefined) return '';
     return text.toString()
@@ -1326,17 +1485,18 @@ function escapeHtml(text) {
 
 function openDetailFromDecision() {
     if (!currentEditingItem) return;
-    const modalEl = document.getElementById('decisionModal');
-    const modalInstance = bootstrap.Modal.getInstance(modalEl);
-    if (modalInstance) {
-        modalInstance.hide();
-    }
+    hideModalSafe('decisionModal');
     setTimeout(() => {
         openExpenseDetailModal(currentEditingItem);
     }, 350);
 }
 
-function openExpenseDetailModal(item) {
+function openExpenseDetailModal(arg1, arg2, buttonEl) {
+    const item = resolveItem(arg1, arg2, buttonEl);
+    if (!item) {
+        console.error('Cannot open Expense Detail: Item not resolved', { arg1, arg2, buttonEl });
+        return;
+    }
     currentDetailItem = item;
 
     // Header & Basic Info
@@ -1463,14 +1623,12 @@ function openExpenseDetailModal(item) {
     const btnOpenDecision = document.getElementById('dBtnOpenDecision');
     if (btnOpenDecision) {
         btnOpenDecision.onclick = function() {
-            const detailModalEl = document.getElementById('expenseDetailModal');
-            const instance = bootstrap.Modal.getInstance(detailModalEl);
-            if (instance) instance.hide();
+            hideModalSafe('expenseDetailModal');
             setTimeout(() => openDecisionModal(item), 350);
         };
     }
 
-    new bootstrap.Modal(document.getElementById('expenseDetailModal')).show();
+    showModalSafe('expenseDetailModal');
 }
 
 function resetOcrState() {
@@ -1521,7 +1679,12 @@ function resetOcrState() {
     if (mPurcType) mPurcType.value = 'PUR_GD';
 }
 
-function openDecisionModal(item) {
+function openDecisionModal(arg1, arg2, buttonEl) {
+    const item = resolveItem(arg1, arg2, buttonEl);
+    if (!item) {
+        console.error('Cannot open VAT Decision: Item not resolved', { arg1, arg2, buttonEl });
+        return;
+    }
     currentEditingItem = item;
     resetOcrState();
 
@@ -1648,10 +1811,15 @@ function openDecisionModal(item) {
     toggleVatFields();
     recalculateVatPreview();
 
-    new bootstrap.Modal(document.getElementById('decisionModal')).show();
+    showModalSafe('decisionModal');
 }
 
-function openDecisionModalWithOcr(item) {
+function openDecisionModalWithOcr(arg1, arg2, buttonEl) {
+    const item = resolveItem(arg1, arg2, buttonEl);
+    if (!item) {
+        console.error('Cannot open VAT Decision with OCR: Item not resolved', { arg1, arg2, buttonEl });
+        return;
+    }
     openDecisionModal(item);
     if (item.receipt_url) {
         runOcrAttached();
@@ -2084,6 +2252,17 @@ document.addEventListener('DOMContentLoaded', function () {
     checkboxes.forEach(cb => {
         cb.addEventListener('change', updateBulkState);
     });
+
+    // Close button fallback for modal dismissal
+    document.addEventListener('click', function (e) {
+        const closeBtn = e.target.closest('[data-bs-dismiss="modal"], [data-dismiss="modal"]');
+        if (closeBtn) {
+            const modal = closeBtn.closest('.modal');
+            if (modal) {
+                hideModalSafe(modal);
+            }
+        }
+    });
 });
 
 function openBulkModal(targetStatus) {
@@ -2104,7 +2283,7 @@ function openBulkModal(targetStatus) {
     });
 
     toggleBulkFields();
-    new bootstrap.Modal(document.getElementById('bulkModal')).show();
+    showModalSafe('bulkModal');
 }
 
 function toggleBulkFields() {
