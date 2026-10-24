@@ -72,6 +72,9 @@ class ExpenseHubController extends Controller
                     if (!Schema::hasColumn('expense_hub_vat_decisions', 'custom_receipt_date')) {
                         $table->string('custom_receipt_date', 30)->nullable()->after('custom_item_description');
                     }
+                    if (!Schema::hasColumn('expense_hub_vat_decisions', 'custom_seller_name')) {
+                        $table->string('custom_seller_name', 255)->nullable()->after('purchase_type');
+                    }
                     if (!Schema::hasColumn('expense_hub_vat_decisions', 'purc_type')) {
                         $table->string('purc_type', 20)->default('PUR_GD')->after('vat_category');
                     }
@@ -437,6 +440,7 @@ class ExpenseHubController extends Controller
             'purc_type'                  => $validated['purc_type'] ?? (($validated['vat_category'] ?? 'G') === 'S' ? 'PUR_SER' : 'PUR_GD'),
             'calendar_type'              => 'E',
             'purchase_type'              => $validated['purchase_type'] ?? ($vatStatus === 'no_vat' ? 6 : 3),
+            'custom_seller_name'         => $validated['custom_seller_name'] ?? null,
             'custom_seller_tin'          => $validated['custom_seller_tin'] ?? null,
             'custom_fs_no'               => $validated['custom_fs_no'] ?? null,
             'custom_mrc_no'              => $validated['custom_mrc_no'] ?? null,

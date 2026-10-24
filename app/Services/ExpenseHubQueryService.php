@@ -400,12 +400,28 @@ class ExpenseHubQueryService
             ->where('status', ExpenseRequest::STATUS_PAID)
             ->whereNull('purchase_request_id')
             ->whereNull('credit_store_ledger_id')
-            ->where('category', 'not like', '%Credit Settlement%')
-            ->where('request_number', 'not like', 'EXP-QP-%')
-            ->where('request_number', 'not like', 'EXP-CR-%')
-            ->where('category', 'not like', '%Petty Cash Replenishment%')
-            ->where('other_reason', 'not like', '%Petty Cash Replenishment%')
-            ->where('description', 'not like', '%Petty Cash Replenishment%');
+            ->where(function ($q) {
+                $q->whereNull('category')
+                  ->orWhere(function ($sub) {
+                      $sub->where('category', 'not like', '%Credit Settlement%')
+                          ->where('category', 'not like', '%Petty Cash Replenishment%');
+                  });
+            })
+            ->where(function ($q) {
+                $q->whereNull('request_number')
+                  ->orWhere(function ($sub) {
+                      $sub->where('request_number', 'not like', 'EXP-QP-%')
+                          ->where('request_number', 'not like', 'EXP-CR-%');
+                  });
+            })
+            ->where(function ($q) {
+                $q->whereNull('other_reason')
+                  ->orWhere('other_reason', 'not like', '%Petty Cash Replenishment%');
+            })
+            ->where(function ($q) {
+                $q->whereNull('description')
+                  ->orWhere('description', 'not like', '%Petty Cash Replenishment%');
+            });
 
         if ($scopedProjectIds !== null) {
             $query->whereIn('project_id', $scopedProjectIds);
@@ -1035,7 +1051,13 @@ class ExpenseHubQueryService
             }
         }
 
+        $supplierName = !empty($decision?->custom_seller_name)
+            ? $decision->custom_seller_name
+            : ($data['payee_supplier'] ?? 'Supplier');
+
         return (object) array_merge($data, [
+            'payee_supplier'             => $supplierName,
+            'custom_seller_name'         => $supplierName,
             'tin'                        => $tin,
             'vat_status'                 => $vatStatus,
             'vat_rate'                   => $vatRate,

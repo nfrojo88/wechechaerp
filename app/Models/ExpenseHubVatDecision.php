@@ -32,6 +32,7 @@ class ExpenseHubVatDecision extends Model
         'purc_type',
         'calendar_type',
         'purchase_type',
+        'custom_seller_name',
         'custom_seller_tin',
         'custom_fs_no',
         'custom_mrc_no',

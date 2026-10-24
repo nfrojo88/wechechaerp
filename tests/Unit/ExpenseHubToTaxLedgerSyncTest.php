@@ -213,6 +213,7 @@ class ExpenseHubToTaxLedgerSyncTest extends TestCase
             $table->string('vat_category')->default('G');
             $table->string('calendar_type')->default('E');
             $table->integer('purchase_type')->default(3);
+            $table->string('custom_seller_name')->nullable();
             $table->string('custom_seller_tin')->nullable();
             $table->string('custom_fs_no')->nullable();
             $table->string('custom_mrc_no')->nullable();
@@ -244,8 +245,10 @@ class ExpenseHubToTaxLedgerSyncTest extends TestCase
             $table->id();
             $table->string('request_number')->nullable();
             $table->unsignedBigInteger('user_id')->nullable();
+            $table->unsignedBigInteger('employee_id')->nullable();
             $table->unsignedBigInteger('project_id')->nullable();
             $table->unsignedBigInteger('purchase_request_id')->nullable();
+            $table->unsignedBigInteger('credit_store_ledger_id')->nullable();
             $table->string('category')->default('Service');
             $table->string('other_reason')->nullable();
             $table->text('description')->nullable();
@@ -519,5 +522,58 @@ class ExpenseHubToTaxLedgerSyncTest extends TestCase
         $slipMatch = $slipExpenses->firstWhere('id', $exp->id);
         $this->assertNotNull($slipMatch, 'The expense with uploaded withholding receipt must appear in the Withholding Slips tab.');
         $this->assertNotEmpty($slipMatch->withholding_receipt);
+    }
+
+    public function test_saving_custom_seller_name_in_vat_decision_engine_persists_and_syncs(): void
+    {
+        $exp = ExpenseRequest::create([
+            'request_number' => 'EXP-HUB-SUP-01',
+            'user_id'        => $this->financeUser->id,
+            'project_id'     => $this->project->id,
+            'category'       => 'Operational',
+            'amount'         => 8000.00,
+            'gross_amount'   => 8000.00,
+            'net_amount'     => 8000.00,
+            'status'         => ExpenseRequest::STATUS_PAID,
+            'paid_at'        => now(),
+            'description'    => 'Fuel purchase at station',
+        ]);
+
+        $controller = app(ExpenseHubController::class);
+        $req = Request::create(route('finance.expense-hub.decision'), 'POST', [
+            'source_type'        => 'expense_request',
+            'source_id'          => $exp->id,
+            'vat_status'         => 'vat_applies',
+            'amount'             => 8000.00,
+            'vat_rate'           => 15.00,
+            'is_inclusive'       => 1,
+            'custom_seller_name' => 'TotalEnergies Marketing Ethiopia',
+            'custom_seller_tin'  => '0012345678',
+            'custom_fs_no'       => 'FS-998877',
+        ]);
+
+        $controller->saveDecision($req);
+
+        // Verify Decision
+        $decision = ExpenseHubVatDecision::where('source_type', 'expense_request')
+            ->where('source_id', $exp->id)
+            ->first();
+        $this->assertNotNull($decision);
+        $this->assertEquals('TotalEnergies Marketing Ethiopia', $decision->custom_seller_name);
+
+        // Verify Receipt vendor name
+        $receipt = Receipt::where('purchasable_type', ExpenseRequest::class)
+            ->where('purchasable_id', $exp->id)
+            ->first();
+        $this->assertNotNull($receipt);
+        $this->assertEquals('TotalEnergies Marketing Ethiopia', $receipt->vendor_name);
+
+        // Verify query service returns custom_seller_name and updated payee_supplier
+        $queryService = app(ExpenseHubQueryService::class);
+        $expenses = $queryService->getExpenses(['supplier' => 'TotalEnergies'], $this->financeUser);
+        $item = $expenses->firstWhere('source_id', $exp->id);
+        $this->assertNotNull($item);
+        $this->assertEquals('TotalEnergies Marketing Ethiopia', $item->payee_supplier);
+        $this->assertEquals('TotalEnergies Marketing Ethiopia', $item->custom_seller_name);
     }
 }

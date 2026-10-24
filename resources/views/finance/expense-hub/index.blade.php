@@ -176,6 +176,15 @@
                     </div>
                 </div>
 
+                <!-- Supplier / Merchant Name Filter -->
+                <div class="col-md-2 col-sm-6">
+                    <label class="form-label text-xxs fw-semibold text-muted mb-1">Supplier / Merchant Name</label>
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text bg-white"><i class="fa-solid fa-store text-muted"></i></span>
+                        <input type="text" name="supplier" class="form-control" placeholder="Supplier name..." value="{{ request('supplier') }}">
+                    </div>
+                </div>
+
                 <!-- Project -->
                 <div class="col-md-2 col-sm-6">
                     <label class="form-label text-xxs fw-semibold text-muted mb-1">Project / Site</label>
@@ -863,7 +872,6 @@
                 <input type="hidden" name="custom_receipt_date" id="mReceiptDate">
                 <input type="hidden" name="receipt_path" id="mReceiptPath">
                 <input type="hidden" name="withholding_receipt" id="mWithholdingReceiptPath">
-                <input type="hidden" name="custom_seller_name" id="mSellerName">
                 <input type="hidden" name="custom_item_description" id="mItemDescription">
                 <input type="hidden" name="purc_type" id="mPurcType" value="PUR_GD">
 
@@ -992,17 +1000,27 @@
                             </div>
 
                             <!-- Official VAT Report Metadata -->
-                            <div class="col-md-4">
-                                <label class="form-label text-xs">Vendor TIN (10 Digits)</label>
-                                <input type="text" name="custom_seller_tin" id="mTin" class="form-control form-control-sm" placeholder="e.g. 0012345678" oninput="syncField('mTin', 'mNoVatTin')">
+                            <div class="col-md-6">
+                                <label class="form-label text-xs fw-semibold">Supplier / Merchant Name</label>
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text bg-light text-muted"><i class="fa-solid fa-store"></i></span>
+                                    <input type="text" name="custom_seller_name" id="mSellerName" class="form-control form-control-sm" placeholder="e.g. TotalEnergies Marketing Ethiopia" oninput="syncField('mSellerName', 'mNoVatSellerName')">
+                                </div>
                             </div>
-                            <div class="col-md-4">
-                                <label class="form-label text-xs">Fiscal Receipt # (FS No)</label>
-                                <input type="text" name="custom_fs_no" id="mFsNo" class="form-control form-control-sm" placeholder="e.g. 00045892" oninput="syncField('mFsNo', 'mNoVatFsNo')">
+                            <div class="col-md-6">
+                                <label class="form-label text-xs fw-semibold">Vendor TIN (10 Digits)</label>
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text bg-light text-muted font-monospace"><i class="fa-solid fa-id-card"></i></span>
+                                    <input type="text" name="custom_seller_tin" id="mTin" class="form-control form-control-sm" placeholder="e.g. 0012345678" oninput="syncField('mTin', 'mNoVatTin')">
+                                </div>
                             </div>
-                            <div class="col-md-4">
-                                <label class="form-label text-xs">MRC Number</label>
-                                <input type="text" name="custom_mrc_no" id="mMrcNo" class="form-control form-control-sm" placeholder="e.g. CAS1029" oninput="syncField('mMrcNo', 'mNoVatMrcNo')">
+                            <div class="col-md-6">
+                                <label class="form-label text-xs fw-semibold">Fiscal Receipt # (FS No)</label>
+                                <input type="text" name="custom_fs_no" id="mFsNo" class="form-control form-control-sm font-monospace fw-bold" placeholder="e.g. 00045892" oninput="syncField('mFsNo', 'mNoVatFsNo')">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label text-xs fw-semibold">MRC Number</label>
+                                <input type="text" name="custom_mrc_no" id="mMrcNo" class="form-control form-control-sm font-monospace" placeholder="e.g. CAS1029" oninput="syncField('mMrcNo', 'mNoVatMrcNo')">
                             </div>
                         </div>
                     </div>
@@ -1034,9 +1052,19 @@
                                 <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 text-xxs">0% VAT TAS e-Tax</span>
                             </div>
                             <div class="row g-2">
-                                <div class="col-md-4">
+                                <div class="col-md-6">
+                                    <label class="form-label text-xxs fw-semibold text-muted mb-1">Supplier / Merchant Name</label>
+                                    <div class="input-group input-group-sm">
+                                        <span class="input-group-text bg-light text-muted py-0"><i class="fa-solid fa-store text-xxs"></i></span>
+                                        <input type="text" id="mNoVatSellerName" class="form-control form-control-sm text-xs" placeholder="e.g. TotalEnergies Marketing Ethiopia" oninput="syncField('mNoVatSellerName', 'mSellerName')">
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
                                     <label class="form-label text-xxs fw-semibold text-muted mb-1">Seller TIN (Vendor TIN)</label>
-                                    <input type="text" id="mNoVatTin" class="form-control form-control-sm text-xs font-monospace" placeholder="e.g. 5201 or 0012345678" oninput="syncField('mNoVatTin', 'mTin')">
+                                    <div class="input-group input-group-sm">
+                                        <span class="input-group-text bg-light text-muted font-monospace py-0"><i class="fa-solid fa-id-card text-xxs"></i></span>
+                                        <input type="text" id="mNoVatTin" class="form-control form-control-sm text-xs font-monospace" placeholder="e.g. 5201 or 0012345678" oninput="syncField('mNoVatTin', 'mTin')">
+                                    </div>
                                 </div>
                                 <div class="col-md-4">
                                     <label class="form-label text-xxs fw-semibold text-muted mb-1">Receipt No / Fiscal # (FS No)</label>
@@ -1050,14 +1078,14 @@
                                     <label class="form-label text-xxs fw-semibold text-muted mb-1">Receipt Date</label>
                                     <input type="date" id="mNoVatReceiptDate" class="form-control form-control-sm text-xs" onchange="syncField('mNoVatReceiptDate', 'mReceiptDate')">
                                 </div>
-                                <div class="col-md-4">
+                                <div class="col-md-6">
                                     <label class="form-label text-xxs fw-semibold text-muted mb-1">PurcType (Commodity Type)</label>
                                     <select id="mNoVatPurcType" class="form-select form-select-sm text-xs" onchange="document.getElementById('mPurcType').value = this.value">
                                         <option value="PUR_GD" selected>PUR_GD (Goods / Fuel / Materials)</option>
                                         <option value="PUR_SER">PUR_SER (Services / Labor / Transport)</option>
                                     </select>
                                 </div>
-                                <div class="col-md-4">
+                                <div class="col-md-6">
                                     <label class="form-label text-xxs fw-semibold text-muted mb-1">Purchaser TIN</label>
                                     <input type="text" class="form-control form-control-sm text-xs bg-light" value="38480010" readonly title="Default Purchaser TIN">
                                 </div>
@@ -1475,6 +1503,8 @@ function resetOcrState() {
     if (mReceiptPath) mReceiptPath.value = '';
     const mSellerName = document.getElementById('mSellerName');
     if (mSellerName) mSellerName.value = '';
+    const noVatSeller = document.getElementById('mNoVatSellerName');
+    if (noVatSeller) noVatSeller.value = '';
     const mItemDescription = document.getElementById('mItemDescription');
     if (mItemDescription) mItemDescription.value = '';
     const noVatTin = document.getElementById('mNoVatTin');
@@ -1510,7 +1540,12 @@ function openDecisionModal(item) {
         document.getElementById('mReceiptDate').value = item.disbursement_date;
     }
     if (item.payee_supplier) {
-        document.getElementById('mSellerName').value = item.payee_supplier;
+        if (document.getElementById('mSellerName')) {
+            document.getElementById('mSellerName').value = item.payee_supplier;
+        }
+        if (document.getElementById('mNoVatSellerName')) {
+            document.getElementById('mNoVatSellerName').value = item.payee_supplier;
+        }
     }
     if (item.purpose_detail || item.description) {
         document.getElementById('mItemDescription').value = item.purpose_detail || item.description;
@@ -1751,7 +1786,12 @@ function handleOcrSuccess(res) {
         if (noVatDate) noVatDate.value = res.receipt_date;
     }
     if (res.vendor_name) {
-        document.getElementById('mSellerName').value = res.vendor_name;
+        if (document.getElementById('mSellerName')) {
+            document.getElementById('mSellerName').value = res.vendor_name;
+        }
+        if (document.getElementById('mNoVatSellerName')) {
+            document.getElementById('mNoVatSellerName').value = res.vendor_name;
+        }
     }
     if (res.description) {
         document.getElementById('mItemDescription').value = res.description;
@@ -1836,12 +1876,14 @@ function applyOcrAndSaveTas() {
     document.getElementById('optNoVat').checked = true;
     toggleVatFields();
 
+    const sellerVal = document.getElementById('mNoVatSellerName')?.value || document.getElementById('mSellerName')?.value;
     const tinVal = document.getElementById('mNoVatTin')?.value || document.getElementById('mTin')?.value;
     const fsVal  = document.getElementById('mNoVatFsNo')?.value || document.getElementById('mFsNo')?.value;
     const mrcVal = document.getElementById('mNoVatMrcNo')?.value || document.getElementById('mMrcNo')?.value;
     const dtVal  = document.getElementById('mNoVatReceiptDate')?.value || document.getElementById('mReceiptDate')?.value;
     const pTypeVal = document.getElementById('mNoVatPurcType')?.value || 'PUR_GD';
 
+    if (sellerVal && document.getElementById('mSellerName')) document.getElementById('mSellerName').value = sellerVal;
     document.getElementById('mTin').value = tinVal;
     document.getElementById('mFsNo').value = fsVal;
     document.getElementById('mMrcNo').value = mrcVal;
@@ -1864,9 +1906,11 @@ function applyOcrAndSaveVat() {
     document.getElementById('optVatApplies').checked = true;
     toggleVatFields();
 
+    const sellerVal = document.getElementById('mSellerName')?.value || document.getElementById('mNoVatSellerName')?.value;
     const tinVal = document.getElementById('mTin')?.value || document.getElementById('mNoVatTin')?.value;
     const fsVal  = document.getElementById('mFsNo')?.value || document.getElementById('mNoVatFsNo')?.value;
     const mrcVal = document.getElementById('mMrcNo')?.value || document.getElementById('mNoVatMrcNo')?.value;
+    if (sellerVal && document.getElementById('mSellerName')) document.getElementById('mSellerName').value = sellerVal;
     document.getElementById('mTin').value = tinVal;
     document.getElementById('mFsNo').value = fsVal;
     document.getElementById('mMrcNo').value = mrcVal;
@@ -1885,8 +1929,16 @@ function syncField(fromId, toId) {
 document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('decisionForm')?.addEventListener('submit', function() {
         if (document.getElementById('optNoVat')?.checked) {
+            const sellerVal = document.getElementById('mNoVatSellerName')?.value;
             const tinVal = document.getElementById('mNoVatTin')?.value;
             const fsVal  = document.getElementById('mNoVatFsNo')?.value;
+            const mrcVal = document.getElementById('mNoVatMrcNo')?.value;
+            const dtVal  = document.getElementById('mNoVatReceiptDate')?.value;
+            const pTypeVal = document.getElementById('mNoVatPurcType')?.value;
+
+            if (sellerVal && document.getElementById('mSellerName')) document.getElementById('mSellerName').value = sellerVal;
+            if (tinVal) document.getElementById('mTin').value = tinVal;
+            if (fsVal) document.getElementById('mFsNo').value = fsVal;
             const mrcVal = document.getElementById('mNoVatMrcNo')?.value;
             const dtVal  = document.getElementById('mNoVatReceiptDate')?.value;
             const pTypeVal = document.getElementById('mNoVatPurcType')?.value;
