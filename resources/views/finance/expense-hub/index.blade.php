@@ -16,15 +16,15 @@
             </p>
         </div>
         <div class="d-flex flex-wrap align-items-center gap-2">
-            <a href="{{ route('finance.expense-hub.export-hub', request()->query()) }}" class="btn btn-outline-success btn-sm shadow-xs">
+            <a href="{{ route('finance.expense-hub.export-hub', request()->query()) }}" class="btn btn-outline-success btn-sm shadow-xs" title="Download 22-Column Master Corporate Audit Format">
                 <i class="fa-solid fa-file-excel me-1"></i> Export Hub (Excel)
             </a>
-            <a href="{{ route('finance.expense-hub.export-tas', request()->query()) }}" class="btn btn-dark btn-sm shadow-xs" title="Download 9-Column e-Tax Purchase TAS Declaration (pro.doc format)">
+            <button type="button" onclick="startPreExportCheck('tas')" class="btn btn-dark btn-sm shadow-xs" title="Download 9-Column e-Tax Purchase TAS Declaration (pro.doc format)">
                 <i class="fa-solid fa-file-excel text-success me-1"></i> Purchase TAS Excel (9 Cols)
-            </a>
-            <a href="{{ route('finance.expense-hub.export-vat', request()->query()) }}" class="btn btn-primary btn-sm shadow-xs">
+            </button>
+            <button type="button" onclick="startPreExportCheck('vat')" class="btn btn-primary btn-sm shadow-xs" title="Download 15-Column Official MoR/ERCA Purchase VAT Return">
                 <i class="fa-solid fa-download me-1"></i> Official VAT Report (15 Cols)
-            </a>
+            </button>
         </div>
     </div>
 
@@ -599,6 +599,14 @@
                                         <li>
                                             <button type="button" class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center gap-2 text-muted w-100 text-start"
                                                data-source-type="{{ $item->source_type }}" data-source-id="{{ $item->source_id }}"
+                                               onclick="openSideBySideReviewAction('{{ $item->source_type }}', '{{ $item->source_id }}', this)">
+                                                <i class="fa-solid fa-wand-magic-sparkles fa-fw text-primary"></i>
+                                                <span class="text-dark fw-semibold">Side-by-Side OCR Review</span>
+                                            </button>
+                                        </li>
+                                        <li>
+                                            <button type="button" class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center gap-2 text-muted w-100 text-start"
+                                               data-source-type="{{ $item->source_type }}" data-source-id="{{ $item->source_id }}"
                                                onclick="openDecisionModal('{{ $item->source_type }}', '{{ $item->source_id }}', this)">
                                                 <i class="fa-solid fa-sliders fa-fw text-secondary"></i>
                                                 <span class="text-dark">Full Studio (3% WHT, TAS)</span>
@@ -651,9 +659,9 @@
                 </h6>
                 <span class="text-xxs text-muted">Matches exact 15-column format from <code>FinanceTaxReportController.php</code>. Only records with "VAT applies" are included.</span>
             </div>
-            <a href="{{ route('finance.expense-hub.export-vat', request()->query()) }}" class="btn btn-success btn-sm shadow-xs">
+            <button type="button" onclick="startPreExportCheck('vat')" class="btn btn-success btn-sm shadow-xs">
                 <i class="fa-solid fa-file-excel me-1"></i> Download Official XLSX / CSV
-            </a>
+            </button>
         </div>
         <div class="table-responsive">
             <table class="table table-hover align-middle mb-0 text-xs table-bordered border-light">
@@ -1621,6 +1629,262 @@
                         </div>
                     </div>
                 </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── MODAL: SIDE-BY-SIDE OCR REVIEW (pro.doc Part 3) ─────────────────── -->
+<div class="modal fade" id="ocrSideBySideReviewModal" tabindex="-1" aria-labelledby="ocrSideBySideReviewModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-fullscreen-lg-down modal-xl modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-dark text-white py-2.5 px-3">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-primary text-white"><i class="fa-solid fa-wand-magic-sparkles me-1"></i> AI OCR Vision</span>
+                    <h6 class="modal-title fw-bold text-white mb-0" id="ocrSideBySideReviewModalLabel">
+                        Side-by-Side Receipt Review: <span id="sbsRefNo" class="text-info"></span>
+                    </h6>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <span id="sbsConfidenceBadge" class="badge bg-success">Confidence: 95%</span>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+            </div>
+            <div class="modal-body p-0">
+                <div class="row g-0" style="min-height: 580px;">
+                    <!-- LEFT COLUMN: Receipt Document Viewer -->
+                    <div class="col-lg-6 border-end bg-light d-flex flex-column">
+                        <div class="p-2 border-bottom bg-white d-flex justify-content-between align-items-center">
+                            <span class="text-xs fw-bold text-muted text-uppercase">
+                                <i class="fa-solid fa-file-invoice me-1 text-primary"></i> Original Receipt Document
+                            </span>
+                            <div class="d-flex gap-1">
+                                <a id="sbsOpenOriginalBtn" href="#" target="_blank" class="btn btn-xs btn-outline-secondary">
+                                    <i class="fa-solid fa-arrow-up-right-from-square me-1"></i> Full Size
+                                </a>
+                                <button type="button" class="btn btn-xs btn-outline-primary" onclick="rotatePreview()">
+                                    <i class="fa-solid fa-rotate-right"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="flex-grow-1 p-3 d-flex align-items-center justify-content-center bg-dark bg-opacity-10 overflow-auto" style="max-height: 600px;">
+                            <div id="sbsMediaContainer" class="text-center w-100">
+                                <img id="sbsImagePreview" src="" class="img-fluid rounded shadow-sm border d-none" style="max-height: 550px; transition: transform 0.2s;" alt="Receipt Preview">
+                                <iframe id="sbsPdfPreview" src="" class="w-100 rounded border d-none" style="height: 550px;"></iframe>
+                                <div id="sbsNoPreview" class="text-muted text-center py-5">
+                                    <i class="fa-solid fa-file-circle-question fa-3x mb-2 text-secondary"></i>
+                                    <p class="text-xs mb-0">No receipt file attached or uploaded yet.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- RIGHT COLUMN: Extracted Fields & Validation Form -->
+                    <div class="col-lg-6 d-flex flex-column bg-white">
+                        <div class="p-2 border-bottom bg-light d-flex justify-content-between align-items-center">
+                            <span class="text-xs fw-bold text-muted text-uppercase">
+                                <i class="fa-solid fa-clipboard-check me-1 text-success"></i> Extracted Tax Fields (Editable)
+                            </span>
+                            <span class="text-xxs text-muted">Amber borders indicate low OCR confidence (&lt;70%)</span>
+                        </div>
+                        <div class="flex-grow-1 p-3 overflow-auto" style="max-height: 600px;">
+                            <!-- Duplicate Alert Box -->
+                            <div id="sbsDuplicateAlert" class="alert alert-danger py-2 px-3 text-xs mb-3 d-none">
+                                <i class="fa-solid fa-triangle-exclamation me-1"></i> <span id="sbsDuplicateMsg"></span>
+                            </div>
+
+                            <!-- Amount Discrepancy Confirmation -->
+                            <div id="sbsDiscrepancyAlert" class="alert alert-warning py-2 px-3 text-xs mb-3 d-none">
+                                <div class="d-flex align-items-center gap-1.5 fw-bold mb-1">
+                                    <i class="fa-solid fa-scale-unbalanced text-warning"></i> Amount Mismatch Alert
+                                </div>
+                                <div>Disbursed cash: <strong id="sbsDisbursedAmt">0.00</strong> ETB vs Extracted Receipt: <strong id="sbsExtractedAmt">0.00</strong> ETB.</div>
+                                <div class="form-check mt-1">
+                                    <input class="form-check-input" type="checkbox" id="sbsConfirmDiscrepancy">
+                                    <label class="form-check-label text-xxs fw-semibold" for="sbsConfirmDiscrepancy">
+                                        I confirm this difference is intentional / audited.
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Outcome Classification Selector -->
+                            <div class="mb-3">
+                                <label class="form-label text-xxs fw-bold text-uppercase text-muted">Tax Outcome Classification <span class="text-danger">*</span></label>
+                                <div class="row g-1">
+                                    <div class="col-6">
+                                        <input type="radio" class="btn-check" name="sbs_outcome" id="sbsOutVat" value="vat_applies" onchange="syncSbsOutcome('vat_applies')">
+                                        <label class="btn btn-outline-success btn-sm w-100 text-xxs py-1.5 fw-semibold text-start text-truncate" for="sbsOutVat">
+                                            1. VAT Receipt (15%)
+                                        </label>
+                                    </div>
+                                    <div class="col-6">
+                                        <input type="radio" class="btn-check" name="sbs_outcome" id="sbsOutNoVat" value="no_vat" onchange="syncSbsOutcome('no_vat')">
+                                        <label class="btn btn-outline-secondary btn-sm w-100 text-xxs py-1.5 fw-semibold text-start text-truncate" for="sbsOutNoVat">
+                                            2. Without VAT (0% TAS)
+                                        </label>
+                                    </div>
+                                    <div class="col-6">
+                                        <input type="radio" class="btn-check" name="sbs_outcome" id="sbsOutWht" value="withholding" onchange="syncSbsOutcome('withholding')">
+                                        <label class="btn btn-outline-primary btn-sm w-100 text-xxs py-1.5 fw-semibold text-start text-truncate" for="sbsOutWht">
+                                            3. Receipt + WHT (3%)
+                                        </label>
+                                    </div>
+                                    <div class="col-6">
+                                        <input type="radio" class="btn-check" name="sbs_outcome" id="sbsOutNoReceipt" value="verified_no_receipt" onchange="syncSbsOutcome('verified_no_receipt')">
+                                        <label class="btn btn-outline-info btn-sm w-100 text-xxs py-1.5 fw-semibold text-start text-truncate" for="sbsOutNoReceipt">
+                                            4. Verified w/o Receipt
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Extracted Tax Inputs -->
+                            <div class="row g-2 mb-3">
+                                <div class="col-md-6">
+                                    <label class="form-label text-xxs fw-semibold mb-0.5 d-flex justify-content-between">
+                                        <span>Vendor TIN (10 Digits)</span>
+                                        <span id="sbsTinStatus" class="badge bg-light text-muted text-xxs">Checking</span>
+                                    </label>
+                                    <input type="text" id="sbsTin" class="form-control form-control-sm text-xs font-monospace" placeholder="10-digit TIN" oninput="validateSbsTin()">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label text-xxs fw-semibold mb-0.5 d-flex justify-content-between">
+                                        <span>Buyer TIN</span>
+                                        <span id="sbsBuyerTinStatus" class="badge bg-success text-white text-xxs">0038480010 (Wechecha)</span>
+                                    </label>
+                                    <input type="text" id="sbsBuyerTin" class="form-control form-control-sm text-xs bg-light font-monospace" value="0038480010" readonly>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label text-xxs fw-semibold mb-0.5">Supplier / Vendor Name</label>
+                                    <input type="text" id="sbsVendorName" class="form-control form-control-sm text-xs" placeholder="Vendor name">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label text-xxs fw-semibold mb-0.5">Fiscal Receipt # (FS No)</label>
+                                    <input type="text" id="sbsFsNo" class="form-control form-control-sm text-xs font-monospace fw-bold" placeholder="FS No">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label text-xxs fw-semibold mb-0.5">MRC Number (Machine No)</label>
+                                    <input type="text" id="sbsMrcNo" class="form-control form-control-sm text-xs font-monospace" placeholder="MRC No">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label text-xxs fw-semibold mb-0.5">Receipt Date</label>
+                                    <input type="date" id="sbsReceiptDate" class="form-control form-control-sm text-xs">
+                                </div>
+                            </div>
+
+                            <!-- Financial Amounts & 15% VAT Match Check -->
+                            <div class="p-2.5 rounded-3 border bg-light mb-3">
+                                <div class="row g-2">
+                                    <div class="col-4">
+                                        <label class="form-label text-xxs fw-semibold mb-0.5">Subtotal / Base</label>
+                                        <input type="number" step="0.01" id="sbsSubtotal" class="form-control form-control-sm text-xs font-monospace" oninput="recalculateSbsVat()">
+                                    </div>
+                                    <div class="col-4">
+                                        <label class="form-label text-xxs fw-semibold mb-0.5 d-flex justify-content-between">
+                                            <span>VAT (15%)</span>
+                                            <span id="sbsVatMatchBadge" class="badge bg-light text-muted text-xxs">Match</span>
+                                        </label>
+                                        <input type="number" step="0.01" id="sbsVatAmount" class="form-control form-control-sm text-xs font-monospace" oninput="recalculateSbsVat()">
+                                    </div>
+                                    <div class="col-4">
+                                        <label class="form-label text-xxs fw-semibold mb-0.5">Total Amount</label>
+                                        <input type="number" step="0.01" id="sbsTotalAmount" class="form-control form-control-sm text-xs font-monospace fw-bold" oninput="recalculateSbsVat()">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Multi-line receipt items table -->
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <span class="text-xxs fw-bold text-muted text-uppercase">Multi-Line Receipt Items</span>
+                                    <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-1.5" onclick="addSbsReceiptItem()">
+                                        <i class="fa-solid fa-plus text-xxs"></i> Add Item
+                                    </button>
+                                </div>
+                                <div class="table-responsive border rounded" style="max-height: 140px;">
+                                    <table class="table table-sm table-bordered text-xxs mb-0 align-middle" id="sbsItemsTable">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>Description</th>
+                                                <th style="width: 50px;">Qty</th>
+                                                <th style="width: 75px;">Unit Price</th>
+                                                <th style="width: 75px;">Total</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="sbsItemsTableBody">
+                                            <tr>
+                                                <td colspan="4" class="text-center text-muted py-2">No multi-line items parsed.</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Side-by-side Modal Footer -->
+                        <div class="modal-footer bg-light py-2 px-3 border-top d-flex justify-content-between">
+                            <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
+                            <div class="d-flex gap-2">
+                                <button type="button" class="btn btn-sm btn-outline-primary" onclick="applySbsToDecisionModal()">
+                                    <i class="fa-solid fa-sliders me-1"></i> Open in Decision Modal
+                                </button>
+                                <button type="button" class="btn btn-sm btn-success px-3 shadow-xs" onclick="saveSbsDecision()">
+                                    <i class="fa-solid fa-check-double me-1"></i> Accept &amp; Sync to Tax Ledger
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── MODAL: PRE-EXPORT VALIDATION CHECK (pro.doc Part 4) ──────────────── -->
+<div class="modal fade" id="preExportCheckModal" tabindex="-1" aria-labelledby="preExportCheckModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-warning text-dark py-2.5 px-3">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="fa-solid fa-triangle-exclamation fa-lg"></i>
+                    <h6 class="modal-title fw-bold text-dark mb-0" id="preExportCheckModalLabel">
+                        Pre-Export Compliance Check: Missing Required Fields
+                    </h6>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-3">
+                <div class="alert alert-warning py-2 px-3 text-xs mb-3">
+                    <span id="pecSummaryText">Checking export compliance against Ethiopian Ministry of Revenue declaration standards...</span>
+                </div>
+                <div class="table-responsive border rounded mb-3" style="max-height: 350px;">
+                    <table class="table table-hover table-sm text-xs align-middle mb-0">
+                        <thead class="table-light text-xxs text-uppercase text-muted">
+                            <tr>
+                                <th>Ref #</th>
+                                <th>Payee / Supplier</th>
+                                <th class="text-end">Amount (ETB)</th>
+                                <th>Missing Required Fields</th>
+                                <th class="text-center" style="width: 90px;">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pecIssuesTableBody">
+                            <!-- Populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+                <div class="text-xxs text-muted">
+                    <i class="fa-solid fa-circle-info text-primary me-1"></i>
+                    The Ministry of Revenue (MOR/ERCA) strictly requires 10-digit TIN, valid FS No, MRC, and disbursement date for official VAT return filings.
+                </div>
+            </div>
+            <div class="modal-footer bg-light py-2 px-3 d-flex justify-content-between">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close &amp; Fix Records</button>
+                <div class="d-flex gap-2">
+                    <button type="button" id="pecProceedDownloadBtn" class="btn btn-sm btn-outline-warning">
+                        <i class="fa-solid fa-download me-1"></i> Download Anyway (Incomplete)
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -3001,6 +3265,419 @@ function toggleBulkFields() {
         noVatGrp?.classList.add('d-none');
         vatRateGrp?.classList.add('d-none');
     }
+}
+
+// ── Side-by-Side OCR Review & Pre-Export Checks (pro.doc Part 3 & 4) ─────────
+let sbsCurrentItem = null;
+let sbsRotation = 0;
+let sbsExportTargetType = 'vat';
+let sbsExtractedItems = [];
+
+function openSideBySideReviewAction(arg1, arg2, buttonEl) {
+    const item = resolveItem(arg1, arg2, buttonEl);
+    if (!item) {
+        alert('Could not locate expense item details.');
+        return;
+    }
+    sbsCurrentItem = item;
+    sbsRotation = 0;
+    populateSideBySideModal(item, null);
+    showModalSafe('ocrSideBySideReviewModal');
+
+    if (item.receipt_url) {
+        const badge = document.getElementById('sbsConfidenceBadge');
+        if (badge) {
+            badge.className = 'badge bg-warning text-dark';
+            badge.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Scanning...';
+        }
+
+        const formData = new FormData();
+        formData.append('receipt_path', item.receipt_url);
+        formData.append('_token', '{{ csrf_token() }}');
+
+        fetch("{{ route('finance.expense-hub.scan-receipt') }}", {
+            method: 'POST',
+            headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}', 'Accept': 'application/json' },
+            body: formData
+        })
+        .then(r => r.json())
+        .then(res => {
+            if (res.success) {
+                lastOcrResult = res;
+                populateSideBySideModal(item, res);
+            } else if (badge) {
+                badge.className = 'badge bg-secondary';
+                badge.textContent = 'Manual Review';
+            }
+        })
+        .catch(e => {
+            if (badge) {
+                badge.className = 'badge bg-secondary';
+                badge.textContent = 'Manual Review';
+            }
+        });
+    }
+}
+
+function rotatePreview() {
+    sbsRotation = (sbsRotation + 90) % 360;
+    const img = document.getElementById('sbsImagePreview');
+    if (img) img.style.transform = `rotate(${sbsRotation}deg)`;
+}
+
+function populateSideBySideModal(item, ocr) {
+    document.getElementById('sbsRefNo').textContent = item.reference_no || '—';
+    document.getElementById('sbsDisbursedAmt').textContent = Number(item.amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2});
+
+    // 1. Media Preview
+    const imgPreview = document.getElementById('sbsImagePreview');
+    const pdfPreview = document.getElementById('sbsPdfPreview');
+    const noPreview = document.getElementById('sbsNoPreview');
+    const fullSizeBtn = document.getElementById('sbsOpenOriginalBtn');
+
+    const fileUrl = ocr?.file_url || (item.receipt_url ? (item.receipt_url.startsWith('http') ? item.receipt_url : '/storage/' + item.receipt_url.replace(/^(storage\/|\/storage\/)/, '')) : null);
+
+    if (fileUrl) {
+        fullSizeBtn.href = fileUrl;
+        fullSizeBtn.classList.remove('d-none');
+        if (fileUrl.toLowerCase().endsWith('.pdf')) {
+            pdfPreview.src = fileUrl;
+            pdfPreview.classList.remove('d-none');
+            imgPreview.classList.add('d-none');
+            noPreview.classList.add('d-none');
+        } else {
+            imgPreview.src = fileUrl;
+            imgPreview.classList.remove('d-none');
+            pdfPreview.classList.add('d-none');
+            noPreview.classList.add('d-none');
+        }
+    } else {
+        fullSizeBtn.classList.add('d-none');
+        imgPreview.classList.add('d-none');
+        pdfPreview.classList.add('d-none');
+        noPreview.classList.remove('d-none');
+    }
+
+    // 2. Extracted Fields
+    const tinVal = ocr?.supplier_tin || item.tin || '';
+    document.getElementById('sbsTin').value = tinVal;
+    document.getElementById('sbsVendorName').value = ocr?.vendor_name || item.payee_supplier || '';
+    document.getElementById('sbsFsNo').value = ocr?.fs_no || item.fs_no || '';
+    document.getElementById('sbsMrcNo').value = ocr?.mrc_no || item.mrc_no || '';
+    document.getElementById('sbsReceiptDate').value = ocr?.receipt_date || item.disbursement_date || new Date().toISOString().split('T')[0];
+
+    const baseVal = ocr ? (ocr.subtotal || 0) : (item.decision_base_amount || (item.amount / 1.15));
+    const vatVal = ocr ? (ocr.vat_amount || 0) : (item.decision_vat_amount || (item.amount - baseVal));
+    const totVal = ocr ? (ocr.total_amount || 0) : (item.decision_total_amount || item.amount);
+
+    document.getElementById('sbsSubtotal').value = Number(baseVal).toFixed(2);
+    document.getElementById('sbsVatAmount').value = Number(vatVal).toFixed(2);
+    document.getElementById('sbsTotalAmount').value = Number(totVal).toFixed(2);
+    document.getElementById('sbsExtractedAmt').textContent = Number(totVal).toFixed(2);
+
+    // 3. Duplicate Alert
+    const dupAlert = document.getElementById('sbsDuplicateAlert');
+    if (ocr?.is_duplicate) {
+        dupAlert.classList.remove('d-none');
+        document.getElementById('sbsDuplicateMsg').textContent = ocr.duplicate_message || 'Duplicate receipt warning.';
+    } else {
+        dupAlert.classList.add('d-none');
+    }
+
+    // 4. Amount Discrepancy Alert
+    const discAlert = document.getElementById('sbsDiscrepancyAlert');
+    if (Math.abs(totVal - (item.amount || 0)) > 1.0) {
+        discAlert.classList.remove('d-none');
+    } else {
+        discAlert.classList.add('d-none');
+    }
+
+    // 5. Outcome Selector
+    if (item.is_verified_without_receipt) {
+        document.getElementById('sbsOutNoReceipt').checked = true;
+    } else if (item.has_withholding || (item.withholding_amount && item.withholding_amount > 0)) {
+        document.getElementById('sbsOutWht').checked = true;
+    } else if (item.vat_status === 'no_vat' || (ocr && ocr.is_no_vat)) {
+        document.getElementById('sbsOutNoVat').checked = true;
+    } else {
+        document.getElementById('sbsOutVat').checked = true;
+    }
+
+    // 6. Confidence Highlights & Validations
+    validateSbsTin();
+    recalculateSbsVat();
+
+    const confScore = ocr?.confidence_score || 95;
+    const confBadge = document.getElementById('sbsConfidenceBadge');
+    if (confBadge) {
+        confBadge.className = confScore >= 80 ? 'badge bg-success' : (confScore >= 60 ? 'badge bg-warning text-dark' : 'badge bg-danger');
+        confBadge.textContent = `Confidence: ${confScore}% (${ocr?.confidence || 'normal'})`;
+    }
+
+    // Amber border for low-confidence fields
+    const fConf = ocr?.field_confidences || {};
+    applyFieldConfidenceStyle('sbsTin', fConf.tin);
+    applyFieldConfidenceStyle('sbsFsNo', fConf.fs_no);
+    applyFieldConfidenceStyle('sbsMrcNo', fConf.mrc_no);
+    applyFieldConfidenceStyle('sbsTotalAmount', fConf.total);
+
+    // 7. Multi-line receipt items
+    sbsExtractedItems = ocr?.items || (item.line_items || []);
+    renderSbsItemsTable();
+}
+
+function applyFieldConfidenceStyle(elementId, score) {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+    if (score !== undefined && score < 70) {
+        el.style.borderColor = '#fd7e14';
+        el.style.backgroundColor = '#fff9db';
+    } else {
+        el.style.borderColor = '';
+        el.style.backgroundColor = '';
+    }
+}
+
+function validateSbsTin() {
+    const val = document.getElementById('sbsTin')?.value || '';
+    const clean = val.replace(/[^0-9]/g, '');
+    const badge = document.getElementById('sbsTinStatus');
+    if (!badge) return;
+
+    if (clean.length === 10) {
+        badge.className = 'badge bg-success text-white text-xxs';
+        badge.textContent = 'Valid 10 Digits';
+    } else if (clean.length > 0) {
+        badge.className = 'badge bg-warning text-dark text-xxs';
+        badge.textContent = `${clean.length}/10 Digits`;
+    } else {
+        badge.className = 'badge bg-secondary text-white text-xxs';
+        badge.textContent = 'Empty';
+    }
+}
+
+function recalculateSbsVat() {
+    const subtotal = parseFloat(document.getElementById('sbsSubtotal')?.value || 0);
+    const vat = parseFloat(document.getElementById('sbsVatAmount')?.value || 0);
+    const total = parseFloat(document.getElementById('sbsTotalAmount')?.value || 0);
+
+    const badge = document.getElementById('sbsVatMatchBadge');
+    if (!badge) return;
+
+    if (vat > 0 && subtotal > 0) {
+        const expected = Math.round(subtotal * 0.15 * 100) / 100;
+        if (Math.abs(vat - expected) <= 1.0) {
+            badge.className = 'badge bg-success text-white text-xxs';
+            badge.textContent = '15% Matched';
+        } else {
+            badge.className = 'badge bg-warning text-dark text-xxs';
+            badge.textContent = `15% Expected: ${expected.toFixed(2)}`;
+        }
+    } else {
+        badge.className = 'badge bg-secondary text-white text-xxs';
+        badge.textContent = '0% VAT';
+    }
+}
+
+function syncSbsOutcome(outcome) {
+    if (outcome === 'vat_applies') {
+        const sub = parseFloat(document.getElementById('sbsSubtotal')?.value || 0);
+        if (sub > 0 && parseFloat(document.getElementById('sbsVatAmount')?.value || 0) === 0) {
+            document.getElementById('sbsVatAmount').value = (sub * 0.15).toFixed(2);
+            document.getElementById('sbsTotalAmount').value = (sub * 1.15).toFixed(2);
+        }
+    } else if (outcome === 'no_vat' || outcome === 'verified_no_receipt') {
+        const tot = parseFloat(document.getElementById('sbsTotalAmount')?.value || 0);
+        document.getElementById('sbsVatAmount').value = '0.00';
+        document.getElementById('sbsSubtotal').value = tot.toFixed(2);
+    }
+    recalculateSbsVat();
+}
+
+function renderSbsItemsTable() {
+    const tbody = document.getElementById('sbsItemsTableBody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    if (!sbsExtractedItems || sbsExtractedItems.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-2">No multi-line items parsed.</td></tr>';
+        return;
+    }
+
+    sbsExtractedItems.forEach((it, idx) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td><input type="text" class="form-control form-control-sm text-xxs py-0 px-1 border-0" value="${escapeHtml(it.name || it.item_name || '')}" onchange="sbsExtractedItems[${idx}].name=this.value"></td>
+            <td><input type="number" step="0.01" class="form-control form-control-sm text-xxs py-0 px-1 border-0 text-center" value="${it.quantity || it.qty || 1}" onchange="sbsExtractedItems[${idx}].quantity=this.value"></td>
+            <td><input type="number" step="0.01" class="form-control form-control-sm text-xxs py-0 px-1 border-0 text-end" value="${Number(it.rate || it.unit_price || 0).toFixed(2)}" onchange="sbsExtractedItems[${idx}].rate=this.value"></td>
+            <td><input type="number" step="0.01" class="form-control form-control-sm text-xxs py-0 px-1 border-0 text-end fw-bold" value="${Number(it.total || it.total_amount || 0).toFixed(2)}" onchange="sbsExtractedItems[${idx}].total=this.value"></td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+function addSbsReceiptItem() {
+    if (!sbsExtractedItems) sbsExtractedItems = [];
+    sbsExtractedItems.push({
+        name: 'Material Item',
+        quantity: 1,
+        rate: 0,
+        total: 0
+    });
+    renderSbsItemsTable();
+}
+
+function applySbsToDecisionModal() {
+    if (!sbsCurrentItem) return;
+    hideModalSafe('ocrSideBySideReviewModal');
+    openDecisionModal(sbsCurrentItem);
+
+    // Sync values
+    const tin = document.getElementById('sbsTin')?.value;
+    const fs = document.getElementById('sbsFsNo')?.value;
+    const mrc = document.getElementById('sbsMrcNo')?.value;
+    const name = document.getElementById('sbsVendorName')?.value;
+
+    if (tin) {
+        document.getElementById('mTin').value = tin;
+        if (document.getElementById('mNoVatTin')) document.getElementById('mNoVatTin').value = tin;
+    }
+    if (fs) {
+        document.getElementById('mFsNo').value = fs;
+        if (document.getElementById('mNoVatFsNo')) document.getElementById('mNoVatFsNo').value = fs;
+    }
+    if (mrc) {
+        document.getElementById('mMrcNo').value = mrc;
+        if (document.getElementById('mNoVatMrcNo')) document.getElementById('mNoVatMrcNo').value = mrc;
+    }
+    if (name) {
+        if (document.getElementById('mSellerName')) document.getElementById('mSellerName').value = name;
+        if (document.getElementById('mNoVatSellerName')) document.getElementById('mNoVatSellerName').value = name;
+    }
+}
+
+function saveSbsDecision() {
+    if (!sbsCurrentItem) return;
+
+    // Discrepancy confirmation check
+    const discAlert = document.getElementById('sbsDiscrepancyAlert');
+    if (!discAlert.classList.contains('d-none')) {
+        const confirmed = document.getElementById('sbsConfirmDiscrepancy')?.checked;
+        if (!confirmed) {
+            alert('Please check the confirmation box acknowledging the difference between the cash disbursed and receipt total.');
+            return;
+        }
+    }
+
+    const selectedOutcome = document.querySelector('input[name="sbs_outcome"]:checked')?.value || 'vat_applies';
+    const subtotal = parseFloat(document.getElementById('sbsSubtotal')?.value || 0);
+    const vat = parseFloat(document.getElementById('sbsVatAmount')?.value || 0);
+    const total = parseFloat(document.getElementById('sbsTotalAmount')?.value || (subtotal + vat));
+
+    const fd = new FormData();
+    fd.append('_token', '{{ csrf_token() }}');
+    fd.append('source_type', sbsCurrentItem.source_type);
+    fd.append('source_id', sbsCurrentItem.source_id);
+    fd.append('amount', total > 0 ? total : sbsCurrentItem.amount);
+    fd.append('vat_status', selectedOutcome === 'verified_no_receipt' ? 'verified_no_receipt' : (selectedOutcome === 'withholding' ? 'vat_applies' : selectedOutcome));
+    fd.append('is_verified_without_receipt', selectedOutcome === 'verified_no_receipt' ? '1' : '0');
+    fd.append('has_withholding', selectedOutcome === 'withholding' ? '1' : '0');
+    fd.append('withholding_rate', selectedOutcome === 'withholding' ? '3.00' : '0.00');
+    fd.append('custom_seller_tin', document.getElementById('sbsTin')?.value || '');
+    fd.append('custom_seller_name', document.getElementById('sbsVendorName')?.value || '');
+    fd.append('custom_fs_no', document.getElementById('sbsFsNo')?.value || '');
+    fd.append('custom_mrc_no', document.getElementById('sbsMrcNo')?.value || '');
+    fd.append('custom_receipt_date', document.getElementById('sbsReceiptDate')?.value || '');
+
+    if (lastOcrResult?.file_path) {
+        fd.append('receipt_path', lastOcrResult.file_path);
+    } else if (sbsCurrentItem.receipt_url) {
+        fd.append('receipt_path', sbsCurrentItem.receipt_url);
+    }
+
+    fetch("{{ route('finance.expense-hub.decision') }}", {
+        method: 'POST',
+        headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}', 'Accept': 'application/json' },
+        body: fd
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            hideModalSafe('ocrSideBySideReviewModal');
+            window.location.reload();
+        } else {
+            alert('Failed to save VAT decision: ' + (data.message || 'Unknown error'));
+        }
+    })
+    .catch(err => {
+        alert('Network error while saving decision: ' + err.message);
+    });
+}
+
+function startPreExportCheck(type) {
+    sbsExportTargetType = type;
+    const currentParams = new URLSearchParams(window.location.search);
+    currentParams.set('type', type);
+
+    fetch("{{ route('finance.expense-hub.pre-export-check') }}?" + currentParams.toString(), {
+        headers: { 'Accept': 'application/json' }
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success || data.issue_count === 0) {
+            const routeUrl = (type === 'vat')
+                ? "{{ route('finance.expense-hub.export-vat') }}?" + currentParams.toString()
+                : "{{ route('finance.expense-hub.export-tas') }}?" + currentParams.toString();
+            window.location.href = routeUrl;
+            return;
+        }
+
+        const tableBody = document.getElementById('pecIssuesTableBody');
+        tableBody.innerHTML = '';
+
+        document.getElementById('pecSummaryText').innerHTML =
+            `<strong>${data.issue_count}</strong> of ${data.total_rows} records are missing mandatory tax return fields (TIN, FS No, MRC, or Date). Fix them below before generating the official declaration.`;
+
+        data.issues.forEach(issue => {
+            const tr = document.createElement('tr');
+            const missingBadges = issue.missing.map(m => `<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 me-1 text-xxs">${escapeHtml(m)}</span>`).join('');
+            tr.innerHTML = `
+                <td class="fw-bold font-monospace text-primary text-xs">${escapeHtml(issue.reference_no)}</td>
+                <td class="text-xs text-truncate" style="max-width: 180px;">${escapeHtml(issue.payee_supplier || 'Supplier')}</td>
+                <td class="text-end font-monospace text-xs">${Number(issue.amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                <td>${missingBadges}</td>
+                <td class="text-center">
+                    <button type="button" class="btn btn-xs btn-primary px-2 py-0.5 text-xxs" onclick="pecFixItem('${issue.source_type}', ${issue.source_id})">
+                        <i class="fa-solid fa-pen-to-square me-1"></i> Fix
+                    </button>
+                </td>
+            `;
+            tableBody.appendChild(tr);
+        });
+
+        const downloadBtn = document.getElementById('pecProceedDownloadBtn');
+        downloadBtn.onclick = function() {
+            const routeUrl = (type === 'vat')
+                ? "{{ route('finance.expense-hub.export-vat') }}?" + currentParams.toString()
+                : "{{ route('finance.expense-hub.export-tas') }}?" + currentParams.toString();
+            window.location.href = routeUrl;
+            hideModalSafe('preExportCheckModal');
+        };
+
+        showModalSafe('preExportCheckModal');
+    })
+    .catch(err => {
+        console.error('Pre-export check failed:', err);
+        const routeUrl = (type === 'vat')
+            ? "{{ route('finance.expense-hub.export-vat') }}?" + currentParams.toString()
+            : "{{ route('finance.expense-hub.export-tas') }}?" + currentParams.toString();
+        window.location.href = routeUrl;
+    });
+}
+
+function pecFixItem(sourceType, sourceId) {
+    hideModalSafe('preExportCheckModal');
+    openDecisionModal(sourceType, sourceId);
 }
 </script>
 @endsection

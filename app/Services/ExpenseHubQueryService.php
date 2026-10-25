@@ -11,6 +11,7 @@ use App\Models\EmployeeAdvance;
 use App\Models\IpcRecord;
 use App\Models\TaxSettlement;
 use App\Models\FixedAsset;
+use App\Models\VehicleFuelRequest;
 use App\Models\ExpenseHubVatDecision;
 use App\Models\ExpenseHubMonthLock;
 use App\Models\Project;
@@ -57,6 +58,11 @@ class ExpenseHubQueryService
         // 4. Petty Cash Material Purchases
         if ($this->shouldIncludeSource('petty_cash_material_purchases', $filters)) {
             $this->loadPettyCashPurchases($items, $decisions, $scopedProjectIds);
+        }
+
+        // 5. Vehicle Fuel Requests
+        if ($this->shouldIncludeSource('vehicle_fuel_requests', $filters)) {
+            $this->loadVehicleFuelRequests($items, $decisions, $scopedProjectIds);
         }
 
         // 5. Payrolls (Status = paid or GM approved)
@@ -121,9 +127,7 @@ class ExpenseHubQueryService
             if (!empty($item->is_verified_without_receipt)) {
                 $verifiedNoReceiptTotal += $amt;
                 $verifiedNoReceiptCount++;
-            }
-
-            if ($item->vat_status === ExpenseHubVatDecision::STATUS_VAT_APPLIES) {
+            } elseif ($item->vat_status === ExpenseHubVatDecision::STATUS_VAT_APPLIES) {
                 $vatAppliesTotal += $amt;
                 $totalInputVat += (float) ($item->decision_vat_amount ?? $item->source_vat_amount ?? 0);
             } elseif ($item->vat_status === ExpenseHubVatDecision::STATUS_NO_VAT) {
@@ -420,7 +424,8 @@ class ExpenseHubQueryService
                 $q->whereNull('request_number')
                   ->orWhere(function ($sub) {
                       $sub->where('request_number', 'not like', 'EXP-QP-%')
-                          ->where('request_number', 'not like', 'EXP-CR-%');
+                          ->where('request_number', 'not like', 'EXP-CR-%')
+                          ->where('request_number', 'not like', 'EXP-FUEL-%');
                   });
             })
             ->where(function ($q) {
@@ -577,6 +582,113 @@ class ExpenseHubQueryService
                 'line_items'           => $lineItems,
                 'decision'             => $decision,
                 'default_status'       => ExpenseHubVatDecision::STATUS_PENDING_DECISION,
+            ]));
+        }
+    }
+
+    protected function loadVehicleFuelRequests(Collection $items, Collection $decisions, ?array $scopedProjectIds): void
+    {
+        if (!Schema::hasTable('vehicle_fuel_requests')) {
+            return;
+        }
+
+        $query = VehicleFuelRequest::with([
+            'assetUnit',
+            'driverEmployee',
+            'requestedByUser',
+            'project',
+            'expenseRequest.user',
+        ])
+            ->whereIn('status', [
+                VehicleFuelRequest::STATUS_PAID,
+                VehicleFuelRequest::STATUS_RECEIPT_ATTACHED,
+                VehicleFuelRequest::STATUS_CLOSED,
+                'paid',
+                'closed',
+            ]);
+
+        if ($scopedProjectIds !== null) {
+            $query->whereIn('project_id', $scopedProjectIds);
+        }
+
+        foreach ($query->get() as $fuel) {
+            $amt = (float) ($fuel->actual_amount > 0 ? $fuel->actual_amount : $fuel->estimated_amount);
+            if ($amt <= 0) {
+                continue;
+            }
+
+            $driverName = $fuel->driverEmployee?->full_name ?: ($fuel->requestedByUser?->name ?: 'Driver / Operator');
+            $plateNo = $fuel->assetUnit?->plate_number ?: ($fuel->assetUnit?->name ?: 'Vehicle');
+            $station = $fuel->fuel_station_name ?: 'Fuel Station';
+            $tin = $fuel->fuel_station_tin ?: null;
+
+            $key = 'vehicle_fuel_request:' . $fuel->id;
+            // Also lookup decision linked via expense_request_id if exists
+            $decision = $decisions->get($key) ?? ($fuel->expense_request_id ? $decisions->get('expense_request:' . $fuel->expense_request_id) : null);
+
+            $taxType = strtolower((string)($fuel->tax_type ?: 'no_vat'));
+            $defaultStatus = ($taxType === 'vat') ? ExpenseHubVatDecision::STATUS_VAT_APPLIES : ExpenseHubVatDecision::STATUS_NO_VAT;
+
+            $createdByName = $fuel->requestedByUser?->name ?: 'Transport Staff';
+            $createdAt = $fuel->created_at ? $fuel->created_at->format('d M Y, h:i A') : null;
+            $approvedByName = 'General Service / Finance Verification';
+            $approvedAt = $fuel->receipt_uploaded_at ? Carbon::parse($fuel->receipt_uploaded_at)->format('d M Y, h:i A') : null;
+            $paidByName = 'Finance Disbursement';
+            $paidAt = $fuel->closed_at ? Carbon::parse($fuel->closed_at)->format('d M Y, h:i A') : null;
+
+            $purpose = "Vehicle Fuel ({$fuel->fuel_type}): " . ($fuel->actual_liters ?: $fuel->liters_requested) . " Liters for {$plateNo} ({$station}) - Req #{$fuel->request_no}";
+
+            $lineItems = [
+                [
+                    'name'     => "Fuel - {$fuel->fuel_type} ({$plateNo})",
+                    'quantity' => (float)($fuel->actual_liters ?: ($fuel->liters_requested ?: 1.0)),
+                    'unit'     => 'LIT',
+                    'rate'     => (float)($fuel->price_per_liter ?: ($amt / max((float)($fuel->actual_liters ?: 1.0), 1))),
+                    'total'    => (float)$amt,
+                ]
+            ];
+
+            $attachment = $fuel->receipt_photo;
+
+            $items->push($this->buildHubItem([
+                'source_type'          => 'vehicle_fuel_request',
+                'source_module_label'  => 'Vehicle Fuel Request',
+                'source_id'            => $fuel->id,
+                'reference_no'         => $fuel->request_no ?: "VFR-{$fuel->id}",
+                'view_url'             => $this->safeRoute(['vehicle-fuel-requests.show'], $fuel->id, url('/vehicle-fuel-requests/' . $fuel->id)),
+                'project_id'           => $fuel->project_id,
+                'project_name'         => $fuel->project?->name ?: 'Company Fleet / Operations',
+                'payee_supplier'       => $station . ' (' . $driverName . ')',
+                'tin'                  => $tin,
+                'fs_no'                => $fuel->fs_no,
+                'mrc_no'               => $fuel->mrc_no,
+                'description'          => $purpose,
+                'purpose_detail'       => $purpose,
+                'amount'               => $amt,
+                'source_vat_amount'    => ($defaultStatus === ExpenseHubVatDecision::STATUS_VAT_APPLIES) ? round($amt - ($amt / 1.15), 2) : 0,
+                'payment_method'       => 'cash',
+                'created_by_name'      => $createdByName,
+                'created_at_formatted' => $createdAt,
+                'approved_by_name'     => $approvedByName,
+                'approved_at_formatted'=> $approvedAt,
+                'paid_by_name'         => $paidByName,
+                'paid_at_formatted'    => $paidAt,
+                'disbursement_date'    => $fuel->closed_at ? $fuel->closed_at->toDateString() : ($fuel->receipt_uploaded_at ? $fuel->receipt_uploaded_at->toDateString() : ($fuel->created_at ? $fuel->created_at->toDateString() : null)),
+                'receipt_url'          => $attachment,
+                'has_withholding'      => false,
+                'withholding_rate'     => 0.00,
+                'withholding_amount'   => 0.00,
+                'withholding_receipt'  => null,
+                'withholding_receipt_number' => null,
+                'net_amount'           => $amt,
+                'category'             => 'fuel',
+                'category_label'       => 'Vehicle Fuel',
+                'is_capex'             => false,
+                'line_items'           => $lineItems,
+                'decision'             => $decision,
+                'default_status'       => $defaultStatus,
+                'default_reason_code'  => $fuel->no_vat_reason_code ?: ($defaultStatus === ExpenseHubVatDecision::STATUS_NO_VAT ? 'fuel_purchase' : null),
+                'default_reason_note'  => $fuel->no_vat_reason_note ?: ($defaultStatus === ExpenseHubVatDecision::STATUS_NO_VAT ? 'Fuel station 0% VAT / exempt voucher' : null),
             ]));
         }
     }
@@ -1138,6 +1250,10 @@ class ExpenseHubQueryService
             if (!empty($filters['vat_status'])) {
                 if ($filters['vat_status'] === 'verified_no_receipt') {
                     if (empty($item->is_verified_without_receipt)) {
+                        return false;
+                    }
+                } elseif ($filters['vat_status'] === ExpenseHubVatDecision::STATUS_NO_VAT) {
+                    if ($item->vat_status !== ExpenseHubVatDecision::STATUS_NO_VAT || !empty($item->is_verified_without_receipt)) {
                         return false;
                     }
                 } elseif ($item->vat_status !== $filters['vat_status']) {

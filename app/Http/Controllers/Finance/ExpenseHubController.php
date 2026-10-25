@@ -14,6 +14,15 @@ use App\Models\ExpenseRequest;
 use App\Models\ProcurementPayment;
 use App\Models\CreditStorePayment;
 use App\Models\PettyCashMaterialPurchase;
+use App\Models\VehicleFuelRequest;
+use App\Models\FixedAsset;
+use App\Models\IpcRecord;
+use App\Models\EmployeeAdvance;
+use App\Models\Payroll;
+use App\Exports\PurchaseVatExport;
+use App\Exports\PurchaseTasExport;
+use App\Exports\SalesVatExport;
+use App\Exports\ExpenseHubMasterAuditExport;
 use Illuminate\Support\Facades\Schema;
 use App\Services\ExpenseHubQueryService;
 use App\Services\EthiopianDate;
@@ -83,6 +92,12 @@ class ExpenseHubController extends Controller
                     }
                     if (!Schema::hasColumn('expense_hub_vat_decisions', 'is_verified_without_receipt')) {
                         $table->boolean('is_verified_without_receipt')->default(false)->after('no_vat_reason_note')->index();
+                    }
+                    if (!Schema::hasColumn('expense_hub_vat_decisions', 'ocr_confidence_score')) {
+                        $table->integer('ocr_confidence_score')->nullable()->after('receipt_path');
+                    }
+                    if (!Schema::hasColumn('expense_hub_vat_decisions', 'raw_ocr_payload')) {
+                        $table->longText('raw_ocr_payload')->nullable()->after('ocr_confidence_score');
                     }
                 });
             }
@@ -295,6 +310,79 @@ class ExpenseHubController extends Controller
             $receiptDateYmd = $scan['receipt_date_ymd'] ?? now()->toDateString();
             $receiptDateEc  = EthiopianDate::formatDateEc($receiptDateYmd, 'd-m-Y');
 
+            // 1. Validate 10-digit TIN
+            $tinClean = preg_replace('/[^0-9]/', '', (string)$supplierTin);
+            $isTin10Digits = (strlen($tinClean) === 10);
+
+            // 2. Validate Buyer TIN = 0038480010
+            $extractedBuyerTin = trim((string)($scan['buyer_tin'] ?? ($scan['extracted']['buyer_tin'] ?? '')));
+            $buyerTinMatches = true;
+            if (!empty($extractedBuyerTin)) {
+                $cleanExtBuyer = preg_replace('/[^0-9]/', '', $extractedBuyerTin);
+                if (!str_contains($cleanExtBuyer, '0038480010') && !str_contains($cleanExtBuyer, '38480010')) {
+                    $buyerTinMatches = false;
+                }
+            }
+
+            // 3. Validate 15% VAT match
+            $vatMatches15 = true;
+            if ($vatAmount > 0 && $subtotal > 0) {
+                $calcExpectedVat = round($subtotal * 0.15, 2);
+                if (abs($vatAmount - $calcExpectedVat) > 1.0) {
+                    $vatMatches15 = false;
+                }
+            }
+
+            // 4. Duplicate check on (TIN + FS + MRC)
+            $isDuplicate = false;
+            $duplicateMessage = null;
+            if (!empty($fsNo) && Schema::hasTable('receipts')) {
+                $dupQ = Receipt::where('fs_no', $fsNo);
+                if (!empty($supplierTin)) {
+                    $dupQ->where(function($q) use ($supplierTin) {
+                        $q->where('vendor_tin', $supplierTin)->orWhere('vendor_tin', 'like', "%{$supplierTin}%");
+                    });
+                }
+                if (!empty($mrcNo)) {
+                    $dupQ->where('mrc_no', $mrcNo);
+                }
+                $dup = $dupQ->first();
+                if ($dup) {
+                    $isDuplicate = true;
+                    $duplicateMessage = "Duplicate Alert: Receipt FS #{$fsNo} and TIN {$supplierTin} already exists in Tax Ledger (Receipt #{$dup->receipt_number})!";
+                }
+            }
+
+            // Compile warnings
+            $warnings = (array)($scan['warnings'] ?? []);
+            if (!$isTin10Digits && !empty($supplierTin)) {
+                $warnings[] = "Vendor TIN '{$supplierTin}' must be exactly 10 digits.";
+            }
+            if (!$buyerTinMatches) {
+                $warnings[] = "Buyer TIN on receipt ('{$extractedBuyerTin}') does not match Wechecha Construction TIN (0038480010).";
+            }
+            if (!$vatMatches15 && $vatAmount > 0) {
+                $warnings[] = "VAT amount ({$vatAmount} ETB) does not match expected 15% calculation on base ({$subtotal} ETB).";
+            }
+            if ($isDuplicate && $duplicateMessage) {
+                $warnings[] = $duplicateMessage;
+            }
+
+            // Calculate confidence scores
+            $fieldConfidences = [
+                'tin'        => (!empty($supplierTin) && $isTin10Digits) ? 95 : 45,
+                'fs_no'      => !empty($fsNo) ? 95 : 45,
+                'mrc_no'     => !empty($mrcNo) ? 90 : 45,
+                'total'      => $totalAmount > 0 ? 98 : 40,
+                'date'       => !empty($receiptDateYmd) ? 95 : 50,
+                'vat_amount' => $vatMatches15 ? 95 : 60,
+            ];
+            $confidenceScore = (int)round(array_sum($fieldConfidences) / count($fieldConfidences));
+            $confidenceLevel = $confidenceScore >= 80 ? 'high' : ($confidenceScore >= 60 ? 'medium' : 'low');
+
+            // Multi-line receipt items
+            $itemsList = $scan['items'] ?? ($scan['extracted']['items'] ?? []);
+
             return response()->json([
                 'success'           => true,
                 'is_verified'       => $isVerified,
@@ -304,25 +392,30 @@ class ExpenseHubController extends Controller
                 'file_path'         => $savedRelativePath ?: ($stripped ?: null),
                 'vendor_name'       => $vendorName,
                 'supplier_tin'      => $supplierTin,
-                'tin_valid'         => $tinNorm['is_valid'] ?? (!empty($supplierTin) && strlen($supplierTin) === 10),
+                'tin_valid'         => $isTin10Digits,
+                'buyer_tin'         => '0038480010',
+                'buyer_tin_matches' => $buyerTinMatches,
                 'fs_no'             => $fsNo,
-                'fs_no_valid'       => $fsNorm['is_valid'] ?? !empty($fsNo),
+                'fs_no_valid'       => !empty($fsNo),
                 'mrc_no'            => $mrcNo,
                 'receipt_date'      => $receiptDateYmd,
                 'receipt_date_ec'   => $receiptDateEc,
                 'subtotal'          => $subtotal,
                 'vat_amount'        => $vatAmount,
                 'total_amount'      => $totalAmount,
+                'vat_matches_15'    => $vatMatches15,
                 'vat_rate'          => $vatAmount > 0 ? 15.00 : 0.00,
                 'is_inclusive'      => true,
                 'purchase_type'     => $purchaseType,
                 'description'       => $scan['description'] ?? '',
                 'engine'            => $scan['engine'] ?? 'AI OCR Vision Engine',
-                'confidence'        => $scan['confidence'] ?? 'high',
-                'confidence_score'  => $scan['confidence_score'] ?? 95,
-                'is_duplicate'      => $scan['is_duplicate'] ?? false,
-                'duplicate_message' => $scan['duplicate_message'] ?? null,
-                'warnings'          => $scan['warnings'] ?? [],
+                'confidence'        => $confidenceLevel,
+                'confidence_score'  => $confidenceScore,
+                'field_confidences' => $fieldConfidences,
+                'is_duplicate'      => $isDuplicate,
+                'duplicate_message' => $duplicateMessage,
+                'warnings'          => array_values(array_unique($warnings)),
+                'items'             => $itemsList,
             ]);
         } catch (\Throwable $e) {
             Log::error('ExpenseHub OCR failure: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
@@ -628,250 +721,118 @@ class ExpenseHubController extends Controller
     }
 
     /**
-     * Export All Expenses Hub table to CSV / Excel
+     * Pre-export validation check (pro.doc Part 4)
+     * Lists rows with missing required fields (TIN, FS, MRC, Date) before download.
+     */
+    public function preExportCheck(Request $request)
+    {
+        $exportType = strtolower((string)$request->input('type', 'vat')); // 'vat' or 'tas'
+        $filters = $request->only(['date_from', 'date_to', 'project_id', 'source_module', 'category', 'supplier', 'search', 'month']);
+
+        if ($exportType === 'vat') {
+            $filters['vat_status'] = ExpenseHubVatDecision::STATUS_VAT_APPLIES;
+        } elseif ($exportType === 'tas') {
+            $filters['vat_status'] = ExpenseHubVatDecision::STATUS_NO_VAT;
+        }
+
+        $expenses = $this->queryService->getExpenses($filters, Auth::user());
+
+        $issues = [];
+        $validCount = 0;
+
+        foreach ($expenses as $item) {
+            // Outcome 4 (verified without receipt) excluded from TAS returns
+            if ($exportType === 'tas' && !empty($item->is_verified_without_receipt)) {
+                continue;
+            }
+
+            $missing = [];
+
+            // 1. Check TIN: must be 10 digits
+            $tinClean = preg_replace('/[^0-9]/', '', (string)($item->tin ?? ''));
+            if (empty($tinClean) || strlen($tinClean) !== 10) {
+                $missing[] = 'TIN (10 digits)';
+            }
+
+            // 2. Check FS No / Receipt No
+            $fsNo = trim((string)($item->fs_no ?? ''));
+            if (empty($fsNo)) {
+                $missing[] = 'FS / Receipt No';
+            }
+
+            // 3. Check MRC No (Required for VAT return)
+            if ($exportType === 'vat') {
+                $mrc = trim((string)($item->mrc_no ?? ''));
+                if (empty($mrc) || $mrc === '-' || strtoupper($mrc) === 'N/A') {
+                    $missing[] = 'MRC Number';
+                }
+            }
+
+            // 4. Check Date
+            $date = $item->disbursement_date ?: $item->created_at;
+            if (empty($date)) {
+                $missing[] = 'Disbursement Date';
+            }
+
+            if (!empty($missing)) {
+                $issues[] = [
+                    'source_type'   => $item->source_type,
+                    'source_id'     => $item->source_id,
+                    'reference_no'  => $item->reference_no,
+                    'payee_supplier'=> $item->payee_supplier,
+                    'amount'        => (float)$item->amount,
+                    'missing'       => $missing,
+                    'vat_status'    => $item->vat_status,
+                ];
+            } else {
+                $validCount++;
+            }
+        }
+
+        return response()->json([
+            'success'      => count($issues) === 0,
+            'export_type'  => $exportType,
+            'total_rows'   => $expenses->count(),
+            'valid_count'  => $validCount,
+            'issue_count'  => count($issues),
+            'issues'       => $issues,
+        ]);
+    }
+
+    /**
+     * Export 22-Column Master Corporate Audit Format (Report D)
      */
     public function exportHubExcel(Request $request)
     {
-        $filters = $request->only(['date_from', 'date_to', 'project_id', 'source_module', 'vat_status', 'category', 'supplier', 'search']);
+        $filters = $request->only(['date_from', 'date_to', 'project_id', 'source_module', 'vat_status', 'category', 'supplier', 'search', 'month']);
         $expenses = $this->queryService->getExpenses($filters, Auth::user());
-
-        $filename = 'Expense_Hub_Export_' . now()->format('Ymd_His') . '.csv';
-
-        $response = new StreamedResponse(function () use ($expenses) {
-            $handle = fopen('php://output', 'w');
-            fprintf($handle, chr(0xEF).chr(0xBB).chr(0xBF)); // UTF-8 BOM
-
-            fputcsv($handle, [
-                'Disbursement Date',
-                'Source Module',
-                'Reference / Source ID',
-                'Project / Site',
-                'Supplier / Payee',
-                'Vendor TIN',
-                'Gross Amount (ETB)',
-                'VAT Status',
-                'Base Subtotal (ETB)',
-                'VAT Amount (15%)',
-                'Total Amount (ETB)',
-                'No-VAT Reason',
-                'Payment Method',
-                'Paid By',
-                'Warnings',
-                'Description',
-            ]);
-
-            foreach ($expenses as $item) {
-                fputcsv($handle, [
-                    $item->disbursement_date ?: 'N/A',
-                    $item->source_module_label,
-                    $item->reference_no,
-                    $item->project_name,
-                    $item->payee_supplier,
-                    $item->tin ?: 'N/A',
-                    number_format($item->amount, 2, '.', ''),
-                    ucwords(str_replace('_', ' ', $item->vat_status)),
-                    number_format($item->decision_base_amount, 2, '.', ''),
-                    number_format($item->decision_vat_amount, 2, '.', ''),
-                    number_format($item->decision_total_amount, 2, '.', ''),
-                    $item->reason_code ? (ExpenseHubVatDecision::NO_VAT_REASONS[$item->reason_code] ?? $item->reason_code) : ($item->reason_note ?: 'N/A'),
-                    ucwords(str_replace('_', ' ', $item->payment_method ?? 'Cash')),
-                    $item->paid_by_name,
-                    !empty($item->warnings) ? implode('; ', $item->warnings) : 'None',
-                    $item->description,
-                ]);
-            }
-
-            fclose($handle);
-        });
-
-        $response->headers->set('Content-Type', 'text/csv; charset=UTF-8');
-        $response->headers->set('Content-Disposition', "attachment; filename=\"{$filename}\"");
-
-        return $response;
+        return ExpenseHubMasterAuditExport::streamCsv($expenses);
     }
 
     /**
-     * Export Official 15-Column Ministry of Revenue / ERCA Purchase VAT Report
-     * Uses the exact columns from FinanceTaxReportController::exportPurchaseVatExcel()
+     * Export Official 15-Column Ministry of Revenue / ERCA Purchase VAT Return (Report A)
+     * Strictly Outcome 1: With VAT receipt (15% input VAT, FS, MRC, 10-digit TIN, date)
      */
     public function exportVatExcel(Request $request)
     {
-        $filters = $request->only(['date_from', 'date_to', 'project_id', 'source_module', 'category', 'supplier', 'search']);
+        $filters = $request->only(['date_from', 'date_to', 'project_id', 'source_module', 'category', 'supplier', 'search', 'month']);
         $filters['vat_status'] = ExpenseHubVatDecision::STATUS_VAT_APPLIES;
 
         $expenses = $this->queryService->getExpenses($filters, Auth::user());
-
-        $filename = 'Purchase_VAT_Declaration_' . now()->format('Ymd_His') . '.csv';
-
-        $response = new StreamedResponse(function () use ($expenses) {
-            $handle = fopen('php://output', 'w');
-            fprintf($handle, chr(0xEF).chr(0xBB).chr(0xBF)); // UTF-8 BOM
-
-            // Official 15 ERA Columns matching pro.doc
-            fputcsv($handle, [
-                'VAT CATEGORY  (G=GOODS;S=SERVICES)',
-                'CALENDAR TYPE (E=ETHIOPIAN;G=GREGORIAN)',
-                'Types of purchase. 1 = Taxable-local Purchase of Capital Assets (Line No. 65) 2 = Taxable-imported Purchase of Capital Assets (Line No. 75) 3 = Taxable-local Purchase of Inputs (Line No. 100) 4 = Taxable-imported Purchase of Inputs (Line No. 110) 5 = Taxable-general Expense Inputs Purchase (Line No. 120) 6= Tax Exempted-purchase with no vat or uncollectible inputs (Line no. 85 or Line no. 130)    (Please type 1 or 2 or 3 or 4 or 5 or 6).This field is mandatory.',
-                'TIN..This field  is not mandatory.',
-                'Seller name (if Seller has no TIN or item is not locally purchased) This field is not mandatory.',
-                'Date of purchase/Customs Declaration No.  Dispatched Date (Please use  dd/mm/yyyy date format).  This field is mandatory.',
-                'MRC Number..This field is not mandatory.',
-                'Vat receipt number/ Customs Declaration Number.This field is mandatory.',
-                'Description.This field is mandatory.',
-                'Unit of Measure (type ID 2-10). 2 KG 3 ML 4 GM 5 LIT 6 MT 7 PCS 8 CT 9 OTHER 10 PC This field is mandatory.',
-                'Quantity. Enter number.Don\'t use comma (,) or Quatation ("") This field is  mandatory.',
-                'Unit Price. Enter number only .Don\'t use comma (,) or Quatation ("") This field is  mandatory.',
-                'Total value',
-                'vat',
-                'value after vat',
-            ]);
-
-            foreach ($expenses as $item) {
-                $rawTin = (string) ($item->tin ?? '');
-                $tinDigits = preg_replace('/[^0-9]/', '', $rawTin);
-                $tinDigits = preg_replace('/^0+/', '', $tinDigits);
-                $tinVal = ($tinDigits !== '') ? (int)$tinDigits : '';
-
-                $calType = strtoupper(trim((string)($item->calendar_type ?: 'G')));
-                $calendarType = ($calType === 'E') ? 'E' : 'G';
-
-                $date = $item->disbursement_date ?: $item->created_at;
-                if ($calendarType === 'E') {
-                    $dateFormatted = $date ? EthiopianDate::formatDateEc($date, 'd/m/Y') : EthiopianDate::formatDateEc(now(), 'd/m/Y');
-                } else {
-                    $dateFormatted = $date ? Carbon::parse($date)->format('d/m/Y') : now()->format('d/m/Y');
-                }
-
-                $baseVal = (float) $item->decision_base_amount;
-                $vatVal  = (float) $item->decision_vat_amount;
-                $totVal  = (float) $item->decision_total_amount;
-                $qty     = (float) ($item->qty > 0 ? $item->qty : 1);
-                $unitVal = round($baseVal / $qty, 2);
-
-                if (abs(($baseVal + $vatVal) - $totVal) > 0.05) {
-                    $totVal = round($baseVal + $vatVal, 2);
-                }
-
-                $uomRaw = strtoupper(trim((string)($item->uom ?? '')));
-                if (is_numeric($uomRaw) && (int)$uomRaw >= 2 && (int)$uomRaw <= 10) {
-                    $uomId = (int)$uomRaw;
-                } else {
-                    $uomId = match (true) {
-                        str_contains($uomRaw, 'KG') || str_contains($uomRaw, 'KILO') => 2,
-                        str_contains($uomRaw, 'ML') => 3,
-                        str_contains($uomRaw, 'GM') || str_contains($uomRaw, 'GRAM') => 4,
-                        str_contains($uomRaw, 'LIT') || str_contains($uomRaw, 'LTR') || $uomRaw === 'L' => 5,
-                        str_contains($uomRaw, 'MT') || str_contains($uomRaw, 'TON') => 6,
-                        str_contains($uomRaw, 'PCS') || str_contains($uomRaw, 'PIECE') || str_contains($uomRaw, 'PCS.') => 7,
-                        str_contains($uomRaw, 'CT') || str_contains($uomRaw, 'CARTON') || str_contains($uomRaw, 'BOX') => 8,
-                        $uomRaw === 'PC' => 10,
-                        default => 9,
-                    };
-                }
-
-                $pType = (int)($item->purchase_type ?: 3);
-                if ($pType < 1 || $pType > 6) $pType = 3;
-                if ($vatVal <= 0 && $pType === 3) $pType = 6;
-
-                $rawMrc = trim((string)($item->mrc_no ?? ''));
-                $mrcVal = ($rawMrc !== '' && $rawMrc !== '-' && strtoupper($rawMrc) !== 'N/A') ? $rawMrc : '';
-
-                $rawFs = trim((string)($item->fs_no ?? ''));
-
-                fputcsv($handle, [
-                    $item->vat_category ?: 'G',
-                    $calendarType,
-                    $pType,
-                    $tinVal,
-                    trim((string)($item->payee_supplier ?? '')),
-                    $dateFormatted,
-                    $mrcVal,
-                    $rawFs,
-                    trim((string)($item->item_desc ?: ($item->description ?? 'Purchased Goods'))),
-                    $uomId,
-                    (floor($qty) == $qty) ? (int)$qty : round($qty, 4),
-                    round($unitVal, 2),
-                    round($baseVal, 2),
-                    round($vatVal, 2),
-                    round($totVal, 2),
-                ]);
-            }
-
-            fclose($handle);
-        });
-
-        $response->headers->set('Content-Type', 'text/csv; charset=UTF-8');
-        $response->headers->set('Content-Disposition', "attachment; filename=\"{$filename}\"");
-
-        return $response;
+        return PurchaseVatExport::streamCsv($expenses);
     }
 
     /**
-     * Export Purchase TAS Excel (9 Columns e-Tax format matching pro.doc).
-     * Purchaser TIN | Seller TIN | Amount | Receipt No | Receipt Date | Encoding Date | MRC | PurcType | Encoded By
+     * Export Official 9-Column e-Tax Purchase TAS Declaration (Report B)
+     * Strictly Outcome 2: Without VAT receipt (0% / TAS, reason, voucher no). Excludes Outcome 4.
      */
     public function exportTasExcel(Request $request)
     {
-        $filters = $request->only(['date_from', 'date_to', 'project_id', 'source_module', 'category', 'supplier', 'search']);
+        $filters = $request->only(['date_from', 'date_to', 'project_id', 'source_module', 'category', 'supplier', 'search', 'month']);
         $filters['vat_status'] = ExpenseHubVatDecision::STATUS_NO_VAT;
 
         $expenses = $this->queryService->getExpenses($filters, Auth::user());
-
-        $defaultPurchaserTin = SystemSetting::get('purchaser_tin', SystemSetting::get('company_tin', '38480010'));
-        $defaultPurchaserDigits = (int)preg_replace('/^0+/', '', preg_replace('/[^0-9]/', '', (string)$defaultPurchaserTin));
-        if (!$defaultPurchaserDigits) $defaultPurchaserDigits = 38480010;
-
-        $filename = 'Purchase_TAS_' . now()->format('Ymd_His') . '.xlsx';
-        $tempPath = storage_path('app/hub_purch_tas_' . uniqid() . '.xlsx');
-
-        $headers = [
-            'Purchaser TIN',
-            'Seller TIN',
-            'Amount',
-            'Receipt No',
-            'Receipt Date',
-            'Encoding Date',
-            'MRC',
-            'PurcType',
-            'Encoded By',
-        ];
-
-        $rows = [];
-        foreach ($expenses as $item) {
-            $rawTin = (string)($item->tin ?? '');
-            $sellerDigits = preg_replace('/^0+/', '', preg_replace('/[^0-9]/', '', $rawTin));
-            $sellerTinVal = ($sellerDigits !== '') ? (int)$sellerDigits : (trim($rawTin) ?: '');
-
-            $amountVal = round((float)($item->decision_total_amount ?: $item->amount), 2);
-
-            $rawFs = trim((string)($item->fs_no ?? ''));
-            $receiptNo = $rawFs ?: ($item->reference_no ?: '');
-
-            $date = $item->disbursement_date ?: $item->created_at;
-            $receiptDate = $date ? EthiopianDate::formatDateEc($date, 'd-m-Y') : EthiopianDate::formatDateEc(now(), 'd-m-Y');
-            $encodingDate = EthiopianDate::formatDateEc(now(), 'd-m-Y');
-
-            $rawMrc = trim((string)($item->mrc_no ?? ''));
-            $mrcVal = ($rawMrc !== '' && $rawMrc !== '-' && strtoupper($rawMrc) !== 'N/A') ? $rawMrc : '';
-
-            $purcType = $item->purc_type ?: ($item->vat_category === 'S' ? 'PUR_SER' : 'PUR_GD');
-
-            $encodedBy = 'wechacha';
-
-            $rows[] = [
-                $defaultPurchaserDigits,
-                $sellerTinVal,
-                $amountVal,
-                $receiptNo,
-                $receiptDate,
-                $encodingDate,
-                $mrcVal,
-                $purcType,
-                $encodedBy,
-            ];
-        }
-
-        return $this->writeExcelFile($headers, $rows, $tempPath, $filename);
+        return PurchaseTasExport::streamCsv($expenses);
     }
 
     /**
@@ -1018,6 +979,7 @@ class ExpenseHubController extends Controller
                 'procurement_payment'   => ProcurementPayment::class,
                 'credit_store_payment'  => CreditStorePayment::class,
                 'petty_cash_purchase'   => PettyCashMaterialPurchase::class,
+                'vehicle_fuel_request'  => VehicleFuelRequest::class,
                 default                 => null,
             };
 
@@ -1160,6 +1122,49 @@ class ExpenseHubController extends Controller
                         $vendorName  = $vendorName ?: ($pc->vendor_name ?: 'Petty Cash Vendor');
                         $itemDesc    = $itemDesc ?: ($pc->item_name ?: 'Petty Cash Purchase');
                         $receiptPath = $receiptPath ?: ($pc->receipt_path ?: ($pc->attachment_path ?? null));
+                    }
+                } elseif ($sourceType === 'vehicle_fuel_request') {
+                    $fuel = VehicleFuelRequest::with('expenseRequest')->find($sourceId);
+                    if ($fuel) {
+                        $fuel->actual_amount = $totalAmount;
+                        $fuel->tax_type = 'vat';
+                        if (!empty($decision->custom_seller_tin)) {
+                            $fuel->fuel_station_tin = $decision->custom_seller_tin;
+                        }
+                        if (!empty($vendorName)) {
+                            $fuel->fuel_station_name = $vendorName;
+                        }
+                        if (!empty($decision->custom_fs_no)) {
+                            $fuel->fs_no = $decision->custom_fs_no;
+                        }
+                        if (!empty($decision->custom_mrc_no)) {
+                            $fuel->mrc_no = $decision->custom_mrc_no;
+                        }
+                        if ($receiptPath) {
+                            $fuel->receipt_photo = $receiptPath;
+                            $fuel->receipt_uploaded_at = now();
+                        }
+                        $fuel->save();
+
+                        if ($fuel->expense_request_id) {
+                            ExpenseRequest::where('id', $fuel->expense_request_id)->update([
+                                'vat_amount'         => $vatAmount,
+                                'vat_type'           => $isInclusive ? 'inclusive' : 'exclusive',
+                                'vat_rate'           => $vatRate,
+                                'gross_amount'       => $totalAmount,
+                                'net_amount'         => max(0, $totalAmount - $whtAmount),
+                                'has_withholding'    => $hasWht,
+                                'withholding_rate'   => $whtRate,
+                                'withholding_amount' => $whtAmount,
+                                'attachment'         => $receiptPath ?: $fuel->receipt_photo,
+                            ]);
+                        }
+
+                        $targetDate  = $targetDate ?: ($fuel->closed_at ? Carbon::parse($fuel->closed_at)->toDateString() : ($fuel->created_at ? Carbon::parse($fuel->created_at)->toDateString() : null));
+                        $projectId   = $projectId ?: $fuel->project_id;
+                        $vendorName  = $vendorName ?: ($fuel->fuel_station_name ?: 'Fuel Station');
+                        $itemDesc    = $itemDesc ?: "Vehicle Fuel ({$fuel->fuel_type})";
+                        $receiptPath = $receiptPath ?: $fuel->receipt_photo;
                     }
                 }
 
@@ -1352,6 +1357,51 @@ class ExpenseHubController extends Controller
                         $vendorName  = $vendorName ?: ($pc->vendor_name ?: 'Petty Cash Vendor');
                         $itemDesc    = $itemDesc ?: ($pc->item_name ?: 'Petty Cash Purchase');
                         $receiptPath = $receiptPath ?: ($pc->receipt_path ?: ($pc->attachment_path ?? null));
+                    }
+                } elseif ($sourceType === 'vehicle_fuel_request') {
+                    $fuel = VehicleFuelRequest::with('expenseRequest')->find($sourceId);
+                    if ($fuel) {
+                        $fuel->actual_amount = $totalAmount;
+                        $fuel->tax_type = 'no_vat';
+                        $fuel->no_vat_reason_code = $decision->no_vat_reason_code ?: 'fuel_purchase';
+                        $fuel->no_vat_reason_note = $decision->no_vat_reason_note ?: 'Fuel station 0% VAT / exempt voucher';
+                        if (!empty($decision->custom_seller_tin)) {
+                            $fuel->fuel_station_tin = $decision->custom_seller_tin;
+                        }
+                        if (!empty($vendorName)) {
+                            $fuel->fuel_station_name = $vendorName;
+                        }
+                        if (!empty($decision->custom_fs_no)) {
+                            $fuel->fs_no = $decision->custom_fs_no;
+                        }
+                        if (!empty($decision->custom_mrc_no)) {
+                            $fuel->mrc_no = $decision->custom_mrc_no;
+                        }
+                        if ($receiptPath) {
+                            $fuel->receipt_photo = $receiptPath;
+                            $fuel->receipt_uploaded_at = now();
+                        }
+                        $fuel->save();
+
+                        if ($fuel->expense_request_id) {
+                            ExpenseRequest::where('id', $fuel->expense_request_id)->update([
+                                'vat_amount'         => 0,
+                                'vat_type'           => 'none',
+                                'vat_rate'           => 0.00,
+                                'gross_amount'       => $totalAmount,
+                                'net_amount'         => max(0, $totalAmount - $whtAmount),
+                                'has_withholding'    => $hasWht,
+                                'withholding_rate'   => $whtRate,
+                                'withholding_amount' => $whtAmount,
+                                'attachment'         => $receiptPath ?: $fuel->receipt_photo,
+                            ]);
+                        }
+
+                        $targetDate  = $targetDate ?: ($fuel->closed_at ? Carbon::parse($fuel->closed_at)->toDateString() : ($fuel->created_at ? Carbon::parse($fuel->created_at)->toDateString() : null));
+                        $projectId   = $projectId ?: $fuel->project_id;
+                        $vendorName  = $vendorName ?: ($fuel->fuel_station_name ?: 'Fuel Station');
+                        $itemDesc    = $itemDesc ?: "Vehicle Fuel ({$fuel->fuel_type})";
+                        $receiptPath = $receiptPath ?: $fuel->receipt_photo;
                     }
                 }
 

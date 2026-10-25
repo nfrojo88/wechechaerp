@@ -2356,6 +2356,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('finance/expense-hub/export-hub', [App\Http\Controllers\Finance\ExpenseHubController::class, 'exportHubExcel'])->name('finance.expense-hub.export-hub');
     Route::get('finance/expense-hub/export-vat', [App\Http\Controllers\Finance\ExpenseHubController::class, 'exportVatExcel'])->name('finance.expense-hub.export-vat');
     Route::get('finance/expense-hub/export-tas', [App\Http\Controllers\Finance\ExpenseHubController::class, 'exportTasExcel'])->name('finance.expense-hub.export-tas');
+    Route::get('finance/expense-hub/pre-export-check', [App\Http\Controllers\Finance\ExpenseHubController::class, 'preExportCheck'])->name('finance.expense-hub.pre-export-check');
     Route::post('finance/expense-hub/lock-month', [App\Http\Controllers\Finance\ExpenseHubController::class, 'lockMonth'])->name('finance.expense-hub.lock-month');
     Route::post('finance/expense-hub/unlock-month', [App\Http\Controllers\Finance\ExpenseHubController::class, 'unlockMonth'])->name('finance.expense-hub.unlock-month');
 

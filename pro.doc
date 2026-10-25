@@ -1,31 +1,97 @@
-Purchaser TIN	Seller TIN	Amount	Receipt No	Receipt Date	Encoding Date	MRC	PurcType	Encoded By
-38480010	5201	17565.22	FS00003898	15-08-2026	26-08-2026	DDB0000032	PUR_GD	wechacha
-38480010	6870105	95.65	FS00016506	22-08-2026	31-08-2026	FGI0026621	PUR_GD	wechacha
-38480010	2131773	31647	DHN638Y2E0	23-08-2026	31-08-2026		PUR_GD	wechacha
-38480010	60440	49182	DHR27F9JNY	27-08-2026	31-08-2026		PUR_GD	wechacha
-38480010	60440	45000	DH61KXVZKR	06-08-2026	31-08-2026		PUR_GD	wechacha
-38480010	60440	40100	DH52JXX110	05-08-2026	31-08-2026		PUR_GD	wechacha
-38480010	60440	46000	DHL61FP2CG	21-08-2026	31-08-2026		PUR_GD	wechacha
-38480010	59269900	24000	FS00000903	24-08-2026	31-08-2026	KJA0048361	PUR_SER	wechacha
-38480010	41486856	50657.73	539	13-08-2026	26-08-2026		PUR_SER	wechacha
-38480010	90833290	42138.94	FS00001412	15-08-2026	26-08-2026	TDB0010720	PUR_GD	wechacha
-38480010	71676674	12375	61	05-08-2026	26-08-2026		PUR_GD	wechacha
-38480010	21046697	46000	DGS7B062Y9	28-07-2026	31-08-2026		PUR_GD	wechacha
-38480010	60440	49400	DHK60DZ65C	20-08-2026	31-08-2026		PUR_GD	wechacha
-38480010	853321	17391.4	FS00011478	07-08-2026	26-08-2026	DDA0015192	PUR_GD	wechacha
-38480010	60440	46705	DH54JYM66C	05-08-2026	31-08-2026		PUR_GD	wechacha
-38480010	60440	46500	DH16FMK342	01-08-2026	31-08-2026		PUR_GD	wechacha
-38480010	6772993	11687	DHS289YYYI	28-08-2026	31-08-2026		PUR_GD	wechacha
-38480010	60440	43000	DHJ8WNQEYY	19-08-2026	31-08-2026		PUR_GD	wechacha
-38480010	60440	44585	DHJ2WNL2KY	19-08-2026	31-08-2026		PUR_GD	wechacha
-38480010	60440	42000	DHI9VJKQ9J	18-08-2026	31-08-2026		PUR_GD	wechacha
-38480010	60440	48650	DHH0UUNUES	17-08-2026	31-08-2026		PUR_GD	wechacha
-38480010	27082360	17143.7	DHG8TN3NQO	16-08-2026	31-08-2026		PUR_GD	wechacha
-38480010	5728224	49118	DHF0SZ6NI0	15-08-2026	31-08-2026		PUR_GD	wechacha
-38480010	27082360	46200	DHD1QZ5WHB	13-08-2026	31-08-2026		PUR_GD	wechacha
-38480010	60440	2300	DH57JYTT01	05-08-2026	31-08-2026		PUR_GD	wechacha
-38480010	60440	49000	DH37HUW5YT	03-08-2026	31-08-2026		PUR_GD	wechacha
-38480010	60440	44600	DH19G1PI1X	01-08-2026	31-08-2026		PUR_GD	wechacha
-38480010	30356908	16920	DGV3EH2EBZ	31-07-2026	31-08-2026		PUR_GD	wechacha
-38480010	21966804	52200	FS00000082	15-08-2026	26-08-2026	RNA0024100	PUR_GD	wechacha
-38480010	73022896	759.87	FS00004336	29-07-2026	26-08-2026	AFG0000650	PUR_SER	wechacha
+ROLE
+You are a senior Laravel engineer working on the existing Wechecha Construction ERP. Extend the existing Finance module. Do not rebuild it or duplicate existing logic. Reuse ExpenseHubController, ExpenseHubQueryService, syncVatDecisionToLedger(), FinanceTaxReportController, TaxSettlement, and the tables expense_hub_vat_decisions, receipts and receipt_items. Read these first and list what already exists before writing code.
+
+GOAL
+Make the Expense Hub (finance/expense-hub) the single place where every paid cash expense is collected, verified, and classified. Verified results must flow automatically into the VAT & Withholding Tax Deductions Ledger and into the official MoR/ERCA report formats. Add receipt upload with AI OCR that pre-fills all the fields the Excel reports need.
+
+PART 1 - COLLECT
+- The Hub lists all paid cash transactions from the 9 modules: ExpenseRequest, ProcurementPayment, CreditStorePayment, PettyCashMaterialPurchase, VehicleFuelRequest, IpcRecord, EmployeeAdvance, Payroll, FixedAsset.
+- Each row shows its verification status (see Part 2). New rows start as "Unverified".
+- Add filters by status, month (Ethiopian calendar), module, and project/site. Summary cards show total gross, total input VAT, total withholding, and counts per status.
+
+PART 2 - VERIFY (four outcomes)
+The finance user opens a row action "Verify / Classify" and picks one outcome:
+
+1. With VAT receipt
+   - vat_status = vat_applies, 15% input VAT.
+   - Required: seller TIN (10 digits), FS number, MRC number, receipt date, base amount.
+   - Computes vat_amount and total. Supports VAT-inclusive and VAT-exclusive entry.
+   - Goes to the VAT pool and the 15-Column Purchase VAT Return.
+
+2. Without VAT receipt (receipt exists, no VAT charged: 0% or exempt)
+   - vat_status = no_vat, with a reason (exempt, non-VAT supplier, etc.).
+   - Required: receipt or voucher number, receipt date, seller TIN if available.
+   - Goes to the 9-Column Purchase TAS Declaration (purchase_type 6). It never enters the input VAT pool.
+
+3. With receipt and withholding
+   - Can be combined with outcome 1 or 2.
+   - Sets has_withholding = true, rate 3%, withholding_amount = 3% of the pre-tax base.
+   - Optional upload of the WHT voucher slip and its serial number. Missing slips show an audit alert in the Slips tab.
+   - Net paid = gross minus withholding. Goes to the Withholding pool.
+
+4. Without receipt (verified without receipt)
+   - Marked as verified but with no tax credit.
+   - Not claimable as input VAT and excluded from the VAT return and TAS exports.
+   - Shows a non-blocking warning, and appears in the audit export with a reason field (required).
+
+Rules:
+- Each decision is saved to expense_hub_vat_decisions, then syncVatDecisionToLedger() runs the existing 4-step sync (decision table, source model update, receipts and receipt_items, ledger display).
+- Decisions are editable until the month is settled. After settlement they are locked, and unlocking requires the Finance Head role and an audit log entry.
+- Log every change (who, when, old value, new value).
+
+PART 3 - RECEIPT UPLOAD AND OCR (inside the Hub)
+- Add an "Add receipt" action on every Hub row and in the verify dialog. It accepts a camera photo, JPG, PNG, or PDF.
+- Run AI OCR vision on the upload and return structured JSON. Extract and map these fields:
+  VAT category (G goods / S services), seller TIN, seller name, purchase date (convert Gregorian to Ethiopian and keep both), MRC number, FS number, description, unit of measure (ID 2-10), quantity, unit price, subtotal (base), VAT amount, total, and VAT-or-not detection (is there a 15% line).
+- Support multi-line receipts. Each line becomes a receipt_items row with its own statutory classification (G, E, S, purchase_type 3 / 6 / 65 / 120).
+- Show a review screen with the receipt image on one side and the extracted fields on the other, all editable. Show a confidence score per field. Highlight low-confidence fields in amber. Nothing is saved until the user confirms.
+- Validations:
+  - TIN has exactly 10 digits. The buyer TIN must equal 0038480010 (warn if not).
+  - VAT must equal 15% of the base, within a small rounding tolerance, otherwise warn.
+  - Base + VAT must equal the total.
+  - Duplicate check on (seller TIN + FS number + MRC). Block exact duplicates and warn on near-duplicates.
+  - If the OCR amount differs from the Hub row amount, show the difference and require confirmation.
+- If OCR fails or the service is down, fall back to manual entry. The OCR result must never block the workflow.
+- Keep the original image and the raw OCR JSON for audit. Link the receipt to the Hub row and to the receipts table. The AI OCR Receipt Audit Studio (/admin/ocr-receipts) should show these scans.
+
+PART 4 - REPORTS (exact official formats)
+Generate .xlsx and CSV from verified data only. Column order and headers must match exactly.
+
+A. 15-Column Purchase VAT Return (routes: finance.expense-hub.export-vat, finance.tax-deductions.export-excel?type=vat)
+   1 VAT Category (G/S), 2 Calendar Type (E/G), 3 Purchase Type (Line 100 Input VAT, Line 65 CapEx, Line 120 General), 4 Seller TIN, 5 Seller Name, 6 Date of Purchase (dd/mm/yyyy), 7 MRC Number, 8 Fiscal Receipt / FS Number, 9 Description, 10 Unit of Measure (ID 2-10), 11 Quantity, 12 Unit Price, 13 Total Value (base), 14 VAT Amount (15%), 15 Value After VAT.
+   Includes only outcome 1 rows. FixedAsset rows use Line 65.
+
+B. 9-Column e-Tax Purchase TAS Declaration (routes: finance.expense-hub.export-tas, finance.tax-deductions.export-excel?type=tas)
+   1 Purchaser TIN (0038480010), 2 Seller TIN, 3 Amount, 4 Receipt/Voucher No, 5 Receipt Date (EC d-m-Y), 6 Encoding Date, 7 MRC Number, 8 PurcType (PUR_GD / PUR_SER), 9 Encoded By.
+   Includes only outcome 2 rows.
+
+C. 13-Column Sales Return (Output VAT) (route: finance.tax-deductions.export-excel?type=sales)
+   1 Seller TIN, 2 Buyer TIN, 3 Buyer Name, 4 Transaction Type, 5 Receipt Category, 6 Receipt Used, 7 MRC, 8 Receipt No, 9 Commodity Type, 10 Quantity, 11 Price, 12 Receipt Date (EC), 13 Encoded By. Source: IncomeRecord / client IPCs.
+
+D. Internal and audit exports
+   - Expense Hub Master Audit Export (CSV, 22 columns, includes all four outcomes, warnings, and no-VAT reasons).
+   - Tax Deductions Master Export (xlsx + csv).
+   - Withholding Slips Compliance Audit (tab=slips, with CSV).
+   - Monthly Tax Movements & Net VAT Reconciliation: Output VAT minus eligible Input VAT, signed. Shows Net VAT Payable or Input VAT Credit Carryforward, with an Ethiopian month navigator (Meskerem, Tikimt, Hidar, ...).
+
+Before download, show a pre-export check that lists rows with missing required fields (TIN, FS, MRC, date) and links to fix them. Do not silently export incomplete rows.
+
+PART 5 - LEDGER AND SETTLEMENT
+- Keep the 4 ledger tabs (All, VAT, Withholding, Slips) and the Active / Settled cycle filter.
+- Only verified decisions appear in the ledger. Unverified rows show as a "pending verification" count on the Hub, not in totals.
+- Keep the monthly settlement flow (Initiate Settlement, upload bank deposit slip, recordPayment, flag vat_settled and withholding_settled).
+
+NON-FUNCTIONAL
+- Use database transactions for each sync. Syncing must be idempotent (saving twice never duplicates receipts or ledger rows).
+- Queue the OCR job and show progress. Use permissions: Finance Officer can verify, Finance Head can settle and unlock.
+- Add migrations only for missing columns and tables, and write them as reversible.
+- Add feature tests for: each of the 4 outcomes flowing into the correct report, the duplicate receipt block, the 15% validation, the settled-month lock, and the exact column order of all three official exports.
+
+DELIVERABLES
+1. A short plan listing what already exists and what you will change.
+2. Migrations, models, services, controllers, routes, and views.
+3. OCR service class with the JSON schema and prompt used.
+4. Export classes for reports A-D.
+5. Tests, plus a short user guide on how finance verifies an expense and downloads each report.
+
+Ask me only if something blocks you. Otherwise state your assumptions and proceed.
