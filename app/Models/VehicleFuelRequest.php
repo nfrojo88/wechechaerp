@@ -107,7 +107,17 @@ class VehicleFuelRequest extends Model
         return $this->belongsTo(Employee::class, 'driver_employee_id');
     }
 
+    public function driverEmployee(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class, 'driver_employee_id');
+    }
+
     public function requestedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'requested_by_user_id');
+    }
+
+    public function requestedByUser(): BelongsTo
     {
         return $this->belongsTo(User::class, 'requested_by_user_id');
     }

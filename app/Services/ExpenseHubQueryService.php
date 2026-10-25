@@ -594,8 +594,8 @@ class ExpenseHubQueryService
 
         $query = VehicleFuelRequest::with([
             'assetUnit',
-            'driverEmployee',
-            'requestedByUser',
+            'driver',
+            'requestedBy',
             'project',
             'expenseRequest.user',
         ])
@@ -617,7 +617,7 @@ class ExpenseHubQueryService
                 continue;
             }
 
-            $driverName = $fuel->driverEmployee?->full_name ?: ($fuel->requestedByUser?->name ?: 'Driver / Operator');
+            $driverName = $fuel->driver?->full_name ?: ($fuel->requestedBy?->name ?: 'Driver / Operator');
             $plateNo = $fuel->assetUnit?->plate_number ?: ($fuel->assetUnit?->name ?: 'Vehicle');
             $station = $fuel->fuel_station_name ?: 'Fuel Station';
             $tin = $fuel->fuel_station_tin ?: null;

@@ -311,4 +311,22 @@ class ExpenseHubProDocTest extends TestCase
         $this->assertFalse($response->json('success'));
         $this->assertStringContainsString('locked', $response->json('message'));
     }
+
+    /**
+     * Test 6: VehicleFuelRequest relationship integrity and query aggregation.
+     */
+    public function test_vehicle_fuel_request_relationships_and_query_loader()
+    {
+        $vfr = new VehicleFuelRequest();
+        $this->assertTrue(method_exists($vfr, 'driver'), 'driver relationship method exists');
+        $this->assertTrue(method_exists($vfr, 'driverEmployee'), 'driverEmployee alias relationship method exists');
+        $this->assertTrue(method_exists($vfr, 'requestedBy'), 'requestedBy relationship method exists');
+        $this->assertTrue(method_exists($vfr, 'requestedByUser'), 'requestedByUser alias relationship method exists');
+        $this->assertTrue(method_exists($vfr, 'assetUnit'), 'assetUnit relationship method exists');
+        $this->assertTrue(method_exists($vfr, 'expenseRequest'), 'expenseRequest relationship method exists');
+
+        // Verify ExpenseHubQueryService safely queries vehicle fuel requests
+        $expenses = $this->queryService->getExpenses(['source_module' => 'vehicle_fuel_requests'], $this->financeHead);
+        $this->assertInstanceOf(Collection::class, $expenses);
+    }
 }
