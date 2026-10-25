@@ -2132,47 +2132,52 @@ function showModalSafe(modalId) {
         });
     } catch(eDrop) {}
 
-    // 3. Defer slightly (50ms) to allow Popper/dropdown close cycle to finish cleanly
-    setTimeout(() => {
-        // Try Bootstrap 5 Modal
-        try {
-            if (window.bootstrap && window.bootstrap.Modal) {
-                const instance = window.bootstrap.Modal.getOrCreateInstance(el, {
-                    backdrop: true,
-                    keyboard: true,
-                    focus: true
-                });
-                instance.show();
-                return;
-            }
-        } catch (e) {
-            console.warn('Bootstrap 5 modal show error:', e);
+    // 3. Try Bootstrap 5 Modal
+    let shown = false;
+    try {
+        if (window.bootstrap && window.bootstrap.Modal) {
+            const instance = window.bootstrap.Modal.getOrCreateInstance(el, {
+                backdrop: true,
+                keyboard: true,
+                focus: true
+            });
+            instance.show();
+            shown = true;
         }
+    } catch (e) {
+        console.warn('Bootstrap 5 modal show error:', e);
+    }
 
-        // Try jQuery Modal
+    // 4. Try jQuery Modal
+    if (!shown) {
         try {
             if (window.$ && typeof window.$(el).modal === 'function') {
                 window.$(el).modal('show');
-                return;
+                shown = true;
             }
         } catch (e2) {
             console.warn('jQuery modal show error:', e2);
         }
+    }
 
-        // Direct DOM fallback
-        el.classList.add('show');
-        el.style.display = 'block';
-        el.removeAttribute('aria-hidden');
-        el.setAttribute('aria-modal', 'true');
-        document.body.classList.add('modal-open');
-        let backdrop = document.querySelector('.modal-backdrop');
-        if (!backdrop) {
-            backdrop = document.createElement('div');
-            backdrop.className = 'modal-backdrop fade show';
-            backdrop.onclick = function() { hideModalSafe(el); };
-            document.body.appendChild(backdrop);
+    // 5. Guaranteed DOM Fallback (ensures modal is ALWAYS visible and usable)
+    setTimeout(() => {
+        const isVisible = el.classList.contains('show') && (el.style.display === 'block' || window.getComputedStyle(el).display !== 'none');
+        if (!isVisible) {
+            el.classList.add('show');
+            el.style.display = 'block';
+            el.removeAttribute('aria-hidden');
+            el.setAttribute('aria-modal', 'true');
+            document.body.classList.add('modal-open');
+            let backdrop = document.querySelector('.modal-backdrop');
+            if (!backdrop) {
+                backdrop = document.createElement('div');
+                backdrop.className = 'modal-backdrop fade show';
+                backdrop.onclick = function() { hideModalSafe(el); };
+                document.body.appendChild(backdrop);
+            }
         }
-    }, 50);
+    }, 100);
 }
 
 function hideModalSafe(modalId) {
@@ -3460,6 +3465,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
         const actionBtn = e.target.closest('[data-hub-action]');
         if (actionBtn) {
+            // Avoid duplicate execution if element already has an inline onclick handler
+            if (actionBtn.getAttribute('onclick')) {
+                return;
+            }
             e.preventDefault();
             e.stopPropagation();
 
