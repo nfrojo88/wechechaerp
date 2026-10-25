@@ -1,4 +1,4 @@
-﻿@extends('layouts.app')
+@extends('layouts.app')
 @section('title', 'Petty Cash Material Purchases - Store Keeper')
 
 @section('content')
@@ -112,6 +112,78 @@
             </div>
         </div>
     </div>
+
+    {{-- ── Emergency Material Requests Approved for Petty Cash Purchase ──────── --}}
+    @if(isset($pendingEmergencyMrs) && $pendingEmergencyMrs->isNotEmpty())
+    <div class="card border-0 shadow-sm rounded-3 mb-4 bg-white border-start border-4 border-danger">
+        <div class="card-header bg-danger bg-opacity-10 py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-danger text-white px-2.5 py-1.5"><i class="fa-solid fa-bolt me-1"></i>URGENT SITE DEMAND</span>
+                <h6 class="mb-0 fw-bold text-danger">
+                    Emergency Material Requests Waiting for Petty Cash Purchase ({{ $pendingEmergencyMrs->count() }})
+                </h6>
+            </div>
+            <small class="text-muted">Approved by Planning Manager to be bought immediately on spot using Site Petty Cash.</small>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-3">Request #</th>
+                            <th>Project / Site Store</th>
+                            <th>Materials Requested</th>
+                            <th>Requested By</th>
+                            <th>Approved Date</th>
+                            <th class="text-end pe-3">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach($pendingEmergencyMrs as $emr)
+                        <tr>
+                            <td class="ps-3">
+                                <span class="fw-bold font-monospace text-primary">#{{ $emr->reference_number }}</span>
+                                <span class="badge bg-danger-subtle text-danger border ms-1" style="font-size:0.7rem;">Emergency</span>
+                            </td>
+                            <td>
+                                <div class="fw-semibold text-dark">{{ $emr->project?->name ?? 'Site Project' }}</div>
+                                <small class="text-muted"><i class="fa-solid fa-warehouse me-1"></i>{{ $emr->store?->name ?? 'Store' }}</small>
+                            </td>
+                            <td>
+                                <div class="d-flex flex-wrap gap-1" style="max-width: 360px;">
+                                    @foreach($emr->items as $itm)
+                                        <span class="badge bg-light text-dark border font-monospace py-1 px-2">
+                                            <i class="fa-solid fa-cube text-danger me-1"></i>{{ $itm->product?->name ?? 'Material' }}:
+                                            <strong>{{ (float)$itm->quantity }} {{ $itm->product?->unit ?? $itm->unit ?? 'pcs' }}</strong>
+                                        </span>
+                                    @endforeach
+                                </div>
+                            </td>
+                            <td>
+                                <div class="small fw-semibold text-dark">{{ $emr->requestedBy?->name ?? $emr->creator?->name ?? 'Site Engineer' }}</div>
+                                <small class="text-muted">{{ $emr->created_at->diffForHumans() }}</small>
+                            </td>
+                            <td>
+                                <span class="badge bg-success-subtle text-success border border-success-subtle">
+                                    <i class="fa-solid fa-check-circle me-1"></i>Planning Approved
+                                </span>
+                                <small class="text-muted d-block" style="font-size:0.75rem;">
+                                    {{ $emr->planning_approved_at ? $emr->planning_approved_at->format('M d, H:i') : $emr->updated_at->format('M d, H:i') }}
+                                </small>
+                            </td>
+                            <td class="text-end pe-3">
+                                <a href="{{ route('store-keeper.petty-cash-purchases.create', ['material_request_id' => $emr->id]) }}" class="btn btn-sm btn-success fw-bold shadow-sm px-3">
+                                    <i class="fa-solid fa-cart-shopping me-1"></i> Buy with Petty Cash
+                                </a>
+                            </td>
+                        </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    @endif
 
     {{-- ── Filters & Search ─────────────────────────────────────────────────── --}}
     <div class="card border-0 shadow-sm rounded-3 mb-4 bg-white">

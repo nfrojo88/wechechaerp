@@ -115,6 +115,17 @@ class PettyCashMaterialPurchaseController extends Controller
                         $table->string('fs_no', 20)->nullable()->after('supplier_tin');
                     });
                 }
+                if (!Schema::hasColumn('petty_cash_material_purchases', 'material_request_id')) {
+                    Schema::table('petty_cash_material_purchases', function (Blueprint $table) {
+                        $table->foreignId('material_request_id')->nullable()->after('delivery_receipt_id')->constrained('material_requests')->nullOnDelete();
+                    });
+                }
+            }
+
+            if (Schema::hasTable('material_requests') && !Schema::hasColumn('material_requests', 'purchase_method')) {
+                Schema::table('material_requests', function (Blueprint $table) {
+                    $table->string('purchase_method', 50)->nullable()->after('status');
+                });
             }
         } catch (\Throwable $e) {
             // Silently continue if schema cannot be created here
@@ -271,6 +282,29 @@ class PettyCashMaterialPurchaseController extends Controller
         }
         $replenishments = $replenishmentsQuery->paginate(15, ['*'], 'rep_page')->withQueryString();
 
+        // Emergency Material Requests approved for Site Petty Cash purchase
+        $pendingEmergencyMrsQuery = \App\Models\MaterialRequest::with(['project', 'store', 'creator', 'requestedBy', 'items.product', 'planningApprover'])
+            ->where(function($q) {
+                $q->where('status', 'approved_for_petty_cash')
+                  ->orWhere(fn($sq) => $sq->where('purchase_method', 'petty_cash')->whereNotIn('status', ['completed', 'fulfilled', 'rejected', 'cancelled']));
+            })
+            ->latest('planning_approved_at')
+            ->latest('id');
+
+        if ($isStoreKeeper && $assignedStore) {
+            $pendingEmergencyMrsQuery->where(function ($q) use ($assignedStore) {
+                $q->where('destination_store_id', $assignedStore->id)
+                  ->orWhere('project_id', $assignedStore->project_id);
+            });
+        } elseif ($request->filled('store_id')) {
+            $pendingEmergencyMrsQuery->where(function ($q) use ($request) {
+                $st = Store::find($request->store_id);
+                $q->where('destination_store_id', $request->store_id)
+                  ->when($st && $st->project_id, fn($sq) => $sq->orWhere('project_id', $st->project_id));
+            });
+        }
+        $pendingEmergencyMrs = $pendingEmergencyMrsQuery->get();
+
         return view('store-keeper.petty-cash-purchases.index', compact(
             'purchases',
             'assignedStore',
@@ -281,14 +315,15 @@ class PettyCashMaterialPurchaseController extends Controller
             'pettyCashAccount',
             'sourceAccounts',
             'storeKeepers',
-            'replenishments'
+            'replenishments',
+            'pendingEmergencyMrs'
         ));
     }
 
     /**
      * Create Petty Cash Material Purchase Form
      */
-    public function create()
+    public function create(Request $request)
     {
         self::ensureSchema();
 
@@ -301,6 +336,57 @@ class PettyCashMaterialPurchaseController extends Controller
         $products = Product::where('is_active', true)->orderBy('name')->get();
 
         $targetStore = $assignedStore ?? $stores->first();
+
+        // ── Pre-fill from Emergency Material Request if provided ──────────────
+        $selectedMaterialRequest = null;
+        $prefilledItems = collect();
+
+        if ($request->filled('material_request_id')) {
+            $selectedMaterialRequest = \App\Models\MaterialRequest::with(['items.product', 'project', 'store', 'planningApprover', 'requestedBy'])->find($request->material_request_id);
+            if ($selectedMaterialRequest) {
+                if ($selectedMaterialRequest->destination_store_id) {
+                    $mStore = Store::find($selectedMaterialRequest->destination_store_id);
+                    if ($mStore) {
+                        $targetStore = $mStore;
+                    }
+                } elseif ($selectedMaterialRequest->project_id) {
+                    $pStore = Store::where('project_id', $selectedMaterialRequest->project_id)->first();
+                    if ($pStore) {
+                        $targetStore = $pStore;
+                    }
+                }
+
+                $prefilledItems = $selectedMaterialRequest->items->map(function ($it) {
+                    return [
+                        'product_id'   => $it->product_id,
+                        'product_name' => $it->product?->name ?? 'Material',
+                        'product_code' => $it->product?->code ?? $it->product?->sku ?? '',
+                        'quantity'     => (float) $it->quantity,
+                        'unit'         => $it->product?->unit ?? $it->unit ?? 'pcs',
+                        'unit_price'   => (float) ($it->product?->unit_price ?? 0),
+                        'remarks'      => $it->notes ?? '',
+                    ];
+                });
+            }
+        }
+
+        // Available Emergency MRs for quick selection
+        $pendingEmergencyMrsQuery = \App\Models\MaterialRequest::with(['project', 'store', 'creator', 'requestedBy', 'items.product', 'planningApprover'])
+            ->where(function($q) {
+                $q->where('status', 'approved_for_petty_cash')
+                  ->orWhere(fn($sq) => $sq->where('purchase_method', 'petty_cash')->whereNotIn('status', ['completed', 'fulfilled', 'rejected', 'cancelled']));
+            })
+            ->latest('planning_approved_at')
+            ->latest('id');
+
+        if ($isStoreKeeper && $assignedStore) {
+            $pendingEmergencyMrsQuery->where(function ($q) use ($assignedStore) {
+                $q->where('destination_store_id', $assignedStore->id)
+                  ->orWhere('project_id', $assignedStore->project_id);
+            });
+        }
+        $pendingEmergencyMrs = $pendingEmergencyMrsQuery->get();
+
         $pettyCashAccount = $targetStore ? $this->resolveStoreSitePettyCash($targetStore, $user) : null;
 
         $replenishedPurchaseNos = PettyCashReplenishmentItem::pluck('reference')->filter()->toArray();
@@ -374,7 +460,10 @@ class PettyCashMaterialPurchaseController extends Controller
             'storeKeepers',
             'unreplenishedPurchases',
             'unreplenishedTotal',
-            'pendingReplenishment'
+            'pendingReplenishment',
+            'selectedMaterialRequest',
+            'prefilledItems',
+            'pendingEmergencyMrs'
         ));
     }
 
@@ -399,6 +488,7 @@ class PettyCashMaterialPurchaseController extends Controller
         $validated = $request->validate([
             'store_id'            => 'required|exists:stores,id',
             'chart_of_account_id' => 'nullable|exists:chart_of_accounts,id',
+            'material_request_id' => 'nullable|exists:material_requests,id',
             'purchase_date'       => 'required|date',
             'supplier_name'       => 'required|string|max:255',
             'supplier_tin'        => 'nullable|string|max:20',
@@ -451,8 +541,38 @@ class PettyCashMaterialPurchaseController extends Controller
                 'total_amount'        => $totalAmount,
                 'notes'               => $validated['notes'] ?? null,
                 'attachment_path'     => $attachmentPath,
+                'material_request_id' => $validated['material_request_id'] ?? null,
                 'status'              => 'completed',
             ]);
+
+            // If this purchase fulfills an Emergency Material Request, mark MR as completed
+            if (!empty($validated['material_request_id'])) {
+                $mr = \App\Models\MaterialRequest::find($validated['material_request_id']);
+                if ($mr) {
+                    $mr->update([
+                        'status' => 'completed',
+                        'notes'  => ($mr->notes ? $mr->notes . "\n" : '') . "Fulfilled via Petty Cash Purchase #{$purchaseNo} (Slip/Receipt: {$validated['receipt_no']}) on " . date('Y-m-d') . " by {$user->name}.",
+                    ]);
+
+                    // Complete companion PRs if any
+                    $mr->loadMissing('purchaseRequests');
+                    foreach ($mr->purchaseRequests as $pr) {
+                        $pr->update(['status' => \App\Models\PurchaseRequest::STATUS_COMPLETED]);
+                        try {
+                            \App\Models\PrWorkflowLog::create([
+                                'purchase_request_id' => $pr->id,
+                                'from_stage'          => $pr->status,
+                                'to_stage'            => \App\Models\PurchaseRequest::STATUS_COMPLETED,
+                                'action'              => 'petty_cash_fulfilled',
+                                'actor_role'          => 'store_keeper',
+                                'actor_id'            => $user->id,
+                                'notes'               => "Emergency Request fulfilled via Petty Cash Purchase #{$purchaseNo} (Receipt/Slip: {$validated['receipt_no']}). Materials added to store stock.",
+                                'created_at'          => now(),
+                            ]);
+                        } catch (\Throwable $e) {}
+                    }
+                }
+            }
 
             // 2. Create Dummy PO for DeliveryReceipt (required by schema)
             $refNumber = 'PETTY-CASH-' . time();
@@ -664,8 +784,13 @@ class PettyCashMaterialPurchaseController extends Controller
             return $purchase;
         });
 
+        $successMsg = "Material purchase #{$purchase->purchase_no} recorded successfully! Stock has been added to {$store->name} inventory, GRN slip generated, and Petty Cash ledger updated.";
+        if (!empty($validated['material_request_id'])) {
+            $successMsg .= " Linked Emergency Material Request has been marked as FULFILLED.";
+        }
+
         return redirect()->route('store-keeper.petty-cash-purchases.show', $purchase)
-            ->with('success', "Material purchase #{$purchase->purchase_no} recorded successfully! Stock has been added to {$store->name} inventory, GRN slip generated, and Petty Cash ledger updated.");
+            ->with('success', $successMsg);
     }
 
     /**

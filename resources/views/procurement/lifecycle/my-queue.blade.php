@@ -288,7 +288,13 @@
                                     @if($isPlanningManagerUser)
                                         <form method="POST" action="{{ route('material-requests.planning-approve', $mr->id) }}">
                                             @csrf
-                                            <button type="submit" class="btn btn-sm btn-success"><i class="fas fa-check me-1"></i> Approve</button>
+                                            <button type="submit" class="btn btn-sm btn-success" title="Approve for standard Procurement Lifecycle"><i class="fas fa-check me-1"></i> Approve</button>
+                                        </form>
+                                        <form method="POST" action="{{ route('material-requests.planning-approve-petty-cash', $mr->id) }}">
+                                            @csrf
+                                            <button type="submit" class="btn btn-sm btn-warning text-dark fw-bold shadow-xs" title="Approve for direct Spot Purchase via Site Petty Cash by Store Keeper">
+                                                <i class="fa-solid fa-coins me-1"></i> Buy with Petty Cash
+                                            </button>
                                         </form>
                                         <button type="button" class="btn btn-sm btn-danger shadow-xs fw-semibold" onclick="openRejectQueueModal('mr', {{ $mr->id }}, '{{ addslashes($mr->reference_number) }}', 'planning')" title="Reject Emergency Request (Planning Manager)">
                                             <i class="fas fa-times me-1"></i> Reject
@@ -427,6 +433,12 @@
                                                 <i class="fas fa-share me-1"></i> Dispatch to Store
                                             </button>
                                         </form>
+                                        <form method="POST" action="{{ route('material-requests.coordinator-approve-petty-cash', $cmr) }}" class="d-inline">
+                                            @csrf
+                                            <button type="submit" class="btn btn-sm btn-warning text-dark fw-bold shadow-xs" title="Route to Store Keeper for direct Spot Purchase via Site Petty Cash">
+                                                <i class="fa-solid fa-coins me-1"></i> Buy with Petty Cash
+                                            </button>
+                                        </form>
                                         <button type="button" class="btn btn-sm btn-danger shadow-xs fw-semibold"
                                                 onclick="openRejectQueueModal('pr', {{ $compPr->id }}, '{{ addslashes($compPr->pr_no) }}', 'coordinator')"
                                                 title="Reject this emergency purchase request">
@@ -440,6 +452,12 @@
                                             @csrf
                                             <button type="submit" class="btn btn-sm btn-primary fw-bold shadow-xs">
                                                 <i class="fas fa-share me-1"></i> Dispatch to Store
+                                            </button>
+                                        </form>
+                                        <form method="POST" action="{{ route('material-requests.coordinator-approve-petty-cash', $cmr) }}" class="d-inline">
+                                            @csrf
+                                            <button type="submit" class="btn btn-sm btn-warning text-dark fw-bold shadow-xs" title="Route to Store Keeper for direct Spot Purchase via Site Petty Cash">
+                                                <i class="fa-solid fa-coins me-1"></i> Buy with Petty Cash
                                             </button>
                                         </form>
                                         <button type="button" class="btn btn-sm btn-danger shadow-xs fw-semibold"

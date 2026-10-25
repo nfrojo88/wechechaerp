@@ -1,4 +1,4 @@
-﻿@extends('layouts.app')
+@extends('layouts.app')
 @section('title', 'Purchase #' . $purchase->purchase_no . ' - Petty Cash Buy')
 
 @section('content')
@@ -229,6 +229,14 @@
                             <span class="text-muted">Petty Cash Fund:</span>
                             <span class="badge bg-warning text-dark font-monospace">{{ $purchase->chartOfAccount->name ?? 'Petty Cash' }}</span>
                         </li>
+                        @if($purchase->materialRequest)
+                        <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
+                            <span class="text-muted">Fulfilled Emergency Request:</span>
+                            <span class="badge bg-danger font-monospace">
+                                <i class="fa-solid fa-bolt me-1"></i>#{{ $purchase->materialRequest->reference_number }}
+                            </span>
+                        </li>
+                        @endif
                         @if($purchase->notes)
                         <li class="list-group-item px-0 py-2">
                             <span class="text-muted d-block mb-1">Notes:</span>

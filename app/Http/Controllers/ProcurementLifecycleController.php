@@ -44,7 +44,7 @@ class ProcurementLifecycleController extends Controller
                     $q->where('status', 'planning_approved')
                       ->orWhere('planning_approval_status', 'approved');
                 })
-                ->whereNotIn('status', ['sent_to_store_manager', 'sent_to_pr', 'transferred', 'transfer_created', 'approved', 'rejected', 'cancelled', 'completed'])
+                ->whereNotIn('status', ['approved_for_petty_cash', 'sent_to_store_manager', 'sent_to_pr', 'transferred', 'transfer_created', 'approved', 'rejected', 'cancelled', 'completed'])
                 ->with('purchaseRequests')
                 ->get();
 
@@ -355,7 +355,7 @@ class ProcurementLifecycleController extends Controller
             $emergencyMrs = MaterialRequest::with(['project', 'creator', 'requestedBy', 'maintenanceRequest', 'items.product', 'purchaseRequests'])
                 ->whereHas('items')
                 ->where('planning_approval_status', 'pending')
-                ->whereNotIn('status', ['planning_approved', 'sent_to_store_manager', 'sent_to_pr', 'transferred', 'transfer_created', 'approved', 'rejected', 'cancelled', 'completed'])
+                ->whereNotIn('status', ['planning_approved', 'approved_for_petty_cash', 'sent_to_store_manager', 'sent_to_pr', 'transferred', 'transfer_created', 'approved', 'rejected', 'cancelled', 'completed'])
                 ->where(function($q) {
                     $q->whereDoesntHave('purchaseRequests')
                       ->orWhereHas('purchaseRequests', function($pq) {
@@ -375,7 +375,7 @@ class ProcurementLifecycleController extends Controller
                     $q->where('status', 'planning_approved')
                       ->orWhere('planning_approval_status', 'approved');
                 })
-                ->whereNotIn('status', ['sent_to_store_manager', 'sent_to_pr', 'transferred', 'transfer_created', 'approved', 'rejected', 'cancelled', 'completed'])
+                ->whereNotIn('status', ['approved_for_petty_cash', 'sent_to_store_manager', 'sent_to_pr', 'transferred', 'transfer_created', 'approved', 'rejected', 'cancelled', 'completed'])
                 ->where(function($q) {
                     $q->whereDoesntHave('purchaseRequests')
                       ->orWhereHas('purchaseRequests', function($pq) {

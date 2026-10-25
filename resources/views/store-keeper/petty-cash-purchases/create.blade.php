@@ -68,9 +68,72 @@
     </div>
     @endif
 
+    {{-- Emergency Material Request Pre-fill Alert Banner --}}
+    @if(isset($selectedMaterialRequest))
+        <div class="card border-0 shadow-sm rounded-3 mb-4 bg-white border-start border-4 border-danger">
+            <div class="card-body p-3 d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="rounded-circle bg-danger bg-opacity-10 p-2 text-danger d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;">
+                        <i class="fa-solid fa-bolt fa-xl text-danger"></i>
+                    </div>
+                    <div>
+                        <div class="d-flex align-items-center gap-2">
+                            <h6 class="mb-0 fw-bold text-dark">
+                                Fulfilling Emergency Material Request:
+                                <span class="text-primary font-monospace">#{{ $selectedMaterialRequest->reference_number }}</span>
+                            </h6>
+                            <span class="badge bg-danger">Emergency Site Demand</span>
+                        </div>
+                        <p class="mb-0 text-muted small mt-0.5">
+                            Project: <strong>{{ $selectedMaterialRequest->project?->name ?? 'Site' }}</strong> &bull;
+                            Requested by: <strong>{{ $selectedMaterialRequest->requestedBy?->name ?? 'Site Engineer' }}</strong> &bull;
+                            Approved for Site Petty Cash by: <strong>{{ $selectedMaterialRequest->planningApprover?->name ?? 'Planning Manager' }}</strong>
+                        </p>
+                    </div>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-warning text-dark px-3 py-2 fw-bold">
+                        <i class="fa-solid fa-pencil me-1"></i>Enter Money &amp; Slip No below then buy it
+                    </span>
+                    <a href="{{ route('store-keeper.petty-cash-purchases.create') }}" class="btn btn-sm btn-outline-secondary" title="Clear pre-fill and create manual purchase">
+                        Clear Pre-fill
+                    </a>
+                </div>
+            </div>
+        </div>
+    @elseif(isset($pendingEmergencyMrs) && $pendingEmergencyMrs->isNotEmpty())
+        <div class="alert alert-warning border-0 shadow-sm rounded-3 mb-4 d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-2">
+                <i class="fa-solid fa-bolt text-danger fa-lg"></i>
+                <div>
+                    <strong class="text-dark">{{ $pendingEmergencyMrs->count() }} Emergency Material Request(s) approved for Site Petty Cash purchase.</strong>
+                    <div class="small text-muted">Auto-populate materials so you don't have to enter them manually:</div>
+                </div>
+            </div>
+            <div class="dropdown">
+                <button class="btn btn-sm btn-warning dropdown-toggle fw-bold text-dark shadow-xs" type="button" data-bs-toggle="dropdown">
+                    <i class="fa-solid fa-bolt me-1 text-danger"></i> Select Emergency Request to Fulfill
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                    @foreach($pendingEmergencyMrs as $pemr)
+                    <li>
+                        <a class="dropdown-item py-2" href="{{ route('store-keeper.petty-cash-purchases.create', ['material_request_id' => $pemr->id]) }}">
+                            <div class="fw-bold font-monospace text-primary">#{{ $pemr->reference_number }}</div>
+                            <small class="text-muted d-block">{{ $pemr->project?->name }} &bull; {{ $pemr->items->count() }} items</small>
+                        </a>
+                    </li>
+                    @endforeach
+                </ul>
+            </div>
+        </div>
+    @endif
+
     {{-- ── Main Purchase Form ────────────────────────────────────────────────── --}}
     <form action="{{ route('store-keeper.petty-cash-purchases.store') }}" method="POST" enctype="multipart/form-data" id="pettyCashPurchaseForm">
         @csrf
+        @if(isset($selectedMaterialRequest))
+            <input type="hidden" name="material_request_id" value="{{ $selectedMaterialRequest->id }}">
+        @endif
 
         <div class="row g-4 mb-4">
 
@@ -216,7 +279,7 @@
                         {{-- Notes --}}
                         <div class="mb-0">
                             <label class="form-label fw-semibold text-dark small">Notes / Purpose</label>
-                            <textarea name="notes" id="pettyNotes" rows="2" class="form-control form-control-sm" placeholder="Purpose or site usage note...">{{ old('notes') }}</textarea>
+                            <textarea name="notes" id="pettyNotes" rows="2" class="form-control form-control-sm" placeholder="Purpose or site usage note...">{{ old('notes', isset($selectedMaterialRequest) ? "Emergency Material Request #{$selectedMaterialRequest->reference_number} - Spot purchase for " . ($selectedMaterialRequest->project?->name ?? 'Site Store') : '') }}</textarea>
                         </div>
 
                     </div>
@@ -257,36 +320,76 @@
                                     </tr>
                                 </thead>
                                 <tbody id="itemsTbody">
-                                    {{-- Row 1 --}}
-                                    <tr class="item-row">
-                                        <td class="ps-3">
-                                            <select name="items[0][product_id]" class="form-select form-select-sm product-select" required>
-                                                <option value="">-- Choose Material --</option>
-                                                @foreach($products as $p)
-                                                    <option value="{{ $p->id }}" data-unit="{{ $p->unit_of_measure ?? $p->unit ?? 'pcs' }}" data-price="{{ $p->unit_price ?? $p->standard_cost ?? 0 }}">
-                                                        {{ $p->name }} [{{ $p->code ?? $p->sku ?? 'PRD' }}]
-                                                    </option>
-                                                @endforeach
-                                            </select>
-                                        </td>
-                                        <td>
-                                            <input type="number" step="0.001" min="0.001" name="items[0][quantity]" class="form-control form-control-sm qty-input text-center fw-bold" placeholder="0.00" required>
-                                        </td>
-                                        <td>
-                                            <input type="text" name="items[0][unit]" class="form-control form-control-sm unit-input bg-light" placeholder="pcs" readonly>
-                                        </td>
-                                        <td>
-                                            <input type="number" step="0.01" min="0" name="items[0][unit_price]" class="form-control form-control-sm price-input text-end fw-bold" placeholder="0.00" required>
-                                        </td>
-                                        <td class="text-end">
-                                            <strong class="row-total-display font-monospace text-dark">0.00</strong>
-                                        </td>
-                                        <td class="text-center pe-3">
-                                            <button type="button" class="btn btn-sm btn-link text-danger p-0 remove-row-btn" title="Remove Row" disabled>
-                                                <i class="fa-solid fa-trash-can"></i>
-                                            </button>
-                                        </td>
-                                    </tr>
+                                    @if(isset($prefilledItems) && $prefilledItems->count() > 0)
+                                        @foreach($prefilledItems as $idx => $pItem)
+                                        <tr class="item-row table-warning bg-opacity-25">
+                                            <td class="ps-3">
+                                                <select name="items[{{ $idx }}][product_id]" class="form-select form-select-sm product-select" required>
+                                                    <option value="">-- Choose Material --</option>
+                                                    @foreach($products as $p)
+                                                        <option value="{{ $p->id }}"
+                                                                data-unit="{{ $p->unit_of_measure ?? $p->unit ?? 'pcs' }}"
+                                                                data-price="{{ $p->unit_price ?? $p->standard_cost ?? 0 }}"
+                                                                @selected($pItem['product_id'] == $p->id)>
+                                                            {{ $p->name }} [{{ $p->code ?? $p->sku ?? 'PRD' }}]
+                                                        </option>
+                                                    @endforeach
+                                                </select>
+                                                @if(!empty($pItem['remarks']))
+                                                    <small class="text-muted d-block mt-1"><i class="fa-solid fa-comment-dots me-1"></i>{{ $pItem['remarks'] }}</small>
+                                                @endif
+                                            </td>
+                                            <td>
+                                                <input type="number" step="0.001" min="0.001" name="items[{{ $idx }}][quantity]" value="{{ $pItem['quantity'] }}" class="form-control form-control-sm qty-input text-center fw-bold" placeholder="0.00" required>
+                                            </td>
+                                            <td>
+                                                <input type="text" name="items[{{ $idx }}][unit]" value="{{ $pItem['unit'] }}" class="form-control form-control-sm unit-input bg-light" placeholder="pcs" readonly>
+                                            </td>
+                                            <td>
+                                                <input type="number" step="0.01" min="0" name="items[{{ $idx }}][unit_price]" value="{{ $pItem['unit_price'] > 0 ? $pItem['unit_price'] : '' }}" class="form-control form-control-sm price-input text-end fw-bold border-warning" placeholder="Enter money..." required autofocus>
+                                            </td>
+                                            <td class="text-end">
+                                                <strong class="row-total-display font-monospace text-dark">{{ number_format($pItem['quantity'] * $pItem['unit_price'], 2) }}</strong>
+                                            </td>
+                                            <td class="text-center pe-3">
+                                                <button type="button" class="btn btn-sm btn-link text-danger p-0 remove-row-btn" title="Remove Row">
+                                                    <i class="fa-solid fa-trash-can"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        @endforeach
+                                    @else
+                                        {{-- Row 1 Default --}}
+                                        <tr class="item-row">
+                                            <td class="ps-3">
+                                                <select name="items[0][product_id]" class="form-select form-select-sm product-select" required>
+                                                    <option value="">-- Choose Material --</option>
+                                                    @foreach($products as $p)
+                                                        <option value="{{ $p->id }}" data-unit="{{ $p->unit_of_measure ?? $p->unit ?? 'pcs' }}" data-price="{{ $p->unit_price ?? $p->standard_cost ?? 0 }}">
+                                                            {{ $p->name }} [{{ $p->code ?? $p->sku ?? 'PRD' }}]
+                                                        </option>
+                                                    @endforeach
+                                                </select>
+                                            </td>
+                                            <td>
+                                                <input type="number" step="0.001" min="0.001" name="items[0][quantity]" class="form-control form-control-sm qty-input text-center fw-bold" placeholder="0.00" required>
+                                            </td>
+                                            <td>
+                                                <input type="text" name="items[0][unit]" class="form-control form-control-sm unit-input bg-light" placeholder="pcs" readonly>
+                                            </td>
+                                            <td>
+                                                <input type="number" step="0.01" min="0" name="items[0][unit_price]" class="form-control form-control-sm price-input text-end fw-bold" placeholder="0.00" required>
+                                            </td>
+                                            <td class="text-end">
+                                                <strong class="row-total-display font-monospace text-dark">0.00</strong>
+                                            </td>
+                                            <td class="text-center pe-3">
+                                                <button type="button" class="btn btn-sm btn-link text-danger p-0 remove-row-btn" title="Remove Row" disabled>
+                                                    <i class="fa-solid fa-trash-can"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    @endif
                                 </tbody>
                             </table>
                         </div>
@@ -706,7 +809,7 @@
 <script type="application/json" id="storesDataScript">{!! json_encode($storesData ?? []) !!}</script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    let rowIndex = 1;
+    let rowIndex = {{ isset($prefilledItems) && $prefilledItems->count() > 0 ? $prefilledItems->count() : 1 }};
     let availablePettyCash = parseFloat("{{ $pettyCashAccount->current_balance ?? 0 }}") || 0;
     const storesData = JSON.parse(document.getElementById('storesDataScript')?.textContent || '[]');
 
@@ -1042,8 +1145,9 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Attach listeners to initial row
+    // Attach listeners to initial rows and calculate initial values
     document.querySelectorAll('.item-row').forEach(attachRowListeners);
+    recalculate();
 
     // Add row button
     if (addRowBtn) {

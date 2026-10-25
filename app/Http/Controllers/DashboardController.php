@@ -1753,15 +1753,26 @@ class DashboardController extends Controller
                 ->latest('id')
                 ->take(6)
                 ->get(), collect());
+
+            // Emergency Material Requests approved for Petty Cash
+            $pendingPettyCashEmergencyMrs = $this->safe(function () use ($storeId, $assignedStore) {
+                return \App\Models\MaterialRequest::with(['items.product', 'project'])
+                    ->where('status', 'approved_for_petty_cash')
+                    ->when($storeId, fn($q) => $q->where(fn($sq) => $sq->where('destination_store_id', $storeId)->orWhere('project_id', $assignedStore?->project_id)))
+                    ->latest()
+                    ->get();
+            }, collect());
         } else {
             $recentPettyCashPurchases = collect();
+            $pendingPettyCashEmergencyMrs = collect();
         }
 
         return view('dashboard.store-keeper', compact(
             'assignedStore', 'storeId', 'kpi',
             'storeInventory', 'lowStockItems',
             'incomingTransfers', 'outgoingTransfers', 'recentTransfers',
-            'materialRequests', 'recentDeliveryReceipts', 'recentPettyCashPurchases'
+            'materialRequests', 'recentDeliveryReceipts', 'recentPettyCashPurchases',
+            'pendingPettyCashEmergencyMrs'
         ));
     }
 

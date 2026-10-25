@@ -27,6 +27,7 @@ class PettyCashMaterialPurchase extends Model
         'attachment_path',
         'delivery_receipt_id',
         'journal_entry_id',
+        'material_request_id',
         'status',
     ];
 
@@ -58,6 +59,11 @@ class PettyCashMaterialPurchase extends Model
     public function journalEntry()
     {
         return $this->belongsTo(JournalEntry::class);
+    }
+
+    public function materialRequest()
+    {
+        return $this->belongsTo(MaterialRequest::class, 'material_request_id');
     }
 
     public function items()

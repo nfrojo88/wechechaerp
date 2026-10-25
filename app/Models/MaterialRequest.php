@@ -16,6 +16,7 @@ class MaterialRequest extends Model
         'reference_number',
         'source',
         'status',
+        'purchase_method',
         'required_date',
         'notes',
         'created_by',
@@ -81,6 +82,16 @@ class MaterialRequest extends Model
     public function maintenanceRequest()
     {
         return $this->belongsTo(MaintenanceRequest::class, 'maintenance_request_id');
+    }
+
+    public function pettyCashPurchases()
+    {
+        return $this->hasMany(PettyCashMaterialPurchase::class, 'material_request_id');
+    }
+
+    public function pettyCashPurchase()
+    {
+        return $this->hasOne(PettyCashMaterialPurchase::class, 'material_request_id')->latestOfMany();
     }
 
     /**

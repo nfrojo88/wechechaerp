@@ -50,6 +50,30 @@
             </div>
         </div>
     </div>
+
+    {{-- Emergency Material Requests Awaiting Petty Cash Purchase Alert --}}
+    @if(isset($pendingPettyCashEmergencyMrs) && $pendingPettyCashEmergencyMrs->isNotEmpty())
+    <div class="card border-0 shadow-sm rounded-3 mb-4 bg-white border-start border-4 border-danger">
+        <div class="card-body p-3 d-flex flex-wrap justify-content-between align-items-center gap-3">
+            <div class="d-flex align-items-center gap-3">
+                <div class="rounded-circle bg-danger bg-opacity-10 p-2 text-danger d-flex align-items-center justify-content-center" style="width: 46px; height: 46px;">
+                    <i class="fa-solid fa-bolt fa-lg text-danger"></i>
+                </div>
+                <div>
+                    <div class="fw-bold text-dark">
+                        {{ $pendingPettyCashEmergencyMrs->count() }} Emergency Material Request(s) Approved for Petty Cash Purchase!
+                    </div>
+                    <small class="text-muted">
+                        Planning Manager approved urgent site material request(s). Materials are pre-loaded—enter price &amp; slip number to buy.
+                    </small>
+                </div>
+            </div>
+            <a href="{{ route('store-keeper.petty-cash-purchases.index') }}" class="btn btn-danger btn-sm fw-bold shadow-sm px-3">
+                <i class="fa-solid fa-cart-shopping me-1"></i> Open Petty Cash Purchase Queue
+            </a>
+        </div>
+    </div>
+    @endif
     @else
     <div class="alert alert-warning border-0 shadow-sm rounded-3 mb-4 p-4">
         <div class="d-flex align-items-center gap-3">
