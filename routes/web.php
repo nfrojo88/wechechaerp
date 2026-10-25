@@ -224,11 +224,35 @@ Route::get('/run-migrations', function () {
             });
         }
 
-        // Check current columns in employees & payrolls table
+        // Direct guarantee for procurement_receipts withholding columns
+        if (\Illuminate\Support\Facades\Schema::hasTable('procurement_receipts')) {
+            \Illuminate\Support\Facades\Schema::table('procurement_receipts', function (\Illuminate\Database\Schema\Blueprint $table) {
+                if (!\Illuminate\Support\Facades\Schema::hasColumn('procurement_receipts', 'withholding_receipt_path')) {
+                    $table->string('withholding_receipt_path', 500)->nullable();
+                }
+                if (!\Illuminate\Support\Facades\Schema::hasColumn('procurement_receipts', 'withholding_receipt_number')) {
+                    $table->string('withholding_receipt_number', 100)->nullable();
+                }
+                if (!\Illuminate\Support\Facades\Schema::hasColumn('procurement_receipts', 'has_withholding')) {
+                    $table->boolean('has_withholding')->default(false);
+                }
+                if (!\Illuminate\Support\Facades\Schema::hasColumn('procurement_receipts', 'withholding_rate')) {
+                    $table->decimal('withholding_rate', 5, 2)->default(2.00);
+                }
+                if (!\Illuminate\Support\Facades\Schema::hasColumn('procurement_receipts', 'withholding_amount')) {
+                    $table->decimal('withholding_amount', 18, 2)->default(0);
+                }
+            });
+        }
+
+        // Check current columns in employees & payrolls & procurement_receipts table
         $columns = \Illuminate\Support\Facades\Schema::getColumnListing('employees');
         $gmCols = array_filter($columns, fn($c) => str_contains($c, 'gm_'));
         $payrollCols = \Illuminate\Support\Facades\Schema::getColumnListing('payrolls');
         $pensionCols = array_intersect($payrollCols, ['company_pension', 'taxable_income', 'loan_deduction', 'absence_deduction', 'absent_days']);
+        $prReceiptCols = \Illuminate\Support\Facades\Schema::hasTable('procurement_receipts')
+            ? array_intersect(\Illuminate\Support\Facades\Schema::getColumnListing('procurement_receipts'), ['withholding_receipt_path', 'withholding_receipt_number', 'has_withholding', 'withholding_rate', 'withholding_amount'])
+            : [];
 
         return "<div style='font-family:sans-serif;max-width:900px;margin:40px auto;padding:0;border-radius:14px;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,0.12);'>"
              . "<div style='background:linear-gradient(135deg,#065f46,#10b981);padding:28px 32px;color:#fff;'>"
@@ -249,6 +273,10 @@ Route::get('/run-migrations', function () {
              . (count($gmCols) > 0
                 ? '  ✅ Found: ' . implode(', ', $gmCols)
                 : '  ❌ NOT FOUND — migration may not have run correctly. See error above.')
+             . "</pre>"
+             . "<h3 style='color:#374151;font-size:15px;'>🗄️ Withholding Columns in <code>procurement_receipts</code> table:</h3>"
+             . "<pre style='background:#f0fdf4;border:1px solid #bbf7d0;padding:16px;border-radius:8px;color:#15803d;font-size:13px;'>"
+             . '  ✅ Found in procurement_receipts: ' . implode(', ', $prReceiptCols)
              . "</pre>"
              . "<div style='margin-top:24px;display:flex;gap:12px;flex-wrap:wrap;'>"
              . "<a href='/finance/payroll' style='background:#2563eb;color:#fff;padding:10px 20px;text-decoration:none;border-radius:6px;font-weight:bold;font-size:14px;'>💵 Go to Finance Payroll</a>"
@@ -1010,21 +1038,6 @@ Route::get('/clear-cache', function () {
         return "<div style='font-family:sans-serif;max-width:700px;margin:40px auto;padding:24px;border-radius:10px;background:#ecfdf5;border:2px solid #10b981;color:#065f46;'>"
              . "<h2>✅ Cache Cleared Successfully!</h2>"
              . "<p>Route cache, view cache, and config cache have been cleared.</p>"
-             . "<a href='/dashboard/site-engineer' style='display:inline-block;padding:10px 18px;background:#059669;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;'>Go to Site Engineer Dashboard</a>"
-             . "</div>";
-    } catch (\Throwable $e) {
-        return "<div style='color:red;padding:20px;'>Error: " . htmlspecialchars($e->getMessage()) . "</div>";
-    }
-});
-
-Route::get('/run-migrations', function () {
-    try {
-        \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]);
-        $output = \Illuminate\Support\Facades\Artisan::output();
-        \Illuminate\Support\Facades\Artisan::call('optimize:clear');
-        return "<div style='font-family:sans-serif;max-width:700px;margin:40px auto;padding:24px;border-radius:10px;background:#ecfdf5;border:2px solid #10b981;color:#065f46;'>"
-             . "<h2>✅ Migrations Run & Cache Cleared!</h2>"
-             . "<pre style='background:#f0fdf4;padding:12px;border-radius:6px;'>" . htmlspecialchars($output) . "</pre>"
              . "<a href='/dashboard/site-engineer' style='display:inline-block;padding:10px 18px;background:#059669;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;'>Go to Site Engineer Dashboard</a>"
              . "</div>";
     } catch (\Throwable $e) {
