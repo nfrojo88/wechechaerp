@@ -1873,6 +1873,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('purchase-requests/{purchaseRequest}/finance-send-back-to-gm', [App\Http\Controllers\PurchaseRequestController::class, 'financeSendBackToGm'])->name('purchase-requests.finance-send-back-to-gm');
     Route::post('purchase-requests/{purchaseRequest}/execute-payment', [App\Http\Controllers\PurchaseRequestController::class, 'executePayment'])->name('purchase-requests.execute-payment');
     Route::post('purchase-requests/{purchaseRequest}/upload-receipt', [App\Http\Controllers\PurchaseRequestController::class, 'uploadReceipt'])->name('purchase-requests.upload-receipt');
+    Route::post('purchase-requests/{purchaseRequest}/upload-withholding-receipt', [App\Http\Controllers\PurchaseRequestController::class, 'uploadWithholdingReceipt'])->name('purchase-requests.upload-withholding-receipt');
     Route::post('purchase-requests/{purchaseRequest}/verify-receipt', [App\Http\Controllers\PurchaseRequestController::class, 'verifyReceipt'])->name('purchase-requests.verify-receipt');
     Route::post('purchase-requests/{purchaseRequest}/book-driver', [App\Http\Controllers\PurchaseRequestController::class, 'bookDriver'])->name('purchase-requests.book-driver');
     Route::post('purchase-requests/{purchaseRequest}/store-intake', [App\Http\Controllers\PurchaseRequestController::class, 'storeIntake'])->name('purchase-requests.store-intake');

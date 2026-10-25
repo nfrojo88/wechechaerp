@@ -281,6 +281,45 @@ class PurchaseRequest extends Model
     public function workflowLogs()   { return $this->hasMany(PrWorkflowLog::class)->orderBy('created_at'); }
     public function deliveryReceipts(){ return $this->hasMany(DeliveryReceipt::class); }
 
+    public function getWithholdingReceiptUrlAttribute(): ?string
+    {
+        $path = $this->receipt?->withholding_receipt_path
+            ?? $this->payment?->withholding_receipt;
+        return $path ? \App\Services\FileUploadService::url($path) : null;
+    }
+
+    public function getEffectiveWithholdingReceiptNumberAttribute(): ?string
+    {
+        return $this->receipt?->withholding_receipt_number
+            ?? $this->payment?->withholding_receipt_number;
+    }
+
+    public function getEffectiveWithholdingAmountAttribute(): float
+    {
+        return (float)($this->receipt?->withholding_amount
+            ?? $this->payment?->withholding_amount
+            ?? 0);
+    }
+
+    public function getEffectiveWithholdingRateAttribute(): float
+    {
+        return (float)($this->receipt?->withholding_rate
+            ?? $this->payment?->withholding_rate
+            ?? 2.00);
+    }
+
+    public function getHasEffectiveWithholdingAttribute(): bool
+    {
+        return (bool)(
+            $this->receipt?->has_withholding
+            || $this->payment?->has_withholding
+            || !empty($this->receipt?->withholding_receipt_path)
+            || !empty($this->payment?->withholding_receipt)
+            || ((float)($this->receipt?->withholding_amount ?? 0) > 0)
+            || ((float)($this->payment?->withholding_amount ?? 0) > 0)
+        );
+    }
+
     /**
      * Get transfers associated with this PR (by reason matching PR no or material_request_id).
      */

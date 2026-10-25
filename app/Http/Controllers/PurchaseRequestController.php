@@ -2009,24 +2009,50 @@ class PurchaseRequestController extends Controller
     {
         $this->authorizeStageRole($purchaseRequest, ['purchase', 'procurement_team', 'purchaser', 'buyer', 'purchase_manager']);
         $request->validate([
-            'receipt_file'         => 'required|file|mimes:pdf,jpg,jpeg,png,webp|max:10240',
-            'vendor_name'          => 'nullable|string|max:255',
-            'supplier_tin'         => 'nullable|string|max:20',
-            'fs_no'                => 'nullable|string|max:20',
-            'receipt_date'         => 'nullable|date',
-            'total_amount'         => 'nullable|numeric|min:0',
-            'subtotal'             => 'nullable|numeric|min:0',
-            'vat_amount'           => 'nullable|numeric|min:0',
-            'material_description' => 'nullable|string|max:500',
-            'items_json'           => 'nullable|string',
-            'notes'                => 'nullable|string|max:1000',
+            'receipt_file'               => 'required|file|mimes:pdf,jpg,jpeg,png,webp|max:10240',
+            'vendor_name'                => 'nullable|string|max:255',
+            'supplier_tin'               => 'nullable|string|max:20',
+            'fs_no'                      => 'nullable|string|max:20',
+            'receipt_date'               => 'nullable|date',
+            'total_amount'               => 'nullable|numeric|min:0',
+            'subtotal'                   => 'nullable|numeric|min:0',
+            'vat_amount'                 => 'nullable|numeric|min:0',
+            'material_description'       => 'nullable|string|max:500',
+            'items_json'                 => 'nullable|string',
+            'notes'                      => 'nullable|string|max:1000',
+            'withholding_receipt'        => 'nullable|file|mimes:pdf,jpg,jpeg,png,webp|max:10240',
+            'withholding_receipt_file'   => 'nullable|file|mimes:pdf,jpg,jpeg,png,webp|max:10240',
+            'withholding_receipt_number' => 'nullable|string|max:100',
+            'has_withholding'            => 'nullable|boolean',
+            'withholding_rate'           => 'nullable|numeric|min:0',
+            'withholding_amount'         => 'nullable|numeric|min:0',
         ]);
 
         $file     = $request->file('receipt_file');
         $path     = \App\Services\FileUploadService::upload($file, 'procurement_receipts');
         $original = $file->getClientOriginalName();
 
-        $this->lifecycle->uploadReceipt($purchaseRequest, $path, $original, $request->notes, true);
+        // Process Withholding Receipt if available / uploaded
+        $whtPath = null;
+        $whtFile = $request->file('withholding_receipt') ?: $request->file('withholding_receipt_file');
+        if ($whtFile) {
+            $whtPath = \App\Services\FileUploadService::upload($whtFile, 'procurement_receipts');
+        }
+
+        $hasWithholding = $request->boolean('has_withholding')
+            || !empty($whtPath)
+            || !empty($request->withholding_receipt_number)
+            || ((float)$request->withholding_amount > 0);
+
+        $withholdingData = [
+            'withholding_receipt_path'   => $whtPath,
+            'withholding_receipt_number' => $request->input('withholding_receipt_number'),
+            'has_withholding'            => $hasWithholding,
+            'withholding_rate'           => $request->filled('withholding_rate') ? (float)$request->withholding_rate : 2.00,
+            'withholding_amount'         => $request->filled('withholding_amount') ? (float)$request->withholding_amount : 0.00,
+        ];
+
+        $this->lifecycle->uploadReceipt($purchaseRequest, $path, $original, $request->notes, true, $withholdingData);
 
         // Auto-link to central Receipt table for fiscal and tax declarations
         try {
@@ -2103,6 +2129,64 @@ class PurchaseRequestController extends Controller
         }
 
         return back()->with('success', 'Vendor purchase receipt uploaded and synced to central fiscal receipts. Request routed directly to Store Manager for material intake.');
+    }
+
+    public function uploadWithholdingReceipt(Request $request, PurchaseRequest $purchaseRequest)
+    {
+        $this->authorizeStageRole($purchaseRequest, [
+            'purchase', 'procurement_team', 'purchaser', 'buyer', 'purchase_manager',
+            'finance_head', 'finance_manager', 'finance', 'accountant'
+        ]);
+
+        $request->validate([
+            'withholding_receipt'        => 'required|file|mimes:pdf,jpg,jpeg,png,webp|max:10240',
+            'withholding_receipt_number' => 'nullable|string|max:100',
+            'withholding_rate'           => 'nullable|numeric|min:0',
+            'withholding_amount'         => 'nullable|numeric|min:0',
+        ]);
+
+        $file = $request->file('withholding_receipt');
+        $path = \App\Services\FileUploadService::upload($file, 'procurement_receipts');
+
+        // Update ProcurementReceipt if exists
+        if ($purchaseRequest->receipt) {
+            $receiptData = [
+                'withholding_receipt_path'   => $path,
+                'withholding_receipt_number' => $request->input('withholding_receipt_number'),
+                'has_withholding'            => true,
+            ];
+            if ($request->filled('withholding_amount')) {
+                $receiptData['withholding_amount'] = (float)$request->withholding_amount;
+            }
+            if ($request->filled('withholding_rate')) {
+                $receiptData['withholding_rate'] = (float)$request->withholding_rate;
+            }
+            $filtered = [];
+            foreach ($receiptData as $k => $v) {
+                if (\Illuminate\Support\Facades\Schema::hasColumn('procurement_receipts', $k)) {
+                    $filtered[$k] = $v;
+                }
+            }
+            $purchaseRequest->receipt->update(!empty($filtered) ? $filtered : $receiptData);
+        }
+
+        // Update ProcurementPayment if exists
+        if ($purchaseRequest->payment) {
+            $payData = [
+                'withholding_receipt'        => $path,
+                'withholding_receipt_number' => $request->input('withholding_receipt_number'),
+                'has_withholding'            => true,
+            ];
+            if ($request->filled('withholding_amount')) {
+                $payData['withholding_amount'] = (float)$request->withholding_amount;
+            }
+            if ($request->filled('withholding_rate')) {
+                $payData['withholding_rate'] = (float)$request->withholding_rate;
+            }
+            $purchaseRequest->payment->update($payData);
+        }
+
+        return back()->with('success', 'Withholding tax receipt attached successfully.');
     }
 
     // ─── STAGE 8: Verify Receipt ─────────────────────────────────────────────

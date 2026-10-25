@@ -1009,20 +1009,56 @@ class ProcurementLifecycleService
     // STAGE 8 — Receipt Upload & Direct Store Routing
     // ═══════════════════════════════════════════════════════════════════
 
-    public function uploadReceipt(PurchaseRequest $pr, string $filePath, string $originalFilename, string $notes = null, bool $sendToStore = true): void
+    public function uploadReceipt(PurchaseRequest $pr, string $filePath, string $originalFilename, string $notes = null, bool $sendToStore = true, array $withholdingData = []): void
     {
         $from = $pr->status;
 
-        ProcurementReceipt::create([
-            'purchase_request_id' => $pr->id,
-            'file_path'           => $filePath,
-            'original_filename'   => $originalFilename,
-            'notes'               => $notes,
-            'uploaded_by'         => Auth::id(),
-            'verification_status' => 'verified',
-            'verified_by'         => Auth::id(),
-            'verified_at'         => now(),
-        ]);
+        $receiptPayload = [
+            'purchase_request_id'        => $pr->id,
+            'file_path'                  => $filePath,
+            'original_filename'          => $originalFilename,
+            'notes'                      => $notes,
+            'uploaded_by'                => Auth::id(),
+            'verification_status'        => 'verified',
+            'verified_by'                => Auth::id(),
+            'verified_at'                => now(),
+            'withholding_receipt_path'   => $withholdingData['withholding_receipt_path'] ?? null,
+            'withholding_receipt_number' => $withholdingData['withholding_receipt_number'] ?? null,
+            'has_withholding'            => !empty($withholdingData['has_withholding']),
+            'withholding_rate'           => isset($withholdingData['withholding_rate']) ? (float)$withholdingData['withholding_rate'] : 2.00,
+            'withholding_amount'         => isset($withholdingData['withholding_amount']) ? (float)$withholdingData['withholding_amount'] : 0.00,
+        ];
+
+        // Filter against schema columns to be completely bulletproof
+        $filteredPayload = [];
+        foreach ($receiptPayload as $key => $val) {
+            if (\Illuminate\Support\Facades\Schema::hasColumn('procurement_receipts', $key)) {
+                $filteredPayload[$key] = $val;
+            }
+        }
+
+        ProcurementReceipt::create(!empty($filteredPayload) ? $filteredPayload : $receiptPayload);
+
+        // Also update companion payment if withholding receipt was uploaded
+        if ($pr->payment && (!empty($withholdingData['withholding_receipt_path']) || !empty($withholdingData['withholding_receipt_number']))) {
+            $paymentUpdates = [];
+            if (!empty($withholdingData['withholding_receipt_path'])) {
+                $paymentUpdates['withholding_receipt'] = $withholdingData['withholding_receipt_path'];
+            }
+            if (!empty($withholdingData['withholding_receipt_number'])) {
+                $paymentUpdates['withholding_receipt_number'] = $withholdingData['withholding_receipt_number'];
+            }
+            if (!empty($withholdingData['has_withholding'])) {
+                $paymentUpdates['has_withholding'] = true;
+            }
+            if (isset($withholdingData['withholding_amount']) && (float)$withholdingData['withholding_amount'] > 0) {
+                $paymentUpdates['withholding_amount'] = (float)$withholdingData['withholding_amount'];
+            }
+            if (isset($withholdingData['withholding_rate']) && (float)$withholdingData['withholding_rate'] > 0) {
+                $paymentUpdates['withholding_rate'] = (float)$withholdingData['withholding_rate'];
+            }
+            $pr->payment->update($paymentUpdates);
+        }
 
         if ($sendToStore) {
             $targetRole = $this->resolveOwnerRole('store_keeper', $pr);

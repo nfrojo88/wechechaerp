@@ -1530,6 +1530,61 @@
                                 </div>
                             </div>
 
+                            {{-- Withholding Receipt (Optional / If Available) --}}
+                            @php
+                                $paymentHasWithholding = (bool)($purchaseRequest->payment?->has_withholding || (float)($purchaseRequest->payment?->withholding_amount ?? 0) > 0);
+                                $defaultWithholdingRate = $purchaseRequest->payment?->withholding_rate ?? 2.00;
+                                $defaultWithholdingAmount = $purchaseRequest->payment?->withholding_amount ?? 0.00;
+                                $existingWithholdingReceipt = $purchaseRequest->payment?->withholding_receipt ?? $purchaseRequest->receipt?->withholding_receipt_path;
+                                $existingWithholdingNo = $purchaseRequest->payment?->withholding_receipt_number ?? $purchaseRequest->receipt?->withholding_receipt_number;
+                            @endphp
+                            <div class="p-2.5 rounded-3 border bg-warning bg-opacity-10 mb-3 border-warning border-opacity-25">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span class="small fw-bold text-uppercase text-dark" style="font-size:0.75rem;">
+                                        <i class="fa-solid fa-file-shield text-warning me-1"></i> Withholding Tax Receipt (If Available)
+                                    </span>
+                                    @if($paymentHasWithholding)
+                                        <span class="badge bg-warning text-dark border border-warning" style="font-size:0.68rem;">
+                                            Withholding Recorded: {{ number_format($defaultWithholdingAmount, 2) }} ETB ({{ $defaultWithholdingRate }}%)
+                                        </span>
+                                    @else
+                                        <span class="badge bg-white text-muted border" style="font-size:0.68rem;">Optional / If applicable</span>
+                                    @endif
+                                </div>
+
+                                <div class="mb-2">
+                                    <label class="form-label small text-muted mb-1" style="font-size:0.72rem;">
+                                        Upload Withholding Receipt (PDF / Image)
+                                    </label>
+                                    <input type="file" name="withholding_receipt" id="prWithholdingReceiptInput" class="form-control form-control-sm bg-white" accept=".pdf,.jpg,.jpeg,.png,.webp">
+                                    @if($existingWithholdingReceipt)
+                                        <div class="mt-1">
+                                            <a href="{{ \App\Services\FileUploadService::url($existingWithholdingReceipt) }}" target="_blank" class="small text-primary text-decoration-none">
+                                                <i class="fa-solid fa-paperclip me-1"></i> Current Withholding Receipt Attached
+                                            </a>
+                                        </div>
+                                    @endif
+                                </div>
+
+                                <div class="row g-2">
+                                    <div class="col-md-5">
+                                        <label class="form-label small text-muted mb-1" style="font-size:0.72rem;">Withholding Receipt / Voucher #</label>
+                                        <input type="text" name="withholding_receipt_number" id="prWithholdingReceiptNumber" class="form-control form-control-sm bg-white font-monospace" placeholder="e.g. WH-008123" value="{{ old('withholding_receipt_number', $existingWithholdingNo) }}">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label small text-muted mb-1" style="font-size:0.72rem;">Rate (%)</label>
+                                        <input type="number" step="0.01" name="withholding_rate" id="prWithholdingRate" class="form-control form-control-sm bg-white font-monospace" value="{{ old('withholding_rate', $defaultWithholdingRate) }}">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label small text-muted mb-1" style="font-size:0.72rem;">Withholding Amount (ETB)</label>
+                                        <input type="number" step="0.01" name="withholding_amount" id="prWithholdingAmount" class="form-control form-control-sm bg-white font-monospace fw-semibold text-danger" placeholder="0.00" value="{{ old('withholding_amount', $defaultWithholdingAmount > 0 ? $defaultWithholdingAmount : '') }}">
+                                    </div>
+                                </div>
+                                <div class="form-text text-muted mt-1" style="font-size:0.68rem;">
+                                    <i class="fas fa-info-circle me-1"></i> Attach official ERCA withholding tax slip if withholding was deducted from the vendor's payment.
+                                </div>
+                            </div>
+
                             <div class="mb-3">
                                 <label class="form-label small fw-bold text-uppercase text-muted">Receipt Notes / Reference</label>
                                 <textarea name="notes" id="prReceiptNotes" class="form-control form-control-sm" rows="2" placeholder="Cash sales invoice #, receipt date, or purchase notes..."></textarea>
@@ -1564,9 +1619,38 @@
                                         if (hiddenEl) {
                                             hiddenEl.value = JSON.stringify(items);
                                         }
+                                        recalculatePrWithholding();
                                     }
                                 });
                             }
+
+                            function recalculatePrWithholding() {
+                                const totalEl = document.getElementById('prTotalAmount');
+                                const subtotalEl = document.getElementById('prSubtotal');
+                                const rateEl = document.getElementById('prWithholdingRate');
+                                const whtAmtEl = document.getElementById('prWithholdingAmount');
+
+                                if (!rateEl || !whtAmtEl) return;
+                                const rate = parseFloat(rateEl.value) || 0;
+                                if (rate <= 0) return;
+
+                                const base = parseFloat(subtotalEl?.value) || parseFloat(totalEl?.value) || 0;
+                                if (base > 0 && (!whtAmtEl.value || parseFloat(whtAmtEl.value) === 0 || whtAmtEl.dataset.autoCalc === '1')) {
+                                    whtAmtEl.value = (base * (rate / 100)).toFixed(2);
+                                    whtAmtEl.dataset.autoCalc = '1';
+                                }
+                            }
+
+                            document.getElementById('prSubtotal')?.addEventListener('input', recalculatePrWithholding);
+                            document.getElementById('prTotalAmount')?.addEventListener('input', recalculatePrWithholding);
+                            document.getElementById('prWithholdingRate')?.addEventListener('input', function() {
+                                const whtAmtEl = document.getElementById('prWithholdingAmount');
+                                if (whtAmtEl) whtAmtEl.dataset.autoCalc = '1';
+                                recalculatePrWithholding();
+                            });
+                            document.getElementById('prWithholdingAmount')?.addEventListener('input', function() {
+                                this.dataset.autoCalc = '0';
+                            });
                         });
                         </script>
 
@@ -2713,11 +2797,11 @@
             </div>
             @endif
 
-            <!-- Uploaded Purchase Receipt (Visible to Requester & All Hierarchy Roles) -->
-            @if($purchaseRequest->receipt)
+            <!-- Uploaded Purchase Receipt & Withholding Voucher (Visible to Requester & All Hierarchy Roles) -->
+            @if($purchaseRequest->receipt || $purchaseRequest->withholding_receipt_url)
                 @php
-                    $receiptUrl = \App\Services\FileUploadService::url($purchaseRequest->receipt->file_path);
-                    $ext = strtolower(pathinfo($purchaseRequest->receipt->file_path, PATHINFO_EXTENSION));
+                    $receiptUrl = $purchaseRequest->receipt ? \App\Services\FileUploadService::url($purchaseRequest->receipt->file_path) : null;
+                    $ext = $purchaseRequest->receipt ? strtolower(pathinfo($purchaseRequest->receipt->file_path, PATHINFO_EXTENSION)) : '';
                     $isImage = in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'gif']);
                     $isPdf = $ext === 'pdf';
                     $vStatus = $purchaseRequest->receipt->verification_status ?? 'pending';
@@ -2726,6 +2810,16 @@
                         'rejected' => ['class' => 'bg-danger', 'label' => 'Receipt Rejected', 'icon' => 'fa-circle-xmark'],
                         default    => ['class' => 'bg-warning text-dark', 'label' => 'Pending Finance Verification', 'icon' => 'fa-clock'],
                     };
+
+                    $withholdingUrl = $purchaseRequest->withholding_receipt_url;
+                    $wPath = $purchaseRequest->receipt?->withholding_receipt_path ?? $purchaseRequest->payment?->withholding_receipt ?? '';
+                    $wExt = strtolower(pathinfo($wPath, PATHINFO_EXTENSION));
+                    $wIsImage = in_array($wExt, ['jpg', 'jpeg', 'png', 'webp', 'gif']);
+                    $wIsPdf = $wExt === 'pdf';
+                    $withholdingReceiptNo = $purchaseRequest->effective_withholding_receipt_number;
+                    $withholdingAmount = $purchaseRequest->effective_withholding_amount;
+                    $withholdingRate = $purchaseRequest->effective_withholding_rate;
+                    $hasWithholding = $purchaseRequest->has_effective_withholding;
                 @endphp
                 <div class="card border-0 shadow-sm mb-4 border-start border-4 border-success">
                     <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -2733,18 +2827,22 @@
                             <h6 class="font-weight-bold text-dark mb-0">
                                 <i class="fas fa-receipt text-success me-2"></i>Official Purchase Receipt / Payment Proof
                             </h6>
+                            @if($purchaseRequest->receipt)
                             <small class="text-muted">
                                 Uploaded by <strong>{{ $purchaseRequest->receipt->uploadedBy->name ?? 'Procurement Officer' }}</strong>
                                 on {{ $purchaseRequest->receipt->created_at->format('M d, Y H:i') }}
                             </small>
+                            @endif
                         </div>
                         <div class="d-flex align-items-center gap-2">
+                            @if($purchaseRequest->receipt)
                             <span class="badge {{ $vBadge['class'] }} px-2 py-1">
                                 <i class="fas {{ $vBadge['icon'] }} me-1"></i>{{ $vBadge['label'] }}
                             </span>
+                            @endif
                             @if($receiptUrl)
                                 <a href="{{ $receiptUrl }}" class="btn btn-sm btn-outline-primary shadow-sm" target="_blank" download>
-                                    <i class="fas fa-download me-1"></i> Download
+                                    <i class="fas fa-download me-1"></i> Download Receipt
                                 </a>
                                 <a href="{{ $receiptUrl }}" class="btn btn-sm btn-primary shadow-sm" target="_blank">
                                     <i class="fas fa-external-link-alt me-1"></i> Full View
@@ -2753,7 +2851,7 @@
                         </div>
                     </div>
                     <div class="card-body p-3">
-                        @if($purchaseRequest->receipt->verification_notes)
+                        @if($purchaseRequest->receipt?->verification_notes)
                             <div class="alert alert-light border small py-2 px-3 mb-3">
                                 <strong>Verification Notes:</strong> {{ $purchaseRequest->receipt->verification_notes }}
                                 @if($purchaseRequest->receipt->verifiedBy)
@@ -2786,8 +2884,163 @@
                                     <a href="{{ $receiptUrl }}" class="btn btn-sm btn-primary mt-2" target="_blank">View / Download Document</a>
                                 </div>
                             @endif
-                        @else
+                        @elseif($purchaseRequest->receipt)
                             <div class="text-muted small italic p-2 bg-light rounded">Receipt file path recorded, but media link is currently unavailable.</div>
+                        @endif
+
+                        {{-- Official ERCA Withholding Receipt Section --}}
+                        @if($withholdingUrl)
+                            <div class="border-top pt-3 mt-3">
+                                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                                    <div class="d-flex align-items-center flex-wrap gap-2">
+                                        <span class="badge bg-warning text-dark px-2 py-1 fw-bold">
+                                            <i class="fas fa-file-invoice-dollar me-1"></i> ERCA Withholding Tax Receipt (የቀረጥ ቅነሳ ደረሰኝ)
+                                        </span>
+                                        @if($withholdingReceiptNo)
+                                            <span class="badge bg-white text-dark border font-monospace">Voucher: {{ $withholdingReceiptNo }}</span>
+                                        @endif
+                                        @if($withholdingRate)
+                                            <span class="badge bg-light text-secondary border">{{ number_format($withholdingRate, 1) }}% Rate</span>
+                                        @endif
+                                        @if($withholdingAmount)
+                                            <span class="badge bg-danger-subtle text-danger border border-danger-subtle fw-bold">
+                                                -{{ number_format($withholdingAmount, 2) }} ETB Deducted
+                                            </span>
+                                        @endif
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <a href="{{ $withholdingUrl }}" class="btn btn-sm btn-outline-secondary shadow-sm" target="_blank" download>
+                                            <i class="fas fa-download me-1"></i> Download Voucher
+                                        </a>
+                                        <a href="{{ $withholdingUrl }}" class="btn btn-sm btn-outline-primary shadow-sm" target="_blank">
+                                            <i class="fas fa-external-link-alt me-1"></i> View Full Slip
+                                        </a>
+                                        <button type="button" class="btn btn-sm btn-outline-dark shadow-sm" data-bs-toggle="collapse" data-bs-target="#updateWithholdingCollapse" aria-expanded="false">
+                                            <i class="fas fa-pen-to-square me-1"></i> Update Voucher
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {{-- Inline Withholding Preview --}}
+                                @if($wIsImage)
+                                    <div class="text-center p-2 bg-light rounded border">
+                                        <a href="{{ $withholdingUrl }}" target="_blank" title="Click to view full withholding voucher">
+                                            <img src="{{ $withholdingUrl }}" alt="Withholding Tax Receipt Voucher" class="img-fluid rounded shadow-sm" style="max-height: 380px; object-fit: contain; cursor: zoom-in;">
+                                        </a>
+                                        <div class="text-muted small mt-1"><i class="fas fa-search-plus me-1"></i> Click voucher image to open high-resolution view</div>
+                                    </div>
+                                @elseif($wIsPdf)
+                                    <div class="border rounded bg-light overflow-hidden" style="height: 420px;">
+                                        <iframe src="{{ $withholdingUrl }}" width="100%" height="100%" style="border: none;">
+                                            <div class="p-3 text-center text-muted">
+                                                PDF preview not supported in browser. <a href="{{ $withholdingUrl }}" target="_blank" class="btn btn-sm btn-primary mt-2">Download PDF</a>
+                                            </div>
+                                        </iframe>
+                                    </div>
+                                @else
+                                    <div class="p-3 bg-light rounded border text-center">
+                                        <i class="fas fa-file-invoice text-warning fa-2x mb-2"></i>
+                                        <div class="fw-bold">{{ basename($wPath) }}</div>
+                                        <a href="{{ $withholdingUrl }}" class="btn btn-sm btn-primary mt-2" target="_blank">View / Download Withholding Voucher</a>
+                                    </div>
+                                @endif
+
+                                {{-- Update Withholding Receipt Collapse --}}
+                                <div class="collapse mt-2" id="updateWithholdingCollapse">
+                                    <div class="p-3 border rounded bg-white shadow-xs">
+                                        <h6 class="fw-bold small text-dark mb-2">
+                                            <i class="fas fa-upload me-1 text-primary"></i> Replace / Update Withholding Tax Receipt
+                                        </h6>
+                                        <form action="{{ route('purchase-requests.upload-withholding-receipt', $purchaseRequest) }}" method="POST" enctype="multipart/form-data">
+                                            @csrf
+                                            <div class="row g-2 align-items-end">
+                                                <div class="col-md-4">
+                                                    <label class="form-label small text-muted mb-1">New Voucher File (.pdf, .jpg, .png) <span class="text-danger">*</span></label>
+                                                    <input type="file" name="withholding_receipt" class="form-control form-control-sm" accept=".pdf,.jpg,.jpeg,.png,.webp" required>
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <label class="form-label small text-muted mb-1">Voucher Number</label>
+                                                    <input type="text" name="withholding_receipt_number" class="form-control form-control-sm font-monospace" value="{{ $withholdingReceiptNo }}" placeholder="e.g. WH-008123">
+                                                </div>
+                                                <div class="col-md-2">
+                                                    <label class="form-label small text-muted mb-1">Rate (%)</label>
+                                                    <input type="number" step="0.01" name="withholding_rate" class="form-control form-control-sm font-monospace" value="{{ $withholdingRate ?? 2.0 }}">
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <label class="form-label small text-muted mb-1">Amount (ETB)</label>
+                                                    <div class="input-group input-group-sm">
+                                                        <input type="number" step="0.01" name="withholding_amount" class="form-control form-control-sm font-monospace text-danger fw-bold" value="{{ $withholdingAmount > 0 ? $withholdingAmount : '' }}" placeholder="0.00">
+                                                        <button type="submit" class="btn btn-sm btn-primary">
+                                                            <i class="fas fa-save me-1"></i> Update
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        @else
+                            {{-- Withholding Receipt Not Yet Attached: Provide Quick Attach Option --}}
+                            <div class="border-top pt-3 mt-3">
+                                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 p-3 bg-light rounded border">
+                                    <div>
+                                        <div class="fw-bold small text-dark">
+                                            <i class="fas fa-file-invoice-dollar text-warning me-1"></i> ERCA Withholding Tax Receipt (የቀረጥ ቅነሳ ደረሰኝ)
+                                        </div>
+                                        <div class="text-muted small mt-1">
+                                            @if($hasWithholding)
+                                                <span class="text-danger fw-semibold">Withholding is applicable</span>: Tax of {{ number_format($withholdingAmount ?? 0, 2) }} ETB ({{ number_format($withholdingRate ?? 2, 1) }}%) was deducted during payment disbursement.
+                                            @else
+                                                Attach official withholding tax slip if withholding was deducted by or from the vendor.
+                                            @endif
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <button type="button" class="btn btn-sm btn-outline-primary shadow-sm" data-bs-toggle="collapse" data-bs-target="#attachWithholdingCollapse" aria-expanded="false">
+                                            <i class="fas fa-plus me-1"></i> Attach Withholding Slip If Available
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {{-- Attach Form Collapse --}}
+                                <div class="collapse mt-2" id="attachWithholdingCollapse">
+                                    <div class="p-3 border rounded bg-white shadow-xs">
+                                        <div class="mb-2">
+                                            <h6 class="fw-bold small text-dark mb-0">
+                                                <i class="fas fa-file-arrow-up text-primary me-1"></i> Upload ERCA Withholding Voucher
+                                            </h6>
+                                            <small class="text-muted">Attach official tax office withholding receipt for this purchase transaction.</small>
+                                        </div>
+                                        <form action="{{ route('purchase-requests.upload-withholding-receipt', $purchaseRequest) }}" method="POST" enctype="multipart/form-data">
+                                            @csrf
+                                            <div class="row g-2 align-items-end">
+                                                <div class="col-md-4">
+                                                    <label class="form-label small text-muted mb-1">Withholding File (.pdf, .jpg, .png) <span class="text-danger">*</span></label>
+                                                    <input type="file" name="withholding_receipt" class="form-control form-control-sm" accept=".pdf,.jpg,.jpeg,.png,.webp" required>
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <label class="form-label small text-muted mb-1">Voucher Number</label>
+                                                    <input type="text" name="withholding_receipt_number" class="form-control form-control-sm font-monospace" value="{{ $withholdingReceiptNo }}" placeholder="e.g. WH-008123">
+                                                </div>
+                                                <div class="col-md-2">
+                                                    <label class="form-label small text-muted mb-1">Rate (%)</label>
+                                                    <input type="number" step="0.01" name="withholding_rate" class="form-control form-control-sm font-monospace" value="{{ $withholdingRate ?? 2.0 }}">
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <label class="form-label small text-muted mb-1">Withheld Amount (ETB)</label>
+                                                    <div class="input-group input-group-sm">
+                                                        <input type="number" step="0.01" name="withholding_amount" class="form-control form-control-sm font-monospace text-danger fw-bold" value="{{ $withholdingAmount > 0 ? $withholdingAmount : '' }}" placeholder="0.00">
+                                                        <button type="submit" class="btn btn-sm btn-success">
+                                                            <i class="fas fa-cloud-arrow-up me-1"></i> Upload Slip
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
                         @endif
                     </div>
                 </div>
