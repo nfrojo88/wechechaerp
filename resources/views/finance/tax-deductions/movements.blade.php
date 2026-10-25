@@ -640,6 +640,9 @@
             $tasTotalCount = count($rawTasPurchases);
             $tasWithTinCount = 0;
             $tasMissingTinCount = 0;
+            $tasWithWhtCount = 0;
+            $tasTotalWht = 0;
+            $tasTotalNet = 0;
             foreach ($rawTasPurchases as $tpItem) {
                 $cTin = preg_replace('/\D/', '', (string)($tpItem['seller_tin'] ?? ''));
                 if (strlen($cTin) === 10) {
@@ -647,6 +650,12 @@
                 } else {
                     $tasMissingTinCount++;
                 }
+                $itemWht = (float)($tpItem['withholding_amount'] ?? 0);
+                if ($itemWht > 0 || !empty($tpItem['has_withholding'])) {
+                    $tasWithWhtCount++;
+                    $tasTotalWht += $itemWht;
+                }
+                $tasTotalNet += (float)($tpItem['net_disbursed'] ?? (($tpItem['amount'] ?? ($tpItem['base_amount'] ?? 0)) - $itemWht));
             }
             $tasTinCompliancePercent = $tasTotalCount > 0 ? round(($tasWithTinCount / $tasTotalCount) * 100) : 0;
         @endphp
@@ -666,7 +675,7 @@
                         </div>
                     </div>
                     <div class="d-flex align-items-center gap-2 d-print-none flex-wrap">
-                        {{-- Quick TIN Filters --}}
+                        {{-- Quick Filters: All, With TIN, Missing TIN, With WHT --}}
                         <div class="btn-group btn-group-sm shadow-xs rounded-pill p-0.5 bg-light border me-1" role="group">
                             <button type="button" 
                                     class="btn btn-sm rounded-pill px-2.5 py-1 fw-semibold btn-primary text-white shadow-xs" 
@@ -689,6 +698,13 @@
                                     title="Show Records Missing Seller TIN">
                                 <i class="fa-solid fa-circle-exclamation text-danger me-1"></i>Missing TIN (<span id="tasCountMissingTin">{{ $tasMissingTinCount }}</span>)
                             </button>
+                            <button type="button" 
+                                    class="btn btn-sm rounded-pill px-2.5 py-1 fw-semibold text-muted" 
+                                    id="btnTasFilterWithWht" 
+                                    onclick="filterTasByTin('with_wht')" 
+                                    title="Show TAS Purchases with Withholding Tax (WHT)">
+                                <i class="fa-solid fa-hand-holding-dollar text-danger me-1"></i>With WHT (<span id="tasCountWithWht">{{ $tasWithWhtCount }}</span>)
+                            </button>
                         </div>
 
                         <a href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_tas', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}" 
@@ -702,16 +718,17 @@
                     </div>
                 </div>
 
-                {{-- Summary Banner with Seller TIN Status --}}
+                {{-- Summary Banner with Seller TIN Status & Withholding Tax --}}
                 <div class="row g-2 px-3 pt-3 pb-2 bg-light bg-opacity-50 border-bottom">
                     <div class="col-sm-6 col-md-3">
-                        <div class="card border border-primary-subtle bg-primary-subtle bg-opacity-25 rounded-3 p-2.5">
+                        <div class="card border border-primary-subtle bg-primary-subtle bg-opacity-25 rounded-3 p-2.5 h-100">
                             <small class="text-muted d-block text-uppercase fw-bold" style="font-size:0.65rem;">Total TAS Purchases</small>
                             <span class="fw-bold font-monospace text-primary fs-6">{{ $tasTotalCount }} Receipts / Vouchers</span>
+                            <small class="text-muted" style="font-size:0.7rem;">0% VAT e-Tax Declaration</small>
                         </div>
                     </div>
                     <div class="col-sm-6 col-md-3">
-                        <div class="card border {{ $tasMissingTinCount === 0 ? 'border-success-subtle bg-success-subtle bg-opacity-20' : 'border-warning-subtle bg-warning-subtle bg-opacity-25' }} rounded-3 p-2.5">
+                        <div class="card border {{ $tasMissingTinCount === 0 ? 'border-success-subtle bg-success-subtle bg-opacity-20' : 'border-warning-subtle bg-warning-subtle bg-opacity-25' }} rounded-3 p-2.5 h-100">
                             <div class="d-flex align-items-center justify-content-between">
                                 <small class="text-muted d-block text-uppercase fw-bold" style="font-size:0.65rem;">2. Seller TIN Status</small>
                                 <span class="badge {{ $tasMissingTinCount === 0 ? 'bg-success' : 'bg-warning text-dark' }} rounded-pill" style="font-size:0.62rem;" id="summaryTasTinBadge">
@@ -723,21 +740,33 @@
                                 <span class="text-muted small">/ {{ $tasTotalCount }} filled</span>
                                 <span class="text-muted small ms-auto font-monospace" id="summaryTasTinPercent">({{ $tasTinCompliancePercent }}%)</span>
                             </div>
+                            <small class="text-muted" style="font-size:0.7rem;">ERCA 10-Digit Seller TIN</small>
                         </div>
                     </div>
                     <div class="col-sm-6 col-md-3">
-                        <div class="card border border-primary-subtle bg-primary-subtle bg-opacity-25 rounded-3 p-2.5">
-                            <small class="text-muted d-block text-uppercase fw-bold" style="font-size:0.65rem;">Expenditure Amount</small>
-                            <span class="fw-bold font-monospace text-dark fs-6">ETB {{ number_format($movementsData['tas_purchases_total_amount'] ?? ($movementsData['summary']['tas_purchases_base'] ?? 0), 2) }}</span>
-                        </div>
-                    </div>
-                    <div class="col-sm-6 col-md-3">
-                        <div class="card border border-secondary-subtle bg-white rounded-3 p-2.5">
-                            <small class="text-muted d-block text-uppercase fw-bold" style="font-size:0.65rem;">Official e-Tax Specification</small>
-                            <div class="d-flex align-items-center gap-1.5 mt-0.5 flex-wrap">
-                                <span class="badge bg-secondary-subtle text-dark rounded-pill fw-semibold" style="font-size:0.68rem;">0% VAT Exempt</span>
-                                <span class="badge bg-warning text-dark rounded-pill fw-bold" style="font-size:0.68rem;"><i class="fa-solid fa-file-lines me-1"></i>pro.doc 9 Cols</span>
+                        <div class="card border border-primary-subtle bg-primary-subtle bg-opacity-25 rounded-3 p-2.5 h-100">
+                            <div class="d-flex align-items-center justify-content-between">
+                                <small class="text-muted d-block text-uppercase fw-bold" style="font-size:0.65rem;">3. Taxable Base &amp; WHT</small>
+                                <span class="badge {{ $tasWithWhtCount > 0 ? 'bg-danger text-white' : 'bg-secondary-subtle text-muted' }} rounded-pill font-monospace" style="font-size:0.62rem;">
+                                    {{ $tasWithWhtCount > 0 ? $tasWithWhtCount . ' With WHT' : '0 WHT' }}
+                                </span>
                             </div>
+                            <span class="fw-bold font-monospace text-dark fs-6 mt-0.5 d-block">ETB {{ number_format($movementsData['tas_purchases_total_amount'] ?? ($movementsData['summary']['tas_purchases_base'] ?? 0), 2) }}</span>
+                            <small class="text-danger fw-semibold d-block font-monospace" style="font-size:0.7rem;">
+                                <i class="fa-solid fa-hand-holding-dollar me-0.5"></i>WHT Deducted: - ETB {{ number_format($tasTotalWht, 2) }}
+                            </small>
+                        </div>
+                    </div>
+                    <div class="col-sm-6 col-md-3">
+                        <div class="card border border-secondary-subtle bg-white rounded-3 p-2.5 h-100">
+                            <div class="d-flex align-items-center justify-content-between">
+                                <small class="text-muted d-block text-uppercase fw-bold" style="font-size:0.65rem;">4. Net Disbursed</small>
+                                <span class="badge bg-secondary-subtle text-dark rounded-pill fw-bold" style="font-size:0.62rem;">
+                                    <i class="fa-solid fa-file-lines me-0.5"></i>9 Cols
+                                </span>
+                            </div>
+                            <span class="fw-bold font-monospace text-success fs-6 mt-0.5 d-block">ETB {{ number_format($tasTotalNet, 2) }}</span>
+                            <small class="text-muted d-block" style="font-size:0.7rem;">Paid to Vendor (Net of WHT)</small>
                         </div>
                     </div>
                 </div>
@@ -767,8 +796,12 @@
                             @forelse($rawTasPurchases as $idx => $tas)
                                 @php
                                     $tAmt = (float)($tas['amount'] ?? ($tas['base_amount'] ?? 0));
+                                    $tWht = (float)($tas['withholding_amount'] ?? 0);
+                                    $tNet = (float)($tas['net_disbursed'] ?? ($tAmt - $tWht));
+                                    $hasWht = !empty($tas['has_withholding']) || $tWht > 0;
                                     $tasTotalAmount += $tAmt;
                                     $slipUrl = $tas['receipt_slip_url'] ?? ($tas['attachment_url'] ?? null);
+                                    $whtSlipUrl = $tas['withholding_receipt_url'] ?? null;
                                     $isFuel = !empty($tas['is_fuel']);
                                     $isPdf = $slipUrl && str_contains(strtolower($slipUrl), '.pdf');
                                     $cleanSellerTin = preg_replace('/\D/', '', (string)($tas['seller_tin'] ?? ''));
@@ -776,6 +809,10 @@
                                     $hasPartialSellerTin = !empty($cleanSellerTin) && strlen($cleanSellerTin) !== 10;
                                 @endphp
                                 <tr data-has-tin="{{ $hasValidSellerTin ? '1' : '0' }}"
+                                    data-has-wht="{{ $hasWht ? '1' : '0' }}"
+                                    data-base="{{ $tAmt }}"
+                                    data-wht="{{ $tWht }}"
+                                    data-net="{{ $tNet }}"
                                     data-receipt-id="{{ $tas['receipt_id'] ?? ($tas['id'] ?? '') }}"
                                     data-fs="{{ ($tas['fs_no'] ?? '') !== '-' ? ($tas['fs_no'] ?? '') : '' }}"
                                     data-expense-id="{{ $tas['id'] ?? '' }}"
@@ -805,6 +842,12 @@
                                                 <span class="badge bg-warning text-dark border border-warning-subtle rounded-pill font-monospace" style="font-size:0.62rem;"><i class="fa-solid fa-gas-pump me-0.5"></i>Fuel</span>
                                             @endif
 
+                                            @if($hasWht)
+                                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill font-monospace" style="font-size:0.62rem;" title="Withholding Tax Deducted">
+                                                    <i class="fa-solid fa-hand-holding-dollar me-0.5"></i>WHT
+                                                </span>
+                                            @endif
+
                                             <button type="button" 
                                                     class="btn btn-xs {{ $hasValidSellerTin ? 'btn-link text-muted p-0' : 'btn-outline-danger rounded-pill px-2 py-0.5 shadow-2xs' }} d-inline-flex align-items-center gap-1 fw-semibold d-print-none cell-tas-tin-btn" 
                                                     onclick="openPageTasInspector({{ $idx }})" 
@@ -817,7 +860,20 @@
                                         </div>
                                         <small class="text-muted d-block text-truncate cell-tas-vendor" style="max-width: 175px;">{{ $tas['payee'] ?? ($tas['seller_name'] ?? 'Vendor') }}</small>
                                     </td>
-                                    <td class="text-end font-monospace fw-bold text-dark cell-tas-amount">ETB {{ number_format($tAmt, 2) }}</td>
+                                    <td class="text-end font-monospace text-dark cell-tas-amount">
+                                        <div class="fw-bold">ETB {{ number_format($tAmt, 2) }}</div>
+                                        @if($hasWht)
+                                            <small class="text-danger d-block font-monospace" style="font-size:0.68rem;" title="Withholding Tax (WHT) Deducted">
+                                                <i class="fa-solid fa-hand-holding-dollar me-0.5"></i>-ETB {{ number_format($tWht, 2) }}
+                                                @if(!empty($tas['withholding_rate']) && $tas['withholding_rate'] > 0)
+                                                    ({{ number_format($tas['withholding_rate'], 1) }}%)
+                                                @endif
+                                            </small>
+                                            <small class="text-success fw-semibold d-block font-monospace" style="font-size:0.68rem;" title="Net Disbursed / Paid Amount">
+                                                Net: ETB {{ number_format($tNet, 2) }}
+                                            </small>
+                                        @endif
+                                    </td>
                                     <td>
                                         <span class="badge bg-light text-primary border font-monospace cell-tas-fs">{{ $tas['fs_no'] ?: ($tas['request_number'] ?? '-') }}</span>
                                         @if(!empty($tas['request_number']) && $tas['request_number'] !== ($tas['fs_no'] ?? ''))
@@ -843,7 +899,14 @@
                                         <span class="small text-muted font-monospace">{{ $tas['encoded_by'] ?? 'wechacha' }}</span>
                                     </td>
                                     <td class="text-center pe-3 d-print-none">
-                                        <div class="d-inline-flex align-items-center gap-1">
+                                        <div class="d-inline-flex align-items-center gap-1 flex-wrap justify-content-center">
+                                            <button type="button" 
+                                                    class="btn btn-xs btn-outline-info rounded-pill px-2.5 py-1 d-inline-flex align-items-center gap-1 fw-semibold cell-tas-detail-btn shadow-2xs" 
+                                                    onclick="openTasExpenseDetailModal({{ $idx }})" 
+                                                    title="View Full Expense Request, Withholding Tax & Purpose Details">
+                                                <i class="fa-solid fa-circle-info text-info"></i>
+                                                <span>Detail</span>
+                                            </button>
                                             <button type="button" 
                                                     class="btn btn-xs {{ $hasValidSellerTin ? 'btn-outline-secondary' : 'btn-primary text-white shadow-2xs' }} rounded-pill px-2.5 py-1 d-inline-flex align-items-center gap-1 fw-semibold cell-tas-action-btn" 
                                                     onclick="openPageTasInspector({{ $idx }})" 
@@ -857,7 +920,15 @@
                                                     <span>{{ $isPdf ? 'PDF Slip' : 'See Slip' }}</span>
                                                 </a>
                                             @else
-                                                <span class="badge bg-light text-muted border" style="font-size:0.68rem;">No Slip</span>
+                                                <button type="button" class="btn btn-xs btn-outline-dashed rounded-pill px-2 py-0.5 text-muted border" onclick="openPageTasInspector({{ $idx }})" title="Attach or Upload Receipt Slip" style="font-size:0.68rem;">
+                                                    <i class="fa-solid fa-arrow-up-from-bracket me-0.5"></i>Attach
+                                                </button>
+                                            @endif
+                                            @if(!empty($whtSlipUrl))
+                                                <a href="{{ $whtSlipUrl }}" target="_blank" class="btn btn-xs btn-outline-danger rounded-pill px-2 py-0.5 d-inline-flex align-items-center gap-1 shadow-2xs" style="font-size:0.68rem;" title="View Attached Withholding Tax (WHT) Receipt / Certificate">
+                                                    <i class="fa-solid fa-file-invoice-dollar text-danger"></i>
+                                                    <span>WHT Slip</span>
+                                                </a>
                                             @endif
                                         </div>
                                     </td>
@@ -871,7 +942,7 @@
                             @endforelse
                             <tr id="pageTasEmptyFilterRow" class="d-none">
                                 <td colspan="11" class="text-center py-4 text-muted">
-                                    <i class="fa-solid fa-filter me-2 text-secondary"></i>No TAS purchases match the selected Seller TIN filter.
+                                    <i class="fa-solid fa-filter me-2 text-secondary"></i>No TAS purchases match the selected filter.
                                 </td>
                             </tr>
                         </tbody>
@@ -880,7 +951,13 @@
                                 <td colspan="3" class="ps-3 py-2 text-uppercase small text-muted">
                                     Total TAS Purchases (<span id="pageTasFootCount">{{ $tasTotalCount }}</span> items)
                                 </td>
-                                <td class="text-end py-2 font-monospace text-dark" id="pageTasFootAmount">ETB {{ number_format($tasTotalAmount, 2) }}</td>
+                                <td class="text-end py-2 font-monospace text-dark" id="pageTasFootAmount">
+                                    <div>ETB {{ number_format($tasTotalAmount, 2) }}</div>
+                                    @if($tasTotalWht > 0)
+                                        <small class="text-danger d-block font-monospace" style="font-size:0.68rem;" id="pageTasFootWht">WHT: - ETB {{ number_format($tasTotalWht, 2) }}</small>
+                                        <small class="text-success d-block font-monospace" style="font-size:0.68rem;" id="pageTasFootNet">Net: ETB {{ number_format($tasTotalNet, 2) }}</small>
+                                    @endif
+                                </td>
                                 <td colspan="7" class="pe-3 d-print-none"></td>
                             </tr>
                         </tfoot>
@@ -1538,6 +1615,285 @@
     </div>
 </div>
 
+{{-- ── TAS Purchases Expense & Withholding Tax (WHT) Detail Modal ── --}}
+<div class="modal fade" id="tasExpenseDetailModal" tabindex="-1" aria-labelledby="tasExpenseDetailModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable my-lg-3" style="max-height: 94vh;">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden d-flex flex-column" style="max-height: 94vh;">
+
+            {{-- Header --}}
+            <div class="modal-header bg-dark text-white py-2.5 px-4 flex-shrink-0" style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%) !important;">
+                <div class="d-flex align-items-center gap-2.5">
+                    <div class="p-2 bg-info bg-opacity-20 text-info rounded-3 border border-info border-opacity-25 d-flex align-items-center justify-content-center shadow-xs">
+                        <i class="fa-solid fa-file-invoice-dollar fs-5"></i>
+                    </div>
+                    <div>
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                            <h5 class="modal-title fs-6 fw-bold text-white mb-0" id="tasExpenseDetailModalLabel">
+                                Expense &amp; Withholding Tax (WHT) Detail
+                            </h5>
+                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill font-monospace" style="font-size:0.72rem;" id="tasModalVoucherBadge">
+                                EXP-0000
+                            </span>
+                            <span class="badge rounded-pill fw-semibold" style="font-size:0.72rem;" id="tasModalWhtStatusBadge">
+                                WHT Status
+                            </span>
+                        </div>
+                        <div class="text-white-50 small mt-0.5" style="font-size:0.75rem;">
+                            <span id="tasModalPayeeSubtitle">Vendor</span> &bull;
+                            <span class="font-monospace text-warning fw-semibold" id="tasModalAmountSubtitle">ETB 0.00</span> &bull;
+                            <span id="tasModalCategorySubtitle">TAS Purchase (0% VAT)</span>
+                        </div>
+                    </div>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            {{-- Body --}}
+            <div class="modal-body p-3 p-lg-4 bg-light bg-opacity-50" style="overflow-y: auto;">
+
+                {{-- Financial Breakdown 4-Cards Row --}}
+                <div class="row g-2 mb-3">
+                    <div class="col-6 col-md-3">
+                        <div class="card border border-primary-subtle bg-white shadow-2xs rounded-3 p-2.5 text-center h-100">
+                            <small class="text-muted text-uppercase fw-bold d-block" style="font-size:0.65rem;">Gross Base</small>
+                            <span class="fs-6 fw-bold font-monospace text-primary" id="tasCardGross">ETB 0.00</span>
+                            <small class="text-muted" style="font-size:0.68rem;">Taxable Base</small>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="card border border-info-subtle bg-white shadow-2xs rounded-3 p-2.5 text-center h-100">
+                            <small class="text-muted text-uppercase fw-bold d-block" style="font-size:0.65rem;">VAT (0%)</small>
+                            <span class="fs-6 fw-bold font-monospace text-info" id="tasCardVat">ETB 0.00</span>
+                            <small class="text-muted" style="font-size:0.68rem;">TAS / Exempt</small>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="card border border-danger-subtle bg-white shadow-2xs rounded-3 p-2.5 text-center h-100" id="tasCardWhtBox">
+                            <small class="text-muted text-uppercase fw-bold d-block" style="font-size:0.65rem;" id="tasCardWhtLabel">WHT (3%)</small>
+                            <span class="fs-6 fw-bold font-monospace text-danger" id="tasCardWht">- ETB 0.00</span>
+                            <small class="text-muted" style="font-size:0.68rem;" id="tasCardWhtRate">Withholding Tax</small>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="card border border-success-subtle bg-white shadow-2xs rounded-3 p-2.5 text-center h-100">
+                            <small class="text-muted text-uppercase fw-bold d-block" style="font-size:0.65rem;">Net Disbursed</small>
+                            <span class="fs-6 fw-bold font-monospace text-success" id="tasCardNet">ETB 0.00</span>
+                            <small class="text-muted" style="font-size:0.68rem;">Paid to Vendor</small>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- WHT Deduction Detail Banner --}}
+                <div class="card border rounded-3 mb-3 overflow-hidden shadow-2xs" id="tasWhtInfoCard">
+                    <div class="card-header py-2 px-3 bg-danger bg-opacity-10 border-bottom border-danger-subtle d-flex align-items-center justify-content-between flex-wrap gap-2">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="fa-solid fa-hand-holding-dollar text-danger"></i>
+                            <span class="fw-bold small text-dark" id="tasWhtBannerTitle">Withholding Tax (WHT) Compliance &amp; Certificate</span>
+                        </div>
+                        <span class="badge rounded-pill fw-semibold font-monospace" style="font-size:0.7rem;" id="tasWhtSettledBadge">
+                            Settled
+                        </span>
+                    </div>
+                    <div class="card-body p-3 bg-white">
+                        <div class="row g-3">
+                            <div class="col-sm-6 col-md-3">
+                                <small class="text-muted d-block" style="font-size:0.7rem;">WHT Applied Rate</small>
+                                <span class="fw-bold font-monospace fs-6 text-danger" id="tasWhtRateDisplay">3.0%</span>
+                                <small class="text-muted d-block" style="font-size:0.68rem;" id="tasWhtRateSub">Services standard</small>
+                            </div>
+                            <div class="col-sm-6 col-md-3">
+                                <small class="text-muted d-block" style="font-size:0.7rem;">WHT Amount Deducted</small>
+                                <span class="fw-bold font-monospace fs-6 text-danger" id="tasWhtAmountDisplay">ETB 0.00</span>
+                                <small class="text-muted d-block" style="font-size:0.68rem;">Retained for ERCA</small>
+                            </div>
+                            <div class="col-sm-6 col-md-3">
+                                <small class="text-muted d-block" style="font-size:0.7rem;">WHT Certificate / Receipt #</small>
+                                <span class="fw-bold font-monospace text-dark" id="tasWhtReceiptNoDisplay">-</span>
+                                <small class="text-muted d-block" style="font-size:0.68rem;">Official slip number</small>
+                            </div>
+                            <div class="col-sm-6 col-md-3">
+                                <small class="text-muted d-block" style="font-size:0.7rem;">WHT Certificate Document</small>
+                                <div id="tasWhtDocBtnWrapper" class="mt-0.5">
+                                    <span class="badge bg-light text-muted border" id="tasWhtNoDocBadge" style="font-size:0.72rem;">No Slip Attached</span>
+                                    <a href="#" target="_blank" class="btn btn-xs btn-outline-danger rounded-pill px-2.5 py-1 d-none align-items-center gap-1 shadow-2xs" id="tasWhtDocLink">
+                                        <i class="fa-solid fa-file-pdf"></i>
+                                        <span>View WHT Slip</span>
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Two-Column Grid: Voucher Details vs ERCA e-Tax Declaration --}}
+                <div class="row g-3 mb-3">
+                    {{-- Column 1: Voucher & Operational Details --}}
+                    <div class="col-md-6">
+                        <div class="card border rounded-3 h-100 shadow-2xs">
+                            <div class="card-header py-2 px-3 bg-light border-bottom d-flex align-items-center justify-content-between">
+                                <div class="d-flex align-items-center gap-2">
+                                    <i class="fa-solid fa-file-lines text-primary"></i>
+                                    <span class="fw-bold text-dark small text-uppercase">Voucher Details</span>
+                                </div>
+                                <span class="badge bg-secondary-subtle text-secondary rounded-pill" style="font-size:0.68rem;" id="tasModalSourceLabel">Expense Voucher</span>
+                            </div>
+                            <div class="card-body p-3">
+                                <div class="d-flex flex-column gap-2">
+                                    <div class="d-flex justify-content-between border-bottom pb-1.5">
+                                        <span class="text-muted small">Voucher / Request #:</span>
+                                        <span class="font-monospace fw-bold text-dark small" id="tasDetRequestNo">-</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between border-bottom pb-1.5">
+                                        <span class="text-muted small">Payee / Beneficiary:</span>
+                                        <span class="fw-semibold text-dark small text-end" id="tasDetPayee">-</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between border-bottom pb-1.5">
+                                        <span class="text-muted small">Project:</span>
+                                        <span class="fw-semibold text-dark small" id="tasDetProject">-</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between border-bottom pb-1.5">
+                                        <span class="text-muted small">Category:</span>
+                                        <span class="badge bg-light text-dark border small" id="tasDetCategory">-</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between border-bottom pb-1.5">
+                                        <span class="text-muted small">Expense Account / Method:</span>
+                                        <span class="fw-semibold text-secondary small" id="tasDetAccount">-</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between border-bottom pb-1.5">
+                                        <span class="text-muted small">Voucher Date (EC):</span>
+                                        <span class="font-monospace text-dark small" id="tasDetDateEc">-</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between border-bottom pb-1.5">
+                                        <span class="text-muted small">Voucher Date (GC):</span>
+                                        <span class="font-monospace text-muted small" id="tasDetDateGc">-</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between">
+                                        <span class="text-muted small">Payment Reference:</span>
+                                        <span class="font-monospace text-muted small" id="tasDetPaymentRef">-</span>
+                                    </div>
+                                </div>
+
+                                {{-- Purpose & Description Callout --}}
+                                <div class="mt-3 p-2.5 bg-light rounded-3 border">
+                                    <div class="d-flex align-items-center gap-1.5 text-muted mb-1">
+                                        <i class="fa-solid fa-quote-left fs-6 text-primary"></i>
+                                        <span class="fw-bold text-uppercase" style="font-size:0.65rem;">Purpose / Line Description</span>
+                                    </div>
+                                    <p class="small text-dark mb-0 fst-italic" id="tasDetDescription" style="white-space: pre-wrap;">-</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {{-- Column 2: ERCA 9-Columns e-Tax Declaration & Fiscal Metadata --}}
+                    <div class="col-md-6">
+                        <div class="card border rounded-3 h-100 shadow-2xs">
+                            <div class="card-header py-2 px-3 bg-light border-bottom d-flex align-items-center justify-content-between">
+                                <div class="d-flex align-items-center gap-2">
+                                    <i class="fa-solid fa-building-columns text-success"></i>
+                                    <span class="fw-bold text-dark small text-uppercase">ERCA e-Tax Declaration</span>
+                                </div>
+                                <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill font-monospace" style="font-size:0.68rem;">0% VAT e-Tax</span>
+                            </div>
+                            <div class="card-body p-3">
+                                <div class="d-flex flex-column gap-2">
+                                    <div class="d-flex justify-content-between border-bottom pb-1.5 align-items-center">
+                                        <span class="text-muted small">Supplier TIN:</span>
+                                        <div class="d-flex align-items-center gap-1.5">
+                                            <span class="font-monospace fw-bold small" id="tasDetSupplierTin">-</span>
+                                            <span class="badge rounded-pill" style="font-size:0.65rem;" id="tasDetTinStatusBadge">Valid</span>
+                                        </div>
+                                    </div>
+                                    <div class="d-flex justify-content-between border-bottom pb-1.5">
+                                        <span class="text-muted small">Fiscal Cash Reg. (FS #):</span>
+                                        <span class="font-monospace fw-semibold text-primary small" id="tasDetFsNo">-</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between border-bottom pb-1.5">
+                                        <span class="text-muted small">Machine Reg. Code (MRC):</span>
+                                        <span class="font-monospace text-dark small" id="tasDetMrcNo">-</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between border-bottom pb-1.5">
+                                        <span class="text-muted small">Purchaser TIN:</span>
+                                        <span class="font-monospace text-dark small" id="tasDetPurchaserTin">-</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between border-bottom pb-1.5">
+                                        <span class="text-muted small">Purchase Type (ERCA Code):</span>
+                                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle font-monospace small" id="tasDetPurcType">G</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between border-bottom pb-1.5">
+                                        <span class="text-muted small">Receipt Date (EC):</span>
+                                        <span class="font-monospace text-dark small" id="tasDetReceiptDateEc">-</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between border-bottom pb-1.5">
+                                        <span class="text-muted small">Encoding Date (EC):</span>
+                                        <span class="font-monospace text-dark small" id="tasDetEncodingDateEc">-</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between">
+                                        <span class="text-muted small">Encoded By User:</span>
+                                        <span class="fw-semibold text-dark small" id="tasDetEncodedBy">-</span>
+                                    </div>
+                                </div>
+
+                                {{-- Attached Receipt Slip Quick Box --}}
+                                <div class="mt-3 p-2.5 bg-light rounded-3 border">
+                                    <div class="d-flex align-items-center justify-content-between">
+                                        <div class="d-flex align-items-center gap-1.5 text-muted">
+                                            <i class="fa-solid fa-receipt text-primary"></i>
+                                            <span class="fw-bold text-uppercase" style="font-size:0.65rem;">Receipt Slip Attached</span>
+                                        </div>
+                                        <div id="tasReceiptSlipActionBox">
+                                            <a href="#" target="_blank" class="btn btn-xs btn-outline-primary rounded-pill px-2.5 py-0.5 d-none align-items-center gap-1" id="tasModalReceiptSlipBtn">
+                                                <i class="fa-solid fa-up-right-from-square"></i>
+                                                <span>View Full Slip</span>
+                                            </a>
+                                            <span class="badge bg-light text-muted border" id="tasModalNoSlipBadge" style="font-size:0.7rem;">No Slip File</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Interactive Slip Preview Container --}}
+                <div class="card border rounded-3 overflow-hidden shadow-2xs d-none" id="tasSlipPreviewCard">
+                    <div class="card-header py-2 px-3 bg-light border-bottom d-flex align-items-center justify-content-between">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="fa-solid fa-eye text-primary"></i>
+                            <span class="fw-bold text-dark small text-uppercase">Receipt Slip Document Preview</span>
+                        </div>
+                        <a href="#" target="_blank" id="tasSlipPreviewOpenLink" class="btn btn-xs btn-outline-secondary rounded-pill px-2 py-0.5">
+                            <i class="fa-solid fa-up-right-from-square me-1"></i>Open in New Tab
+                        </a>
+                    </div>
+                    <div class="card-body p-2 text-center bg-dark bg-opacity-10 d-flex align-items-center justify-content-center" style="min-height: 220px; max-height: 380px; overflow: auto;">
+                        <img id="tasSlipPreviewImg" src="" alt="Receipt Slip Preview" class="img-fluid rounded shadow-sm d-none" style="max-height: 360px; object-fit: contain;">
+                        <iframe id="tasSlipPreviewPdf" src="" class="w-100 rounded d-none" style="height: 360px; border: none;"></iframe>
+                    </div>
+                </div>
+
+            </div>
+
+            {{-- Footer --}}
+            <div class="modal-footer bg-white border-top py-2.5 px-4 d-flex justify-content-between align-items-center flex-shrink-0">
+                <div class="d-flex align-items-center gap-2 text-muted small">
+                    <i class="fa-solid fa-shield-halved text-primary"></i>
+                    <span class="d-none d-sm-inline">Complies with ERCA 0% VAT TAS &amp; Withholding Tax (WHT) Requirements</span>
+                </div>
+                <div class="d-flex gap-2 align-items-center">
+                    <button type="button" class="btn btn-outline-primary rounded-pill px-3 py-1.5 shadow-2xs" id="tasDetailEditInInspectorBtn" onclick="openPageTasInspectorFromDetail()">
+                        <i class="fa-solid fa-pencil me-1.5"></i>Edit in ERCA Inspector
+                    </button>
+                    <button type="button" class="btn btn-secondary rounded-pill px-3.5 py-1.5" data-bs-dismiss="modal">
+                        Close
+                    </button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
 {{-- ── Client Scripts & Filtering ────────────────────────────────────────────── --}}
 @push('scripts')
 <script>
@@ -1545,7 +1901,7 @@
     window._pageOcrItems = @json($movementsData['all_ocr_items'] ?? ($movementsData['ocr_items'] ?? []));
     window._pageTasPurchases = @json($movementsData['tas_purchases'] ?? []);
 
-    // Toggle TAS Purchases by Seller TIN status: 'all', 'with_tin', 'missing_tin'
+    // Toggle TAS Purchases by Seller TIN / WHT status: 'all', 'with_tin', 'missing_tin', 'with_wht'
     let _activeTasTinFilter = 'all';
 
     function filterTasByTin(filter) {
@@ -1554,17 +1910,22 @@
         const btnAll = document.getElementById('btnTasFilterAll');
         const btnWith = document.getElementById('btnTasFilterWithTin');
         const btnMissing = document.getElementById('btnTasFilterMissingTin');
+        const btnWht = document.getElementById('btnTasFilterWithWht');
 
         if (btnAll) btnAll.className = 'btn btn-sm rounded-pill px-2.5 py-1 fw-semibold ' + (filter === 'all' ? 'btn-primary text-white shadow-xs' : 'text-muted');
         if (btnWith) btnWith.className = 'btn btn-sm rounded-pill px-2.5 py-1 fw-semibold ' + (filter === 'with_tin' ? 'btn-success text-white shadow-xs' : 'text-muted');
         if (btnMissing) btnMissing.className = 'btn btn-sm rounded-pill px-2.5 py-1 fw-semibold ' + (filter === 'missing_tin' ? 'btn-danger text-white shadow-xs' : 'text-muted');
+        if (btnWht) btnWht.className = 'btn btn-sm rounded-pill px-2.5 py-1 fw-semibold ' + (filter === 'with_wht' ? 'btn-danger text-white shadow-xs' : 'text-muted');
 
         const rows = document.querySelectorAll('#pageTasTable tbody tr.tas-row');
         let visibleCount = 0;
         let totalVisibleAmt = 0;
+        let totalVisibleWht = 0;
+        let totalVisibleNet = 0;
 
         rows.forEach(tr => {
             const hasTin = tr.getAttribute('data-has-tin') === '1';
+            const hasWht = tr.getAttribute('data-has-wht') === '1';
             let matches = false;
             if (filter === 'all') {
                 matches = true;
@@ -1572,16 +1933,19 @@
                 matches = hasTin;
             } else if (filter === 'missing_tin') {
                 matches = !hasTin;
+            } else if (filter === 'with_wht') {
+                matches = hasWht;
             }
 
             if (matches) {
                 tr.style.display = '';
                 visibleCount++;
-                const amtCell = tr.querySelector('.cell-tas-amount');
-                if (amtCell) {
-                    const amtVal = parseFloat((amtCell.textContent || '0').replace(/[^0-9.-]/g, '')) || 0;
-                    totalVisibleAmt += amtVal;
-                }
+                const amtVal = parseFloat(tr.getAttribute('data-base') || 0) || (parseFloat((tr.querySelector('.cell-tas-amount')?.textContent || '0').replace(/[^0-9.-]/g, '')) || 0);
+                const whtVal = parseFloat(tr.getAttribute('data-wht') || 0) || 0;
+                const netVal = parseFloat(tr.getAttribute('data-net') || (amtVal - whtVal)) || 0;
+                totalVisibleAmt += amtVal;
+                totalVisibleWht += whtVal;
+                totalVisibleNet += netVal;
             } else {
                 tr.style.display = 'none';
             }
@@ -1599,7 +1963,15 @@
         const footCount = document.getElementById('pageTasFootCount');
         if (footCount) footCount.textContent = visibleCount;
         const footAmt = document.getElementById('pageTasFootAmount');
-        if (footAmt) footAmt.textContent = 'ETB ' + totalVisibleAmt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        if (footAmt) {
+            if (totalVisibleWht > 0) {
+                footAmt.innerHTML = `<div>ETB ${totalVisibleAmt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>` +
+                    `<small class="text-danger d-block font-monospace" style="font-size:0.68rem;" id="pageTasFootWht">WHT: - ETB ${totalVisibleWht.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</small>` +
+                    `<small class="text-success d-block font-monospace" style="font-size:0.68rem;" id="pageTasFootNet">Net: ETB ${totalVisibleNet.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</small>`;
+            } else {
+                footAmt.innerHTML = `<div>ETB ${totalVisibleAmt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>`;
+            }
+        }
     }
 
     // Live table filtering
@@ -1622,11 +1994,16 @@
             if (tableId === 'pageTasTable') {
                 if (tr.id === 'pageTasEmptyFilterRow') return;
                 const hasTin = tr.getAttribute('data-has-tin') === '1';
+                const hasWht = tr.getAttribute('data-has-wht') === '1';
                 if (_activeTasTinFilter === 'with_tin' && !hasTin) {
                     tr.style.display = 'none';
                     return;
                 }
                 if (_activeTasTinFilter === 'missing_tin' && hasTin) {
+                    tr.style.display = 'none';
+                    return;
+                }
+                if (_activeTasTinFilter === 'with_wht' && !hasWht) {
                     tr.style.display = 'none';
                     return;
                 }
@@ -2309,6 +2686,261 @@
             bootstrap.Modal.getOrCreateInstance(modalEl).show();
         } else if (window.$ && typeof $(modalEl).modal === 'function') {
             $(modalEl).modal('show');
+        }
+    }
+
+    // Active index for detail modal
+    let _activeTasDetailIdx = null;
+
+    // Open Expense Request & Withholding Tax (WHT) Detail Modal for TAS Purchase
+    function openTasExpenseDetailModal(idx) {
+        _activeTasDetailIdx = idx;
+        const tas = (window._pageTasPurchases && window._pageTasPurchases[idx]) || {};
+        const modalEl = document.getElementById('tasExpenseDetailModal');
+        if (!modalEl) return;
+
+        const baseAmount = parseFloat(tas.base_amount || tas.amount || 0) || 0;
+        const vatAmount  = parseFloat(tas.vat_amount || 0) || 0;
+        const whtAmount  = parseFloat(tas.withholding_amount || 0) || 0;
+        const hasWht     = (tas.has_withholding || whtAmount > 0);
+        const whtRate    = parseFloat(tas.withholding_rate || (whtAmount > 0 ? (whtAmount / Math.max(1, baseAmount) * 100).toFixed(1) : 0)) || 0;
+        const netAmount  = parseFloat(tas.net_disbursed || (baseAmount - whtAmount)) || 0;
+
+        const formatMoney = (val) => 'ETB ' + (parseFloat(val) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+        // Header subtitles & badges
+        const voucherBadge = document.getElementById('tasModalVoucherBadge');
+        if (voucherBadge) voucherBadge.textContent = tas.request_number || (tas.id ? ('EXP-' + tas.id) : ('TAS #' + (idx + 1)));
+
+        const payeeSub = document.getElementById('tasModalPayeeSubtitle');
+        if (payeeSub) payeeSub.textContent = tas.payee || tas.seller_name || 'Vendor';
+
+        const amtSub = document.getElementById('tasModalAmountSubtitle');
+        if (amtSub) amtSub.textContent = formatMoney(baseAmount);
+
+        const catSub = document.getElementById('tasModalCategorySubtitle');
+        if (catSub) catSub.textContent = tas.category || (tas.is_fuel ? 'Fuel Expense' : 'TAS Purchase (0% VAT)');
+
+        const statusBadge = document.getElementById('tasModalWhtStatusBadge');
+        if (statusBadge) {
+            if (hasWht) {
+                statusBadge.className = 'badge rounded-pill fw-semibold bg-danger text-white shadow-2xs';
+                statusBadge.innerHTML = `<i class="fa-solid fa-hand-holding-dollar me-1"></i>${whtRate > 0 ? whtRate + '% ' : ''}WHT Deducted`;
+            } else {
+                statusBadge.className = 'badge rounded-pill fw-semibold bg-secondary-subtle text-secondary border border-secondary-subtle';
+                statusBadge.textContent = '0% WHT (No Deduction)';
+            }
+        }
+
+        // Financial 4-Cards
+        const grossEl = document.getElementById('tasCardGross');
+        if (grossEl) grossEl.textContent = formatMoney(baseAmount);
+
+        const vatEl = document.getElementById('tasCardVat');
+        if (vatEl) vatEl.textContent = formatMoney(vatAmount);
+
+        const whtLabel = document.getElementById('tasCardWhtLabel');
+        if (whtLabel) whtLabel.textContent = hasWht ? `WHT (${whtRate}%)` : 'WHT (0%)';
+
+        const whtEl = document.getElementById('tasCardWht');
+        if (whtEl) {
+            whtEl.textContent = hasWht ? `- ${formatMoney(whtAmount)}` : 'ETB 0.00';
+            whtEl.className = 'fs-6 fw-bold font-monospace ' + (hasWht ? 'text-danger' : 'text-muted');
+        }
+
+        const whtRateSub = document.getElementById('tasCardWhtRate');
+        if (whtRateSub) whtRateSub.textContent = hasWht ? `${whtRate}% Withholding` : 'Not Applicable';
+
+        const netEl = document.getElementById('tasCardNet');
+        if (netEl) netEl.textContent = formatMoney(netAmount);
+
+        // WHT Info Card
+        const whtSettledBadge = document.getElementById('tasWhtSettledBadge');
+        const whtRateDisplay = document.getElementById('tasWhtRateDisplay');
+        const whtRateDesc = document.getElementById('tasWhtRateSub');
+        const whtAmountDisplay = document.getElementById('tasWhtAmountDisplay');
+        const whtReceiptNoDisplay = document.getElementById('tasWhtReceiptNoDisplay');
+        const whtNoDocBadge = document.getElementById('tasWhtNoDocBadge');
+        const whtDocLink = document.getElementById('tasWhtDocLink');
+
+        if (whtRateDisplay) whtRateDisplay.textContent = hasWht ? `${whtRate}%` : '0.0%';
+        if (whtRateDesc) {
+            if (!hasWht) {
+                whtRateDesc.textContent = 'No withholding tax applied';
+            } else if (whtRate >= 30) {
+                whtRateDesc.textContent = 'Unregistered vendor rate (30%)';
+            } else if (whtRate >= 3) {
+                whtRateDesc.textContent = 'Services standard rate (3%)';
+            } else if (whtRate >= 2) {
+                whtRateDesc.textContent = 'Goods supply standard rate (2%)';
+            } else {
+                whtRateDesc.textContent = 'Withholding tax rate';
+            }
+        }
+        if (whtAmountDisplay) whtAmountDisplay.textContent = formatMoney(whtAmount);
+        if (whtReceiptNoDisplay) whtReceiptNoDisplay.textContent = tas.withholding_receipt_number && tas.withholding_receipt_number !== '-' ? tas.withholding_receipt_number : (hasWht ? 'Pending Certificate #' : 'None');
+
+        if (whtSettledBadge) {
+            if (!hasWht) {
+                whtSettledBadge.className = 'badge rounded-pill fw-semibold bg-light text-muted border';
+                whtSettledBadge.textContent = 'No WHT';
+            } else if (tas.withholding_settled) {
+                whtSettledBadge.className = 'badge rounded-pill fw-semibold bg-success text-white shadow-2xs';
+                whtSettledBadge.innerHTML = '<i class="fa-solid fa-circle-check me-1"></i>Settled with ERCA';
+            } else {
+                whtSettledBadge.className = 'badge rounded-pill fw-semibold bg-warning-subtle text-warning border border-warning-subtle';
+                whtSettledBadge.innerHTML = '<i class="fa-solid fa-clock me-1"></i>Pending Tax Settlement';
+            }
+        }
+
+        const whtSlipUrl = tas.withholding_receipt_url || null;
+        if (whtSlipUrl) {
+            if (whtDocLink) {
+                whtDocLink.href = whtSlipUrl;
+                whtDocLink.classList.remove('d-none');
+                whtDocLink.classList.add('d-inline-flex');
+            }
+            if (whtNoDocBadge) whtNoDocBadge.classList.add('d-none');
+        } else {
+            if (whtDocLink) {
+                whtDocLink.classList.add('d-none');
+                whtDocLink.classList.remove('d-inline-flex');
+            }
+            if (whtNoDocBadge) whtNoDocBadge.classList.remove('d-none');
+        }
+
+        // Column 1: Voucher Details
+        const detReqNo = document.getElementById('tasDetRequestNo');
+        if (detReqNo) detReqNo.textContent = tas.request_number || '-';
+
+        const detPayee = document.getElementById('tasDetPayee');
+        if (detPayee) detPayee.textContent = tas.payee || tas.seller_name || '-';
+
+        const detProject = document.getElementById('tasDetProject');
+        if (detProject) detProject.textContent = tas.project_name || 'General';
+
+        const detCategory = document.getElementById('tasDetCategory');
+        if (detCategory) detCategory.textContent = tas.category || '-';
+
+        const detAccount = document.getElementById('tasDetAccount');
+        if (detAccount) detAccount.textContent = tas.account_name || 'Main Operational Account';
+
+        const detDateEc = document.getElementById('tasDetDateEc');
+        if (detDateEc) detDateEc.textContent = tas.date_ec || tas.receipt_date_ec || '-';
+
+        const detDateGc = document.getElementById('tasDetDateGc');
+        if (detDateGc) detDateGc.textContent = tas.date_gc || tas.raw_date || '-';
+
+        const detPaymentRef = document.getElementById('tasDetPaymentRef');
+        if (detPaymentRef) detPaymentRef.textContent = tas.payment_reference || '-';
+
+        const detDesc = document.getElementById('tasDetDescription');
+        if (detDesc) detDesc.textContent = tas.description || 'No description entered.';
+
+        // Column 2: ERCA e-Tax Declaration
+        const cleanTin = (String(tas.seller_tin || '')).replace(/\D/g, '');
+        const hasValidTin = cleanTin.length === 10;
+
+        const detTin = document.getElementById('tasDetSupplierTin');
+        if (detTin) {
+            detTin.textContent = tas.seller_tin && tas.seller_tin !== '-' ? tas.seller_tin : 'Missing';
+            detTin.className = 'font-monospace fw-bold small ' + (hasValidTin ? 'text-dark' : 'text-danger');
+        }
+
+        const detTinBadge = document.getElementById('tasDetTinStatusBadge');
+        if (detTinBadge) {
+            if (hasValidTin) {
+                detTinBadge.className = 'badge bg-success-subtle text-success border border-success-subtle rounded-pill font-monospace';
+                detTinBadge.innerHTML = '<i class="fa-solid fa-check me-0.5"></i>10 Digits';
+            } else {
+                detTinBadge.className = 'badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill font-monospace';
+                detTinBadge.innerHTML = '<i class="fa-solid fa-triangle-exclamation me-0.5"></i>Missing TIN';
+            }
+        }
+
+        const detFsNo = document.getElementById('tasDetFsNo');
+        if (detFsNo) detFsNo.textContent = tas.fs_no && tas.fs_no !== '-' ? ('FS #' + tas.fs_no) : '-';
+
+        const detMrcNo = document.getElementById('tasDetMrcNo');
+        if (detMrcNo) detMrcNo.textContent = tas.mrc_no && tas.mrc_no !== '-' ? tas.mrc_no : '-';
+
+        const detPurchaserTin = document.getElementById('tasDetPurchaserTin');
+        if (detPurchaserTin) detPurchaserTin.textContent = tas.purchaser_tin || '-';
+
+        const detPurcType = document.getElementById('tasDetPurcType');
+        if (detPurcType) detPurcType.textContent = tas.purc_type || 'G';
+
+        const detReceiptDateEc = document.getElementById('tasDetReceiptDateEc');
+        if (detReceiptDateEc) detReceiptDateEc.textContent = tas.receipt_date_ec || tas.date_ec || '-';
+
+        const detEncodingDateEc = document.getElementById('tasDetEncodingDateEc');
+        if (detEncodingDateEc) detEncodingDateEc.textContent = tas.encoding_date_ec || '-';
+
+        const detEncodedBy = document.getElementById('tasDetEncodedBy');
+        if (detEncodedBy) detEncodedBy.textContent = tas.encoded_by || '-';
+
+        // Receipt Slip Preview
+        const slipUrl = tas.receipt_slip_url || tas.attachment_url || null;
+        const slipBtn = document.getElementById('tasModalReceiptSlipBtn');
+        const noSlipBadge = document.getElementById('tasModalNoSlipBadge');
+        const slipPreviewCard = document.getElementById('tasSlipPreviewCard');
+        const slipPreviewOpenLink = document.getElementById('tasSlipPreviewOpenLink');
+        const slipPreviewImg = document.getElementById('tasSlipPreviewImg');
+        const slipPreviewPdf = document.getElementById('tasSlipPreviewPdf');
+
+        if (slipUrl) {
+            if (slipBtn) {
+                slipBtn.href = slipUrl;
+                slipBtn.classList.remove('d-none');
+                slipBtn.classList.add('d-inline-flex');
+            }
+            if (noSlipBadge) noSlipBadge.classList.add('d-none');
+
+            const isPdf = /\.pdf(\?.*)?$/i.test(slipUrl);
+            if (slipPreviewCard) slipPreviewCard.classList.remove('d-none');
+            if (slipPreviewOpenLink) slipPreviewOpenLink.href = slipUrl;
+
+            if (isPdf) {
+                if (slipPreviewImg) { slipPreviewImg.classList.add('d-none'); slipPreviewImg.src = ''; }
+                if (slipPreviewPdf) { slipPreviewPdf.classList.remove('d-none'); slipPreviewPdf.src = slipUrl; }
+            } else {
+                if (slipPreviewPdf) { slipPreviewPdf.classList.add('d-none'); slipPreviewPdf.src = ''; }
+                if (slipPreviewImg) { slipPreviewImg.classList.remove('d-none'); slipPreviewImg.src = slipUrl; }
+            }
+        } else {
+            if (slipBtn) {
+                slipBtn.classList.add('d-none');
+                slipBtn.classList.remove('d-inline-flex');
+            }
+            if (noSlipBadge) noSlipBadge.classList.remove('d-none');
+            if (slipPreviewCard) slipPreviewCard.classList.add('d-none');
+            if (slipPreviewImg) slipPreviewImg.src = '';
+            if (slipPreviewPdf) slipPreviewPdf.src = '';
+        }
+
+        // Show modal
+        if (window.bootstrap && bootstrap.Modal) {
+            bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        } else if (window.$ && typeof $(modalEl).modal === 'function') {
+            $(modalEl).modal('show');
+        }
+    }
+
+    // Switch from Detail Modal to ERCA Slip Inspector
+    function openPageTasInspectorFromDetail() {
+        const modalEl = document.getElementById('tasExpenseDetailModal');
+        if (modalEl) {
+            if (window.bootstrap && bootstrap.Modal) {
+                const inst = bootstrap.Modal.getInstance(modalEl);
+                if (inst) inst.hide();
+            } else if (window.$ && typeof $(modalEl).modal === 'function') {
+                $(modalEl).modal('hide');
+            }
+        }
+        if (_activeTasDetailIdx !== null) {
+            setTimeout(() => {
+                openPageTasInspector(_activeTasDetailIdx);
+            }, 300);
         }
     }
 
