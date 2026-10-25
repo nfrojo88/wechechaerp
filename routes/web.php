@@ -245,6 +245,24 @@ Route::get('/run-migrations', function () {
             });
         }
 
+        // Direct guarantee for emergency material requests petty cash columns
+        if (\Illuminate\Support\Facades\Schema::hasTable('material_requests')) {
+            \Illuminate\Support\Facades\Schema::table('material_requests', function (\Illuminate\Database\Schema\Blueprint $table) {
+                if (!\Illuminate\Support\Facades\Schema::hasColumn('material_requests', 'purchase_method')) {
+                    $table->string('purchase_method', 50)->nullable()->after('status');
+                }
+            });
+        }
+
+        // Direct guarantee for petty cash purchases linked to material requests
+        if (\Illuminate\Support\Facades\Schema::hasTable('petty_cash_material_purchases')) {
+            \Illuminate\Support\Facades\Schema::table('petty_cash_material_purchases', function (\Illuminate\Database\Schema\Blueprint $table) {
+                if (!\Illuminate\Support\Facades\Schema::hasColumn('petty_cash_material_purchases', 'material_request_id')) {
+                    $table->foreignId('material_request_id')->nullable()->after('delivery_receipt_id')->constrained('material_requests')->nullOnDelete();
+                }
+            });
+        }
+
         // Check current columns in employees & payrolls & procurement_receipts table
         $columns = \Illuminate\Support\Facades\Schema::getColumnListing('employees');
         $gmCols = array_filter($columns, fn($c) => str_contains($c, 'gm_'));
