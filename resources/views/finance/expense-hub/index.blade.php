@@ -448,9 +448,10 @@
                         <td class="text-center">
                             @if($canDecideVat && !$item->is_locked)
                                 <button type="button" class="btn btn-xs rounded-pill px-2.5 py-1 text-xxs fw-semibold {{ $statusBadgeClass }} btn-open-decision"
+                                        data-hub-action="full-studio"
                                         data-source-type="{{ $item->source_type }}"
                                         data-source-id="{{ $item->source_id }}"
-                                        onclick="openDecisionModal('{{ $item->source_type }}', '{{ $item->source_id }}', this)" title="Click to review or edit VAT decision">
+                                        onclick="openDecisionModal('{{ $item->source_type }}', '{{ $item->source_id }}', this); return false;" title="Click to review or edit VAT decision">
                                     {{ $statusLabel }} <i class="fa-solid fa-pen ms-1 opacity-75"></i>
                                 </button>
                             @else
@@ -496,10 +497,11 @@
                                 </span>
                             @else
                                 @if($canDecideVat && !$item->is_locked)
-                                    <button type="button" class="btn btn-xs btn-outline-primary border-dashed rounded-pill px-2 py-0.5 text-xxs"
+                                    <button type="button" class="btn btn-xs btn-outline-primary border-dashed rounded-pill px-2 py-0.5 text-xxs btn-add-receipt"
+                                            data-hub-action="add-receipt"
                                             data-source-type="{{ $item->source_type }}"
                                             data-source-id="{{ $item->source_id }}"
-                                            onclick="openAddReceiptAction('{{ $item->source_type }}', '{{ $item->source_id }}', this)" title="Add Receipt to this expense">
+                                            onclick="openAddReceiptAction('{{ $item->source_type }}', '{{ $item->source_id }}', this); return false;" title="Add Receipt to this expense">
                                         <i class="fa-solid fa-plus me-0.5"></i> Add
                                     </button>
                                 @else
@@ -519,9 +521,10 @@
                         <td class="text-end text-nowrap">
                             <div class="d-inline-flex align-items-center gap-1">
                                 <button type="button" class="btn btn-xs btn-outline-secondary rounded-pill px-2 py-1 text-xs fw-semibold btn-view-details"
+                                        data-hub-action="view-details"
                                         data-source-type="{{ $item->source_type }}"
                                         data-source-id="{{ $item->source_id }}"
-                                        onclick="openExpenseDetailModal('{{ $item->source_type }}', '{{ $item->source_id }}', this)" title="View Full Purpose, Line Items &amp; Audit Trail">
+                                        onclick="openExpenseDetailModal('{{ $item->source_type }}', '{{ $item->source_id }}', this); return false;" title="View Full Purpose, Line Items &amp; Audit Trail">
                                     <i class="fa-solid fa-circle-info"></i>
                                 </button>
 
@@ -537,8 +540,9 @@
                                         </li>
                                         <li>
                                             <button type="button" class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center gap-2 w-100 text-start"
+                                               data-hub-action="add-receipt"
                                                data-source-type="{{ $item->source_type }}" data-source-id="{{ $item->source_id }}"
-                                               onclick="openAddReceiptAction('{{ $item->source_type }}', '{{ $item->source_id }}', this)">
+                                               onclick="openAddReceiptAction('{{ $item->source_type }}', '{{ $item->source_id }}', this); return false;">
                                                 <div class="bg-primary bg-opacity-10 text-primary rounded-circle p-1.5 d-flex align-items-center justify-content-center flex-shrink-0" style="width: 28px; height: 28px;">
                                                     <i class="fa-solid fa-cloud-arrow-up text-xxs"></i>
                                                 </div>
@@ -550,8 +554,9 @@
                                         </li>
                                         <li>
                                             <button type="button" class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center gap-2 w-100 text-start"
+                                               data-hub-action="add-vat"
                                                data-source-type="{{ $item->source_type }}" data-source-id="{{ $item->source_id }}"
-                                               onclick="openAddVatAction('{{ $item->source_type }}', '{{ $item->source_id }}', this)">
+                                               onclick="openAddVatAction('{{ $item->source_type }}', '{{ $item->source_id }}', this); return false;">
                                                 <div class="bg-success bg-opacity-10 text-success rounded-circle p-1.5 d-flex align-items-center justify-content-center flex-shrink-0" style="width: 28px; height: 28px;">
                                                     <i class="fa-solid fa-percent text-xxs"></i>
                                                 </div>
@@ -563,8 +568,9 @@
                                         </li>
                                         <li>
                                             <button type="button" class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center gap-2 w-100 text-start"
+                                               data-hub-action="non-vat"
                                                data-source-type="{{ $item->source_type }}" data-source-id="{{ $item->source_id }}"
-                                               onclick="openNonVatAction('{{ $item->source_type }}', '{{ $item->source_id }}', this)">
+                                               onclick="openNonVatAction('{{ $item->source_type }}', '{{ $item->source_id }}', this); return false;">
                                                 <div class="bg-secondary bg-opacity-10 text-secondary rounded-circle p-1.5 d-flex align-items-center justify-content-center flex-shrink-0" style="width: 28px; height: 28px;">
                                                     <i class="fa-solid fa-receipt text-xxs"></i>
                                                 </div>
@@ -576,8 +582,9 @@
                                         </li>
                                         <li>
                                             <button type="button" class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center gap-2 w-100 text-start"
+                                               data-hub-action="verified-without-receipt"
                                                data-source-type="{{ $item->source_type }}" data-source-id="{{ $item->source_id }}"
-                                               onclick="openVerifiedWithoutReceiptAction('{{ $item->source_type }}', '{{ $item->source_id }}', this)">
+                                               onclick="openVerifiedWithoutReceiptAction('{{ $item->source_type }}', '{{ $item->source_id }}', this); return false;">
                                                 <div class="bg-info bg-opacity-10 text-info rounded-circle p-1.5 d-flex align-items-center justify-content-center flex-shrink-0" style="width: 28px; height: 28px;">
                                                     <i class="fa-solid fa-check-double text-xxs"></i>
                                                 </div>
@@ -590,24 +597,27 @@
                                         <li><hr class="dropdown-divider my-1"></li>
                                         <li>
                                             <button type="button" class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center gap-2 text-muted w-100 text-start"
+                                               data-hub-action="view-details"
                                                data-source-type="{{ $item->source_type }}" data-source-id="{{ $item->source_id }}"
-                                               onclick="openExpenseDetailModal('{{ $item->source_type }}', '{{ $item->source_id }}', this)">
+                                               onclick="openExpenseDetailModal('{{ $item->source_type }}', '{{ $item->source_id }}', this); return false;">
                                                 <i class="fa-solid fa-circle-info fa-fw text-secondary"></i>
                                                 <span class="text-dark">View Purpose &amp; Line Items</span>
                                             </button>
                                         </li>
                                         <li>
                                             <button type="button" class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center gap-2 text-muted w-100 text-start"
+                                               data-hub-action="side-by-side"
                                                data-source-type="{{ $item->source_type }}" data-source-id="{{ $item->source_id }}"
-                                               onclick="openSideBySideReviewAction('{{ $item->source_type }}', '{{ $item->source_id }}', this)">
+                                               onclick="openSideBySideReviewAction('{{ $item->source_type }}', '{{ $item->source_id }}', this); return false;">
                                                 <i class="fa-solid fa-wand-magic-sparkles fa-fw text-primary"></i>
                                                 <span class="text-dark fw-semibold">Side-by-Side OCR Review</span>
                                             </button>
                                         </li>
                                         <li>
                                             <button type="button" class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center gap-2 text-muted w-100 text-start"
+                                               data-hub-action="full-studio"
                                                data-source-type="{{ $item->source_type }}" data-source-id="{{ $item->source_id }}"
-                                               onclick="openDecisionModal('{{ $item->source_type }}', '{{ $item->source_id }}', this)">
+                                               onclick="openDecisionModal('{{ $item->source_type }}', '{{ $item->source_id }}', this); return false;">
                                                 <i class="fa-solid fa-sliders fa-fw text-secondary"></i>
                                                 <span class="text-dark">Full Studio (3% WHT, TAS)</span>
                                             </button>
@@ -1894,8 +1904,24 @@
 .text-xxs { font-size: 0.72rem; }
 .btn-xs { font-size: 0.75rem; padding: 0.2rem 0.5rem; }
 .shadow-xs { box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
-</style>
 
+/* Ensure modals are never trapped in containing blocks / transform stacking contexts */
+.content-wrapper > .modal,
+.modal {
+    animation: none !important;
+    transform: none !important;
+    z-index: 1065 !important;
+}
+.modal.fade .modal-dialog {
+    transition: transform .3s ease-out;
+}
+.modal-backdrop {
+    z-index: 1060 !important;
+}
+</style>
+@endsection
+
+@push('scripts')
 <script>
 let currentEditingItem = null;
 let currentDetailItem = null;
@@ -1916,49 +1942,64 @@ function showModalSafe(modalId) {
         return;
     }
 
-    // Dismiss any open dropdown menus before displaying modal to avoid focus traps
+    // 1. Move modal directly to document.body to break out of any container transform/stacking context
+    if (el.parentElement !== document.body) {
+        document.body.appendChild(el);
+    }
+
+    // 2. Dismiss any open dropdown menus before displaying modal to avoid focus traps
     try {
-        document.querySelectorAll('.dropdown-menu.show').forEach(m => m.classList.remove('show'));
-        document.querySelectorAll('.dropdown-toggle.show').forEach(b => {
-            b.classList.remove('show');
-            b.setAttribute('aria-expanded', 'false');
+        document.querySelectorAll('.dropdown-menu.show').forEach(m => {
+            m.classList.remove('show');
+            const dropToggle = m.closest('.dropdown')?.querySelector('[data-bs-toggle="dropdown"]');
+            if (dropToggle) {
+                dropToggle.classList.remove('show');
+                dropToggle.setAttribute('aria-expanded', 'false');
+            }
         });
     } catch(eDrop) {}
 
-    // 1. Try Bootstrap 5 Modal
-    try {
-        if (window.bootstrap && window.bootstrap.Modal) {
-            const instance = window.bootstrap.Modal.getOrCreateInstance(el);
-            instance.show();
-            return;
+    // 3. Defer slightly (50ms) to allow Popper/dropdown close cycle to finish cleanly
+    setTimeout(() => {
+        // Try Bootstrap 5 Modal
+        try {
+            if (window.bootstrap && window.bootstrap.Modal) {
+                const instance = window.bootstrap.Modal.getOrCreateInstance(el, {
+                    backdrop: true,
+                    keyboard: true,
+                    focus: true
+                });
+                instance.show();
+                return;
+            }
+        } catch (e) {
+            console.warn('Bootstrap 5 modal show error:', e);
         }
-    } catch (e) {
-        console.warn('Bootstrap 5 modal show error:', e);
-    }
 
-    // 2. Try jQuery Modal
-    try {
-        if (window.$ && typeof window.$(el).modal === 'function') {
-            window.$(el).modal('show');
-            return;
+        // Try jQuery Modal
+        try {
+            if (window.$ && typeof window.$(el).modal === 'function') {
+                window.$(el).modal('show');
+                return;
+            }
+        } catch (e2) {
+            console.warn('jQuery modal show error:', e2);
         }
-    } catch (e2) {
-        console.warn('jQuery modal show error:', e2);
-    }
 
-    // 3. Direct DOM fallback
-    el.classList.add('show');
-    el.style.display = 'block';
-    el.removeAttribute('aria-hidden');
-    el.setAttribute('aria-modal', 'true');
-    document.body.classList.add('modal-open');
-    let backdrop = document.querySelector('.modal-backdrop');
-    if (!backdrop) {
-        backdrop = document.createElement('div');
-        backdrop.className = 'modal-backdrop fade show';
-        backdrop.onclick = function() { hideModalSafe(el); };
-        document.body.appendChild(backdrop);
-    }
+        // Direct DOM fallback
+        el.classList.add('show');
+        el.style.display = 'block';
+        el.removeAttribute('aria-hidden');
+        el.setAttribute('aria-modal', 'true');
+        document.body.classList.add('modal-open');
+        let backdrop = document.querySelector('.modal-backdrop');
+        if (!backdrop) {
+            backdrop = document.createElement('div');
+            backdrop.className = 'modal-backdrop fade show';
+            backdrop.onclick = function() { hideModalSafe(el); };
+            document.body.appendChild(backdrop);
+        }
+    }, 50);
 }
 
 function hideModalSafe(modalId) {
@@ -1967,7 +2008,7 @@ function hideModalSafe(modalId) {
 
     try {
         if (window.bootstrap && window.bootstrap.Modal) {
-            const instance = window.bootstrap.Modal.getInstance(el);
+            const instance = window.bootstrap.Modal.getOrCreateInstance(el);
             if (instance) {
                 instance.hide();
                 return;
@@ -2051,12 +2092,12 @@ function resolveItem(arg1, arg2, buttonEl) {
     let sourceType = null;
     let sourceId = null;
 
-    if (arg1 && arg2 !== undefined && arg2 !== null) {
+    if (arg1 && arg2 !== undefined && arg2 !== null && typeof arg1 === 'string' && typeof arg2 !== 'object') {
         sourceType = String(arg1);
         sourceId = String(arg2);
     } else if (buttonEl) {
-        sourceType = buttonEl.getAttribute('data-source-type');
-        sourceId = buttonEl.getAttribute('data-source-id');
+        sourceType = buttonEl.getAttribute('data-source-type') || buttonEl.dataset?.sourceType;
+        sourceId = buttonEl.getAttribute('data-source-id') || buttonEl.dataset?.sourceId;
     }
 
     // 2. Look up in window.expenseHubRegistry
@@ -2067,13 +2108,13 @@ function resolveItem(arg1, arg2, buttonEl) {
         }
     }
 
-    // 3. Look up from row element dataset
+    // 3. Look up from row element dataset via ID
     let row = null;
-    if (buttonEl && buttonEl.closest) {
-        row = buttonEl.closest('tr');
-    }
-    if (!row && sourceType && sourceId) {
+    if (sourceType && sourceId) {
         row = document.getElementById('hub-row-' + sourceType + '-' + sourceId);
+    }
+    if (!row && buttonEl && buttonEl.closest) {
+        row = buttonEl.closest('tr');
     }
     if (row) {
         return extractItemFromRow(row);
@@ -3108,13 +3149,68 @@ document.addEventListener('DOMContentLoaded', function () {
         cb.addEventListener('change', updateBulkState);
     });
 
-    // Close button and action button fallbacks
+    // Relocate all hub modals directly to document.body on page ready
+    const hubModals = [
+        'expenseDetailModal', 'decisionModal', 'quickAddReceiptModal',
+        'verifiedWithoutReceiptModal', 'bulkModal', 'monthLockModal',
+        'ocrSideBySideReviewModal', 'preExportCheckModal'
+    ];
+    hubModals.forEach(function (id) {
+        const m = document.getElementById(id);
+        if (m && m.parentElement !== document.body) {
+            document.body.appendChild(m);
+        }
+    });
+
+    // Close button and action button fallbacks & global delegation
     document.addEventListener('click', function (e) {
         const closeBtn = e.target.closest('[data-bs-dismiss="modal"], [data-dismiss="modal"]');
         if (closeBtn) {
             const modal = closeBtn.closest('.modal');
             if (modal) {
                 hideModalSafe(modal);
+            }
+            return;
+        }
+
+        const actionBtn = e.target.closest('[data-hub-action]');
+        if (actionBtn) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            const action = actionBtn.getAttribute('data-hub-action');
+            const sType  = actionBtn.getAttribute('data-source-type');
+            const sId    = actionBtn.getAttribute('data-source-id');
+
+            // Dismiss parent dropdown cleanly
+            const dropToggle = actionBtn.closest('.dropdown')?.querySelector('[data-bs-toggle="dropdown"]');
+            if (dropToggle && window.bootstrap && window.bootstrap.Dropdown) {
+                const dInst = window.bootstrap.Dropdown.getInstance(dropToggle);
+                if (dInst) dInst.hide();
+            }
+
+            switch (action) {
+                case 'add-receipt':
+                    openAddReceiptAction(sType, sId, actionBtn);
+                    break;
+                case 'add-vat':
+                    openAddVatAction(sType, sId, actionBtn);
+                    break;
+                case 'non-vat':
+                    openNonVatAction(sType, sId, actionBtn);
+                    break;
+                case 'verified-without-receipt':
+                    openVerifiedWithoutReceiptAction(sType, sId, actionBtn);
+                    break;
+                case 'view-details':
+                    openExpenseDetailModal(sType, sId, actionBtn);
+                    break;
+                case 'side-by-side':
+                    openSideBySideReviewAction(sType, sId, actionBtn);
+                    break;
+                case 'full-studio':
+                    openDecisionModal(sType, sId, actionBtn);
+                    break;
             }
             return;
         }
@@ -3680,4 +3776,4 @@ function pecFixItem(sourceType, sourceId) {
     openDecisionModal(sourceType, sourceId);
 }
 </script>
-@endsection
+@endpush
