@@ -329,4 +329,244 @@ class ExpenseHubProDocTest extends TestCase
         $expenses = $this->queryService->getExpenses(['source_module' => 'vehicle_fuel_requests'], $this->financeHead);
         $this->assertInstanceOf(Collection::class, $expenses);
     }
+
+    /**
+     * Test 7: Action 1 - Receipt upload and graceful fallback when OCR fails
+     */
+    public function test_action_1_receipt_upload_and_scan_fallback_on_error()
+    {
+        $response = $this->actingAs($this->financeHead)->postJson(route('finance.expense-hub.scan-receipt'), [
+            'receipt_path' => 'non_existent_slip_test.jpg',
+            'source_type'  => 'expense_request',
+            'source_id'    => 12345,
+        ]);
+
+        $response->assertStatus(200);
+        // Fallback per pro.doc Action 1: Never block, returns ocr_failed: true with empty fields
+        $this->assertTrue($response->json('ocr_failed'));
+        $this->assertArrayHasKey('file_url', $response->json());
+        $this->assertEquals('', $response->json('supplier_tin'));
+        $this->assertEquals('', $response->json('fs_no'));
+    }
+
+    /**
+     * Test 8: Action 2 - Enforce mandatory 10-digit TIN, FS No, MRC No for 15% VAT
+     */
+    public function test_action_2_add_vat_requires_mandatory_tin_fs_mrc_and_blocks_without_them()
+    {
+        // 1. Missing TIN, FS, and MRC should be rejected with 422
+        $response = $this->actingAs($this->financeHead)->postJson(route('finance.expense-hub.decision'), [
+            'source_type' => 'expense_request',
+            'source_id'   => 8881,
+            'vat_status'  => 'vat_applies',
+            'amount'      => 1150.00,
+        ]);
+
+        $response->assertStatus(422);
+        $this->assertFalse($response->json('success'));
+        $this->assertStringContainsString('Missing mandatory fields', $response->json('message'));
+
+        // 2. Invalid TIN (e.g. 5 digits instead of 10)
+        $response2 = $this->actingAs($this->financeHead)->postJson(route('finance.expense-hub.decision'), [
+            'source_type'       => 'expense_request',
+            'source_id'         => 8881,
+            'vat_status'        => 'vat_applies',
+            'amount'            => 1150.00,
+            'custom_seller_tin' => '12345',
+            'custom_fs_no'      => 'FS-001',
+            'custom_mrc_no'     => 'MRC-001',
+        ]);
+
+        $response2->assertStatus(422);
+        $this->assertStringContainsString('Valid 10-digit Supplier TIN', $response2->json('message'));
+
+        // 3. Valid inputs save successfully and return normalized item & summary
+        $response3 = $this->actingAs($this->financeHead)->postJson(route('finance.expense-hub.decision'), [
+            'source_type'        => 'expense_request',
+            'source_id'          => 8881,
+            'vat_status'         => 'vat_applies',
+            'amount'             => 1150.00,
+            'vat_rate'           => 15.00,
+            'is_inclusive'       => 1,
+            'custom_seller_name' => 'Valid Steel Supplier',
+            'custom_seller_tin'  => '0012345678',
+            'custom_fs_no'       => 'FS-9912001',
+            'custom_mrc_no'      => 'MRC-889900',
+        ]);
+
+        $response3->assertStatus(200);
+        $this->assertTrue($response3->json('success'));
+        $this->assertEquals('vat_applies', $response3->json('item.vat_status'));
+        $this->assertEquals(1000.00, (float)$response3->json('item.decision_base_amount'));
+        $this->assertEquals(150.00, (float)$response3->json('item.decision_vat_amount'));
+        $this->assertArrayHasKey('summary', $response3->json());
+    }
+
+    /**
+     * Test 9: Action 3 - Non-VAT payment saves and zeroes VAT
+     */
+    public function test_action_3_non_vat_payment_routes_to_report_b()
+    {
+        $response = $this->actingAs($this->financeHead)->postJson(route('finance.expense-hub.decision'), [
+            'source_type'        => 'expense_request',
+            'source_id'          => 8882,
+            'vat_status'         => 'no_vat',
+            'amount'             => 2500.00,
+            'no_vat_reason_code' => 'exempt_item',
+            'no_vat_reason_note' => 'Fuel / Tax exempt goods',
+            'custom_seller_name' => 'TotalEnergies Ethiopia',
+            'custom_fs_no'       => 'FS-TAS-001',
+        ]);
+
+        $response->assertStatus(200);
+        $this->assertTrue($response->json('success'));
+        $this->assertEquals('no_vat', $response->json('item.vat_status'));
+        $this->assertEquals(0.00, (float)$response->json('item.decision_vat_amount'));
+    }
+
+    /**
+     * Test 10: Action 4 - Verified Without Receipt sets is_verified_without_receipt = true
+     */
+    public function test_action_4_verified_without_receipt_routes_to_report_d_only()
+    {
+        $response = $this->actingAs($this->financeHead)->postJson(route('finance.expense-hub.decision'), [
+            'source_type'                 => 'expense_request',
+            'source_id'                   => 8883,
+            'vat_status'                  => 'verified_no_receipt',
+            'is_verified_without_receipt' => 1,
+            'amount'                      => 450.00,
+            'no_vat_reason_code'          => 'petty_cash',
+            'no_vat_reason_note'          => 'Informal day labor payment',
+            'custom_seller_name'          => 'Day Labor Crew',
+        ]);
+
+        $response->assertStatus(200);
+        $this->assertTrue($response->json('success'));
+        $this->assertTrue($response->json('item.is_verified_without_receipt'));
+        $this->assertEquals(0.00, (float)$response->json('item.decision_vat_amount'));
+    }
+
+    /**
+     * Test 11: Action 5 - Audit History endpoint retrieves logs
+     */
+    public function test_action_5_item_audit_history_endpoint()
+    {
+        // First record a decision to generate an audit log
+        $this->actingAs($this->financeHead)->postJson(route('finance.expense-hub.decision'), [
+            'source_type'        => 'expense_request',
+            'source_id'          => 8884,
+            'vat_status'         => 'vat_applies',
+            'amount'             => 1150.00,
+            'custom_seller_name' => 'Audit History Supplier',
+            'custom_seller_tin'  => '0098765432',
+            'custom_fs_no'       => 'FS-HIST-001',
+            'custom_mrc_no'      => 'MRC-HIST-001',
+        ]);
+
+        $response = $this->actingAs($this->financeHead)->getJson(route('finance.expense-hub.item-history', [
+            'source_type' => 'expense_request',
+            'source_id'   => 8884,
+        ]));
+
+        $response->assertStatus(200);
+        $this->assertTrue($response->json('success'));
+        $this->assertIsArray($response->json('logs'));
+        $this->assertNotEmpty($response->json('logs'));
+        $this->assertEquals('VAT Decision Updated', $response->json('logs.0.action'));
+    }
+
+    /**
+     * Test 12: Action 7 - 3% Withholding Tax auto-calculates on pre-tax base
+     */
+    public function test_action_7_withholding_tax_calculation_and_ledger_routing()
+    {
+        $response = $this->actingAs($this->financeHead)->postJson(route('finance.expense-hub.decision'), [
+            'source_type'        => 'expense_request',
+            'source_id'          => 8885,
+            'vat_status'         => 'vat_applies',
+            'amount'             => 11500.00,
+            'vat_rate'           => 15.00,
+            'is_inclusive'       => 1,
+            'has_withholding'    => 1,
+            'withholding_rate'   => 3.00,
+            'withholding_amount' => 300.00, // 3% of 10,000 base
+            'withholding_receipt_number' => 'WHT-SLIP-9901',
+            'custom_seller_name' => 'Major Subcontractor PLC',
+            'custom_seller_tin'  => '0055443322',
+            'custom_fs_no'       => 'FS-WHT-001',
+            'custom_mrc_no'      => 'MRC-WHT-001',
+        ]);
+
+        $response->assertStatus(200);
+        $this->assertTrue($response->json('success'));
+        $this->assertTrue($response->json('item.has_withholding'));
+        $this->assertEquals(300.00, (float)$response->json('item.withholding_amount'));
+        $this->assertEquals(11200.00, (float)$response->json('item.net_payable_amount')); // 11500 - 300
+    }
+
+    /**
+     * Test 13: Exact duplicate receipt is blocked across other rows
+     */
+    public function test_duplicate_receipt_blocked_across_rows()
+    {
+        // First row with FS-DUP-001 and TIN 0077889900
+        $this->actingAs($this->financeHead)->postJson(route('finance.expense-hub.decision'), [
+            'source_type'        => 'expense_request',
+            'source_id'          => 8886,
+            'vat_status'         => 'vat_applies',
+            'amount'             => 1150.00,
+            'custom_seller_name' => 'Supplier Alpha',
+            'custom_seller_tin'  => '0077889900',
+            'custom_fs_no'       => 'FS-DUP-001',
+            'custom_mrc_no'      => 'MRC-DUP-001',
+        ]);
+
+        // Attempt second row with same FS No and TIN
+        $response = $this->actingAs($this->financeHead)->postJson(route('finance.expense-hub.decision'), [
+            'source_type'        => 'expense_request',
+            'source_id'          => 8887,
+            'vat_status'         => 'vat_applies',
+            'amount'             => 2300.00,
+            'custom_seller_name' => 'Supplier Beta',
+            'custom_seller_tin'  => '0077889900',
+            'custom_fs_no'       => 'FS-DUP-001',
+            'custom_mrc_no'      => 'MRC-DUP-001',
+        ]);
+
+        $response->assertStatus(422);
+        $this->assertFalse($response->json('success'));
+        $this->assertTrue($response->json('is_duplicate'));
+        $this->assertStringContainsString('Duplicate Receipt', $response->json('message'));
+    }
+
+    /**
+     * Test 14: Saving the same decision twice updates the row without creating duplicates
+     */
+    public function test_saving_decision_twice_does_not_create_duplicate_records()
+    {
+        $payload = [
+            'source_type'        => 'expense_request',
+            'source_id'          => 8888,
+            'vat_status'         => 'vat_applies',
+            'amount'             => 1150.00,
+            'custom_seller_name' => 'Idempotent Supplier',
+            'custom_seller_tin'  => '0066554433',
+            'custom_fs_no'       => 'FS-IDEM-001',
+            'custom_mrc_no'      => 'MRC-IDEM-001',
+        ];
+
+        // Save 1st time
+        $r1 = $this->actingAs($this->financeHead)->postJson(route('finance.expense-hub.decision'), $payload);
+        $r1->assertStatus(200);
+
+        // Save 2nd time on exact same row
+        $r2 = $this->actingAs($this->financeHead)->postJson(route('finance.expense-hub.decision'), $payload);
+        $r2->assertStatus(200);
+
+        // Assert exactly 1 record in database
+        $count = ExpenseHubVatDecision::where('source_type', 'expense_request')
+            ->where('source_id', 8888)
+            ->count();
+        $this->assertEquals(1, $count);
+    }
 }

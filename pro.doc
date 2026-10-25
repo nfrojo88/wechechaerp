@@ -1,97 +1,75 @@
 ROLE
-You are a senior Laravel engineer working on the existing Wechecha Construction ERP. Extend the existing Finance module. Do not rebuild it or duplicate existing logic. Reuse ExpenseHubController, ExpenseHubQueryService, syncVatDecisionToLedger(), FinanceTaxReportController, TaxSettlement, and the tables expense_hub_vat_decisions, receipts and receipt_items. Read these first and list what already exists before writing code.
+You are a senior Laravel engineer on the existing Wechecha Construction ERP. Work only on the Expense Hub (finance/expense-hub) row action dropdown titled "Expense Tax & Receipt". Reuse existing code: ExpenseHubController, ExpenseHubQueryService, syncVatDecisionToLedger(), scanReceipt(), the OCR side-by-side review modal (#ocrSideBySideReviewModal), the pre-export check, and the tables expense_hub_vat_decisions, receipts, receipt_items. Do not duplicate logic. First inspect the current dropdown in index.blade.php and list which items are already wired and which are dead (no click handler, no route, or errors). Then fix only what is missing or broken.
 
-GOAL
-Make the Expense Hub (finance/expense-hub) the single place where every paid cash expense is collected, verified, and classified. Verified results must flow automatically into the VAT & Withholding Tax Deductions Ledger and into the official MoR/ERCA report formats. Add receipt upload with AI OCR that pre-fills all the fields the Excel reports need.
+PROBLEM
+The dropdown items below are displayed, but clicking them does not do the right thing. Make every item fully functional, as specified.
 
-PART 1 - COLLECT
-- The Hub lists all paid cash transactions from the 9 modules: ExpenseRequest, ProcurementPayment, CreditStorePayment, PettyCashMaterialPurchase, VehicleFuelRequest, IpcRecord, EmployeeAdvance, Payroll, FixedAsset.
-- Each row shows its verification status (see Part 2). New rows start as "Unverified".
-- Add filters by status, month (Ethiopian calendar), module, and project/site. Summary cards show total gross, total input VAT, total withholding, and counts per status.
+GENERAL RULES FOR ALL ACTIONS
+- Each action opens from the clicked row and works on that row's source_type + source_id.
+- Use a modal or side drawer. Do not reload the full page. After saving, refresh only that row and the summary cards, and show a success toast.
+- All saves go through ExpenseHubController::saveDecision() and then syncVatDecisionToLedger() inside a DB::transaction(). Saving twice must not create duplicate receipts or ledger rows.
+- Show server-side validation errors inline next to the field.
+- Respect permissions: Finance Officer can use all actions. Rows in a settled month are read-only (view only) unless the user is Finance Head.
+- Log every change in an audit log (user, time, old value, new value).
+- Show a loading state on buttons, and disable them while saving.
+- Remove any empty or placeholder menu item (there is a blank bullet between "Verified Without Receipt" and "View Purpose & Line Items").
+- Show a small status badge on the row after an action (Unverified, VAT, Non-VAT, No receipt, Withholding applied, Receipt attached).
 
-PART 2 - VERIFY (four outcomes)
-The finance user opens a row action "Verify / Classify" and picks one outcome:
+ACTION 1: Add Receipt  ("Upload slip or scan with AI OCR")
+- Opens a modal with: drag-and-drop file upload, a "Choose file" button, and a "Take photo" button on mobile (use capture="environment"). Accept JPG, PNG, PDF, max 10 MB. Show a preview thumbnail and a progress bar.
+- On upload: store the file, link it to the row (receipt_path), then run AI OCR (queue the job and show a "Scanning..." state).
+- OCR must return JSON: vat_category (G/S), seller_tin, seller_name, purchase_date (also convert to Ethiopian date), mrc_number, fs_number, description, unit_of_measure, quantity, unit_price, subtotal, vat_amount, total, and line items, plus a confidence score per field. Save raw_ocr_payload and ocr_confidence_score.
+- When OCR finishes, open the Side-by-Side OCR Review (Action 6) pre-filled with the results.
+- Fallback: if OCR fails or times out, keep the uploaded file and open the same review screen with empty editable fields. The user can fill them in manually. Never block.
+- Allow replace or remove receipt before the decision is confirmed.
+- Reject exact duplicates (same seller TIN + FS number + MRC) with a clear message that links to the existing record.
 
-1. With VAT receipt
-   - vat_status = vat_applies, 15% input VAT.
-   - Required: seller TIN (10 digits), FS number, MRC number, receipt date, base amount.
-   - Computes vat_amount and total. Supports VAT-inclusive and VAT-exclusive entry.
-   - Goes to the VAT pool and the 15-Column Purchase VAT Return.
+ACTION 2: Add VAT Payment  ("Input VAT at 15% rate")
+- Opens a form with: seller TIN (10 digits, required), seller name, FS number, MRC number, receipt date, description, VAT-inclusive / VAT-exclusive toggle, amount.
+- Auto-calculate base, 15% VAT, and total live as the user types. Show a warning if the VAT is not 15% of the base (small rounding tolerance).
+- Include an "Attach receipt" button that triggers Action 1, and pre-fill the form from OCR if a receipt is already attached.
+- Save sets vat_status = 'vat_applies', stores base_amount, vat_amount, total_amount, custom_seller_tin, custom_fs_no, custom_mrc_no, then syncs to the ledger and receipts tables. This row feeds Report A (15-column Purchase VAT Return) and the VAT pool.
+- Do not allow saving as VAT without TIN, FS number, and MRC. Show which one is missing.
 
-2. Without VAT receipt (receipt exists, no VAT charged: 0% or exempt)
-   - vat_status = no_vat, with a reason (exempt, non-VAT supplier, etc.).
-   - Required: receipt or voucher number, receipt date, seller TIN if available.
-   - Goes to the 9-Column Purchase TAS Declaration (purchase_type 6). It never enters the input VAT pool.
+ACTION 3: Non-VAT Payment  ("0% VAT / TAS exempt purchase")
+- Opens a form with: receipt or voucher number, receipt date, seller TIN (if available), required reason dropdown (exempt supply, non-VAT supplier, other), optional receipt attachment.
+- Save sets vat_status = 'no_vat', vat_amount = 0. This row feeds Report B (9-column TAS Declaration) and never enters the input VAT pool.
 
-3. With receipt and withholding
-   - Can be combined with outcome 1 or 2.
-   - Sets has_withholding = true, rate 3%, withholding_amount = 3% of the pre-tax base.
-   - Optional upload of the WHT voucher slip and its serial number. Missing slips show an audit alert in the Slips tab.
-   - Net paid = gross minus withholding. Goes to the Withholding pool.
+ACTION 4: Verified Without Receipt  ("Petty cash / informal vendor / no slip")
+- Opens a short form with: required reason (petty cash, informal vendor, lost slip, other), required free-text note, optional payee name.
+- Save sets is_verified_without_receipt = true. The row counts as verified but is excluded from the VAT pool, from Report A, and from Report B. It appears only in the Master Audit Export (Report D) with a non-blocking warning.
+- Show a warning that no tax credit can be claimed for this expense.
 
-4. Without receipt (verified without receipt)
-   - Marked as verified but with no tax credit.
-   - Not claimable as input VAT and excluded from the VAT return and TAS exports.
-   - Shows a non-blocking warning, and appears in the audit export with a reason field (required).
+ACTION 5: View Purpose & Line Items
+- Opens a read-only drawer showing: purpose or description from the source module, project or site, payee, payment method, paid by, source reference number, and the line items (description, quantity, unit, unit price, amount).
+- If a receipt exists, show its OCR line items next to the source line items. Highlight mismatches.
+- Show the decision history (who verified, when, and what changed).
+- Include a "Download receipt" link when a file exists.
 
-Rules:
-- Each decision is saved to expense_hub_vat_decisions, then syncVatDecisionToLedger() runs the existing 4-step sync (decision table, source model update, receipts and receipt_items, ledger display).
-- Decisions are editable until the month is settled. After settlement they are locked, and unlocking requires the Finance Head role and an audit log entry.
-- Log every change (who, when, old value, new value).
+ACTION 6: Side-by-Side OCR Review
+- Opens the existing review modal with the original receipt (image or PDF viewer with zoom and rotate) on the left and editable extracted fields on the right.
+- Fields below 70% confidence get an amber highlight. Show warnings for: invalid TIN, buyer TIN not 0038480010, VAT not equal to 15% of base, base + VAT not equal to total, duplicate receipt, and a mismatch with the cash amount paid.
+- Buttons: "Confirm and save as VAT" (goes to Action 2 logic), "Confirm and save as Non-VAT" (Action 3 logic), "Re-scan", and "Cancel". Nothing is saved until the user confirms.
+- If no receipt is attached, show an "Upload receipt" prompt that goes to Action 1.
 
-PART 3 - RECEIPT UPLOAD AND OCR (inside the Hub)
-- Add an "Add receipt" action on every Hub row and in the verify dialog. It accepts a camera photo, JPG, PNG, or PDF.
-- Run AI OCR vision on the upload and return structured JSON. Extract and map these fields:
-  VAT category (G goods / S services), seller TIN, seller name, purchase date (convert Gregorian to Ethiopian and keep both), MRC number, FS number, description, unit of measure (ID 2-10), quantity, unit price, subtotal (base), VAT amount, total, and VAT-or-not detection (is there a 15% line).
-- Support multi-line receipts. Each line becomes a receipt_items row with its own statutory classification (G, E, S, purchase_type 3 / 6 / 65 / 120).
-- Show a review screen with the receipt image on one side and the extracted fields on the other, all editable. Show a confidence score per field. Highlight low-confidence fields in amber. Nothing is saved until the user confirms.
-- Validations:
-  - TIN has exactly 10 digits. The buyer TIN must equal 0038480010 (warn if not).
-  - VAT must equal 15% of the base, within a small rounding tolerance, otherwise warn.
-  - Base + VAT must equal the total.
-  - Duplicate check on (seller TIN + FS number + MRC). Block exact duplicates and warn on near-duplicates.
-  - If the OCR amount differs from the Hub row amount, show the difference and require confirmation.
-- If OCR fails or the service is down, fall back to manual entry. The OCR result must never block the workflow.
-- Keep the original image and the raw OCR JSON for audit. Link the receipt to the Hub row and to the receipts table. The AI OCR Receipt Audit Studio (/admin/ocr-receipts) should show these scans.
+ACTION 7: Full Studio (3% WHT, TAS)
+- Opens one combined screen that lets the user set everything for this row in one place: VAT status (VAT 15% / Non-VAT / No receipt), receipt upload and OCR, and the 3% withholding toggle.
+- When withholding is on: withholding_amount = 3% of the pre-tax base, net payable = gross minus withholding, plus an upload field and serial number field for the WHT voucher slip. A missing slip is allowed, but the row shows a "Missing slip" alert in the Withholding Slips tab.
+- Allow withholding to be combined with VAT or Non-VAT outcomes.
+- Show a live summary: base, VAT, withholding, net paid, and which reports and ledger tabs this row will appear in.
 
-PART 4 - REPORTS (exact official formats)
-Generate .xlsx and CSV from verified data only. Column order and headers must match exactly.
-
-A. 15-Column Purchase VAT Return (routes: finance.expense-hub.export-vat, finance.tax-deductions.export-excel?type=vat)
-   1 VAT Category (G/S), 2 Calendar Type (E/G), 3 Purchase Type (Line 100 Input VAT, Line 65 CapEx, Line 120 General), 4 Seller TIN, 5 Seller Name, 6 Date of Purchase (dd/mm/yyyy), 7 MRC Number, 8 Fiscal Receipt / FS Number, 9 Description, 10 Unit of Measure (ID 2-10), 11 Quantity, 12 Unit Price, 13 Total Value (base), 14 VAT Amount (15%), 15 Value After VAT.
-   Includes only outcome 1 rows. FixedAsset rows use Line 65.
-
-B. 9-Column e-Tax Purchase TAS Declaration (routes: finance.expense-hub.export-tas, finance.tax-deductions.export-excel?type=tas)
-   1 Purchaser TIN (0038480010), 2 Seller TIN, 3 Amount, 4 Receipt/Voucher No, 5 Receipt Date (EC d-m-Y), 6 Encoding Date, 7 MRC Number, 8 PurcType (PUR_GD / PUR_SER), 9 Encoded By.
-   Includes only outcome 2 rows.
-
-C. 13-Column Sales Return (Output VAT) (route: finance.tax-deductions.export-excel?type=sales)
-   1 Seller TIN, 2 Buyer TIN, 3 Buyer Name, 4 Transaction Type, 5 Receipt Category, 6 Receipt Used, 7 MRC, 8 Receipt No, 9 Commodity Type, 10 Quantity, 11 Price, 12 Receipt Date (EC), 13 Encoded By. Source: IncomeRecord / client IPCs.
-
-D. Internal and audit exports
-   - Expense Hub Master Audit Export (CSV, 22 columns, includes all four outcomes, warnings, and no-VAT reasons).
-   - Tax Deductions Master Export (xlsx + csv).
-   - Withholding Slips Compliance Audit (tab=slips, with CSV).
-   - Monthly Tax Movements & Net VAT Reconciliation: Output VAT minus eligible Input VAT, signed. Shows Net VAT Payable or Input VAT Credit Carryforward, with an Ethiopian month navigator (Meskerem, Tikimt, Hidar, ...).
-
-Before download, show a pre-export check that lists rows with missing required fields (TIN, FS, MRC, date) and links to fix them. Do not silently export incomplete rows.
-
-PART 5 - LEDGER AND SETTLEMENT
-- Keep the 4 ledger tabs (All, VAT, Withholding, Slips) and the Active / Settled cycle filter.
-- Only verified decisions appear in the ledger. Unverified rows show as a "pending verification" count on the Hub, not in totals.
-- Keep the monthly settlement flow (Initiate Settlement, upload bank deposit slip, recordPayment, flag vat_settled and withholding_settled).
-
-NON-FUNCTIONAL
-- Use database transactions for each sync. Syncing must be idempotent (saving twice never duplicates receipts or ledger rows).
-- Queue the OCR job and show progress. Use permissions: Finance Officer can verify, Finance Head can settle and unlock.
-- Add migrations only for missing columns and tables, and write them as reversible.
-- Add feature tests for: each of the 4 outcomes flowing into the correct report, the duplicate receipt block, the 15% validation, the settled-month lock, and the exact column order of all three official exports.
+TESTING (feature tests)
+- Each of the 7 actions opens and saves correctly through its route, and invalid input returns validation errors.
+- Add VAT row appears in Report A only. Non-VAT row appears in Report B only. Verified Without Receipt appears in Report D only.
+- Withholding row appears in the Withholding tab and Slips tab.
+- Duplicate receipt is blocked, and saving the same decision twice does not create duplicate rows.
+- Settled-month rows cannot be edited by a Finance Officer.
+- OCR failure still lets the user finish manually.
 
 DELIVERABLES
-1. A short plan listing what already exists and what you will change.
-2. Migrations, models, services, controllers, routes, and views.
-3. OCR service class with the JSON schema and prompt used.
-4. Export classes for reports A-D.
-5. Tests, plus a short user guide on how finance verifies an expense and downloads each report.
+1. A short audit of the dropdown: which items worked, which were dead, and why.
+2. The fixes (routes, controller methods, Blade, JS, services), keeping changes minimal.
+3. Tests.
+4. A final checklist, one line per action, saying how I can test it manually in the browser.
 
-Ask me only if something blocks you. Otherwise state your assumptions and proceed.
+If something blocks you, ask me one question. Otherwise state your assumption and continue.

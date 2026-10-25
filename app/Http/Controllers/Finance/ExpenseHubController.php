@@ -205,6 +205,8 @@ class ExpenseHubController extends Controller
         $request->validate([
             'receipt_file' => 'nullable|file|mimes:jpeg,jpg,png,webp,pdf|max:25600',
             'receipt_path' => 'nullable|string|max:500',
+            'source_type'  => 'nullable|string|max:60',
+            'source_id'    => 'nullable|integer',
         ]);
 
         try {
@@ -336,20 +338,42 @@ class ExpenseHubController extends Controller
             // 4. Duplicate check on (TIN + FS + MRC)
             $isDuplicate = false;
             $duplicateMessage = null;
-            if (!empty($fsNo) && Schema::hasTable('receipts')) {
-                $dupQ = Receipt::where('fs_no', $fsNo);
-                if (!empty($supplierTin)) {
-                    $dupQ->where(function($q) use ($supplierTin) {
-                        $q->where('vendor_tin', $supplierTin)->orWhere('vendor_tin', 'like', "%{$supplierTin}%");
-                    });
+            if (!empty($fsNo)) {
+                if (Schema::hasTable('receipts')) {
+                    $dupQ = Receipt::where('fs_no', $fsNo);
+                    if (!empty($supplierTin)) {
+                        $dupQ->where(function($q) use ($supplierTin) {
+                            $q->where('vendor_tin', $supplierTin)->orWhere('vendor_tin', 'like', "%{$supplierTin}%");
+                        });
+                    }
+                    if (!empty($mrcNo)) {
+                        $dupQ->where('mrc_no', $mrcNo);
+                    }
+                    $dup = $dupQ->first();
+                    if ($dup) {
+                        $isDuplicate = true;
+                        $duplicateMessage = "Duplicate Alert: Receipt FS #{$fsNo} and TIN {$supplierTin} already exists in Tax Ledger (Receipt #{$dup->receipt_number})!";
+                    }
                 }
-                if (!empty($mrcNo)) {
-                    $dupQ->where('mrc_no', $mrcNo);
-                }
-                $dup = $dupQ->first();
-                if ($dup) {
-                    $isDuplicate = true;
-                    $duplicateMessage = "Duplicate Alert: Receipt FS #{$fsNo} and TIN {$supplierTin} already exists in Tax Ledger (Receipt #{$dup->receipt_number})!";
+
+                // Check other decisions in ExpenseHubVatDecision
+                if (!$isDuplicate && !empty($supplierTin)) {
+                    $decQ = ExpenseHubVatDecision::where('custom_fs_no', $fsNo)
+                        ->where('custom_seller_tin', $supplierTin);
+                    if ($request->filled('source_type') && $request->filled('source_id')) {
+                        $decQ->where(function($q) use ($request) {
+                            $q->where('source_type', '!=', $request->input('source_type'))
+                              ->orWhere('source_id', '!=', $request->input('source_id'));
+                        });
+                    }
+                    if (!empty($mrcNo)) {
+                        $decQ->where('custom_mrc_no', $mrcNo);
+                    }
+                    $dupDec = $decQ->first();
+                    if ($dupDec) {
+                        $isDuplicate = true;
+                        $duplicateMessage = "Duplicate Alert: Receipt FS #{$fsNo} and TIN {$supplierTin} already registered on {$dupDec->source_type} #{$dupDec->source_id}!";
+                    }
                 }
             }
 
@@ -419,10 +443,38 @@ class ExpenseHubController extends Controller
             ]);
         } catch (\Throwable $e) {
             Log::error('ExpenseHub OCR failure: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
+            // Fallback per pro.doc Action 1: Keep uploaded file and open review screen with empty editable fields
             return response()->json([
-                'success' => false,
-                'message' => 'OCR Scan failed: ' . $e->getMessage(),
-            ], 500);
+                'success'           => false,
+                'ocr_failed'        => true,
+                'message'           => 'OCR could not extract text automatically: ' . $e->getMessage() . '. You can complete the fields manually.',
+                'file_url'          => $fileUrl,
+                'file_path'         => $savedRelativePath ?: ($stripped ?: null),
+                'vendor_name'       => '',
+                'supplier_tin'      => '',
+                'tin_valid'         => false,
+                'buyer_tin'         => '0038480010',
+                'buyer_tin_matches' => true,
+                'fs_no'             => '',
+                'fs_no_valid'       => false,
+                'mrc_no'            => '',
+                'receipt_date'      => date('Y-m-d'),
+                'subtotal'          => 0,
+                'vat_amount'        => 0,
+                'total_amount'      => 0,
+                'vat_matches_15'    => false,
+                'vat_rate'          => 15.00,
+                'is_inclusive'      => true,
+                'purchase_type'     => 1,
+                'description'       => '',
+                'engine'            => 'Manual Fallback (OCR Unavailable)',
+                'confidence'        => 'low',
+                'confidence_score'  => 0,
+                'field_confidences' => [],
+                'is_duplicate'      => false,
+                'warnings'          => ['AI OCR extraction was unavailable or timed out. Please enter receipt information manually.'],
+                'items'             => [],
+            ]);
         }
     }
 
@@ -503,6 +555,63 @@ class ExpenseHubController extends Controller
                 $request->file('receipt_file'),
                 'receipts'
             );
+        }
+
+        // Action 2 Compliance Rule: Enforce mandatory 10-digit TIN, FS No, and MRC No when recording as 15% VAT
+        if ($vatStatus === ExpenseHubVatDecision::STATUS_VAT_APPLIES) {
+            $missing = [];
+            $tinClean = preg_replace('/[^0-9]/', '', (string)($validated['custom_seller_tin'] ?? ''));
+            if (empty($validated['custom_seller_tin'])) {
+                $missing[] = 'Supplier TIN';
+            } elseif (strlen($tinClean) !== 10) {
+                $missing[] = 'Valid 10-digit Supplier TIN';
+            }
+            if (empty($validated['custom_fs_no'])) {
+                $missing[] = 'Fiscal Receipt No (FS No)';
+            }
+            if (empty($validated['custom_mrc_no'])) {
+                $missing[] = 'Machine Registration Code (MRC No)';
+            }
+            if (!empty($missing)) {
+                $errMsg = 'Cannot record as 15% VAT: Missing mandatory fields: ' . implode(', ', $missing) . '.';
+                if ($request->wantsJson() || $request->ajax()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => $errMsg,
+                        'missing' => $missing,
+                    ], 422);
+                }
+                return back()->withInput()->with('error', $errMsg);
+            }
+        }
+
+        // Action 1 & 2 Rule: Reject exact duplicate receipts (same seller TIN + FS number + MRC) across other rows
+        if (!empty($validated['custom_fs_no']) && !empty($validated['custom_seller_tin'])) {
+            $dupQ = ExpenseHubVatDecision::where('custom_fs_no', $validated['custom_fs_no'])
+                ->where('custom_seller_tin', $validated['custom_seller_tin'])
+                ->where(function($q) use ($validated) {
+                    $q->where('source_type', '!=', $validated['source_type'])
+                      ->orWhere('source_id', '!=', $validated['source_id']);
+                });
+
+            if (!empty($validated['custom_mrc_no'])) {
+                $dupQ->where('custom_mrc_no', $validated['custom_mrc_no']);
+            }
+
+            $dup = $dupQ->first();
+            if ($dup) {
+                $dupMsg = "Duplicate Receipt: A receipt with FS #{$validated['custom_fs_no']} and TIN {$validated['custom_seller_tin']} already exists on {$dup->source_type} #{$dup->source_id}. Duplicate filings are prohibited.";
+                if ($request->wantsJson() || $request->ajax()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => $dupMsg,
+                        'is_duplicate' => true,
+                        'existing_source_type' => $dup->source_type,
+                        'existing_source_id'   => $dup->source_id,
+                    ], 422);
+                }
+                return back()->withInput()->with('error', $dupMsg);
+            }
         }
 
         // Compute Base & VAT amounts
@@ -600,13 +709,79 @@ class ExpenseHubController extends Controller
         }
 
         if ($request->wantsJson() || $request->ajax()) {
+            $itemPayload = [
+                'source_type'                 => $decision->source_type,
+                'source_id'                   => $decision->source_id,
+                'reference_no'                => $request->input('reference_no') ?: ($decision->custom_fs_no ?: "REF-{$decision->source_id}"),
+                'payee_supplier'              => $decision->custom_seller_name ?: $request->input('payee_supplier', ''),
+                'tin'                         => $decision->custom_seller_tin,
+                'fs_no'                       => $decision->custom_fs_no,
+                'mrc_no'                      => $decision->custom_mrc_no,
+                'amount'                      => (float)$decision->total_amount,
+                'vat_status'                  => $decision->vat_status,
+                'is_verified_without_receipt' => (bool)$decision->is_verified_without_receipt,
+                'vat_rate'                    => (float)$decision->vat_rate,
+                'is_inclusive'                => (bool)$decision->is_inclusive,
+                'decision_base_amount'        => (float)$decision->base_amount,
+                'decision_vat_amount'         => (float)$decision->vat_amount,
+                'decision_total_amount'       => (float)$decision->total_amount,
+                'receipt_url'                 => $decision->receipt_path,
+                'has_withholding'             => (bool)$decision->has_withholding,
+                'withholding_rate'            => (float)$decision->withholding_rate,
+                'withholding_amount'          => (float)$decision->withholding_amount,
+                'withholding_receipt_number'  => $decision->withholding_receipt_number,
+                'withholding_receipt'         => $decision->withholding_receipt,
+                'net_payable_amount'          => (float)$decision->net_payable_amount,
+                'reason_code'                 => $decision->no_vat_reason_code,
+                'reason_note'                 => $decision->no_vat_reason_note,
+            ];
+
+            $allExpenses = $this->queryService->getExpenses([], $user);
+            $summaryCards = $this->queryService->getSummaryCards($allExpenses);
+
             return response()->json([
                 'success' => true,
-                'message' => 'VAT decision saved successfully.',
+                'message' => 'VAT decision saved successfully and synced to Tax Deductions Ledger.',
+                'item'    => $itemPayload,
+                'summary' => $summaryCards,
             ]);
         }
 
         return back()->with('success', 'VAT decision saved successfully.');
+    }
+
+    /**
+     * Fetch decision audit history for a single expense record (Action 5)
+     */
+    public function itemHistory(Request $request)
+    {
+        $user = Auth::user();
+        if (!$user->hasAnyRole(['global_admin', 'admin', 'finance_head', 'finance', 'auditor']) && !$user->can('finance.approve')) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized.'], 403);
+        }
+
+        $sourceType = $request->input('source_type');
+        $sourceId   = (int) $request->input('source_id');
+
+        $logs = ExpenseHubVatAuditLog::with('performer')
+            ->where('source_type', $sourceType)
+            ->where('source_id', $sourceId)
+            ->orderByDesc('id')
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'logs'    => $logs->map(function ($l) {
+                return [
+                    'id'          => $l->id,
+                    'action'      => $l->action,
+                    'user_name'   => $l->performer?->name ?: 'System',
+                    'created_at'  => $l->created_at ? $l->created_at->format('d M Y, h:i A') : '—',
+                    'old_values'  => $l->old_values,
+                    'new_values'  => $l->new_values,
+                ];
+            })
+        ]);
     }
 
     /**
