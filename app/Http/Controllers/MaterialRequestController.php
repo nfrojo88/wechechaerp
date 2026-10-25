@@ -3,12 +3,15 @@
 namespace App\Http\Controllers;
 
 use App\Models\MaterialRequest;
+use App\Models\MaterialRequestItem;
+use App\Models\PurchaseRequestItem;
 use App\Models\Store;
 use App\Models\Project;
 use App\Models\PurchaseRequest;
 use App\Models\PrWorkflowLog;
 use App\Services\ProcurementLifecycleService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 
@@ -462,6 +465,315 @@ class MaterialRequestController extends Controller
         }
 
         return back()->with('success', 'Material Request rejected by Planning Manager.');
+    }
+
+    /**
+     * Planning Manager item-level / split decision for Emergency Material Requests:
+     * Allows selecting which material items to approve for standard procurement,
+     * which to send directly to Site Petty Cash (Store Keeper), and which to reject.
+     */
+    public function itemDecisions(Request $request, MaterialRequest $materialRequest)
+    {
+        /** @var \App\Models\User|null $user */
+        $user = auth()->user();
+        $roles = $user ? $user->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray() : [];
+        if (!in_array('planning_manager', $roles) && !$user?->hasRole('Planning Manager')) {
+            abort(403, 'Unauthorized: Emergency material requests awaiting planning approval can only be decided by the Planning Manager.');
+        }
+
+        Gate::authorize('approvePlanning', $materialRequest);
+
+        $validated = $request->validate([
+            'decisions'           => 'required|array|min:1',
+            'decisions.*'         => 'required|in:approve_procurement,buy_petty_cash,reject',
+            'rejection_reasons'   => 'nullable|array',
+            'rejection_reasons.*' => 'nullable|string|max:1000',
+        ]);
+
+        $decisions = $validated['decisions'];
+        $rejectionReasons = $validated['rejection_reasons'] ?? [];
+
+        $materialRequest->loadMissing('items.product', 'purchaseRequests');
+
+        if ($materialRequest->items->isEmpty()) {
+            return back()->with('error', 'Cannot process item decisions: This Material Request has no items.');
+        }
+
+        $procurementItemIds = [];
+        $pettyCashItemIds   = [];
+        $rejectedItemIds    = [];
+
+        foreach ($materialRequest->items as $item) {
+            $dec = $decisions[$item->id] ?? 'approve_procurement';
+            if ($dec === 'buy_petty_cash') {
+                $pettyCashItemIds[] = $item->id;
+            } elseif ($dec === 'reject') {
+                $rejectedItemIds[] = $item->id;
+            } else {
+                $procurementItemIds[] = $item->id;
+            }
+        }
+
+        $totalItems = $materialRequest->items->count();
+
+        // ── 1. If ALL items are Buy with Petty Cash ───────────────────────────
+        if (count($pettyCashItemIds) === $totalItems) {
+            return $this->planningApprovePettyCash($materialRequest);
+        }
+
+        // ── 2. If ALL items are Approve Procurement ───────────────────────────
+        if (count($procurementItemIds) === $totalItems) {
+            return $this->planningApprove($materialRequest);
+        }
+
+        // ── 3. If ALL items are Rejected ──────────────────────────────────────
+        if (count($rejectedItemIds) === $totalItems) {
+            $combinedReason = collect($rejectedItemIds)->map(function($id) use ($rejectionReasons) {
+                return $rejectionReasons[$id] ?? null;
+            })->filter()->implode('; ');
+            $request->merge(['rejection_reason' => $combinedReason ?: 'Rejected by Planning Manager']);
+            return $this->planningReject($request, $materialRequest);
+        }
+
+        // ── 4. Split / Mixed Decisions ────────────────────────────────────────
+        $redirectMsg = '';
+
+        DB::transaction(function () use (
+            $materialRequest,
+            $procurementItemIds,
+            $pettyCashItemIds,
+            $rejectedItemIds,
+            $rejectionReasons,
+            $user,
+            &$redirectMsg
+        ) {
+            $hasProcurement = count($procurementItemIds) > 0;
+            $hasPettyCash   = count($pettyCashItemIds) > 0;
+            $hasRejected    = count($rejectedItemIds) > 0;
+
+            $baseRef = preg_replace('/-(PC|REJ)\d*$/', '', $materialRequest->reference_number);
+
+            // ── Step A: Handle Rejected Items ──────────────────────────────────
+            if ($hasRejected) {
+                $rejNotes = [];
+                foreach ($rejectedItemIds as $rId) {
+                    $rItem = MaterialRequestItem::find($rId);
+                    $reason = !empty($rejectionReasons[$rId]) ? trim($rejectionReasons[$rId]) : 'Rejected during planning split review';
+                    if ($rItem) {
+                        $rNotes = "[REJECTED by Planning: {$reason}]" . ($rItem->notes ? " " . $rItem->notes : "");
+                        $itemData = ['notes' => $rNotes];
+                        if (\Illuminate\Support\Facades\Schema::hasColumn('material_request_items', 'status')) {
+                            $itemData['status'] = 'rejected';
+                        }
+                        if (\Illuminate\Support\Facades\Schema::hasColumn('material_request_items', 'rejection_reason')) {
+                            $itemData['rejection_reason'] = $reason;
+                        }
+                        $rItem->update($itemData);
+                        $rejNotes[] = ($rItem->product?->name ?? "Item #{$rId}") . " (Reason: {$reason})";
+                    }
+                }
+                $rejSummary = implode("; ", $rejNotes);
+
+                // Move rejected items to a dedicated child rejected MR so they don't stay in actionable queues
+                if ($hasProcurement || $hasPettyCash) {
+                    $rejRef = $baseRef . '-REJ';
+                    $c = 1;
+                    while (MaterialRequest::where('reference_number', $rejRef)->exists()) {
+                        $c++;
+                        $rejRef = $baseRef . '-REJ' . $c;
+                    }
+
+                    $rejectedMr = MaterialRequest::create([
+                        'project_id'                => $materialRequest->project_id,
+                        'destination_store_id'      => $materialRequest->destination_store_id,
+                        'reference_number'          => $rejRef,
+                        'source'                    => 'Emergency (Split Rejected)',
+                        'status'                    => 'rejected',
+                        'purchase_method'           => null,
+                        'required_date'             => $materialRequest->required_date,
+                        'notes'                     => "Rejected items split from Emergency Request #{$materialRequest->reference_number}. " . $rejSummary,
+                        'created_by'                => $materialRequest->created_by,
+                        'approved_by'               => $user->id,
+                        'approved_at'               => now(),
+                        'planning_approval_status'  => 'rejected',
+                        'planning_approved_by'      => $user->id,
+                        'planning_approved_at'      => now(),
+                        'planning_rejection_reason' => $rejSummary,
+                    ]);
+
+                    foreach ($rejectedItemIds as $rId) {
+                        $rItem = MaterialRequestItem::find($rId);
+                        if ($rItem) {
+                            $rItem->update(['material_request_id' => $rejectedMr->id]);
+                        }
+                    }
+                }
+            }
+
+            // ── Step B: Handle Petty Cash Items ────────────────────────────────
+            if ($hasPettyCash) {
+                if ($hasProcurement) {
+                    // Mixed Procurement + Petty Cash: Create child MR for Petty Cash items
+                    $pcRef = $baseRef . '-PC';
+                    $c = 1;
+                    while (MaterialRequest::where('reference_number', $pcRef)->exists()) {
+                        $c++;
+                        $pcRef = $baseRef . '-PC' . $c;
+                    }
+
+                    $pettyCashMr = MaterialRequest::create([
+                        'project_id'               => $materialRequest->project_id,
+                        'destination_store_id'     => $materialRequest->destination_store_id,
+                        'reference_number'         => $pcRef,
+                        'source'                   => 'Emergency (Petty Cash Split)',
+                        'status'                   => 'approved_for_petty_cash',
+                        'purchase_method'          => 'petty_cash',
+                        'required_date'            => $materialRequest->required_date,
+                        'notes'                    => "Site Petty Cash purchase split from Emergency Request #{$materialRequest->reference_number}." . ($materialRequest->notes ? " [Original notes: {$materialRequest->notes}]" : ''),
+                        'created_by'               => $materialRequest->created_by,
+                        'approved_by'              => $user->id,
+                        'approved_at'              => now(),
+                        'planning_approval_status' => 'approved',
+                        'planning_approved_by'     => $user->id,
+                        'planning_approved_at'     => now(),
+                    ]);
+
+                    foreach ($pettyCashItemIds as $pId) {
+                        $pItem = MaterialRequestItem::find($pId);
+                        if ($pItem) {
+                            $itemData = ['material_request_id' => $pettyCashMr->id];
+                            if (\Illuminate\Support\Facades\Schema::hasColumn('material_request_items', 'status')) {
+                                $itemData['status'] = 'petty_cash';
+                            }
+                            $pItem->update($itemData);
+                        }
+                    }
+                } else {
+                    // ONLY Petty Cash (+ optionally Rejected): Original MR becomes the Petty Cash MR
+                    $materialRequest->update([
+                        'status'                   => 'approved_for_petty_cash',
+                        'purchase_method'          => 'petty_cash',
+                        'planning_approval_status' => 'approved',
+                        'planning_approved_by'     => $user->id,
+                        'planning_approved_at'     => now(),
+                    ]);
+
+                    foreach ($pettyCashItemIds as $pId) {
+                        $pItem = MaterialRequestItem::find($pId);
+                        if ($pItem && \Illuminate\Support\Facades\Schema::hasColumn('material_request_items', 'status')) {
+                            $pItem->update(['status' => 'petty_cash']);
+                        }
+                    }
+
+                    // Companion PRs are marked approved_petty_cash
+                    $materialRequest->loadMissing('purchaseRequests');
+                    foreach ($materialRequest->purchaseRequests as $cPr) {
+                        $cPr->update([
+                            'status' => 'approved_petty_cash',
+                            'notes'  => ($cPr->notes ? $cPr->notes . "\n" : "") . "Routed to Site Petty Cash purchase by Planning Manager during item split.",
+                        ]);
+                    }
+                }
+            }
+
+            // ── Step C: Handle Procurement Items ────────────────────────────────
+            if ($hasProcurement) {
+                $materialRequest->update([
+                    'status'                   => 'planning_approved',
+                    'planning_approval_status' => 'approved',
+                    'planning_approved_by'     => $user->id,
+                    'planning_approved_at'     => now(),
+                ]);
+
+                foreach ($procurementItemIds as $prId) {
+                    $prItem = MaterialRequestItem::find($prId);
+                    if ($prItem && \Illuminate\Support\Facades\Schema::hasColumn('material_request_items', 'status')) {
+                        $prItem->update(['status' => 'approved']);
+                    }
+                }
+
+                // Companion PR: Keep ONLY the procurement items and forward to Coordinator
+                $lifecycle = app(ProcurementLifecycleService::class);
+                $companionPr = $materialRequest->purchaseRequests()->latest()->first();
+                if (!$companionPr) {
+                    $companionPr = $materialRequest->createOrGetPurchaseRequest($user->id);
+                }
+
+                if ($companionPr) {
+                    $activeProcurementProductIds = MaterialRequestItem::where('material_request_id', $materialRequest->id)
+                        ->whereIn('id', $procurementItemIds)
+                        ->pluck('product_id')
+                        ->toArray();
+
+                    \App\Models\PurchaseRequestItem::where('purchase_request_id', $companionPr->id)
+                        ->whereNotIn('product_id', $activeProcurementProductIds)
+                        ->delete();
+
+                    $targetRole = $lifecycle->resolveOwnerRole('coordinator', $companionPr);
+                    $companionPr->update([
+                        'status'             => PurchaseRequest::STATUS_PENDING_HR_APPROVAL,
+                        'current_owner_role' => $targetRole,
+                        'approved_by'        => $user->id,
+                        'approved_at'        => now(),
+                    ]);
+
+                    try {
+                        PrWorkflowLog::create([
+                            'purchase_request_id' => $companionPr->id,
+                            'from_stage'          => PurchaseRequest::STATUS_PENDING_PLANNING,
+                            'to_stage'            => PurchaseRequest::STATUS_PENDING_HR_APPROVAL,
+                            'action'              => 'planning_approve_split_to_coordinator',
+                            'actor_role'          => 'planning',
+                            'actor_id'            => $user->id,
+                            'notes'               => "Planning Manager approved " . count($procurementItemIds) . " item(s) for Procurement. Other items split to Petty Cash / Rejected. PR forwarded to Coordinator.",
+                            'created_at'          => now(),
+                        ]);
+                    } catch (\Throwable $e) {}
+
+                    try {
+                        $lifecycle->notifyStageRole(
+                            $companionPr->id,
+                            $targetRole,
+                            "ConstructPro: Emergency PR #{$companionPr->pr_no} approved (split items) by Planning for Project: " . ($companionPr->project?->name ?? 'General') . ". Awaiting coordinator review. Open: " . url("/purchase-requests/{$companionPr->id}"),
+                            $companionPr->project_id,
+                            $companionPr->store_id
+                        );
+                    } catch (\Throwable $e) {}
+                }
+            }
+
+            // Step D: Activity Log & Summary Message
+            try {
+                \App\Models\ActivityLog::log(
+                    'planning_split_mr_decisions',
+                    "Planning Manager '{$user->name}' processed split item decisions for Emergency MR #{$materialRequest->reference_number}: " .
+                    count($procurementItemIds) . " procurement, " .
+                    count($pettyCashItemIds) . " petty cash, " .
+                    count($rejectedItemIds) . " rejected.",
+                    'Procurement',
+                    $materialRequest,
+                    [
+                        'procurement_items' => $procurementItemIds,
+                        'petty_cash_items'  => $pettyCashItemIds,
+                        'rejected_items'    => $rejectedItemIds,
+                    ]
+                );
+            } catch (\Throwable $e) {}
+
+            $parts = [];
+            if ($hasProcurement) {
+                $parts[] = count($procurementItemIds) . " item(s) approved for Procurement (sent to Coordinator)";
+            }
+            if ($hasPettyCash) {
+                $parts[] = count($pettyCashItemIds) . " item(s) sent to Site Petty Cash (Store Keeper queue)";
+            }
+            if ($hasRejected) {
+                $parts[] = count($rejectedItemIds) . " item(s) rejected";
+            }
+            $redirectMsg = "Emergency Request #{$materialRequest->reference_number} items processed: " . implode(', ', $parts) . ".";
+        });
+
+        return back()->with('success', $redirectMsg);
     }
 
     // ─── Dispatch by Coordinator to Store Manager ────────────────────────────

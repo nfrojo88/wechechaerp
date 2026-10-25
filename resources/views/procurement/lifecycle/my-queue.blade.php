@@ -296,6 +296,9 @@
                                                 <i class="fa-solid fa-coins me-1"></i> Buy with Petty Cash
                                             </button>
                                         </form>
+                                        <button type="button" class="btn btn-sm btn-primary shadow-xs fw-semibold" data-bs-toggle="modal" data-bs-target="#itemDecisionsModal{{ $mr->id }}" title="Decide per Material Item (Petty Cash, Procurement, or Reject)">
+                                            <i class="fa-solid fa-list-check me-1"></i> Decide per Item
+                                        </button>
                                         <button type="button" class="btn btn-sm btn-danger shadow-xs fw-semibold" onclick="openRejectQueueModal('mr', {{ $mr->id }}, '{{ addslashes($mr->reference_number) }}', 'planning')" title="Reject Emergency Request (Planning Manager)">
                                             <i class="fas fa-times me-1"></i> Reject
                                         </button>
@@ -322,6 +325,164 @@
             </div>
         </div>
     </div>
+
+    @if($isPlanningManagerUser)
+        @foreach($emergencyMrs as $mr)
+        <!-- Item Decisions Modal for Emergency MR #{{ $mr->reference_number }} -->
+        <div class="modal fade" id="itemDecisionsModal{{ $mr->id }}" tabindex="-1" aria-labelledby="itemDecisionsModalLabel{{ $mr->id }}" aria-hidden="true">
+            <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+                <div class="modal-content border-0 shadow-lg">
+                    <div class="modal-header bg-dark text-white p-3">
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="badge bg-danger rounded-pill p-2"><i class="fa-solid fa-bolt text-white"></i></span>
+                            <div>
+                                <h5 class="modal-title font-weight-bold mb-0 text-white" id="itemDecisionsModalLabel{{ $mr->id }}">
+                                    Decide per Material Item — Emergency MR #{{ $mr->reference_number }}
+                                </h5>
+                                <small class="text-white-50">
+                                    Project: <strong>{{ $mr->project?->name ?? 'N/A' }}</strong> &bull; Requested by: <strong>{{ $mr->requestedBy?->name ?? $mr->creator?->name ?? 'N/A' }}</strong> &bull; Total Items: <strong>{{ $mr->items->count() }}</strong>
+                                </small>
+                            </div>
+                        </div>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+
+                    <form method="POST" action="{{ route('material-requests.item-decisions', $mr->id) }}">
+                        @csrf
+                        <div class="modal-body p-4 bg-light">
+                            <!-- Quick Action Bar -->
+                            <div class="card border-0 shadow-2xs mb-3 bg-white">
+                                <div class="card-body p-3">
+                                    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                        <div>
+                                            <h6 class="fw-bold mb-1 text-dark"><i class="fa-solid fa-sliders text-primary me-2"></i>Select Decision for Each Requested Material</h6>
+                                            <div class="text-muted small">
+                                                Choose whether to approve for <strong>Standard Procurement</strong>, route directly to Store Keeper for <strong>Site Petty Cash</strong>, or <strong>Reject</strong> individual items.
+                                            </div>
+                                        </div>
+                                        <div class="d-flex gap-2">
+                                            <button type="button" class="btn btn-xs btn-outline-success fw-semibold" onclick="setAllMrDecisions({{ $mr->id }}, 'approve_procurement')">
+                                                <i class="fas fa-check me-1"></i> All to Procurement
+                                            </button>
+                                            <button type="button" class="btn btn-xs btn-outline-warning text-dark fw-semibold" onclick="setAllMrDecisions({{ $mr->id }}, 'buy_petty_cash')">
+                                                <i class="fa-solid fa-coins me-1"></i> All to Petty Cash
+                                            </button>
+                                            <button type="button" class="btn btn-xs btn-outline-danger fw-semibold" onclick="setAllMrDecisions({{ $mr->id }}, 'reject')">
+                                                <i class="fas fa-times me-1"></i> All Reject
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Materials Table -->
+                            <div class="card border-0 shadow-2xs bg-white overflow-hidden">
+                                <div class="table-responsive">
+                                    <table class="table table-hover align-middle mb-0">
+                                        <thead class="table-light text-uppercase text-secondary" style="font-size: 0.72rem; letter-spacing: 0.5px;">
+                                            <tr>
+                                                <th style="width: 28%;">Material Details</th>
+                                                <th style="width: 14%;" class="text-center">Requested Qty</th>
+                                                <th style="width: 32%;">Action Decision</th>
+                                                <th style="width: 26%;">Rejection Reason / Status Note</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach($mr->items as $itm)
+                                            @php
+                                                $prodName = $itm->product?->name ?? 'Material #' . $itm->product_id;
+                                                $prodCode = $itm->product?->code ?? $itm->product?->sku ?? '-';
+                                                $prodUnit = $itm->product?->unit ?? $itm->unit ?? 'Units';
+                                            @endphp
+                                            <tr id="mr-item-row-{{ $mr->id }}-{{ $itm->id }}">
+                                                <td>
+                                                    <div class="fw-bold text-dark">{{ $prodName }}</div>
+                                                    <div class="text-muted small">
+                                                        <code>Code: {{ $prodCode }}</code>
+                                                        @if($itm->notes)
+                                                            <span class="ms-1 text-info"><i class="fa-regular fa-comment-dots"></i> {{ $itm->notes }}</span>
+                                                        @endif
+                                                    </div>
+                                                </td>
+                                                <td class="text-center">
+                                                    <span class="badge bg-light text-dark border font-monospace px-2 py-1 fs-6 fw-bold">
+                                                        {{ (float)$itm->quantity }} {{ $prodUnit }}
+                                                    </span>
+                                                </td>
+                                                <td>
+                                                    <div class="d-flex flex-column gap-1">
+                                                        <!-- Option: Procurement -->
+                                                        <label class="d-flex align-items-center p-2 rounded border cursor-pointer bg-light-subtle decision-option-label" style="font-size: 0.8rem; cursor: pointer;">
+                                                            <input type="radio"
+                                                                   name="decisions[{{ $itm->id }}]"
+                                                                   value="approve_procurement"
+                                                                   class="form-check-input me-2 decision-radio mr-{{ $mr->id }}-decision"
+                                                                   data-item-id="{{ $itm->id }}"
+                                                                   data-mr-id="{{ $mr->id }}"
+                                                                   onchange="onDecisionChange({{ $mr->id }}, {{ $itm->id }})"
+                                                                   checked>
+                                                            <span class="fw-semibold text-success"><i class="fas fa-truck-fast me-1"></i> Approve Procurement</span>
+                                                            <span class="badge bg-success-subtle text-success border border-success ms-auto" style="font-size: 10px;">Coordinator PR</span>
+                                                        </label>
+                                                        <!-- Option: Buy with Petty Cash -->
+                                                        <label class="d-flex align-items-center p-2 rounded border cursor-pointer bg-light-subtle decision-option-label" style="font-size: 0.8rem; cursor: pointer;">
+                                                            <input type="radio"
+                                                                   name="decisions[{{ $itm->id }}]"
+                                                                   value="buy_petty_cash"
+                                                                   class="form-check-input me-2 decision-radio mr-{{ $mr->id }}-decision"
+                                                                   data-item-id="{{ $itm->id }}"
+                                                                   data-mr-id="{{ $mr->id }}"
+                                                                   onchange="onDecisionChange({{ $mr->id }}, {{ $itm->id }})">
+                                                            <span class="fw-semibold text-warning text-dark"><i class="fa-solid fa-coins text-warning me-1"></i> Buy with Petty Cash</span>
+                                                            <span class="badge bg-warning-subtle text-dark border border-warning ms-auto" style="font-size: 10px;">Store Keeper</span>
+                                                        </label>
+                                                        <!-- Option: Reject -->
+                                                        <label class="d-flex align-items-center p-2 rounded border cursor-pointer bg-light-subtle decision-option-label" style="font-size: 0.8rem; cursor: pointer;">
+                                                            <input type="radio"
+                                                                   name="decisions[{{ $itm->id }}]"
+                                                                   value="reject"
+                                                                   class="form-check-input me-2 decision-radio mr-{{ $mr->id }}-decision"
+                                                                   data-item-id="{{ $itm->id }}"
+                                                                   data-mr-id="{{ $mr->id }}"
+                                                                   onchange="onDecisionChange({{ $mr->id }}, {{ $itm->id }})">
+                                                            <span class="fw-semibold text-danger"><i class="fas fa-times me-1"></i> Reject Material</span>
+                                                            <span class="badge bg-danger-subtle text-danger border border-danger ms-auto" style="font-size: 10px;">Exclude</span>
+                                                        </label>
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <div id="rejection-box-{{ $mr->id }}-{{ $itm->id }}" class="rejection-box d-none">
+                                                        <label class="form-label text-danger small fw-semibold mb-1">
+                                                            <i class="fa-solid fa-circle-exclamation me-1"></i>Why is this item rejected?
+                                                        </label>
+                                                        <input type="text"
+                                                               name="rejection_reasons[{{ $itm->id }}]"
+                                                               class="form-control form-control-sm border-danger"
+                                                               placeholder="e.g. Non-urgent, wait for bulk purchase...">
+                                                    </div>
+                                                    <div id="approved-box-{{ $mr->id }}-{{ $itm->id }}" class="text-muted small">
+                                                        <span class="badge bg-success-subtle text-success border border-success"><i class="fa-solid fa-check-circle text-success me-1"></i> Standard Procurement</span>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                            @endforeach
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="modal-footer bg-white d-flex justify-content-between">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-primary fw-bold px-4 shadow-sm" onclick="return confirm('Are you sure you want to apply these item decisions? Split requests will be generated automatically.')">
+                                <i class="fa-solid fa-check-double me-1"></i> Apply & Execute Decisions
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        @endforeach
+    @endif
     @endif
 
     <!-- Emergency MRs Section Approved by Planning (Awaiting Coordinator Review & Dispatch) -->
@@ -486,7 +647,7 @@
             <ul class="nav nav-pills card-header-pills" id="procurementQueueTabs">
                 <!-- Tab 1: Awaiting Role Action -->
                 <li class="nav-item">
-                    <a class="nav-link {{ $currentTab === 'pending' ? 'active shadow-sm' : '' }} fw-bold" 
+                    <a class="nav-link {{ $currentTab === 'pending' ? 'active shadow-sm' : '' }} fw-bold"
                        href="{{ route('procurement.my-queue', array_merge(request()->query(), ['tab' => 'pending'])) }}">
                         <i class="fas fa-hourglass-half me-1"></i> Awaiting Role Action
                         <span class="badge {{ $currentTab === 'pending' ? 'bg-white text-primary' : 'bg-primary text-white' }} ms-1">{{ $kpi['my_pending'] }}</span>
@@ -494,7 +655,7 @@
                 </li>
                 <!-- Tab 2: My Created Requests History -->
                 <li class="nav-item">
-                    <a class="nav-link {{ $currentTab === 'my_created' ? 'active shadow-sm' : '' }} fw-bold" 
+                    <a class="nav-link {{ $currentTab === 'my_created' ? 'active shadow-sm' : '' }} fw-bold"
                        href="{{ route('procurement.my-queue', array_merge(request()->query(), ['tab' => 'my_created'])) }}">
                         <i class="fas fa-history me-1"></i> My Created Requests History
                         <span class="badge {{ $currentTab === 'my_created' ? 'bg-white text-primary' : 'bg-info text-dark' }} ms-1">{{ $kpi['my_created'] }}</span>
@@ -502,7 +663,7 @@
                 </li>
                 <!-- Tab 3: Completed History -->
                 <li class="nav-item">
-                    <a class="nav-link {{ $currentTab === 'completed' ? 'active shadow-sm' : '' }} fw-bold" 
+                    <a class="nav-link {{ $currentTab === 'completed' ? 'active shadow-sm' : '' }} fw-bold"
                        href="{{ route('procurement.my-queue', array_merge(request()->query(), ['tab' => 'completed'])) }}">
                         <i class="fas fa-check-double me-1"></i> Completed History
                         <span class="badge {{ $currentTab === 'completed' ? 'bg-white text-success' : 'bg-success text-white' }} ms-1">{{ $kpi['completed'] }}</span>
@@ -511,7 +672,7 @@
                 <!-- Tab 4: All Company Requests & PR History (Auditor / Admin / GM) -->
                 @if($isAdmin || $isAuditorUser || $isGmUser || $isCoordinatorUser || $isPurchaseManagerUser)
                 <li class="nav-item">
-                    <a class="nav-link {{ $currentTab === 'all' ? 'active shadow-sm' : '' }} fw-bold" 
+                    <a class="nav-link {{ $currentTab === 'all' ? 'active shadow-sm' : '' }} fw-bold"
                        href="{{ route('procurement.my-queue', array_merge(request()->query(), ['tab' => 'all'])) }}">
                         <i class="fas fa-list-check me-1"></i> All Company Requests &amp; PRs
                         <span class="badge {{ $currentTab === 'all' ? 'bg-white text-secondary' : 'bg-secondary text-white' }} ms-1">{{ $kpi['all_prs'] }}</span>
@@ -520,7 +681,7 @@
                 @endif
                 <!-- Tab 5: Deleted & Cancelled Requisitions ("Deleted Questions") -->
                 <li class="nav-item">
-                    <a class="nav-link {{ $currentTab === 'deleted' ? 'active shadow-sm' : '' }} fw-bold" 
+                    <a class="nav-link {{ $currentTab === 'deleted' ? 'active shadow-sm' : '' }} fw-bold"
                        href="{{ route('procurement.my-queue', array_merge(request()->query(), ['tab' => 'deleted'])) }}">
                         <i class="fas fa-trash-can me-1 text-danger"></i> Deleted &amp; Cancelled
                         <span class="badge {{ $currentTab === 'deleted' ? 'bg-white text-danger' : 'bg-danger text-white' }} ms-1">{{ $kpi['deleted'] ?? 0 }}</span>
@@ -736,9 +897,9 @@
                                         $owner = $pr->current_owner_role;
                                         $isFinalIntakeStage = ($pr->status === \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW) && (
                                             $owner === 'store_keeper' ||
-                                            $pr->payment !== null || 
-                                            $pr->creditLedger !== null || 
-                                            $pr->driverBooking !== null || 
+                                            $pr->payment !== null ||
+                                            $pr->creditLedger !== null ||
+                                            $pr->driverBooking !== null ||
                                             $pr->receipt !== null ||
                                             $pr->workflowLogs()->whereIn('action', [
                                                 'gm_approve_buy_by_credit',
@@ -2208,5 +2369,39 @@ document.addEventListener('DOMContentLoaded', function() {
     const savedMode = localStorage.getItem('wechecha_procurement_materials_mode') || 'expanded';
     setQueueMaterialsMode(savedMode);
 });
+
+// Item-level decisions helpers for Emergency Material Requests
+function setAllMrDecisions(mrId, decisionValue) {
+    const radios = document.querySelectorAll(`input.mr-${mrId}-decision[value="${decisionValue}"]`);
+    radios.forEach(radio => {
+        radio.checked = true;
+        const itemId = radio.getAttribute('data-item-id');
+        if (itemId) {
+            onDecisionChange(mrId, itemId);
+        }
+    });
+}
+
+function onDecisionChange(mrId, itemId) {
+    const selected = document.querySelector(`input[name="decisions[${itemId}]"]:checked`);
+    const val = selected ? selected.value : '';
+    const rejBox = document.getElementById(`rejection-box-${mrId}-${itemId}`);
+    const appBox = document.getElementById(`approved-box-${mrId}-${itemId}`);
+
+    if (val === 'reject') {
+        if (rejBox) rejBox.classList.remove('d-none');
+        if (appBox) appBox.classList.add('d-none');
+    } else {
+        if (rejBox) rejBox.classList.add('d-none');
+        if (appBox) {
+            appBox.classList.remove('d-none');
+            if (val === 'buy_petty_cash') {
+                appBox.innerHTML = '<span class="badge bg-warning-subtle text-dark border border-warning"><i class="fa-solid fa-coins text-warning me-1"></i> Site Petty Cash</span>';
+            } else {
+                appBox.innerHTML = '<span class="badge bg-success-subtle text-success border border-success"><i class="fa-solid fa-check-circle text-success me-1"></i> Standard Procurement</span>';
+            }
+        }
+    }
+}
 </script>
 @endsection

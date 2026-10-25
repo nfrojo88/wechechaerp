@@ -1947,6 +1947,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('material-requests/{materialRequest}/planning-approve', [App\Http\Controllers\MaterialRequestController::class, 'planningApprove'])->name('material-requests.planning-approve');
     Route::post('material-requests/{materialRequest}/planning-approve-petty-cash', [App\Http\Controllers\MaterialRequestController::class, 'planningApprovePettyCash'])->name('material-requests.planning-approve-petty-cash');
     Route::post('material-requests/{materialRequest}/planning-reject', [App\Http\Controllers\MaterialRequestController::class, 'planningReject'])->name('material-requests.planning-reject');
+    Route::post('material-requests/{materialRequest}/item-decisions', [App\Http\Controllers\MaterialRequestController::class, 'itemDecisions'])->name('material-requests.item-decisions');
     Route::post('material-requests/{materialRequest}/coordinator-dispatch', [App\Http\Controllers\MaterialRequestController::class, 'coordinatorDispatch'])->name('material-requests.coordinator-dispatch');
     Route::post('material-requests/{materialRequest}/coordinator-approve-petty-cash', [App\Http\Controllers\MaterialRequestController::class, 'coordinatorApprovePettyCash'])->name('material-requests.coordinator-approve-petty-cash');
     Route::post('material-requests/{materialRequest}/coordinator-reject', [App\Http\Controllers\MaterialRequestController::class, 'coordinatorReject'])->name('material-requests.coordinator-reject');
