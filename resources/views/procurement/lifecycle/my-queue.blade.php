@@ -21,7 +21,7 @@
 @section('title', $isAuditorUser ? 'Procurement Status & Compliance (Read-Only)' : 'Procurement — My Queue & History')
 
 @section('content')
-<div class="container-fluid px-4 py-3">
+<div class="container-fluid px-4 py-3" id="procurementQueueContainer">
     <!-- Header -->
     <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
         <div>
@@ -34,6 +34,16 @@
             </p>
         </div>
         <div class="d-flex align-items-center gap-2 flex-wrap">
+            {{-- Material Visibility Option Toggle (View without saying See Details) --}}
+            <div class="btn-group btn-group-sm shadow-xs rounded-pill p-0.5 bg-white border" role="group" id="queueMaterialsOptionGroup" title="Option: View materials directly in the queue without clicking See Details">
+                <button type="button" class="btn btn-sm rounded-pill px-3 py-1 fw-semibold btn-primary text-white shadow-xs" id="btnQueueMaterialsExpanded" onclick="setQueueMaterialsMode('expanded')" title="Show full requested materials inline directly in each row">
+                    <i class="fa-solid fa-boxes-stacked me-1.5"></i>Show Materials (Inline)
+                </button>
+                <button type="button" class="btn btn-sm rounded-pill px-3 py-1 fw-semibold text-muted" id="btnQueueMaterialsCompact" onclick="setQueueMaterialsMode('compact')" title="Compact row view">
+                    <i class="fa-solid fa-list me-1.5"></i>Compact View
+                </button>
+            </div>
+
             <span class="badge bg-light text-muted border px-2 py-2" title="Policy: Once created, entries cannot be deleted and no new materials can be added by standard users.">
                 <i class="fas fa-lock me-1 text-secondary"></i> Records Locked After Creation
             </span>
@@ -221,16 +231,55 @@
                             <th>Ref No</th>
                             <th>Project</th>
                             <th>Requested By</th>
+                            <th>Requested Materials</th>
                             <th>Date</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         @foreach($emergencyMrs as $mr)
+                        @php
+                            $eMrMaterialsJson = $mr->items->map(function($itm) {
+                                return [
+                                    'name' => $itm->product?->name ?? 'Material',
+                                    'code' => $itm->product?->item_code ?? '-',
+                                    'quantity' => (float)$itm->quantity,
+                                    'unit' => $itm->product?->unit ?? 'Units',
+                                    'estimated_unit_cost' => 0,
+                                    'estimated_total' => 0,
+                                    'specifications' => $itm->notes ?? '',
+                                ];
+                            });
+                        @endphp
                         <tr>
                             <td><strong>{{ $mr->reference_number }}</strong></td>
                             <td>{{ $mr->project?->name }}</td>
                             <td>{{ $mr->requestedBy?->name ?? $mr->creator?->name ?? 'N/A' }}</td>
+                            <td class="col-procurement-materials">
+                                <div class="d-flex align-items-center justify-content-between mb-1">
+                                    <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 px-2 py-0.5 fw-semibold" style="font-size:0.75rem;">
+                                        <i class="fa-solid fa-bolt me-1"></i>{{ $mr->items->count() }} Urgent Material(s)
+                                    </span>
+                                    <button type="button" class="btn btn-xs btn-link text-muted p-0 text-decoration-none btn-toggle-single-materials" onclick="toggleSingleMaterials(this)" title="Toggle items display">
+                                        <i class="fa-solid fa-chevron-up"></i>
+                                    </button>
+                                </div>
+                                <div class="procurement-materials-list d-flex flex-column gap-1" style="max-height: 160px; overflow-y: auto;">
+                                    @foreach($mr->items as $itm)
+                                        <div class="d-flex align-items-center justify-content-between p-1 bg-white rounded border text-nowrap shadow-2xs" style="font-size:0.78rem;">
+                                            <span class="fw-semibold text-dark text-truncate me-2" style="max-width: 200px;" title="{{ $itm->product?->name }}">
+                                                <i class="fa-solid fa-cube text-danger me-1"></i>{{ $itm->product?->name ?? 'Material' }}
+                                            </span>
+                                            <span class="badge bg-light text-dark border font-monospace px-1.5 py-0.5 fw-bold">
+                                                {{ (float)$itm->quantity }} {{ $itm->product?->unit ?? 'Units' }}
+                                            </span>
+                                        </div>
+                                    @endforeach
+                                </div>
+                                <div class="procurement-materials-compact-preview d-none text-muted small" style="font-size:11px;">
+                                    {{ $mr->items->count() }} item(s): {{ Str::limit($mr->items->map(fn($it) => $it->product?->name)->filter()->join(', '), 30) }}
+                                </div>
+                            </td>
                             <td>{{ $mr->created_at->format('M d, Y H:i') }}</td>
                             <td>
                                 <div class="d-flex gap-1 align-items-center">
@@ -330,14 +379,56 @@
                                 </span>
                                 <small class="text-muted d-block">{{ optional($cmr->planning_approved_at)->format('M d, Y H:i') ?? $cmr->updated_at->format('M d, Y') }}</small>
                             </td>
-                            <td>
-                                <span class="badge bg-light text-dark border">{{ $cmr->items->count() }} item(s)</span>
-                                <small class="text-muted d-block">
-                                    {{ Str::limit($cmr->items->map(fn($it) => $it->product?->name)->filter()->join(', '), 30, '...') }}
-                                </small>
+                            @php
+                                $cmrMaterialsJson = $cmr->items->map(function($itm) {
+                                    return [
+                                        'name' => $itm->product?->name ?? 'Material',
+                                        'code' => $itm->product?->item_code ?? '-',
+                                        'quantity' => (float)$itm->quantity,
+                                        'unit' => $itm->product?->unit ?? 'Units',
+                                        'estimated_unit_cost' => 0,
+                                        'estimated_total' => 0,
+                                        'specifications' => $itm->notes ?? '',
+                                    ];
+                                });
+                            @endphp
+                            <td class="col-procurement-materials">
+                                <div class="d-flex align-items-center justify-content-between mb-1">
+                                    <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 px-2 py-0.5 fw-semibold" style="font-size:0.75rem;">
+                                        <i class="fa-solid fa-boxes-stacked me-1"></i>{{ $cmr->items->count() }} Material(s)
+                                    </span>
+                                    <button type="button" class="btn btn-xs btn-link text-muted p-0 text-decoration-none btn-toggle-single-materials" onclick="toggleSingleMaterials(this)" title="Toggle items display">
+                                        <i class="fa-solid fa-chevron-up"></i>
+                                    </button>
+                                </div>
+                                <div class="procurement-materials-list d-flex flex-column gap-1" style="max-height: 160px; overflow-y: auto;">
+                                    @foreach($cmr->items as $it)
+                                        <div class="d-flex align-items-center justify-content-between p-1 bg-white rounded border text-nowrap shadow-2xs" style="font-size:0.78rem;">
+                                            <span class="fw-semibold text-dark text-truncate me-2" style="max-width: 200px;" title="{{ $it->product?->name }}">
+                                                <i class="fa-solid fa-cube text-primary me-1"></i>{{ $it->product?->name ?? 'Material' }}
+                                            </span>
+                                            <span class="badge bg-light text-dark border font-monospace px-1.5 py-0.5 fw-bold">
+                                                {{ (float)$it->quantity }} {{ $it->product?->unit ?? 'Units' }}
+                                            </span>
+                                        </div>
+                                    @endforeach
+                                </div>
+                                <div class="procurement-materials-compact-preview d-none text-muted small" style="font-size:11px;">
+                                    {{ $cmr->items->count() }} item(s): {{ Str::limit($cmr->items->map(fn($it) => $it->product?->name)->filter()->join(', '), 30) }}
+                                </div>
                             </td>
                             <td class="text-end">
                                 <div class="d-flex justify-content-end align-items-center gap-1">
+                                    <button type="button" class="btn btn-sm btn-outline-primary shadow-xs fw-semibold btn-queue-quick-materials"
+                                            data-ref="{{ $cmr->reference_number }}"
+                                            data-project="{{ $cmr->project?->name ?? 'General Project' }}"
+                                            data-store="{{ $cmr->store?->name ?? $cmr->destinationStore?->name ?? 'N/A' }}"
+                                            data-url="{{ $compPr ? route('purchase-requests.show', $compPr->id) : route('material-requests.show', $cmr) }}"
+                                            data-items="{{ json_encode($cmrMaterialsJson) }}"
+                                            onclick="openQuickMaterialsModalFromBtn(this)"
+                                            title="View materials without saying See Details">
+                                        <i class="fa-solid fa-boxes-stacked me-1"></i>Materials ({{ $cmr->items->count() }})
+                                    </button>
                                     @if($compPr)
                                         <form method="POST" action="{{ route('purchase-requests.coordinator-approve', $compPr) }}" class="d-inline">
                                             @csrf
@@ -418,18 +509,31 @@
                 </li>
             </ul>
 
-            <div class="text-muted small">
-                @if($currentTab === 'my_created')
-                    <span class="badge bg-light text-dark border"><i class="fas fa-clock-rotate-left me-1 text-primary"></i> Created Requisition History</span>
-                @elseif($currentTab === 'completed')
-                    <span class="badge bg-light text-dark border"><i class="fas fa-check-circle me-1 text-success"></i> Stocked &amp; Intake Completed Archives</span>
-                @elseif($currentTab === 'all')
-                    <span class="badge bg-light text-dark border"><i class="fas fa-globe me-1 text-secondary"></i> Organization-wide Procurement</span>
-                @elseif($currentTab === 'deleted')
-                    <span class="badge bg-light text-dark border"><i class="fas fa-trash-can me-1 text-danger"></i> Deleted &amp; Cancelled Questions Category</span>
-                @else
-                    <span class="badge bg-light text-dark border"><i class="fas fa-inbox me-1 text-warning"></i> Role Pending Action Feed</span>
-                @endif
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                {{-- Quick Materials View Toggle Option --}}
+                <div class="d-flex align-items-center gap-1.5 bg-light px-2.5 py-1 rounded-pill border shadow-2xs">
+                    <small class="text-muted fw-bold text-uppercase" style="font-size:0.68rem;"><i class="fa-solid fa-boxes-stacked text-primary me-1"></i>Materials:</small>
+                    <button type="button" class="btn btn-xs rounded-pill px-2.5 py-0.5 fw-semibold btn-primary text-white shadow-2xs" id="btnTabMaterialsExpanded" onclick="setQueueMaterialsMode('expanded')" title="Display all materials inline without clicking See Details">
+                        <i class="fa-solid fa-eye me-1"></i>Show Materials
+                    </button>
+                    <button type="button" class="btn btn-xs rounded-pill px-2.5 py-0.5 fw-semibold text-muted" id="btnTabMaterialsCompact" onclick="setQueueMaterialsMode('compact')" title="Compact view">
+                        <i class="fa-solid fa-eye-slash me-1"></i>Compact
+                    </button>
+                </div>
+
+                <div class="text-muted small">
+                    @if($currentTab === 'my_created')
+                        <span class="badge bg-light text-dark border"><i class="fas fa-clock-rotate-left me-1 text-primary"></i> Created Requisition History</span>
+                    @elseif($currentTab === 'completed')
+                        <span class="badge bg-light text-dark border"><i class="fas fa-check-circle me-1 text-success"></i> Stocked &amp; Intake Completed Archives</span>
+                    @elseif($currentTab === 'all')
+                        <span class="badge bg-light text-dark border"><i class="fas fa-globe me-1 text-secondary"></i> Organization-wide Procurement</span>
+                    @elseif($currentTab === 'deleted')
+                        <span class="badge bg-light text-dark border"><i class="fas fa-trash-can me-1 text-danger"></i> Deleted &amp; Cancelled Questions Category</span>
+                    @else
+                        <span class="badge bg-light text-dark border"><i class="fas fa-inbox me-1 text-warning"></i> Role Pending Action Feed</span>
+                    @endif
+                </div>
             </div>
         </div>
 
@@ -444,7 +548,8 @@
                         <thead class="table-light">
                             <tr>
                                 <th>PR / Ref Number</th>
-                                <th>Project / Purpose / Store</th>
+                                <th>Project &amp; Store</th>
+                                <th>Requested Materials</th>
                                 <th>Channel Source</th>
                                 <th>Stage / Status</th>
                                 <th>Current Owner</th>
@@ -457,6 +562,17 @@
                             @foreach($materialRequestsQueue as $mr)
                             @php
                                 $linkedPr = $mr->purchaseRequests->first();
+                                $mrMaterialsJson = $mr->items->map(function($itm) {
+                                    return [
+                                        'name' => $itm->product?->name ?? 'Material',
+                                        'code' => $itm->product?->item_code ?? '-',
+                                        'quantity' => (float)$itm->quantity,
+                                        'unit' => $itm->product?->unit ?? 'Units',
+                                        'estimated_unit_cost' => 0,
+                                        'estimated_total' => 0,
+                                        'specifications' => $itm->notes ?? '',
+                                    ];
+                                });
                             @endphp
                             {{-- Never show requests already converted/sent to PR in this queue: they show strictly in PR tables --}}
                             @if($linkedPr || $mr->status === 'sent_to_pr')
@@ -474,6 +590,35 @@
                                     <strong>{{ $mr->project?->name ?? 'Head Office' }}</strong>
                                     <small class="text-muted d-block">Store: {{ $mr->store?->name ?? 'N/A' }}</small>
                                 </td>
+                                <td class="col-procurement-materials">
+                                    <div class="d-flex align-items-center justify-content-between mb-1">
+                                        <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 px-2 py-0.5 fw-semibold" style="font-size:0.75rem;">
+                                            <i class="fa-solid fa-boxes-stacked me-1"></i>{{ $mr->items->count() }} Material(s)
+                                        </span>
+                                        <button type="button" class="btn btn-xs btn-link text-muted p-0 text-decoration-none btn-toggle-single-materials" onclick="toggleSingleMaterials(this)" title="Toggle items display">
+                                            <i class="fa-solid fa-chevron-up"></i>
+                                        </button>
+                                    </div>
+                                    <div class="procurement-materials-list d-flex flex-column gap-1" style="max-height: 180px; overflow-y: auto;">
+                                        @foreach($mr->items as $mItm)
+                                            <div class="d-flex align-items-center justify-content-between p-1.5 bg-white rounded border text-nowrap shadow-2xs" style="font-size:0.78rem;">
+                                                <div class="d-flex align-items-center gap-1.5 text-truncate me-2" style="max-width: 220px;">
+                                                    <i class="fa-solid fa-cube text-primary" style="font-size:0.7rem;"></i>
+                                                    <strong class="text-dark text-truncate" title="{{ $mItm->product?->name }}">{{ $mItm->product?->name ?? 'Material' }}</strong>
+                                                </div>
+                                                <span class="badge bg-light text-dark border font-monospace px-1.5 py-0.5 fw-bold">
+                                                    {{ (float)$mItm->quantity }} {{ $mItm->product?->unit ?? 'Units' }}
+                                                </span>
+                                            </div>
+                                            @if(!empty($mItm->notes))
+                                                <small class="text-muted d-block ps-2 fst-italic" style="font-size:0.68rem;">{{ Str::limit($mItm->notes, 35) }}</small>
+                                            @endif
+                                        @endforeach
+                                    </div>
+                                    <div class="procurement-materials-compact-preview d-none text-muted small" style="font-size:11px;">
+                                        {{ $mr->items->count() }} item(s): {{ Str::limit($mr->items->map(fn($it) => $it->product?->name)->filter()->join(', '), 30) }}
+                                    </div>
+                                </td>
                                 <td><span class="badge bg-info text-dark border">Material Request</span></td>
                                 <td>
                                     <span class="badge bg-warning text-dark">{{ ucfirst(str_replace('_', ' ', $mr->status)) }}</span>
@@ -485,7 +630,17 @@
                                 </td>
                                 <td>{{ $mr->created_at->format('M d, Y') }}</td>
                                 <td class="text-end">
-                                    <div class="d-flex justify-content-end align-items-center gap-1">
+                                    <div class="d-flex justify-content-end align-items-center gap-1 flex-wrap">
+                                        <button type="button" class="btn btn-sm btn-outline-primary shadow-xs fw-semibold btn-queue-quick-materials"
+                                                data-ref="{{ $mr->reference_number }}"
+                                                data-project="{{ $mr->project?->name ?? 'Head Office' }}"
+                                                data-store="{{ $mr->store?->name ?? 'N/A' }}"
+                                                data-url="{{ route('material-requests.show', $mr) }}"
+                                                data-items="{{ json_encode($mrMaterialsJson) }}"
+                                                onclick="openQuickMaterialsModalFromBtn(this)"
+                                                title="View full materials without saying See Details">
+                                            <i class="fa-solid fa-boxes-stacked me-1"></i>Materials ({{ $mr->items->count() }})
+                                        </button>
                                         <a href="{{ route('material-requests.show', $mr) }}" class="btn btn-sm btn-outline-info shadow-xs fw-semibold" title="See full Material Request details">
                                             <i class="fas fa-eye me-1"></i> See Details
                                         </a>
@@ -511,6 +666,17 @@
                             @foreach($myPrs as $pr)
                             @php
                                 $canActOnThisPr = false;
+                                $prMaterialsJson = $pr->items->map(function($itm) {
+                                    return [
+                                        'name' => $itm->product?->name ?? 'Material',
+                                        'code' => $itm->product?->item_code ?? '-',
+                                        'quantity' => (float)$itm->quantity,
+                                        'unit' => $itm->unit ?? ($itm->product?->unit ?? 'Units'),
+                                        'estimated_unit_cost' => (float)($itm->estimated_unit_cost ?? 0),
+                                        'estimated_total' => (float)($itm->estimated_total ?? 0),
+                                        'specifications' => $itm->specifications ?? '',
+                                    ];
+                                });
                                 if (!$isAuditorUser) {
                                     if ($isGlobalAdmin) {
                                         $canActOnThisPr = true;
@@ -581,7 +747,45 @@
                                     @if($destStore)
                                         <small class="text-muted d-block"><i class="fas fa-warehouse me-1"></i>Store: {{ $destStore->name }}</small>
                                     @endif
-                                    <small class="text-muted d-block">{{ $pr->items->count() }} item(s)</small>
+                                </td>
+                                <td class="col-procurement-materials">
+                                    <div class="d-flex align-items-center justify-content-between mb-1">
+                                        <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 px-2 py-0.5 fw-semibold" style="font-size:0.75rem;">
+                                            <i class="fa-solid fa-boxes-stacked me-1"></i>{{ $pr->items->count() }} Material(s)
+                                        </span>
+                                        @if((float)($pr->estimated_total ?? 0) > 0 || (float)($pr->direct_buy_amount ?? 0) > 0)
+                                            <span class="font-monospace text-muted small" style="font-size:0.72rem;">
+                                                {{ number_format($pr->direct_buy_amount > 0 ? $pr->direct_buy_amount : ($pr->estimated_total ?? 0), 2) }} ETB
+                                            </span>
+                                        @endif
+                                        <button type="button" class="btn btn-xs btn-link text-muted p-0 text-decoration-none btn-toggle-single-materials" onclick="toggleSingleMaterials(this)" title="Toggle items display">
+                                            <i class="fa-solid fa-chevron-up"></i>
+                                        </button>
+                                    </div>
+                                    <div class="procurement-materials-list d-flex flex-column gap-1" style="max-height: 180px; overflow-y: auto;">
+                                        @foreach($pr->items as $pItm)
+                                            <div class="d-flex align-items-center justify-content-between p-1.5 bg-white rounded border text-nowrap shadow-2xs" style="font-size:0.78rem;">
+                                                <div class="d-flex align-items-center gap-1.5 text-truncate me-2" style="max-width: 220px;">
+                                                    <i class="fa-solid fa-cube text-primary" style="font-size:0.7rem;"></i>
+                                                    <strong class="text-dark text-truncate" title="{{ $pItm->product?->name }}">{{ $pItm->product?->name ?? 'Material' }}</strong>
+                                                </div>
+                                                <div class="font-monospace text-end">
+                                                    <span class="badge bg-light text-dark border px-1.5 py-0.5 fw-bold">
+                                                        {{ (float)$pItm->quantity }} {{ $pItm->unit ?? ($pItm->product?->unit ?? 'Units') }}
+                                                    </span>
+                                                    @if((float)($pItm->estimated_unit_cost ?? 0) > 0)
+                                                        <small class="text-muted d-block" style="font-size:0.68rem;">@ {{ number_format($pItm->estimated_unit_cost, 2) }}</small>
+                                                    @endif
+                                                </div>
+                                            </div>
+                                            @if(!empty($pItm->specifications))
+                                                <small class="text-muted d-block ps-2 fst-italic" style="font-size:0.68rem;">{{ Str::limit($pItm->specifications, 35) }}</small>
+                                            @endif
+                                        @endforeach
+                                    </div>
+                                    <div class="procurement-materials-compact-preview d-none text-muted small" style="font-size:11px;">
+                                        {{ $pr->items->count() }} item(s): {{ Str::limit($pr->items->map(fn($it) => $it->product?->name)->filter()->join(', '), 30) }}
+                                    </div>
                                 </td>
                                 <td>
                                     @if($pr->materialRequest)
@@ -610,7 +814,17 @@
                                 </td>
                                 <td>{{ $pr->created_at->format('M d, Y') }}</td>
                                 <td class="text-end">
-                                    <div class="d-flex justify-content-end align-items-center gap-1">
+                                    <div class="d-flex justify-content-end align-items-center gap-1 flex-wrap">
+                                        <button type="button" class="btn btn-sm btn-outline-primary shadow-xs fw-semibold btn-queue-quick-materials"
+                                                data-ref="{{ $pr->pr_no }}"
+                                                data-project="{{ $pr->project?->name ?? 'N/A' }}"
+                                                data-store="{{ $destStore?->name ?? 'Store Unassigned' }}"
+                                                data-url="{{ route('purchase-requests.show', $pr->id) }}"
+                                                data-items="{{ json_encode($prMaterialsJson) }}"
+                                                onclick="openQuickMaterialsModalFromBtn(this)"
+                                                title="View full materials without saying See Details">
+                                            <i class="fa-solid fa-boxes-stacked me-1"></i>Materials ({{ $pr->items->count() }})
+                                        </button>
                                         <a href="{{ route('purchase-requests.show', $pr->id) }}" class="btn btn-sm btn-outline-info shadow-xs fw-semibold" title="See full Purchase Request details">
                                             <i class="fas fa-eye me-1"></i> See Details
                                         </a>
@@ -637,7 +851,7 @@
 
                             @if(($materialRequestsQueue->isEmpty() ?? true) && $myPrs->isEmpty())
                             <tr>
-                                <td colspan="7" class="text-center py-5 text-muted">
+                                <td colspan="8" class="text-center py-5 text-muted">
                                     <i class="fas fa-check-circle fa-3x mb-3 text-success d-block"></i>
                                     <h6 class="fw-bold text-dark">No pending procurement or requisition items awaiting your action right now!</h6>
                                     @if($kpi['my_created'] > 0)
@@ -707,11 +921,50 @@
                                     <div class="fw-semibold text-dark">{{ $cPr->project?->name ?? 'N/A' }}</div>
                                     <small class="text-muted"><i class="fas fa-warehouse me-1"></i>{{ $cPr->store?->name ?? 'Store Unassigned' }}</small>
                                 </td>
-                                <td>
-                                    <div class="fw-bold small text-dark mb-1">
-                                        <i class="fas fa-boxes-stacked me-1 text-secondary"></i>{{ $cPr->items->count() }} Material Item(s)
+                                @php
+                                    $cPrMaterialsJson = $cPr->items->map(function($itm) {
+                                        return [
+                                            'name' => $itm->product?->name ?? 'Material',
+                                            'code' => $itm->product?->item_code ?? '-',
+                                            'quantity' => (float)$itm->quantity,
+                                            'unit' => $itm->unit ?? ($itm->product?->unit ?? 'Units'),
+                                            'estimated_unit_cost' => (float)($itm->estimated_unit_cost ?? 0),
+                                            'estimated_total' => (float)($itm->estimated_total ?? 0),
+                                            'specifications' => $itm->specifications ?? '',
+                                        ];
+                                    });
+                                @endphp
+                                <td class="col-procurement-materials">
+                                    <div class="d-flex align-items-center justify-content-between mb-1">
+                                        <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 px-2 py-0.5 fw-semibold" style="font-size:0.75rem;">
+                                            <i class="fa-solid fa-boxes-stacked me-1"></i>{{ $cPr->items->count() }} Material(s)
+                                        </span>
+                                        <button type="button" class="btn btn-xs btn-link text-muted p-0 text-decoration-none btn-toggle-single-materials" onclick="toggleSingleMaterials(this)" title="Toggle items display">
+                                            <i class="fa-solid fa-chevron-up"></i>
+                                        </button>
                                     </div>
-                                    <div class="text-muted small" style="font-size:11px;">
+                                    <div class="procurement-materials-list d-flex flex-column gap-1" style="max-height: 180px; overflow-y: auto;">
+                                        @foreach($cPr->items as $itm)
+                                            <div class="d-flex align-items-center justify-content-between p-1.5 bg-white rounded border text-nowrap shadow-2xs" style="font-size:0.78rem;">
+                                                <div class="d-flex align-items-center gap-1.5 text-truncate me-2" style="max-width: 220px;">
+                                                    <i class="fa-solid fa-cube text-primary" style="font-size:0.7rem;"></i>
+                                                    <strong class="text-dark text-truncate" title="{{ $itm->product?->name }}">{{ $itm->product?->name ?? 'Material' }}</strong>
+                                                </div>
+                                                <div class="font-monospace text-end">
+                                                    <span class="badge bg-light text-dark border px-1.5 py-0.5 fw-bold">
+                                                        {{ (float)$itm->quantity }} {{ $itm->unit }}
+                                                    </span>
+                                                    @if((float)($itm->estimated_unit_cost ?? 0) > 0)
+                                                        <small class="text-muted d-block" style="font-size:0.68rem;">@ {{ number_format($itm->estimated_unit_cost, 2) }}</small>
+                                                    @endif
+                                                </div>
+                                            </div>
+                                            @if(!empty($itm->specifications))
+                                                <small class="text-muted d-block ps-2 fst-italic" style="font-size:0.68rem;">{{ Str::limit($itm->specifications, 35) }}</small>
+                                            @endif
+                                        @endforeach
+                                    </div>
+                                    <div class="procurement-materials-compact-preview d-none text-muted small" style="font-size:11px;">
                                         @foreach($cPr->items->take(2) as $itm)
                                             <span class="badge bg-light text-dark border me-1">
                                                 {{ $itm->product?->name ?? 'Item' }}: {{ (float)$itm->quantity }} {{ $itm->unit }}
@@ -751,7 +1004,17 @@
                                     <small class="text-muted">{{ $cPr->created_at->diffForHumans() }}</small>
                                 </td>
                                 <td class="text-end">
-                                    <div class="d-flex justify-content-end align-items-center gap-1">
+                                    <div class="d-flex justify-content-end align-items-center gap-1 flex-wrap">
+                                        <button type="button" class="btn btn-sm btn-outline-primary shadow-xs fw-semibold btn-queue-quick-materials"
+                                                data-ref="{{ $cPr->pr_no }}"
+                                                data-project="{{ $cPr->project?->name ?? 'N/A' }}"
+                                                data-store="{{ $cPr->store?->name ?? 'Store Unassigned' }}"
+                                                data-url="{{ route('purchase-requests.show', $cPr->id) }}"
+                                                data-items="{{ json_encode($cPrMaterialsJson) }}"
+                                                onclick="openQuickMaterialsModalFromBtn(this)"
+                                                title="View full materials without saying See Details">
+                                            <i class="fa-solid fa-boxes-stacked me-1"></i>Materials ({{ $cPr->items->count() }})
+                                        </button>
                                         <a href="{{ route('purchase-requests.show', $cPr->id) }}" class="btn btn-sm btn-outline-info shadow-xs fw-semibold">
                                             <i class="fas fa-eye me-1"></i> See Details
                                         </a>
@@ -790,8 +1053,47 @@
                                     <div class="fw-semibold text-dark">{{ $cMr->project?->name ?? 'Head Office' }}</div>
                                     <small class="text-muted"><i class="fas fa-warehouse me-1"></i>{{ $cMr->store?->name ?? 'Store' }}</small>
                                 </td>
-                                <td>
-                                    <span class="badge bg-light text-dark border">{{ $cMr->items->count() }} Items</span>
+                                @php
+                                    $cMrMaterialsJson = $cMr->items->map(function($itm) {
+                                        return [
+                                            'name' => $itm->product?->name ?? 'Material',
+                                            'code' => $itm->product?->item_code ?? '-',
+                                            'quantity' => (float)$itm->quantity,
+                                            'unit' => $itm->product?->unit ?? 'Units',
+                                            'estimated_unit_cost' => 0,
+                                            'estimated_total' => 0,
+                                            'specifications' => $itm->notes ?? '',
+                                        ];
+                                    });
+                                @endphp
+                                <td class="col-procurement-materials">
+                                    <div class="d-flex align-items-center justify-content-between mb-1">
+                                        <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 px-2 py-0.5 fw-semibold" style="font-size:0.75rem;">
+                                            <i class="fa-solid fa-boxes-stacked me-1"></i>{{ $cMr->items->count() }} Material(s)
+                                        </span>
+                                        <button type="button" class="btn btn-xs btn-link text-muted p-0 text-decoration-none btn-toggle-single-materials" onclick="toggleSingleMaterials(this)" title="Toggle items display">
+                                            <i class="fa-solid fa-chevron-up"></i>
+                                        </button>
+                                    </div>
+                                    <div class="procurement-materials-list d-flex flex-column gap-1" style="max-height: 180px; overflow-y: auto;">
+                                        @foreach($cMr->items as $mItm)
+                                            <div class="d-flex align-items-center justify-content-between p-1.5 bg-white rounded border text-nowrap shadow-2xs" style="font-size:0.78rem;">
+                                                <div class="d-flex align-items-center gap-1.5 text-truncate me-2" style="max-width: 200px;">
+                                                    <i class="fa-solid fa-cube text-primary" style="font-size:0.7rem;"></i>
+                                                    <strong class="text-dark text-truncate" title="{{ $mItm->product?->name }}">{{ $mItm->product?->name ?? 'Material' }}</strong>
+                                                </div>
+                                                <span class="badge bg-light text-dark border font-monospace px-1.5 py-0.5 fw-bold">
+                                                    {{ (float)$mItm->quantity }} {{ $mItm->product?->unit ?? 'Units' }}
+                                                </span>
+                                            </div>
+                                            @if(!empty($mItm->notes))
+                                                <small class="text-muted d-block ps-2 fst-italic" style="font-size:0.68rem;">{{ Str::limit($mItm->notes, 35) }}</small>
+                                            @endif
+                                        @endforeach
+                                    </div>
+                                    <div class="procurement-materials-compact-preview d-none text-muted small" style="font-size:11px;">
+                                        {{ $cMr->items->count() }} item(s): {{ Str::limit($cMr->items->map(fn($it) => $it->product?->name)->filter()->join(', '), 30) }}
+                                    </div>
                                 </td>
                                 <td><span class="text-muted small">Pending PR Pricing</span></td>
                                 <td>
@@ -805,7 +1107,17 @@
                                     <small class="text-muted">{{ $cMr->created_at->diffForHumans() }}</small>
                                 </td>
                                 <td class="text-end">
-                                    <div class="d-flex justify-content-end align-items-center gap-1">
+                                    <div class="d-flex justify-content-end align-items-center gap-1 flex-wrap">
+                                        <button type="button" class="btn btn-sm btn-outline-primary shadow-xs fw-semibold btn-queue-quick-materials"
+                                                data-ref="{{ $cMr->reference_number }}"
+                                                data-project="{{ $cMr->project?->name ?? 'Head Office' }}"
+                                                data-store="{{ $cMr->store?->name ?? 'Store' }}"
+                                                data-url="{{ route('material-requests.show', $cMr) }}"
+                                                data-items="{{ json_encode($cMrMaterialsJson) }}"
+                                                onclick="openQuickMaterialsModalFromBtn(this)"
+                                                title="View full materials without saying See Details">
+                                            <i class="fa-solid fa-boxes-stacked me-1"></i>Materials ({{ $cMr->items->count() }})
+                                        </button>
                                         <a href="{{ route('material-requests.show', $cMr) }}" class="btn btn-sm btn-outline-info shadow-xs fw-semibold">
                                             <i class="fas fa-eye me-1"></i> See Details
                                         </a>
@@ -872,13 +1184,42 @@
                                 <td>
                                     <span class="small fw-semibold text-dark">{{ $compPr->requestedBy?->name ?? 'N/A' }}</span>
                                 </td>
-                                <td>
-                                    <div class="small">
+                                @php
+                                    $compMaterialsJson = $compPr->items->map(function($item) {
+                                        return [
+                                            'product_name' => $item->product?->name ?? 'Material Item',
+                                            'product_code' => $item->product?->item_code ?? '',
+                                            'quantity' => (float)$item->quantity,
+                                            'unit' => $item->unit ?? ($item->product?->unit ?? 'Units'),
+                                            'unit_cost' => (float)($item->estimated_unit_cost ?? 0),
+                                            'specs' => $item->specifications ?? '',
+                                        ];
+                                    })->values()->toArray();
+                                @endphp
+                                <td class="col-procurement-materials" style="min-width: 250px;">
+                                    <div class="d-flex align-items-center justify-content-between mb-1">
+                                        <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-2 py-0.5 fw-semibold" style="font-size:0.75rem;">
+                                            <i class="fa-solid fa-boxes-packing me-1"></i>{{ $compPr->items->count() }} Stocked Material(s)
+                                        </span>
+                                        <button type="button" class="btn btn-xs btn-link text-muted p-0 text-decoration-none btn-toggle-single-materials" onclick="toggleSingleMaterials(this)" title="Toggle items display">
+                                            <i class="fa-solid fa-chevron-up"></i>
+                                        </button>
+                                    </div>
+                                    <div class="procurement-materials-list d-flex flex-column gap-1" style="max-height: 180px; overflow-y: auto;">
                                         @foreach($compPr->items as $cItm)
-                                            <span class="badge bg-light text-dark border me-1 mb-1">
-                                                {{ $cItm->product?->name ?? 'Material' }}: {{ (float)$cItm->quantity }} {{ $cItm->unit }}
-                                            </span>
+                                            <div class="d-flex align-items-center justify-content-between p-1.5 bg-white rounded border text-nowrap shadow-2xs" style="font-size:0.78rem;">
+                                                <div class="d-flex align-items-center gap-1.5 text-truncate me-2" style="max-width: 190px;">
+                                                    <i class="fa-solid fa-cube text-success" style="font-size:0.7rem;"></i>
+                                                    <strong class="text-dark text-truncate" title="{{ $cItm->product?->name }}">{{ $cItm->product?->name ?? 'Material' }}</strong>
+                                                </div>
+                                                <span class="badge bg-light text-dark border px-1.5 py-0.5 font-monospace fw-bold">
+                                                    {{ (float)$cItm->quantity }} {{ $cItm->unit ?? ($cItm->product?->unit ?? 'Units') }}
+                                                </span>
+                                            </div>
                                         @endforeach
+                                    </div>
+                                    <div class="procurement-materials-compact-preview d-none text-muted small" style="font-size:11px;">
+                                        {{ $compPr->items->count() }} item(s): {{ Str::limit($compPr->items->map(fn($it) => $it->product?->name)->filter()->join(', '), 30) }}
                                     </div>
                                 </td>
                                 <td>
@@ -900,7 +1241,17 @@
                                     <small class="text-muted">{{ $compPr->updated_at->diffForHumans() }}</small>
                                 </td>
                                 <td class="text-end">
-                                    <div class="d-flex justify-content-end align-items-center gap-1">
+                                    <div class="d-flex justify-content-end align-items-center gap-1 flex-wrap">
+                                        <button type="button" class="btn btn-sm btn-outline-primary shadow-xs fw-semibold btn-queue-quick-materials"
+                                                data-ref="{{ $compPr->pr_no }}"
+                                                data-project="{{ $compPr->project?->name ?? 'N/A' }}"
+                                                data-store="{{ $compPr->store?->name ?? 'Store' }}"
+                                                data-url="{{ route('purchase-requests.show', $compPr->id) }}"
+                                                data-items="{{ json_encode($compMaterialsJson) }}"
+                                                onclick="openQuickMaterialsModalFromBtn(this)"
+                                                title="View full materials without saying See Details">
+                                            <i class="fa-solid fa-boxes-stacked me-1"></i>Materials ({{ $compPr->items->count() }})
+                                        </button>
                                         <a href="{{ route('purchase-requests.show', $compPr->id) }}" class="btn btn-sm btn-outline-success shadow-xs fw-semibold">
                                             <i class="fas fa-eye me-1"></i> See Details
                                         </a>
@@ -952,7 +1303,7 @@
                                 <th>PR Number</th>
                                 <th>Project &amp; Store</th>
                                 <th>Requester</th>
-                                <th>Items</th>
+                                <th>Requested Materials</th>
                                 <th>Total Budget</th>
                                 <th>Status</th>
                                 <th>Current Owner</th>
@@ -980,7 +1331,46 @@
                                     <small class="text-muted d-block">{{ $aPr->store?->name ?? 'Store Unassigned' }}</small>
                                 </td>
                                 <td>{{ $aPr->requestedBy?->name ?? 'N/A' }}</td>
-                                <td><span class="badge bg-light text-dark border">{{ $aPr->items->count() }} items</span></td>
+                                @php
+                                    $aPrMaterialsJson = $aPr->items->map(function($item) {
+                                        return [
+                                            'product_name' => $item->product?->name ?? 'Material Item',
+                                            'product_code' => $item->product?->item_code ?? '',
+                                            'quantity' => (float)$item->quantity,
+                                            'unit' => $item->unit ?? ($item->product?->unit ?? 'Units'),
+                                            'unit_cost' => (float)($item->estimated_unit_cost ?? 0),
+                                            'specs' => $item->specifications ?? '',
+                                        ];
+                                    })->values()->toArray();
+                                @endphp
+                                <td class="col-procurement-materials" style="min-width: 250px;">
+                                    <div class="d-flex align-items-center justify-content-between mb-1">
+                                        <span class="badge bg-secondary bg-opacity-10 text-dark border border-secondary border-opacity-25 px-2 py-0.5 fw-semibold" style="font-size:0.75rem;">
+                                            <i class="fa-solid fa-boxes-stacked me-1"></i>{{ $aPr->items->count() }} Material(s)
+                                        </span>
+                                        <button type="button" class="btn btn-xs btn-link text-muted p-0 text-decoration-none btn-toggle-single-materials" onclick="toggleSingleMaterials(this)" title="Toggle items display">
+                                            <i class="fa-solid fa-chevron-up"></i>
+                                        </button>
+                                    </div>
+                                    <div class="procurement-materials-list d-flex flex-column gap-1" style="max-height: 180px; overflow-y: auto;">
+                                        @foreach($aPr->items as $aItm)
+                                            <div class="d-flex align-items-center justify-content-between p-1.5 bg-white rounded border text-nowrap shadow-2xs" style="font-size:0.78rem;">
+                                                <div class="d-flex align-items-center gap-1.5 text-truncate me-2" style="max-width: 190px;">
+                                                    <i class="fa-solid fa-cube text-primary" style="font-size:0.7rem;"></i>
+                                                    <strong class="text-dark text-truncate" title="{{ $aItm->product?->name }}">{{ $aItm->product?->name ?? 'Material' }}</strong>
+                                                </div>
+                                                <div class="font-monospace text-end">
+                                                    <span class="badge bg-light text-dark border px-1.5 py-0.5 fw-bold">
+                                                        {{ (float)$aItm->quantity }} {{ $aItm->unit ?? ($aItm->product?->unit ?? 'Units') }}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        @endforeach
+                                    </div>
+                                    <div class="procurement-materials-compact-preview d-none text-muted small" style="font-size:11px;">
+                                        {{ $aPr->items->count() }} item(s): {{ Str::limit($aPr->items->map(fn($it) => $it->product?->name)->filter()->join(', '), 30) }}
+                                    </div>
+                                </td>
                                 <td>
                                     <span class="font-monospace fw-bold">{{ number_format($aPr->direct_buy_amount > 0 ? $aPr->direct_buy_amount : ($aPr->estimated_total ?? 0), 2) }} ETB</span>
                                 </td>
@@ -996,7 +1386,17 @@
                                 </td>
                                 <td>{{ $aPr->created_at->format('M d, Y') }}</td>
                                 <td class="text-end">
-                                    <div class="d-flex justify-content-end align-items-center gap-1">
+                                    <div class="d-flex justify-content-end align-items-center gap-1 flex-wrap">
+                                        <button type="button" class="btn btn-sm btn-outline-primary shadow-xs fw-semibold btn-queue-quick-materials"
+                                                data-ref="{{ $aPr->pr_no }}"
+                                                data-project="{{ $aPr->project?->name ?? 'Head Office' }}"
+                                                data-store="{{ $aPr->store?->name ?? 'Store Unassigned' }}"
+                                                data-url="{{ route('purchase-requests.show', $aPr->id) }}"
+                                                data-items="{{ json_encode($aPrMaterialsJson) }}"
+                                                onclick="openQuickMaterialsModalFromBtn(this)"
+                                                title="View full materials without saying See Details">
+                                            <i class="fa-solid fa-boxes-stacked me-1"></i>Materials ({{ $aPr->items->count() }})
+                                        </button>
                                         <a href="{{ route('purchase-requests.show', $aPr->id) }}" class="btn btn-sm btn-outline-info shadow-xs fw-semibold">
                                             <i class="fas fa-eye me-1"></i> See Details
                                         </a>
@@ -1087,19 +1487,42 @@
                                     <div class="fw-semibold text-dark">{{ $dPr->requestedBy?->name ?? 'System' }}</div>
                                     <small class="text-muted">{{ $dPr->requestedBy?->email ?? '' }}</small>
                                 </td>
-                                <td>
-                                    <div class="fw-bold small text-dark mb-1">
-                                        <i class="fas fa-boxes-stacked me-1 text-secondary"></i>{{ $dPr->items->count() }} Material Item(s)
+                                @php
+                                    $dPrMaterialsJson = $dPr->items->map(function($item) {
+                                        return [
+                                            'product_name' => $item->product?->name ?? 'Material Item',
+                                            'product_code' => $item->product?->item_code ?? '',
+                                            'quantity' => (float)$item->quantity,
+                                            'unit' => $item->unit ?? ($item->product?->unit ?? 'Units'),
+                                            'unit_cost' => (float)($item->estimated_unit_cost ?? 0),
+                                            'specs' => $item->specifications ?? '',
+                                        ];
+                                    })->values()->toArray();
+                                @endphp
+                                <td class="col-procurement-materials" style="min-width: 250px;">
+                                    <div class="d-flex align-items-center justify-content-between mb-1">
+                                        <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 px-2 py-0.5 fw-semibold" style="font-size:0.75rem;">
+                                            <i class="fas fa-boxes-stacked me-1"></i>{{ $dPr->items->count() }} Material Item(s)
+                                        </span>
+                                        <button type="button" class="btn btn-xs btn-link text-muted p-0 text-decoration-none btn-toggle-single-materials" onclick="toggleSingleMaterials(this)" title="Toggle items display">
+                                            <i class="fa-solid fa-chevron-up"></i>
+                                        </button>
                                     </div>
-                                    <div class="text-muted small" style="font-size:11px;">
-                                        @foreach($dPr->items->take(2) as $itm)
-                                            <span class="badge bg-light text-dark border me-1">
-                                                {{ $itm->product?->name ?? 'Item' }}: {{ (float)$itm->quantity }} {{ $itm->unit }}
-                                            </span>
+                                    <div class="procurement-materials-list d-flex flex-column gap-1" style="max-height: 180px; overflow-y: auto;">
+                                        @foreach($dPr->items as $itm)
+                                            <div class="d-flex align-items-center justify-content-between p-1.5 bg-white rounded border text-nowrap shadow-2xs" style="font-size:0.78rem;">
+                                                <div class="d-flex align-items-center gap-1.5 text-truncate me-2" style="max-width: 190px;">
+                                                    <i class="fa-solid fa-cube text-danger" style="font-size:0.7rem;"></i>
+                                                    <strong class="text-dark text-truncate" title="{{ $itm->product?->name }}">{{ $itm->product?->name ?? 'Item' }}</strong>
+                                                </div>
+                                                <span class="badge bg-light text-dark border px-1.5 py-0.5 font-monospace fw-bold">
+                                                    {{ (float)$itm->quantity }} {{ $itm->unit ?? ($itm->product?->unit ?? 'Units') }}
+                                                </span>
+                                            </div>
                                         @endforeach
-                                        @if($dPr->items->count() > 2)
-                                            <span class="text-muted">+{{ $dPr->items->count() - 2 }} more</span>
-                                        @endif
+                                    </div>
+                                    <div class="procurement-materials-compact-preview d-none text-muted small" style="font-size:11px;">
+                                        {{ $dPr->items->count() }} item(s): {{ Str::limit($dPr->items->map(fn($it) => $it->product?->name)->filter()->join(', '), 30) }}
                                     </div>
                                 </td>
                                 <td>
@@ -1130,7 +1553,17 @@
                                     </small>
                                 </td>
                                 <td class="text-end">
-                                    <div class="d-flex justify-content-end align-items-center gap-1">
+                                    <div class="d-flex justify-content-end align-items-center gap-1 flex-wrap">
+                                        <button type="button" class="btn btn-sm btn-outline-primary shadow-xs fw-semibold btn-queue-quick-materials"
+                                                data-ref="{{ $dPr->pr_no }}"
+                                                data-project="{{ $dPr->project?->name ?? 'Head Office / Unassigned' }}"
+                                                data-store="{{ $dPr->store?->name ?? 'Store Unassigned' }}"
+                                                data-url="{{ !$dPr->trashed() ? route('purchase-requests.show', $dPr->id) : '' }}"
+                                                data-items="{{ json_encode($dPrMaterialsJson) }}"
+                                                onclick="openQuickMaterialsModalFromBtn(this)"
+                                                title="View full materials without saying See Details">
+                                            <i class="fa-solid fa-boxes-stacked me-1"></i>Materials ({{ $dPr->items->count() }})
+                                        </button>
                                         @if(!$dPr->trashed())
                                         <a href="{{ route('purchase-requests.show', $dPr->id) }}" class="btn btn-sm btn-outline-info shadow-xs fw-semibold">
                                             <i class="fas fa-eye me-1"></i> Details
@@ -1185,19 +1618,42 @@
                                     <div class="fw-semibold text-dark">{{ $dMr->creator?->name ?? $dMr->requestedBy?->name ?? 'Unknown' }}</div>
                                     <small class="text-muted">{{ $dMr->creator?->email ?? '' }}</small>
                                 </td>
-                                <td>
-                                    <div class="fw-bold small text-dark mb-1">
-                                        <i class="fas fa-boxes-stacked me-1 text-secondary"></i>{{ $dMr->items->count() }} Material Item(s)
+                                @php
+                                    $dMrMaterialsJson = $dMr->items->map(function($item) {
+                                        return [
+                                            'product_name' => $item->product?->name ?? 'Material Item',
+                                            'product_code' => $item->product?->item_code ?? '',
+                                            'quantity' => (float)($item->quantity_requested ?? $item->quantity ?? 0),
+                                            'unit' => $item->unit ?? ($item->product?->unit ?? 'Units'),
+                                            'unit_cost' => 0,
+                                            'specs' => $item->notes ?? '',
+                                        ];
+                                    })->values()->toArray();
+                                @endphp
+                                <td class="col-procurement-materials" style="min-width: 250px;">
+                                    <div class="d-flex align-items-center justify-content-between mb-1">
+                                        <span class="badge bg-secondary bg-opacity-10 text-dark border border-secondary border-opacity-25 px-2 py-0.5 fw-semibold" style="font-size:0.75rem;">
+                                            <i class="fas fa-boxes-stacked me-1"></i>{{ $dMr->items->count() }} Material Item(s)
+                                        </span>
+                                        <button type="button" class="btn btn-xs btn-link text-muted p-0 text-decoration-none btn-toggle-single-materials" onclick="toggleSingleMaterials(this)" title="Toggle items display">
+                                            <i class="fa-solid fa-chevron-up"></i>
+                                        </button>
                                     </div>
-                                    <div class="text-muted small" style="font-size:11px;">
-                                        @foreach($dMr->items->take(2) as $itm)
-                                            <span class="badge bg-light text-dark border me-1">
-                                                {{ $itm->product?->name ?? 'Item' }}: {{ (float)$itm->quantity }} {{ $itm->unit }}
-                                            </span>
+                                    <div class="procurement-materials-list d-flex flex-column gap-1" style="max-height: 180px; overflow-y: auto;">
+                                        @foreach($dMr->items as $itm)
+                                            <div class="d-flex align-items-center justify-content-between p-1.5 bg-white rounded border text-nowrap shadow-2xs" style="font-size:0.78rem;">
+                                                <div class="d-flex align-items-center gap-1.5 text-truncate me-2" style="max-width: 190px;">
+                                                    <i class="fa-solid fa-cube text-secondary" style="font-size:0.7rem;"></i>
+                                                    <strong class="text-dark text-truncate" title="{{ $itm->product?->name }}">{{ $itm->product?->name ?? 'Item' }}</strong>
+                                                </div>
+                                                <span class="badge bg-light text-dark border px-1.5 py-0.5 font-monospace fw-bold">
+                                                    {{ (float)($itm->quantity_requested ?? $itm->quantity ?? 0) }} {{ $itm->unit ?? ($itm->product?->unit ?? 'Units') }}
+                                                </span>
+                                            </div>
                                         @endforeach
-                                        @if($dMr->items->count() > 2)
-                                            <span class="text-muted">+{{ $dMr->items->count() - 2 }} more</span>
-                                        @endif
+                                    </div>
+                                    <div class="procurement-materials-compact-preview d-none text-muted small" style="font-size:11px;">
+                                        {{ $dMr->items->count() }} item(s): {{ Str::limit($dMr->items->map(fn($it) => $it->product?->name)->filter()->join(', '), 30) }}
                                     </div>
                                 </td>
                                 <td>
@@ -1219,7 +1675,17 @@
                                     <small class="text-muted">{{ $dMr->updated_at->diffForHumans() }}</small>
                                 </td>
                                 <td class="text-end">
-                                    <div class="d-flex justify-content-end align-items-center gap-1">
+                                    <div class="d-flex justify-content-end align-items-center gap-1 flex-wrap">
+                                        <button type="button" class="btn btn-sm btn-outline-primary shadow-xs fw-semibold btn-queue-quick-materials"
+                                                data-ref="{{ $dMr->reference_number }}"
+                                                data-project="{{ $dMr->project?->name ?? 'Head Office / General' }}"
+                                                data-store="{{ $dMr->store?->name ?? 'Store Unassigned' }}"
+                                                data-url="{{ route('material-requests.show', $dMr->id) }}"
+                                                data-items="{{ json_encode($dMrMaterialsJson) }}"
+                                                onclick="openQuickMaterialsModalFromBtn(this)"
+                                                title="View full materials without saying See Details">
+                                            <i class="fa-solid fa-boxes-stacked me-1"></i>Materials ({{ $dMr->items->count() }})
+                                        </button>
                                         <a href="{{ route('material-requests.show', $dMr->id) }}" class="btn btn-sm btn-outline-info shadow-xs fw-semibold">
                                             <i class="fas fa-eye me-1"></i> Details
                                         </a>
@@ -1317,4 +1783,275 @@ function openDeleteQueueMrModal(mrId, mrRef) {
 }
 </script>
 @endif
+
+<!-- ========================================================================= -->
+<!-- Quick Materials Preview Modal (Accessible by all roles without leaving queue) -->
+<!-- ========================================================================= -->
+<div class="modal fade" id="quickMaterialsModal" tabindex="-1" aria-labelledby="quickMaterialsModalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-light border-bottom py-3">
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <span class="p-2 rounded-circle bg-primary bg-opacity-10 text-primary">
+                        <i class="fa-solid fa-boxes-stacked fa-lg"></i>
+                    </span>
+                    <div>
+                        <h5 class="modal-title fw-bold text-dark mb-0" id="quickMaterialsModalTitle">Requested Materials</h5>
+                        <div class="d-flex align-items-center gap-2 mt-1 flex-wrap">
+                            <span class="badge bg-primary font-monospace" id="quickMaterialsModalRef">PR #</span>
+                            <span class="badge bg-light text-dark border"><i class="fas fa-building me-1 text-secondary"></i><span id="quickMaterialsModalProject">Project</span></span>
+                            <span class="badge bg-light text-dark border"><i class="fas fa-warehouse me-1 text-success"></i><span id="quickMaterialsModalStore">Store</span></span>
+                        </div>
+                    </div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-3">
+                <div class="d-flex justify-content-between align-items-center mb-2 px-1">
+                    <span class="badge bg-secondary bg-opacity-10 text-dark border px-2.5 py-1 fw-bold" id="quickMaterialsModalCount">0 Items</span>
+                    <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 font-monospace px-2.5 py-1 fw-bold d-none" id="quickMaterialsModalTotal">Total Est: 0.00 ETB</span>
+                </div>
+                <div class="table-responsive rounded border bg-white shadow-2xs">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr class="text-secondary small">
+                                <th style="width: 40px;" class="text-center">#</th>
+                                <th>Material / Item Description</th>
+                                <th style="width: 140px;">Quantity</th>
+                                <th style="width: 130px;" class="text-end">Est. Unit Cost</th>
+                                <th style="width: 130px;" class="text-end">Subtotal</th>
+                                <th>Specifications / Notes</th>
+                            </tr>
+                        </thead>
+                        <tbody id="quickMaterialsModalTableBody">
+                            <!-- Injected dynamically via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer bg-light border-top d-flex justify-content-between align-items-center py-2.5">
+                <small class="text-muted fst-italic">
+                    <i class="fas fa-info-circle me-1 text-primary"></i>Inspecting materials directly from My Queue.
+                </small>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-outline-secondary btn-sm px-3" data-bs-dismiss="modal">Close</button>
+                    <a id="quickMaterialsModalDetailsBtn" href="#" class="btn btn-primary btn-sm px-3 fw-bold shadow-xs">
+                        <i class="fa-solid fa-arrow-up-right-from-square me-1"></i>Open Full Details Page
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+/* Materials column and list display */
+.col-procurement-materials {
+    min-width: 250px;
+    max-width: 380px;
+}
+.procurement-materials-list {
+    transition: all 0.2s ease-in-out;
+}
+.procurement-materials-list::-webkit-scrollbar {
+    width: 4px;
+}
+.procurement-materials-list::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+/* Compact view mode toggled globally */
+#procurementQueueContainer.queue-materials-compact .procurement-materials-list {
+    display: none !important;
+}
+#procurementQueueContainer.queue-materials-compact .procurement-materials-compact-preview {
+    display: block !important;
+}
+#procurementQueueContainer.queue-materials-compact .btn-toggle-single-materials i {
+    transform: rotate(180deg);
+}
+.shadow-2xs {
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+.btn-xs {
+    padding: 0.15rem 0.45rem;
+    font-size: 0.72rem;
+    line-height: 1.2;
+}
+</style>
+
+<script>
+// State management for Queue Materials Option (expanded vs compact)
+function setQueueMaterialsMode(mode) {
+    const container = document.getElementById('procurementQueueContainer');
+    const btnExp = document.getElementById('btnQueueMaterialsExpanded');
+    const btnCmp = document.getElementById('btnQueueMaterialsCompact');
+    const tabExp = document.getElementById('btnTabMaterialsExpanded');
+    const tabCmp = document.getElementById('btnTabMaterialsCompact');
+
+    if (mode === 'compact') {
+        container?.classList.add('queue-materials-compact');
+        localStorage.setItem('wechecha_procurement_materials_mode', 'compact');
+
+        // Update header buttons
+        if (btnExp) {
+            btnExp.className = 'btn btn-sm rounded-pill px-3 py-1 fw-semibold text-muted';
+        }
+        if (btnCmp) {
+            btnCmp.className = 'btn btn-sm rounded-pill px-3 py-1 fw-semibold btn-primary text-white shadow-xs';
+        }
+        // Update tab bar buttons
+        if (tabExp) {
+            tabExp.className = 'btn btn-xs rounded-pill px-2.5 py-0.5 fw-semibold text-muted';
+        }
+        if (tabCmp) {
+            tabCmp.className = 'btn btn-xs rounded-pill px-2.5 py-0.5 fw-semibold btn-primary text-white shadow-2xs';
+        }
+    } else {
+        container?.classList.remove('queue-materials-compact');
+        localStorage.setItem('wechecha_procurement_materials_mode', 'expanded');
+
+        // Update header buttons
+        if (btnExp) {
+            btnExp.className = 'btn btn-sm rounded-pill px-3 py-1 fw-semibold btn-primary text-white shadow-xs';
+        }
+        if (btnCmp) {
+            btnCmp.className = 'btn btn-sm rounded-pill px-3 py-1 fw-semibold text-muted';
+        }
+        // Update tab bar buttons
+        if (tabExp) {
+            tabExp.className = 'btn btn-xs rounded-pill px-2.5 py-0.5 fw-semibold btn-primary text-white shadow-2xs';
+        }
+        if (tabCmp) {
+            tabCmp.className = 'btn btn-xs rounded-pill px-2.5 py-0.5 fw-semibold text-muted';
+        }
+    }
+}
+
+// Single row toggle button
+function toggleSingleMaterials(btn) {
+    const col = btn.closest('.col-procurement-materials');
+    if (!col) return;
+    const list = col.querySelector('.procurement-materials-list');
+    const preview = col.querySelector('.procurement-materials-compact-preview');
+    const icon = btn.querySelector('i');
+
+    if (!list) return;
+
+    const isListHidden = window.getComputedStyle(list).display === 'none';
+
+    if (isListHidden) {
+        list.style.setProperty('display', 'flex', 'important');
+        if (preview) preview.style.setProperty('display', 'none', 'important');
+        if (icon) {
+            icon.className = 'fa-solid fa-chevron-up';
+        }
+    } else {
+        list.style.setProperty('display', 'none', 'important');
+        if (preview) preview.style.setProperty('display', 'block', 'important');
+        if (icon) {
+            icon.className = 'fa-solid fa-chevron-down';
+        }
+    }
+}
+
+// Quick Materials Preview Modal
+function openQuickMaterialsModalFromBtn(btn) {
+    const ref = btn.dataset.ref || 'Requisition';
+    const project = btn.dataset.project || 'N/A';
+    const store = btn.dataset.store || 'Store Unassigned';
+    const url = btn.dataset.url || '';
+    let items = [];
+
+    try {
+        items = JSON.parse(btn.dataset.items || '[]');
+    } catch (e) {
+        items = [];
+    }
+
+    document.getElementById('quickMaterialsModalTitle').textContent = 'Materials for ' + ref;
+    document.getElementById('quickMaterialsModalRef').textContent = ref;
+    document.getElementById('quickMaterialsModalProject').textContent = project;
+    document.getElementById('quickMaterialsModalStore').textContent = store;
+    document.getElementById('quickMaterialsModalCount').textContent = items.length + ' Item(s)';
+
+    const tbody = document.getElementById('quickMaterialsModalTableBody');
+    tbody.innerHTML = '';
+
+    let grandTotal = 0;
+    let hasCosts = false;
+
+    if (items.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4"><i class="fa-solid fa-box-open fa-2x mb-2 d-block opacity-50"></i>No material items recorded for this request.</td></tr>';
+    } else {
+        items.forEach((item, index) => {
+            const qty = Number(item.quantity || 0);
+            const unit = item.unit || 'Units';
+            const cost = Number(item.unit_cost || 0);
+            const lineTotal = qty * cost;
+            if (cost > 0) hasCosts = true;
+            grandTotal += lineTotal;
+
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td class="text-center text-muted small fw-bold">${index + 1}</td>
+                <td>
+                    <div class="fw-bold text-dark">${escapeHtml(item.product_name || 'Material Item')}</div>
+                    ${item.product_code ? `<span class="badge bg-light text-secondary border font-monospace" style="font-size:0.7rem;">Code: ${escapeHtml(item.product_code)}</span>` : ''}
+                </td>
+                <td>
+                    <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 font-monospace fw-bold px-2 py-1">
+                        ${qty.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 3})} ${escapeHtml(unit)}
+                    </span>
+                </td>
+                <td class="font-monospace text-end">
+                    ${cost > 0 ? cost.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' ETB' : '<span class="text-muted">—</span>'}
+                </td>
+                <td class="font-monospace text-end fw-bold text-dark">
+                    ${lineTotal > 0 ? lineTotal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' ETB' : '<span class="text-muted">—</span>'}
+                </td>
+                <td class="small text-muted fst-italic">
+                    ${item.specs ? escapeHtml(item.specs) : '<span class="text-muted opacity-50">—</span>'}
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    const totalEl = document.getElementById('quickMaterialsModalTotal');
+    if (hasCosts && grandTotal > 0) {
+        totalEl.textContent = 'Total Est: ' + grandTotal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' ETB';
+        totalEl.classList.remove('d-none');
+    } else {
+        totalEl.classList.add('d-none');
+    }
+
+    const detailsBtn = document.getElementById('quickMaterialsModalDetailsBtn');
+    if (url && url.length > 5) {
+        detailsBtn.href = url;
+        detailsBtn.classList.remove('d-none');
+    } else {
+        detailsBtn.classList.add('d-none');
+    }
+
+    const modal = new bootstrap.Modal(document.getElementById('quickMaterialsModal'));
+    modal.show();
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+// Restore saved preference on load
+document.addEventListener('DOMContentLoaded', function() {
+    const savedMode = localStorage.getItem('wechecha_procurement_materials_mode') || 'expanded';
+    setQueueMaterialsMode(savedMode);
+});
+</script>
 @endsection
