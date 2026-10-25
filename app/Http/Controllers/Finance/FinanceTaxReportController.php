@@ -4614,6 +4614,8 @@ class FinanceTaxReportController extends Controller
             'receipt_id'         => 'nullable',
             'expense_request_id' => 'nullable',
             'request_number'     => 'nullable|string|max:100',
+            'receipt_file'       => 'nullable|file|mimes:jpeg,jpg,png,webp,pdf|max:25600',
+            'receipt_path'       => 'nullable|string|max:500',
             'seller_name'        => 'nullable|string|max:255',
             'supplier_tin'       => 'nullable|string|max:50',
             'receipt_date'       => 'nullable|string',
@@ -4632,6 +4634,17 @@ class FinanceTaxReportController extends Controller
         ]);
 
         try {
+            $uploadedPath = null;
+            if ($request->hasFile('receipt_file')) {
+                try {
+                    $uploadedPath = \App\Services\FileUploadService::upload($request->file('receipt_file'), 'receipts');
+                } catch (\Throwable $e) {
+                    Log::warning('updateOcrItem file upload error: ' . $e->getMessage());
+                }
+            } elseif ($request->filled('receipt_path')) {
+                $uploadedPath = trim((string)$request->input('receipt_path'));
+            }
+
             $rawId            = $request->input('id');
             $rawReceiptId     = $request->input('receipt_id');
             $rawExpenseReqId  = $request->input('expense_request_id');
@@ -4694,7 +4707,7 @@ class FinanceTaxReportController extends Controller
                                     'vendor_name'      => $payment->ledger?->supplier_name ?: 'Credit Vendor',
                                     'fs_no'            => $payment->reference_no ?: null,
                                     'receipt_date'     => $payment->payment_date ?: $payment->created_at?->toDateString(),
-                                    'file_path'        => $payment->receipt_path ?: '',
+                                    'file_path'        => $uploadedPath ?: ($payment->receipt_path ?: ''),
                                     'total_amount'     => (float)$payment->amount,
                                     'subtotal'         => (float)$payment->amount,
                                     'vat_amount'       => 0,
@@ -4755,7 +4768,7 @@ class FinanceTaxReportController extends Controller
                         'mrc_no'           => $request->mrc_no ?: null,
                         'uploaded_by'      => Auth::id() ?: ($expReq->user_id ?: 1),
                         'project_id'       => $request->project_id ?: $expReq->project_id,
-                        'file_path'        => (string)($expReq->attachment ?? ''),
+                        'file_path'        => $uploadedPath ?: (string)($expReq->attachment ?? ''),
                         'file_type'        => 'image',
                         'category'         => $request->category ?: ($expReq->category ?: 'general'),
                         'parsed_data'      => ['tax_type' => ((float)($request->vat_amount ?? 0) <= 0) ? 'no_vat' : 'vat_standard', 'purc_type' => (string)($request->purchase_type ?: 'PUR_GD')],
@@ -4795,7 +4808,7 @@ class FinanceTaxReportController extends Controller
                             'mrc_no'           => $request->mrc_no ?: null,
                             'uploaded_by'      => Auth::id() ?: ($expReq->user_id ?: 1),
                             'project_id'       => $request->project_id ?: $expReq->project_id,
-                            'file_path'        => (string)($expReq->attachment ?? ''),
+                            'file_path'        => $uploadedPath ?: (string)($expReq->attachment ?? ''),
                             'file_type'        => 'image',
                             'category'         => $request->category ?: ($expReq->category ?: 'general'),
                             'parsed_data'      => ['tax_type' => ((float)($request->vat_amount ?? 0) <= 0) ? 'no_vat' : 'vat_standard', 'purc_type' => (string)($request->purchase_type ?: 'PUR_GD')],
@@ -4847,7 +4860,7 @@ class FinanceTaxReportController extends Controller
                                     'mrc_no'           => $request->mrc_no ?: ($fuel->mrc_no ?? null),
                                     'uploaded_by'      => Auth::id() ?: ($expReq->user_id ?: 1),
                                     'project_id'       => $request->project_id ?: $expReq->project_id,
-                                    'file_path'        => (string)($expReq->attachment ?? ''),
+                                    'file_path'        => $uploadedPath ?: (string)($expReq->attachment ?? ''),
                                     'file_type'        => 'image',
                                     'category'         => 'fuel',
                                     'parsed_data'      => ['tax_type' => ((float)($request->vat_amount ?? 0) <= 0) ? 'no_vat' : 'vat_standard', 'purc_type' => (string)($request->purchase_type ?: 'PUR_GD')],
@@ -5012,6 +5025,9 @@ class FinanceTaxReportController extends Controller
             if ($request->filled('item_description')) {
                 $receiptUpdates['description'] = $request->item_description;
             }
+            if (!empty($uploadedPath)) {
+                $receiptUpdates['file_path'] = $uploadedPath;
+            }
 
             // Merge with parsed_data JSON so that e-Tax exports and movements views immediately reflect the latest edits
             $parsed = is_string($receipt->parsed_data) ? (json_decode($receipt->parsed_data, true) ?: []) : (array)($receipt->parsed_data ?? []);
@@ -5133,6 +5149,9 @@ class FinanceTaxReportController extends Controller
                     if (!empty($refParts)) {
                         $linkedExp->payment_reference = implode(' | ', $refParts);
                     }
+                    if (!empty($uploadedPath)) {
+                        $linkedExp->attachment = $uploadedPath;
+                    }
                     $linkedExp->save();
 
                     if (Schema::hasTable('expense_hub_vat_decisions')) {
@@ -5143,6 +5162,9 @@ class FinanceTaxReportController extends Controller
                         if ($receipt->fs_no) $vatDec->custom_fs_no = $receipt->fs_no;
                         if ($receipt->vendor_tin) $vatDec->custom_seller_tin = $receipt->vendor_tin;
                         if ($receipt->mrc_no) $vatDec->custom_mrc_no = $receipt->mrc_no;
+                        if (!empty($uploadedPath) && Schema::hasColumn('expense_hub_vat_decisions', 'receipt_path')) {
+                            $vatDec->receipt_path = $uploadedPath;
+                        }
                         if ($request->filled('purchase_type')) $vatDec->purc_type = (string)$request->purchase_type;
                         if ($request->filled('item_description') && Schema::hasColumn('expense_hub_vat_decisions', 'custom_item_description')) {
                             $vatDec->custom_item_description = (string)$request->item_description;
@@ -5214,6 +5236,9 @@ class FinanceTaxReportController extends Controller
                         if ($receipt->fs_no) {
                             $payment->reference_no = $receipt->fs_no;
                         }
+                        if (!empty($uploadedPath) && Schema::hasColumn('credit_store_payments', 'receipt_path')) {
+                            $payment->receipt_path = $uploadedPath;
+                        }
                         $payment->amount = $valAfter;
                         $payment->vat_amount = $vat;
                         $payment->save();
@@ -5226,6 +5251,17 @@ class FinanceTaxReportController extends Controller
             $item->refresh();
             $receipt->refresh();
 
+            $calcFileUrl = null;
+            if (!empty($receipt->file_path)) {
+                try {
+                    $calcFileUrl = \App\Services\FileUploadService::url($receipt->file_path);
+                } catch (\Throwable $e) {
+                    $calcFileUrl = Str::startsWith($receipt->file_path, ['http://', 'https://'])
+                        ? $receipt->file_path
+                        : asset('storage/' . ltrim($receipt->file_path, '/'));
+                }
+            }
+
             return response()->json([
                 'success' => true,
                 'message' => "Invoice / Receipt #{$receipt->id} updated successfully and reconciled with system tax records.",
@@ -5234,6 +5270,8 @@ class FinanceTaxReportController extends Controller
                     'receipt_id'         => $receipt->id,
                     'expense_request_id' => $linkedExp?->id,
                     'request_number'     => $linkedExp?->request_number ?: $receipt->receipt_number,
+                    'file_path'          => $receipt->file_path,
+                    'file_url'           => $calcFileUrl,
                     'vendor_name'        => $receipt->vendor_name ?: 'Unknown Vendor',
                     'vendor_tin'         => $receipt->vendor_tin ?: '-',
                     'seller_tin'         => $receipt->vendor_tin ?: '-',

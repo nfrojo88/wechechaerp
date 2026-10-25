@@ -1274,6 +1274,9 @@
                                     <input type="hidden" id="movement_edit_receipt_id" name="receipt_id">
                                     <input type="hidden" id="movement_edit_expense_request_id" name="expense_request_id">
                                     <input type="hidden" id="movement_edit_request_number" name="request_number">
+                                    <input type="hidden" id="movement_edit_receipt_file_path" name="receipt_path">
+                                    <input type="file" id="movementSlipFileInput" name="receipt_file" class="d-none" accept=".jpg,.jpeg,.png,.webp,.pdf" onchange="if(this.files &amp;&amp; this.files[0]) handleMovementReceiptFileSelect(this.files[0])">
+                                    <input type="file" id="movementSlipCameraInput" class="d-none" accept="image/*" capture="environment" onchange="if(this.files &amp;&amp; this.files[0]) handleMovementReceiptFileSelect(this.files[0])">
 
                                     {{-- Supplier Name --}}
                                     <div class="mb-2.5">
@@ -1437,39 +1440,75 @@
                     {{-- RIGHT COLUMN: Receipt Slip Preview --}}
                     <div class="col-12 col-lg-6">
                         <div class="card border-0 shadow-xs rounded-3 h-100 bg-white d-flex flex-column">
-                            <div class="card-header bg-white border-bottom py-2.5 px-3 d-flex align-items-center justify-content-between flex-shrink-0">
+                            <div class="card-header bg-white border-bottom py-2 px-3 d-flex align-items-center justify-content-between flex-shrink-0 flex-wrap gap-2">
                                 <div class="d-flex align-items-center gap-2">
                                     <i class="fa-solid fa-image text-info"></i>
                                     <span class="fw-bold text-dark small text-uppercase">Original Scanned Receipt Slip</span>
                                 </div>
-                                <div class="btn-group btn-group-sm shadow-xs" role="group">
-                                    <button type="button" class="btn btn-outline-secondary btn-sm py-1 px-2" onclick="zoomPageSlip(0.15)" title="Zoom In"><i class="fa-solid fa-magnifying-glass-plus"></i></button>
-                                    <button type="button" class="btn btn-outline-secondary btn-sm py-1 px-2" onclick="zoomPageSlip(-0.15)" title="Zoom Out"><i class="fa-solid fa-magnifying-glass-minus"></i></button>
-                                    <button type="button" class="btn btn-outline-secondary btn-sm py-1 px-2" onclick="rotatePageSlip()" title="Rotate 90°"><i class="fa-solid fa-rotate-right"></i></button>
-                                    <button type="button" class="btn btn-outline-secondary btn-sm py-1 px-2" onclick="resetPageSlip()" title="Reset View"><i class="fa-solid fa-arrows-rotate"></i></button>
-                                    <a id="movementModalSlipOpenNewTab" href="#" target="_blank" class="btn btn-outline-secondary btn-sm py-1 px-2" title="Open in New Tab"><i class="fa-solid fa-up-right-from-square"></i></a>
-                                </div>
-                            </div>
-                            <div class="card-body p-2 flex-grow-1 d-flex flex-column">
-                                <div class="flex-grow-1 position-relative border rounded-3 bg-light d-flex align-items-center justify-content-center p-2" style="min-height: 420px; max-height: 520px; overflow: auto;" id="movementSlipViewport">
-                                    <img id="movementSlipImg" src="" alt="Receipt Slip" class="img-fluid rounded shadow-sm" style="max-height: 480px; width: auto; object-fit: contain; transition: transform 0.2s ease;">
-                                    <iframe id="movementSlipPdf" src="" class="w-100 rounded d-none" style="height: 480px; border: none;"></iframe>
-                                    <div id="movementSlipEmpty" class="text-center p-4 d-none">
-                                        <div class="p-3 bg-white bg-opacity-75 rounded-circle d-inline-block text-muted mb-2 shadow-xs">
-                                            <i class="fa-solid fa-file-invoice text-secondary fs-2"></i>
-                                        </div>
-                                        <div class="fw-semibold text-muted small">No Scanned Slip File Attached</div>
-                                        <div class="text-muted" style="font-size:0.75rem;">You can still edit and save all fiscal declaration fields on the left.</div>
+                                <div class="d-flex align-items-center gap-1.5 flex-wrap">
+                                    <button type="button" class="btn btn-primary btn-sm py-1 px-2.5 rounded-pill shadow-xs d-inline-flex align-items-center gap-1.5 fw-semibold" onclick="triggerMovementReceiptUpload()" title="Upload or Replace Receipt Slip">
+                                        <i class="fa-solid fa-arrow-up-from-bracket"></i>
+                                        <span>Upload Slip</span>
+                                    </button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm py-1 px-2 rounded-pill shadow-xs" onclick="triggerMovementReceiptCamera()" title="Take Photo with Camera">
+                                        <i class="fa-solid fa-camera"></i>
+                                    </button>
+                                    <div class="btn-group btn-group-sm shadow-xs ms-1" role="group">
+                                        <button type="button" class="btn btn-outline-secondary btn-sm py-1 px-2" onclick="zoomPageSlip(0.15)" title="Zoom In"><i class="fa-solid fa-magnifying-glass-plus"></i></button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm py-1 px-2" onclick="zoomPageSlip(-0.15)" title="Zoom Out"><i class="fa-solid fa-magnifying-glass-minus"></i></button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm py-1 px-2" onclick="rotatePageSlip()" title="Rotate 90°"><i class="fa-solid fa-rotate-right"></i></button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm py-1 px-2" onclick="resetPageSlip()" title="Reset View"><i class="fa-solid fa-arrows-rotate"></i></button>
+                                        <a id="movementModalSlipOpenNewTab" href="#" target="_blank" class="btn btn-outline-secondary btn-sm py-1 px-2" title="Open in New Tab"><i class="fa-solid fa-up-right-from-square"></i></a>
                                     </div>
                                 </div>
                             </div>
-                            <div class="card-footer bg-light border-top py-2 px-3 d-flex align-items-center justify-content-between flex-shrink-0">
-                                <span class="small text-muted font-monospace" id="movementSlipFilename" style="font-size:0.75rem;">Document: Receipt Slip</span>
-                                <div class="d-flex gap-2">
-                                    <a id="movementSlipDownloadBtn" href="#" target="_blank" download class="btn btn-outline-info btn-sm rounded-pill px-3 shadow-xs">
+                            <div class="card-body p-2 flex-grow-1 d-flex flex-column">
+                                {{-- Upload & AI OCR Scanning Progress Bar --}}
+                                <div id="movementUploadProgress" class="alert alert-info py-2 px-3 small rounded-3 mb-2 d-none align-items-center justify-content-between flex-shrink-0">
+                                    <div class="d-flex align-items-center gap-2 text-truncate me-2">
+                                        <i class="fa-solid fa-circle-notch fa-spin text-info fs-6 flex-shrink-0" id="movementUploadSpinner"></i>
+                                        <span id="movementUploadStatusText" class="text-truncate">Processing slip with AI Vision OCR...</span>
+                                    </div>
+                                    <span class="badge bg-info text-white rounded-pill px-2 py-0.5 flex-shrink-0" id="movementUploadBadge">Scanning</span>
+                                </div>
+
+                                <div class="flex-grow-1 position-relative border rounded-3 bg-light d-flex align-items-center justify-content-center p-2" style="min-height: 420px; max-height: 520px; overflow: auto; transition: border-color 0.2s, background-color 0.2s;" id="movementSlipViewport">
+                                    <img id="movementSlipImg" src="" alt="Receipt Slip" class="img-fluid rounded shadow-sm" style="max-height: 480px; width: auto; object-fit: contain; transition: transform 0.2s ease;">
+                                    <iframe id="movementSlipPdf" src="" class="w-100 rounded d-none" style="height: 480px; border: none;"></iframe>
+
+                                    {{-- Interactive Dropzone Empty State --}}
+                                    <div id="movementSlipEmpty" class="text-center p-4 d-none w-100 h-100 d-flex flex-column align-items-center justify-content-center">
+                                        <div class="p-3 bg-primary bg-opacity-10 text-primary rounded-circle d-inline-block mb-2 shadow-xs">
+                                            <i class="fa-solid fa-cloud-arrow-up fs-2"></i>
+                                        </div>
+                                        <div class="fw-bold text-dark small mb-1">No Scanned Slip File Attached</div>
+                                        <div class="text-muted mb-3" style="font-size:0.78rem; max-width: 320px;">
+                                            Drag &amp; drop receipt slip here (JPG, PNG, PDF up to 25MB) or choose an action below to attach &amp; auto-extract:
+                                        </div>
+                                        <div class="d-flex gap-2 justify-content-center flex-wrap">
+                                            <button type="button" class="btn btn-primary btn-sm rounded-pill px-3 shadow-xs fw-semibold" onclick="triggerMovementReceiptUpload()">
+                                                <i class="fa-solid fa-arrow-up-from-bracket me-1.5"></i>Upload Receipt / Slip
+                                            </button>
+                                            <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-3" onclick="triggerMovementReceiptCamera()">
+                                                <i class="fa-solid fa-camera me-1.5"></i>Take Photo
+                                            </button>
+                                        </div>
+                                        <div class="text-muted mt-3 pt-2 border-top w-75" style="font-size:0.72rem;">
+                                            <i class="fa-solid fa-wand-magic-sparkles text-primary me-1"></i>AI OCR will auto-extract FS #, Supplier TIN, Name &amp; Amounts into the form on the left.
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="card-footer bg-light border-top py-2 px-3 d-flex align-items-center justify-content-between flex-shrink-0 flex-wrap gap-2">
+                                <span class="small text-muted font-monospace text-truncate me-2" id="movementSlipFilename" style="font-size:0.75rem; max-width: 220px;">Document: Receipt Slip</span>
+                                <div class="d-flex gap-1.5 align-items-center flex-wrap">
+                                    <button type="button" class="btn btn-outline-primary btn-sm rounded-pill px-2.5 shadow-xs" onclick="triggerMovementReceiptUpload()" title="Upload or Replace Slip">
+                                        <i class="fa-solid fa-arrow-up-from-bracket me-1"></i>Replace Slip
+                                    </button>
+                                    <a id="movementSlipDownloadBtn" href="#" target="_blank" download class="btn btn-outline-info btn-sm rounded-pill px-2.5 shadow-xs">
                                         <i class="fa-solid fa-download me-1"></i>Download
                                     </a>
-                                    <a id="movementModalStudioLink" href="{{ route('admin.ocr.index') }}" target="_blank" class="btn btn-outline-primary btn-sm rounded-pill px-3">
+                                    <a id="movementModalStudioLink" href="{{ route('admin.ocr.index') }}" target="_blank" class="btn btn-outline-secondary btn-sm rounded-pill px-2.5">
                                         <i class="fa-solid fa-wand-magic-sparkles me-1"></i>OCR Studio
                                     </a>
                                 </div>
@@ -1747,8 +1786,210 @@
         _updatePageSlipTransform();
     }
 
+    // Trigger file chooser for receipt slip upload
+    function triggerMovementReceiptUpload() {
+        const input = document.getElementById('movementSlipFileInput');
+        if (input) {
+            input.value = '';
+            input.click();
+        }
+    }
+
+    // Trigger smartphone camera photo capture for receipt slip
+    function triggerMovementReceiptCamera() {
+        const input = document.getElementById('movementSlipCameraInput');
+        if (input) {
+            input.value = '';
+            input.click();
+        }
+    }
+
+    // Handle receipt slip file selection, instant preview, and AI OCR extraction
+    function handleMovementReceiptFileSelect(file) {
+        if (!file) return;
+
+        if (file.size > 25 * 1024 * 1024) {
+            alert('The selected file is too large (' + (file.size / (1024 * 1024)).toFixed(1) + 'MB). Maximum file size is 25MB.');
+            return;
+        }
+
+        const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg', 'application/pdf'];
+        const ext = (file.name.split('.').pop() || '').toLowerCase();
+        const validExts = ['jpg', 'jpeg', 'png', 'webp', 'pdf'];
+        if (!validTypes.includes(file.type) && !validExts.includes(ext)) {
+            alert('Invalid file format. Please select a JPG, PNG, WEBP image or a PDF document.');
+            return;
+        }
+
+        // Show immediate client-side preview
+        try {
+            const blobUrl = URL.createObjectURL(file);
+            _setPageSlipPreview(blobUrl, file.name);
+        } catch (e) {
+            console.warn('Could not generate object URL:', e);
+        }
+
+        // Show upload & scanning alert
+        const progBox = document.getElementById('movementUploadProgress');
+        const progText = document.getElementById('movementUploadStatusText');
+        const progBadge = document.getElementById('movementUploadBadge');
+        const progSpinner = document.getElementById('movementUploadSpinner');
+
+        if (progBox) {
+            progBox.className = 'alert alert-info py-2 px-3 small rounded-3 mb-2 d-flex align-items-center justify-content-between flex-shrink-0';
+            if (progText) progText.innerHTML = `<strong>Uploading &amp; Scanning "${file.name}"...</strong> AI OCR is extracting fiscal metadata.`;
+            if (progBadge) {
+                progBadge.className = 'badge bg-primary text-white rounded-pill px-2 py-0.5 flex-shrink-0';
+                progBadge.textContent = 'AI OCR Scanning';
+            }
+            if (progSpinner) {
+                progSpinner.className = 'fa-solid fa-circle-notch fa-spin text-primary fs-6 flex-shrink-0';
+            }
+            progBox.classList.remove('d-none');
+        }
+
+        // Trigger OCR Scan via backend endpoint
+        const formData = new FormData();
+        formData.append('receipt_file', file);
+        formData.append('_token', '{{ csrf_token() }}');
+
+        fetch('{{ route("finance.tax-deductions.scan-receipt") }}', {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(async res => {
+            const isJson = (res.headers.get('content-type') || '').includes('application/json');
+            const data = isJson ? await res.json() : { success: false, message: await res.text() };
+            if (!res.ok) {
+                throw new Error(data.message || ('Server error: HTTP ' + res.status));
+            }
+            return data;
+        })
+        .then(data => {
+            if (data.success) {
+                const pathInput = document.getElementById('movement_edit_receipt_file_path');
+                if (pathInput && data.file_path) {
+                    pathInput.value = data.file_path;
+                }
+
+                if (data.file_url) {
+                    _setPageSlipPreview(data.file_url, file.name);
+                }
+
+                let autofilled = [];
+
+                if (data.fs_no && data.fs_no !== '-') {
+                    const fsInput = document.getElementById('movement_edit_fs_no');
+                    if (fsInput) {
+                        fsInput.value = data.fs_no;
+                        validateMovementFs(data.fs_no);
+                        autofilled.push('FS #' + data.fs_no);
+                    }
+                }
+
+                if (data.vendor_tin && data.vendor_tin !== '-') {
+                    const tinInput = document.getElementById('movement_edit_supplier_tin');
+                    if (tinInput) {
+                        tinInput.value = data.vendor_tin;
+                        validateMovementTin(data.vendor_tin);
+                        autofilled.push('TIN');
+                    }
+                }
+
+                if (data.vendor_name && data.vendor_name !== 'General Merchant') {
+                    const vendorInput = document.getElementById('movement_edit_seller_name');
+                    if (vendorInput) {
+                        vendorInput.value = data.vendor_name;
+                        autofilled.push('Merchant Name');
+                    }
+                }
+
+                if (data.mrc_no && data.mrc_no !== '-') {
+                    const mrcInput = document.getElementById('movement_edit_mrc_no');
+                    if (mrcInput) {
+                        mrcInput.value = data.mrc_no;
+                        autofilled.push('MRC');
+                    }
+                }
+
+                if (data.receipt_date) {
+                    const dateInput = document.getElementById('movement_edit_receipt_date');
+                    if (dateInput) {
+                        dateInput.value = data.receipt_date;
+                        syncMovementDateToEc(data.receipt_date);
+                        autofilled.push('Date');
+                    }
+                }
+
+                const totalVal = parseFloat(data.total_amount || 0);
+                const subtotalVal = parseFloat(data.subtotal || 0);
+                const vatVal = parseFloat(data.vat_amount || 0);
+
+                if (totalVal > 0 || subtotalVal > 0) {
+                    const baseInput = document.getElementById('movement_edit_total_value');
+                    const vatInput = document.getElementById('movement_edit_vat_amount');
+                    const totalInput = document.getElementById('movement_edit_value_after_vat');
+
+                    if (baseInput) baseInput.value = (subtotalVal > 0 ? subtotalVal : totalVal).toFixed(2);
+                    if (vatInput) vatInput.value = vatVal.toFixed(2);
+                    if (totalInput) totalInput.value = (totalVal > 0 ? totalVal : (subtotalVal + vatVal)).toFixed(2);
+                    autofilled.push('Amounts');
+                }
+
+                if (data.purchase_type) {
+                    const purcSelect = document.getElementById('movement_edit_purchase_type');
+                    if (purcSelect) {
+                        for (let opt of purcSelect.options) {
+                            if (opt.value === data.purchase_type || opt.value.includes(data.purchase_type)) {
+                                purcSelect.value = opt.value;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (progBox) {
+                    progBox.className = 'alert alert-success py-2 px-3 small rounded-3 mb-2 d-flex align-items-center justify-content-between flex-shrink-0';
+                    if (progText) {
+                        const fieldsStr = autofilled.length > 0 ? ` (Auto-filled: ${autofilled.join(', ')})` : '';
+                        progText.innerHTML = `<strong><i class="fa-solid fa-circle-check text-success me-1"></i>Slip Uploaded &amp; Scanned!</strong>${fieldsStr}. Click <strong>Save Changes</strong> to reconcile with system.`;
+                    }
+                    if (progBadge) {
+                        progBadge.className = 'badge bg-success text-white rounded-pill px-2 py-0.5 flex-shrink-0';
+                        progBadge.textContent = 'OCR Verified';
+                    }
+                    if (progSpinner) {
+                        progSpinner.className = 'fa-solid fa-check text-success fs-6 flex-shrink-0';
+                    }
+                }
+            } else {
+                throw new Error(data.message || 'Could not parse slip');
+            }
+        })
+        .catch(err => {
+            console.warn('OCR Scan notice:', err);
+            if (progBox) {
+                progBox.className = 'alert alert-warning py-2 px-3 small rounded-3 mb-2 d-flex align-items-center justify-content-between flex-shrink-0';
+                if (progText) {
+                    progText.innerHTML = `<strong><i class="fa-solid fa-paperclip text-warning me-1"></i>Slip attached!</strong> Ready for upload. Click <strong>Save Changes</strong> to store slip and fiscal edits.`;
+                }
+                if (progBadge) {
+                    progBadge.className = 'badge bg-warning text-dark rounded-pill px-2 py-0.5 flex-shrink-0';
+                    progBadge.textContent = 'Attached';
+                }
+                if (progSpinner) {
+                    progSpinner.className = 'fa-solid fa-paperclip text-warning fs-6 flex-shrink-0';
+                }
+            }
+        });
+    }
+
     // Set preview file in inspector modal
-    function _setPageSlipPreview(url) {
+    function _setPageSlipPreview(url, customFilename) {
         const imgEl = document.getElementById('movementSlipImg');
         const pdfEl = document.getElementById('movementSlipPdf');
         const emptyEl = document.getElementById('movementSlipEmpty');
@@ -1761,19 +2002,29 @@
         if (!url) {
             if (imgEl) { imgEl.classList.add('d-none'); imgEl.src = ''; }
             if (pdfEl) { pdfEl.classList.add('d-none'); pdfEl.src = ''; }
-            if (emptyEl) emptyEl.classList.remove('d-none');
+            if (emptyEl) {
+                emptyEl.classList.remove('d-none');
+                emptyEl.classList.add('d-flex');
+            }
             if (dlBtn) dlBtn.classList.add('d-none');
             if (newTabBtn) newTabBtn.classList.add('d-none');
             if (fnLabel) fnLabel.textContent = 'No document attached';
             return;
         }
 
-        if (emptyEl) emptyEl.classList.add('d-none');
+        if (emptyEl) {
+            emptyEl.classList.add('d-none');
+            emptyEl.classList.remove('d-flex');
+        }
         if (dlBtn) { dlBtn.classList.remove('d-none'); dlBtn.href = url; }
         if (newTabBtn) { newTabBtn.classList.remove('d-none'); newTabBtn.href = url; }
         if (fnLabel) {
-            const parts = url.split('/');
-            fnLabel.textContent = 'Document: ' + decodeURIComponent(parts[parts.length - 1] || 'receipt-slip');
+            if (customFilename) {
+                fnLabel.textContent = 'Document: ' + customFilename;
+            } else {
+                const parts = url.split('/');
+                fnLabel.textContent = 'Document: ' + decodeURIComponent(parts[parts.length - 1] || 'receipt-slip');
+            }
         }
 
         const isPdf = url.toLowerCase().includes('.pdf');
@@ -1809,6 +2060,18 @@
 
         const reqNumInput = document.getElementById('movement_edit_request_number');
         if (reqNumInput) reqNumInput.value = ocr.request_number || '';
+
+        const pathInput = document.getElementById('movement_edit_receipt_file_path');
+        if (pathInput) pathInput.value = ocr.file_path || '';
+
+        const fileInput = document.getElementById('movementSlipFileInput');
+        if (fileInput) fileInput.value = '';
+
+        const camInput = document.getElementById('movementSlipCameraInput');
+        if (camInput) camInput.value = '';
+
+        const progBox = document.getElementById('movementUploadProgress');
+        if (progBox) progBox.className = 'alert alert-info py-2 px-3 small rounded-3 mb-2 d-none align-items-center justify-content-between flex-shrink-0';
 
         const badgeId = document.getElementById('movement_edit_ocr_badge_id');
         if (badgeId) badgeId.textContent = ocr.id ? ('Invoice #' + ocr.id) : ('Item #' + (idx + 1));
@@ -1941,6 +2204,18 @@
 
         const reqNumInput = document.getElementById('movement_edit_request_number');
         if (reqNumInput) reqNumInput.value = tas.request_number || '';
+
+        const pathInput = document.getElementById('movement_edit_receipt_file_path');
+        if (pathInput) pathInput.value = tas.receipt_slip_url || tas.attachment || '';
+
+        const fileInput = document.getElementById('movementSlipFileInput');
+        if (fileInput) fileInput.value = '';
+
+        const camInput = document.getElementById('movementSlipCameraInput');
+        if (camInput) camInput.value = '';
+
+        const progBox = document.getElementById('movementUploadProgress');
+        if (progBox) progBox.className = 'alert alert-info py-2 px-3 small rounded-3 mb-2 d-none align-items-center justify-content-between flex-shrink-0';
 
         const badgeId = document.getElementById('movement_edit_ocr_badge_id');
         if (badgeId) badgeId.textContent = tas.request_number || ('TAS #' + (idx + 1));
@@ -2275,6 +2550,18 @@
                     window._pageOcrItems[cacheIdx] = Object.assign(window._pageOcrItems[cacheIdx], itm);
                 }
 
+                // If receipt slip was uploaded, update preview in modal
+                if (itm.file_url) {
+                    _setPageSlipPreview(itm.file_url);
+                }
+                const pathInput = document.getElementById('movement_edit_receipt_file_path');
+                if (pathInput && itm.file_path) {
+                    pathInput.value = itm.file_path;
+                }
+                // Hide upload progress banner now that changes are reconciled & saved
+                const progBox = document.getElementById('movementUploadProgress');
+                if (progBox) progBox.className = 'alert alert-info py-2 px-3 small rounded-3 mb-2 d-none align-items-center justify-content-between flex-shrink-0';
+
                 // Update table row in Scanned OCR Receipts DOM
                 const submittedId = form.elements['id'] ? form.elements['id'].value : null;
                 const submittedReceiptId = form.elements['receipt_id'] ? form.elements['receipt_id'].value : null;
@@ -2596,6 +2883,43 @@
         const urlFilter = urlParams.get('ocr_filter') || sessionStorage.getItem('movements_ocr_category');
         if (urlFilter && (urlFilter === 'all' || urlFilter === 'tas' || urlFilter === 'vat')) {
             filterPageOcrCategory(urlFilter);
+        }
+
+        // Drag and drop receipt slip onto viewport
+        const slipViewport = document.getElementById('movementSlipViewport');
+        if (slipViewport) {
+            ['dragenter', 'dragover'].forEach(evtName => {
+                slipViewport.addEventListener(evtName, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    slipViewport.style.borderColor = '#0d6efd';
+                    slipViewport.style.backgroundColor = 'rgba(13, 110, 253, 0.05)';
+                });
+            });
+
+            ['dragleave', 'drop'].forEach(evtName => {
+                slipViewport.addEventListener(evtName, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    slipViewport.style.borderColor = '';
+                    slipViewport.style.backgroundColor = '';
+                });
+            });
+
+            slipViewport.addEventListener('drop', (e) => {
+                if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                    const droppedFile = e.dataTransfer.files[0];
+                    const fileInput = document.getElementById('movementSlipFileInput');
+                    if (fileInput) {
+                        try {
+                            const dt = new DataTransfer();
+                            dt.items.add(droppedFile);
+                            fileInput.files = dt.files;
+                        } catch (err) {}
+                    }
+                    handleMovementReceiptFileSelect(droppedFile);
+                }
+            });
         }
 
         // Auto-refresh when modal closes after saving changes
