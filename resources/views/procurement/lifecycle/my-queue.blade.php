@@ -243,13 +243,15 @@
                         @php
                             $eMrMaterialsJson = $mr->items->map(function($itm) {
                                 return [
+                                    'id' => $itm->id,
                                     'name' => $itm->product?->name ?? 'Material',
-                                    'code' => $itm->product?->item_code ?? '-',
+                                    'code' => $itm->product?->item_code ?? $itm->product?->sku ?? '-',
                                     'quantity' => (float)$itm->quantity,
                                     'unit' => $itm->product?->unit ?? 'Units',
                                     'estimated_unit_cost' => 0,
                                     'estimated_total' => 0,
                                     'specifications' => $itm->notes ?? '',
+                                    'notes' => $itm->notes ?? '',
                                 ];
                             });
                         @endphp
@@ -296,8 +298,16 @@
                                                 <i class="fa-solid fa-coins me-1"></i> Buy with Petty Cash
                                             </button>
                                         </form>
-                                        <button type="button" class="btn btn-sm btn-primary shadow-xs fw-semibold" data-bs-toggle="modal" data-bs-target="#itemDecisionsModal{{ $mr->id }}" title="Decide per Material Item (Petty Cash, Procurement, or Reject)">
-                                            <i class="fa-solid fa-list-check me-1"></i> Decide per Item
+                                        <button type="button"
+                                                class="btn btn-sm btn-outline-primary shadow-xs fw-semibold"
+                                                data-mr-id="{{ $mr->id }}"
+                                                data-ref="{{ $mr->reference_number }}"
+                                                data-project="{{ $mr->project?->name ?? 'General Project' }}"
+                                                data-requested-by="{{ $mr->requestedBy?->name ?? $mr->creator?->name ?? 'Site Engineer' }}"
+                                                data-items="{{ json_encode($eMrMaterialsJson) }}"
+                                                onclick="openEmergencySplitModalFromBtn(this)"
+                                                title="Decide per Material Item (Petty Cash, Procurement, or Reject)">
+                                            <i class="fa-solid fa-layer-group me-1"></i> Decide per Item
                                         </button>
                                         <button type="button" class="btn btn-sm btn-danger shadow-xs fw-semibold" onclick="openRejectQueueModal('mr', {{ $mr->id }}, '{{ addslashes($mr->reference_number) }}', 'planning')" title="Reject Emergency Request (Planning Manager)">
                                             <i class="fas fa-times me-1"></i> Reject
@@ -325,164 +335,6 @@
             </div>
         </div>
     </div>
-
-    @if($isPlanningManagerUser)
-        @foreach($emergencyMrs as $mr)
-        <!-- Item Decisions Modal for Emergency MR #{{ $mr->reference_number }} -->
-        <div class="modal fade" id="itemDecisionsModal{{ $mr->id }}" tabindex="-1" aria-labelledby="itemDecisionsModalLabel{{ $mr->id }}" aria-hidden="true">
-            <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
-                <div class="modal-content border-0 shadow-lg">
-                    <div class="modal-header bg-dark text-white p-3">
-                        <div class="d-flex align-items-center gap-2">
-                            <span class="badge bg-danger rounded-pill p-2"><i class="fa-solid fa-bolt text-white"></i></span>
-                            <div>
-                                <h5 class="modal-title font-weight-bold mb-0 text-white" id="itemDecisionsModalLabel{{ $mr->id }}">
-                                    Decide per Material Item — Emergency MR #{{ $mr->reference_number }}
-                                </h5>
-                                <small class="text-white-50">
-                                    Project: <strong>{{ $mr->project?->name ?? 'N/A' }}</strong> &bull; Requested by: <strong>{{ $mr->requestedBy?->name ?? $mr->creator?->name ?? 'N/A' }}</strong> &bull; Total Items: <strong>{{ $mr->items->count() }}</strong>
-                                </small>
-                            </div>
-                        </div>
-                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-
-                    <form method="POST" action="{{ route('material-requests.item-decisions', $mr->id) }}">
-                        @csrf
-                        <div class="modal-body p-4 bg-light">
-                            <!-- Quick Action Bar -->
-                            <div class="card border-0 shadow-2xs mb-3 bg-white">
-                                <div class="card-body p-3">
-                                    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
-                                        <div>
-                                            <h6 class="fw-bold mb-1 text-dark"><i class="fa-solid fa-sliders text-primary me-2"></i>Select Decision for Each Requested Material</h6>
-                                            <div class="text-muted small">
-                                                Choose whether to approve for <strong>Standard Procurement</strong>, route directly to Store Keeper for <strong>Site Petty Cash</strong>, or <strong>Reject</strong> individual items.
-                                            </div>
-                                        </div>
-                                        <div class="d-flex gap-2">
-                                            <button type="button" class="btn btn-xs btn-outline-success fw-semibold" onclick="setAllMrDecisions({{ $mr->id }}, 'approve_procurement')">
-                                                <i class="fas fa-check me-1"></i> All to Procurement
-                                            </button>
-                                            <button type="button" class="btn btn-xs btn-outline-warning text-dark fw-semibold" onclick="setAllMrDecisions({{ $mr->id }}, 'buy_petty_cash')">
-                                                <i class="fa-solid fa-coins me-1"></i> All to Petty Cash
-                                            </button>
-                                            <button type="button" class="btn btn-xs btn-outline-danger fw-semibold" onclick="setAllMrDecisions({{ $mr->id }}, 'reject')">
-                                                <i class="fas fa-times me-1"></i> All Reject
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Materials Table -->
-                            <div class="card border-0 shadow-2xs bg-white overflow-hidden">
-                                <div class="table-responsive">
-                                    <table class="table table-hover align-middle mb-0">
-                                        <thead class="table-light text-uppercase text-secondary" style="font-size: 0.72rem; letter-spacing: 0.5px;">
-                                            <tr>
-                                                <th style="width: 28%;">Material Details</th>
-                                                <th style="width: 14%;" class="text-center">Requested Qty</th>
-                                                <th style="width: 32%;">Action Decision</th>
-                                                <th style="width: 26%;">Rejection Reason / Status Note</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            @foreach($mr->items as $itm)
-                                            @php
-                                                $prodName = $itm->product?->name ?? 'Material #' . $itm->product_id;
-                                                $prodCode = $itm->product?->code ?? $itm->product?->sku ?? '-';
-                                                $prodUnit = $itm->product?->unit ?? $itm->unit ?? 'Units';
-                                            @endphp
-                                            <tr id="mr-item-row-{{ $mr->id }}-{{ $itm->id }}">
-                                                <td>
-                                                    <div class="fw-bold text-dark">{{ $prodName }}</div>
-                                                    <div class="text-muted small">
-                                                        <code>Code: {{ $prodCode }}</code>
-                                                        @if($itm->notes)
-                                                            <span class="ms-1 text-info"><i class="fa-regular fa-comment-dots"></i> {{ $itm->notes }}</span>
-                                                        @endif
-                                                    </div>
-                                                </td>
-                                                <td class="text-center">
-                                                    <span class="badge bg-light text-dark border font-monospace px-2 py-1 fs-6 fw-bold">
-                                                        {{ (float)$itm->quantity }} {{ $prodUnit }}
-                                                    </span>
-                                                </td>
-                                                <td>
-                                                    <div class="d-flex flex-column gap-1">
-                                                        <!-- Option: Procurement -->
-                                                        <label class="d-flex align-items-center p-2 rounded border cursor-pointer bg-light-subtle decision-option-label" style="font-size: 0.8rem; cursor: pointer;">
-                                                            <input type="radio"
-                                                                   name="decisions[{{ $itm->id }}]"
-                                                                   value="approve_procurement"
-                                                                   class="form-check-input me-2 decision-radio mr-{{ $mr->id }}-decision"
-                                                                   data-item-id="{{ $itm->id }}"
-                                                                   data-mr-id="{{ $mr->id }}"
-                                                                   onchange="onDecisionChange({{ $mr->id }}, {{ $itm->id }})"
-                                                                   checked>
-                                                            <span class="fw-semibold text-success"><i class="fas fa-truck-fast me-1"></i> Approve Procurement</span>
-                                                            <span class="badge bg-success-subtle text-success border border-success ms-auto" style="font-size: 10px;">Coordinator PR</span>
-                                                        </label>
-                                                        <!-- Option: Buy with Petty Cash -->
-                                                        <label class="d-flex align-items-center p-2 rounded border cursor-pointer bg-light-subtle decision-option-label" style="font-size: 0.8rem; cursor: pointer;">
-                                                            <input type="radio"
-                                                                   name="decisions[{{ $itm->id }}]"
-                                                                   value="buy_petty_cash"
-                                                                   class="form-check-input me-2 decision-radio mr-{{ $mr->id }}-decision"
-                                                                   data-item-id="{{ $itm->id }}"
-                                                                   data-mr-id="{{ $mr->id }}"
-                                                                   onchange="onDecisionChange({{ $mr->id }}, {{ $itm->id }})">
-                                                            <span class="fw-semibold text-warning text-dark"><i class="fa-solid fa-coins text-warning me-1"></i> Buy with Petty Cash</span>
-                                                            <span class="badge bg-warning-subtle text-dark border border-warning ms-auto" style="font-size: 10px;">Store Keeper</span>
-                                                        </label>
-                                                        <!-- Option: Reject -->
-                                                        <label class="d-flex align-items-center p-2 rounded border cursor-pointer bg-light-subtle decision-option-label" style="font-size: 0.8rem; cursor: pointer;">
-                                                            <input type="radio"
-                                                                   name="decisions[{{ $itm->id }}]"
-                                                                   value="reject"
-                                                                   class="form-check-input me-2 decision-radio mr-{{ $mr->id }}-decision"
-                                                                   data-item-id="{{ $itm->id }}"
-                                                                   data-mr-id="{{ $mr->id }}"
-                                                                   onchange="onDecisionChange({{ $mr->id }}, {{ $itm->id }})">
-                                                            <span class="fw-semibold text-danger"><i class="fas fa-times me-1"></i> Reject Material</span>
-                                                            <span class="badge bg-danger-subtle text-danger border border-danger ms-auto" style="font-size: 10px;">Exclude</span>
-                                                        </label>
-                                                    </div>
-                                                </td>
-                                                <td>
-                                                    <div id="rejection-box-{{ $mr->id }}-{{ $itm->id }}" class="rejection-box d-none">
-                                                        <label class="form-label text-danger small fw-semibold mb-1">
-                                                            <i class="fa-solid fa-circle-exclamation me-1"></i>Why is this item rejected?
-                                                        </label>
-                                                        <input type="text"
-                                                               name="rejection_reasons[{{ $itm->id }}]"
-                                                               class="form-control form-control-sm border-danger"
-                                                               placeholder="e.g. Non-urgent, wait for bulk purchase...">
-                                                    </div>
-                                                    <div id="approved-box-{{ $mr->id }}-{{ $itm->id }}" class="text-muted small">
-                                                        <span class="badge bg-success-subtle text-success border border-success"><i class="fa-solid fa-check-circle text-success me-1"></i> Standard Procurement</span>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                            @endforeach
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="modal-footer bg-white d-flex justify-content-between">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                            <button type="submit" class="btn btn-primary fw-bold px-4 shadow-sm" onclick="return confirm('Are you sure you want to apply these item decisions? Split requests will be generated automatically.')">
-                                <i class="fa-solid fa-check-double me-1"></i> Apply & Execute Decisions
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-        @endforeach
-    @endif
     @endif
 
     <!-- Emergency MRs Section Approved by Planning (Awaiting Coordinator Review & Dispatch) -->
@@ -2127,6 +1979,95 @@ function openDeleteQueueMrModal(mrId, mrRef) {
     </div>
 </div>
 
+<!-- ========================================================================= -->
+<!-- Modal: Decide per Material Item (Split Emergency MR) -->
+<!-- ========================================================================= -->
+<div class="modal fade" id="emergencySplitModal" tabindex="-1" aria-labelledby="emergencySplitModalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <form id="emergencySplitForm" method="POST" class="modal-content border-0 shadow-lg">
+            @csrf
+            <div class="modal-header bg-light border-bottom py-3">
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <span class="p-2 rounded-circle bg-warning bg-opacity-10 text-warning">
+                        <i class="fa-solid fa-bolt fa-lg text-danger"></i>
+                    </span>
+                    <div>
+                        <h5 class="modal-title fw-bold text-dark mb-0" id="emergencySplitModalTitle">
+                            Decide per Material Item — Split Emergency Requisition
+                        </h5>
+                        <div class="d-flex align-items-center gap-2 mt-1 flex-wrap">
+                            <span class="badge bg-danger font-monospace" id="emergencySplitModalRef">MR #</span>
+                            <span class="badge bg-light text-dark border"><i class="fas fa-building me-1 text-secondary"></i><span id="emergencySplitModalProject">Project</span></span>
+                            <span class="badge bg-light text-dark border"><i class="fas fa-user me-1 text-primary"></i><span id="emergencySplitModalRequester">Requester</span></span>
+                            <span class="badge bg-secondary bg-opacity-10 text-dark border px-2 py-0.5 fw-bold" id="emergencySplitModalItemCount">0 Items</span>
+                        </div>
+                    </div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <div class="modal-body p-3 bg-light">
+                <!-- Guidance / Quick Batch Actions Card -->
+                <div class="card border-0 shadow-2xs mb-3 bg-white">
+                    <div class="card-body p-3">
+                        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                            <div>
+                                <h6 class="fw-bold mb-1 text-dark" style="font-size: 0.9rem;">
+                                    <i class="fa-solid fa-sliders text-primary me-2"></i>Select Decision for Each Requested Material
+                                </h6>
+                                <div class="text-muted small" style="font-size: 0.82rem;">
+                                    Choose whether each material should go to <strong>Standard Procurement</strong> (Coordinator PR), direct <strong>Site Petty Cash</strong> (Store Keeper), or be <strong>Rejected</strong>.
+                                </div>
+                            </div>
+                            <div class="d-flex gap-2 flex-wrap">
+                                <button type="button" class="btn btn-xs btn-outline-success fw-semibold shadow-2xs" onclick="setAllSplitDecisions('approve_procurement')">
+                                    <i class="fas fa-truck-fast me-1"></i> All to Procurement
+                                </button>
+                                <button type="button" class="btn btn-xs btn-outline-warning text-dark fw-semibold shadow-2xs" onclick="setAllSplitDecisions('buy_petty_cash')">
+                                    <i class="fa-solid fa-coins me-1"></i> All to Petty Cash
+                                </button>
+                                <button type="button" class="btn btn-xs btn-outline-danger fw-semibold shadow-2xs" onclick="setAllSplitDecisions('reject')">
+                                    <i class="fas fa-ban me-1"></i> All Reject
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Materials Table -->
+                <div class="table-responsive rounded border bg-white shadow-2xs">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr class="text-secondary small">
+                                <th style="width: 40px;" class="text-center">#</th>
+                                <th style="min-width: 200px;">Material &amp; Specifications</th>
+                                <th style="width: 140px;" class="text-center">Requested Qty</th>
+                                <th style="min-width: 320px;">Decision for Line Item</th>
+                                <th style="min-width: 220px;">Routing / Rejection Note</th>
+                            </tr>
+                        </thead>
+                        <tbody id="emergencySplitModalTableBody">
+                            <!-- Injected dynamically via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="modal-footer bg-light border-top d-flex justify-content-between align-items-center py-2.5">
+                <small class="text-muted">
+                    <i class="fas fa-info-circle me-1 text-primary"></i>Split requests will be created automatically: Petty Cash items to Store Keeper, Procurement items to Coordinator.
+                </small>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-outline-secondary btn-sm px-3" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm px-4 fw-bold shadow-xs">
+                        <i class="fa-solid fa-check-double me-1"></i> Apply &amp; Execute Decisions
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
 <style>
 /* Materials column and list display */
 .col-procurement-materials {
@@ -2370,38 +2311,145 @@ document.addEventListener('DOMContentLoaded', function() {
     setQueueMaterialsMode(savedMode);
 });
 
-// Item-level decisions helpers for Emergency Material Requests
-function setAllMrDecisions(mrId, decisionValue) {
-    const radios = document.querySelectorAll(`input.mr-${mrId}-decision[value="${decisionValue}"]`);
+// Emergency Requisition Line-Item Decision Modal
+function openEmergencySplitModalFromBtn(btn) {
+    const mrId = btn.dataset.mrId;
+    const ref = btn.dataset.ref || 'MR';
+    const project = btn.dataset.project || 'General Project';
+    const requester = btn.dataset.requestedBy || 'Site Engineer';
+    let items = [];
+
+    try {
+        items = JSON.parse(btn.dataset.items || '[]');
+    } catch (e) {
+        items = [];
+    }
+
+    const form = document.getElementById('emergencySplitForm');
+    form.action = "{{ url('material-requests') }}/" + mrId + "/item-decisions";
+
+    document.getElementById('emergencySplitModalRef').textContent = ref;
+    document.getElementById('emergencySplitModalProject').textContent = project;
+    document.getElementById('emergencySplitModalRequester').textContent = requester;
+    document.getElementById('emergencySplitModalItemCount').textContent = items.length + ' Material(s)';
+
+    const tbody = document.getElementById('emergencySplitModalTableBody');
+    tbody.innerHTML = '';
+
+    if (!items || items.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted"><i class="fa-solid fa-box-open fa-2x mb-2 text-secondary opacity-50 d-block"></i>No materials found in this requisition.</td></tr>';
+    } else {
+        items.forEach((it, idx) => {
+            const tr = document.createElement('tr');
+            const itemId = it.id;
+            const name = escapeHtml(it.name || 'Material');
+            const code = escapeHtml(it.code || '-');
+            const qty = parseFloat(it.quantity || 0).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 3});
+            const unit = escapeHtml(it.unit || 'Units');
+            const notes = it.notes ? `<div class="text-info small mt-1"><i class="fa-regular fa-comment-dots me-1"></i>${escapeHtml(it.notes)}</div>` : '';
+
+            tr.innerHTML = `
+                <td class="text-center text-muted fw-bold">${idx + 1}</td>
+                <td>
+                    <div class="fw-bold text-dark">${name}</div>
+                    <div class="text-muted small"><code>${code}</code></div>
+                    ${notes}
+                </td>
+                <td class="text-center">
+                    <span class="badge bg-light text-dark border font-monospace px-2.5 py-1 fs-6 fw-bold">
+                        ${qty} ${unit}
+                    </span>
+                </td>
+                <td>
+                    <div class="btn-group btn-group-sm w-100 shadow-2xs" role="group">
+                        <input type="radio"
+                               class="btn-check split-decision-radio"
+                               name="decisions[${itemId}]"
+                               id="dec_proc_${itemId}"
+                               value="approve_procurement"
+                               data-item-id="${itemId}"
+                               checked
+                               onchange="onSplitItemDecisionChange(${itemId})">
+                        <label class="btn btn-outline-success fw-semibold" for="dec_proc_${itemId}" title="Approve for standard Procurement (Coordinator PR)">
+                            <i class="fas fa-truck-fast me-1"></i> Procurement
+                        </label>
+
+                        <input type="radio"
+                               class="btn-check split-decision-radio"
+                               name="decisions[${itemId}]"
+                               id="dec_pc_${itemId}"
+                               value="buy_petty_cash"
+                               data-item-id="${itemId}"
+                               onchange="onSplitItemDecisionChange(${itemId})">
+                        <label class="btn btn-outline-warning text-dark fw-semibold" for="dec_pc_${itemId}" title="Buy via Site Petty Cash (Store Keeper)">
+                            <i class="fa-solid fa-coins me-1"></i> Petty Cash
+                        </label>
+
+                        <input type="radio"
+                               class="btn-check split-decision-radio"
+                               name="decisions[${itemId}]"
+                               id="dec_rej_${itemId}"
+                               value="reject"
+                               data-item-id="${itemId}"
+                               onchange="onSplitItemDecisionChange(${itemId})">
+                        <label class="btn btn-outline-danger fw-semibold" for="dec_rej_${itemId}" title="Reject this material">
+                            <i class="fas fa-ban me-1"></i> Reject
+                        </label>
+                    </div>
+                </td>
+                <td>
+                    <div id="splitStatusBox_${itemId}">
+                        <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-2 py-1">
+                            <i class="fas fa-check-circle me-1"></i>Coordinator PR
+                        </span>
+                    </div>
+                    <div id="splitRejectionBox_${itemId}" class="d-none">
+                        <input type="text"
+                               name="rejection_reasons[${itemId}]"
+                               class="form-control form-control-sm border-danger"
+                               placeholder="Reason for rejecting...">
+                    </div>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    const modal = new bootstrap.Modal(document.getElementById('emergencySplitModal'));
+    modal.show();
+}
+
+function onSplitItemDecisionChange(itemId) {
+    const selected = document.querySelector(`input[name="decisions[${itemId}]"]:checked`);
+    const val = selected ? selected.value : '';
+    const statusBox = document.getElementById(`splitStatusBox_${itemId}`);
+    const rejBox = document.getElementById(`splitRejectionBox_${itemId}`);
+
+    if (val === 'reject') {
+        if (statusBox) statusBox.classList.add('d-none');
+        if (rejBox) rejBox.classList.remove('d-none');
+    } else {
+        if (rejBox) rejBox.classList.add('d-none');
+        if (statusBox) {
+            statusBox.classList.remove('d-none');
+            if (val === 'buy_petty_cash') {
+                statusBox.innerHTML = '<span class="badge bg-warning bg-opacity-10 text-dark border border-warning px-2 py-1"><i class="fa-solid fa-coins text-warning me-1"></i>Store Keeper Cash</span>';
+            } else {
+                statusBox.innerHTML = '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-2 py-1"><i class="fas fa-check-circle me-1"></i>Coordinator PR</span>';
+            }
+        }
+    }
+}
+
+function setAllSplitDecisions(decisionValue) {
+    const radios = document.querySelectorAll(`input.split-decision-radio[value="${decisionValue}"]`);
     radios.forEach(radio => {
         radio.checked = true;
         const itemId = radio.getAttribute('data-item-id');
         if (itemId) {
-            onDecisionChange(mrId, itemId);
+            onSplitItemDecisionChange(itemId);
         }
     });
-}
-
-function onDecisionChange(mrId, itemId) {
-    const selected = document.querySelector(`input[name="decisions[${itemId}]"]:checked`);
-    const val = selected ? selected.value : '';
-    const rejBox = document.getElementById(`rejection-box-${mrId}-${itemId}`);
-    const appBox = document.getElementById(`approved-box-${mrId}-${itemId}`);
-
-    if (val === 'reject') {
-        if (rejBox) rejBox.classList.remove('d-none');
-        if (appBox) appBox.classList.add('d-none');
-    } else {
-        if (rejBox) rejBox.classList.add('d-none');
-        if (appBox) {
-            appBox.classList.remove('d-none');
-            if (val === 'buy_petty_cash') {
-                appBox.innerHTML = '<span class="badge bg-warning-subtle text-dark border border-warning"><i class="fa-solid fa-coins text-warning me-1"></i> Site Petty Cash</span>';
-            } else {
-                appBox.innerHTML = '<span class="badge bg-success-subtle text-success border border-success"><i class="fa-solid fa-check-circle text-success me-1"></i> Standard Procurement</span>';
-            }
-        }
-    }
 }
 </script>
 @endsection
