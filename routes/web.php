@@ -263,6 +263,18 @@ Route::get('/run-migrations', function () {
             });
         }
 
+        // Direct guarantee for material_request_items status and rejection_reason columns
+        if (\Illuminate\Support\Facades\Schema::hasTable('material_request_items')) {
+            \Illuminate\Support\Facades\Schema::table('material_request_items', function (\Illuminate\Database\Schema\Blueprint $table) {
+                if (!\Illuminate\Support\Facades\Schema::hasColumn('material_request_items', 'status')) {
+                    $table->string('status', 30)->default('pending')->after('quantity_fulfilled')->index();
+                }
+                if (!\Illuminate\Support\Facades\Schema::hasColumn('material_request_items', 'rejection_reason')) {
+                    $table->text('rejection_reason')->nullable()->after('notes');
+                }
+            });
+        }
+
         // Check current columns in employees & payrolls & procurement_receipts table
         $columns = \Illuminate\Support\Facades\Schema::getColumnListing('employees');
         $gmCols = array_filter($columns, fn($c) => str_contains($c, 'gm_'));
@@ -270,6 +282,9 @@ Route::get('/run-migrations', function () {
         $pensionCols = array_intersect($payrollCols, ['company_pension', 'taxable_income', 'loan_deduction', 'absence_deduction', 'absent_days']);
         $prReceiptCols = \Illuminate\Support\Facades\Schema::hasTable('procurement_receipts')
             ? array_intersect(\Illuminate\Support\Facades\Schema::getColumnListing('procurement_receipts'), ['withholding_receipt_path', 'withholding_receipt_number', 'has_withholding', 'withholding_rate', 'withholding_amount'])
+            : [];
+        $mrItemCols = \Illuminate\Support\Facades\Schema::hasTable('material_request_items')
+            ? array_intersect(\Illuminate\Support\Facades\Schema::getColumnListing('material_request_items'), ['status', 'rejection_reason'])
             : [];
 
         return "<div style='font-family:sans-serif;max-width:900px;margin:40px auto;padding:0;border-radius:14px;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,0.12);'>"
@@ -295,6 +310,10 @@ Route::get('/run-migrations', function () {
              . "<h3 style='color:#374151;font-size:15px;'>🗄️ Withholding Columns in <code>procurement_receipts</code> table:</h3>"
              . "<pre style='background:#f0fdf4;border:1px solid #bbf7d0;padding:16px;border-radius:8px;color:#15803d;font-size:13px;'>"
              . '  ✅ Found in procurement_receipts: ' . implode(', ', $prReceiptCols)
+             . "</pre>"
+             . "<h3 style='color:#374151;font-size:15px;'>🗄️ Emergency MR Item Split Columns in <code>material_request_items</code> table:</h3>"
+             . "<pre style='background:#f0fdf4;border:1px solid #bbf7d0;padding:16px;border-radius:8px;color:#15803d;font-size:13px;'>"
+             . '  ✅ Found in material_request_items: ' . implode(', ', $mrItemCols)
              . "</pre>"
              . "<div style='margin-top:24px;display:flex;gap:12px;flex-wrap:wrap;'>"
              . "<a href='/finance/payroll' style='background:#2563eb;color:#fff;padding:10px 20px;text-decoration:none;border-radius:6px;font-weight:bold;font-size:14px;'>💵 Go to Finance Payroll</a>"
