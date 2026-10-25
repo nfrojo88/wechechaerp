@@ -108,6 +108,42 @@
         </div>
     @endif
 
+    {{-- Site Stores & Inventory Summary Banner --}}
+    @if(isset($assignedStores) && $assignedStores->isNotEmpty())
+    <div class="card border-0 shadow-sm rounded-3 mb-4 bg-white border-start border-4 border-info">
+        <div class="card-body p-3 d-flex flex-wrap align-items-center justify-content-between gap-3">
+            <div class="d-flex align-items-center gap-3">
+                <div class="rounded-circle bg-info bg-opacity-10 p-2 text-info d-flex align-items-center justify-content-center" style="width: 46px; height: 46px;">
+                    <i class="fa-solid fa-warehouse fa-lg"></i>
+                </div>
+                <div>
+                    <div class="fw-bold text-dark">
+                        Assigned Site Store(s):
+                        <span class="text-primary">{{ $assignedStores->pluck('name')->implode(', ') }}</span>
+                    </div>
+                    <div class="text-muted small">
+                        <strong>{{ $kpi['site_inventory_count'] ?? 0 }}</strong> material types on hand &bull;
+                        @if(($kpi['site_low_stock_count'] ?? 0) > 0)
+                            <span class="text-danger fw-semibold"><i class="fa-solid fa-triangle-exclamation me-1"></i>{{ $kpi['site_low_stock_count'] }} low stock</span> &bull;
+                        @else
+                            <span class="text-success"><i class="fa-solid fa-check me-1"></i>Stock levels healthy</span> &bull;
+                        @endif
+                        <span><strong>{{ $kpi['site_movements_7d'] ?? 0 }}</strong> movements logged in last 7 days</span>
+                    </div>
+                </div>
+            </div>
+            <div class="d-flex gap-2">
+                <a href="{{ route('inventory.index') }}" class="btn btn-sm btn-outline-primary fw-semibold">
+                    <i class="fa-solid fa-boxes-stacked me-1"></i> View Site Inventory
+                </a>
+                <a href="{{ route('inventory.all-movements') }}" class="btn btn-sm btn-outline-info fw-semibold">
+                    <i class="fa-solid fa-arrow-right-arrow-left me-1"></i> Site Movements
+                </a>
+            </div>
+        </div>
+    </div>
+    @endif
+
     {{-- KPI Cards Row --}}
     <div class="row g-3 mb-4">
         <!-- Today Workforce -->
@@ -260,6 +296,166 @@
                 </div>
             </div>
 
+            {{-- Site Store Inventory & Recent Movements (Assigned Site Only) --}}
+            <div class="card border-0 shadow-sm rounded-3 mb-4 bg-white">
+                <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <div>
+                        <h6 class="m-0 fw-bold text-dark">
+                            <i class="fa-solid fa-warehouse text-primary me-2"></i>Site Store Inventory & Movements
+                        </h6>
+                        <small class="text-muted">Strictly scoped to your assigned site store(s)</small>
+                    </div>
+                    <ul class="nav nav-pills card-header-pills" id="siteInvTab" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active btn-sm py-1 px-3" id="stock-tab" data-bs-toggle="pill" data-bs-target="#stock-panel" type="button" role="tab">
+                                <i class="fa-solid fa-boxes-stacked me-1"></i> Stock on Hand ({{ isset($siteInventoryItems) ? $siteInventoryItems->count() : 0 }})
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link btn-sm py-1 px-3" id="movements-tab" data-bs-toggle="pill" data-bs-target="#movements-panel" type="button" role="tab">
+                                <i class="fa-solid fa-arrow-right-arrow-left me-1"></i> Recent Movements
+                            </button>
+                        </li>
+                    </ul>
+                </div>
+                <div class="card-body p-0">
+                    <div class="tab-content" id="siteInvTabContent">
+                        {{-- Stock on Hand Tab --}}
+                        <div class="tab-pane fade show active" id="stock-panel" role="tabpanel">
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Material / Product</th>
+                                            <th>Store</th>
+                                            <th>Category</th>
+                                            <th class="text-end">On Hand</th>
+                                            <th class="text-end">Available</th>
+                                            <th class="text-center">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @forelse($siteInventoryItems ?? [] as $item)
+                                        @php
+                                            $isLow = $item->quantity_on_hand <= $item->min_stock && $item->min_stock > 0;
+                                            $skuCode = $item->product?->sku ?: ($item->product?->code ?: null);
+                                        @endphp
+                                        <tr class="{{ $isLow ? 'table-warning' : '' }}">
+                                            <td>
+                                                <div class="fw-semibold text-dark">{{ $item->product?->name ?? 'N/A' }}</div>
+                                                @if($skuCode)
+                                                    <small class="text-muted font-monospace"><i class="fa-solid fa-barcode me-1"></i>{{ $skuCode }}</small>
+                                                @endif
+                                            </td>
+                                            <td>
+                                                <span class="badge bg-light text-dark border">{{ $item->store?->name ?? 'Site Store' }}</span>
+                                            </td>
+                                            <td class="small text-muted">{{ $item->product?->category ?? '—' }}</td>
+                                            <td class="text-end fw-bold">
+                                                {{ number_format($item->quantity_on_hand, 2) }}
+                                                <small class="text-muted fw-normal">{{ $item->product?->unit ?? '' }}</small>
+                                            </td>
+                                            <td class="text-end {{ $isLow ? 'text-danger fw-bold' : '' }}">
+                                                {{ number_format($item->quantity_available, 2) }}
+                                            </td>
+                                            <td class="text-center">
+                                                @if($isLow)
+                                                    <span class="badge bg-danger"><i class="fa-solid fa-triangle-exclamation me-1"></i>Low</span>
+                                                @else
+                                                    <span class="badge bg-success">OK</span>
+                                                @endif
+                                            </td>
+                                        </tr>
+                                        @empty
+                                        <tr>
+                                            <td colspan="6" class="text-center text-muted py-4">
+                                                <i class="fa-solid fa-boxes-stacked fa-2x mb-2 d-block text-secondary"></i>
+                                                No inventory records found for your assigned site store(s).
+                                            </td>
+                                        </tr>
+                                        @endforelse
+                                    </tbody>
+                                </table>
+                            </div>
+                            @if(isset($siteInventoryItems) && $siteInventoryItems->isNotEmpty())
+                            <div class="p-2 text-center border-top bg-light bg-opacity-50">
+                                <a href="{{ route('inventory.index') }}" class="small fw-semibold text-primary text-decoration-none">
+                                    View Complete Site Inventory ({{ $kpi['site_inventory_count'] ?? 0 }} items) <i class="fa-solid fa-arrow-right ms-1"></i>
+                                </a>
+                            </div>
+                            @endif
+                        </div>
+
+                        {{-- Recent Movements Tab --}}
+                        <div class="tab-pane fade" id="movements-panel" role="tabpanel">
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Date</th>
+                                            <th>Product</th>
+                                            <th>Type</th>
+                                            <th class="text-end">Quantity</th>
+                                            <th>Performed By</th>
+                                            <th>Remarks</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @forelse($siteRecentMovements ?? [] as $mov)
+                                        @php
+                                            $badge = match(strtolower($mov->type ?? '')) {
+                                                'in', 'purchase_intake', 'grn' => 'success',
+                                                'out', 'dispatch', 'issue' => 'danger',
+                                                'transfer', 'transfer_in', 'transfer_out' => 'info',
+                                                'adjustment' => 'warning',
+                                                'reserve' => 'secondary',
+                                                'release' => 'primary',
+                                                default => 'secondary'
+                                            };
+                                            $isPositive = in_array(strtolower($mov->type ?? ''), ['in', 'purchase_intake', 'grn', 'adjustment', 'release']);
+                                            $qty = (float) $mov->quantity;
+                                        @endphp
+                                        <tr>
+                                            <td class="small">
+                                                <div class="fw-semibold text-dark">{{ $mov->created_at ? $mov->created_at->format('M d, H:i') : '—' }}</div>
+                                            </td>
+                                            <td>
+                                                <div class="fw-semibold small text-dark">{{ $mov->inventory?->product?->name ?? 'N/A' }}</div>
+                                                <small class="text-muted">{{ $mov->inventory?->store?->name ?? '' }}</small>
+                                            </td>
+                                            <td>
+                                                <span class="badge bg-{{ $badge }} text-uppercase">{{ $mov->type }}</span>
+                                            </td>
+                                            <td class="text-end font-monospace fw-bold {{ $isPositive ? 'text-success' : 'text-danger' }}">
+                                                {{ $isPositive ? '+' : '-' }}{{ number_format(abs($qty), 2) }}
+                                                <small class="text-muted fw-normal">{{ $mov->inventory?->product?->unit ?? '' }}</small>
+                                            </td>
+                                            <td class="small">{{ $mov->performer?->name ?? 'System' }}</td>
+                                            <td class="small text-muted text-truncate" style="max-width: 180px;">{{ $mov->remarks ?: '—' }}</td>
+                                        </tr>
+                                        @empty
+                                        <tr>
+                                            <td colspan="6" class="text-center text-muted py-4">
+                                                <i class="fa-solid fa-arrow-right-arrow-left fa-2x mb-2 d-block text-secondary"></i>
+                                                No recent stock movements recorded for your assigned site store(s).
+                                            </td>
+                                        </tr>
+                                        @endforelse
+                                    </tbody>
+                                </table>
+                            </div>
+                            @if(isset($siteRecentMovements) && $siteRecentMovements->isNotEmpty())
+                            <div class="p-2 text-center border-top bg-light bg-opacity-50">
+                                <a href="{{ route('inventory.all-movements') }}" class="small fw-semibold text-primary text-decoration-none">
+                                    View All Site Movements History <i class="fa-solid fa-arrow-right ms-1"></i>
+                                </a>
+                            </div>
+                            @endif
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             {{-- Recent Morning Manpower Reports --}}
             <div class="card border-0 shadow-sm rounded-3 mb-4 bg-white">
                 <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
@@ -399,6 +595,12 @@
                 <div class="card-body d-flex flex-column gap-2 p-3">
                     <a href="{{ route('manpower-daily-report.create') }}" class="btn btn-primary text-start fw-semibold py-2">
                         <i class="fa-solid fa-users-line me-2"></i> Submit Morning Manpower Report
+                    </a>
+                    <a href="{{ route('inventory.index') }}" class="btn btn-outline-primary text-start fw-semibold py-2">
+                        <i class="fa-solid fa-boxes-stacked me-2"></i> Site Store Inventory (Stock on Hand)
+                    </a>
+                    <a href="{{ route('inventory.all-movements') }}" class="btn btn-outline-info text-start fw-semibold py-2">
+                        <i class="fa-solid fa-arrow-right-arrow-left me-2"></i> Site Stock Movements
                     </a>
                     <a href="{{ route('material-requests.create', ['source' => 'Emergency']) }}" class="btn btn-danger text-start fw-semibold py-2">
                         <i class="fa-solid fa-bolt me-2"></i> Ask Emergency Material Request

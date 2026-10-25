@@ -19,13 +19,19 @@ class InventoryPolicy
 
     public function viewAny(User $user)
     {
-        return $user->can('inventory.view') || $user->hasAnyRole(['Coordinator', 'coordinator', 'admin', 'global_admin', 'store_manager', 'store_keeper']);
+        return $user->can('inventory.view')
+            || $user->hasAnyRole(['Coordinator', 'coordinator', 'admin', 'global_admin', 'store_manager', 'store_keeper', 'site_engineer', 'Site Engineer']);
     }
 
     public function view(User $user, Inventory $inventory)
     {
         if ($user->hasAnyRole(['global_admin', 'admin', 'store_manager', 'coordinator', 'Coordinator'])) {
             return true;
+        }
+
+        // Site Engineer: Strictly allowed only for inventory belonging to their assigned site store(s)
+        if ($user->hasAnyRole(['site_engineer', 'Site Engineer'])) {
+            return $user->getAssignedStoreIds()->contains((int)$inventory->store_id);
         }
 
         if ($user->hasRole('store_keeper')) {

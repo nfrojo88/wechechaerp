@@ -196,10 +196,22 @@ class StoreManagerController extends Controller
         $products = Product::where('is_active', true)->orderBy('name')->get();
 
         $user = Auth::user();
+        $rawUserRoles = $user ? $user->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray() : [];
+        $isGlobalAdmin = $user && ($user->isGlobalAdmin() || in_array('global_admin', $rawUserRoles) || in_array('admin', $rawUserRoles));
+        $isSiteEngineer = in_array('site_engineer', $rawUserRoles) && !$isGlobalAdmin;
         $isStoreKeeper = $user && $user->hasRole('store_keeper');
         $assignedStore = null;
+        $assignedStoreIds = collect();
 
-        if ($isStoreKeeper) {
+        if ($isSiteEngineer) {
+            $assignedStoreIds = $user->getAssignedStoreIds();
+            $stores = Store::whereIn('id', $assignedStoreIds)->where('is_active', true)->orderBy('name')->get();
+            if ($selectedStoreId && !$assignedStoreIds->contains((int)$selectedStoreId)) {
+                $selectedStoreId = $assignedStoreIds->first();
+            } elseif (!$selectedStoreId && $assignedStoreIds->count() === 1) {
+                $selectedStoreId = $assignedStoreIds->first();
+            }
+        } elseif ($isStoreKeeper) {
             $assignedStore = $user->store ?? Store::where('manager_id', $user->id)->first();
             if ($assignedStore) {
                 $selectedStoreId = $assignedStore->id;
@@ -208,7 +220,9 @@ class StoreManagerController extends Controller
 
         // Base query for category tab counts
         $countQuery = Inventory::whereHas('store', fn($q) => $q->where('is_active', true));
-        if ($selectedStoreId) {
+        if ($isSiteEngineer && !$selectedStoreId) {
+            $countQuery->whereIn('store_id', $assignedStoreIds);
+        } elseif ($selectedStoreId) {
             $countQuery->where('store_id', $selectedStoreId);
         }
         if ($search) {
@@ -283,6 +297,10 @@ class StoreManagerController extends Controller
             $query = Inventory::with(['product', 'store'])
                 ->whereHas('store', fn($q) => $q->where('is_active', true))
                 ->whereHas('product');
+
+            if ($isSiteEngineer) {
+                $query->whereIn('store_id', $assignedStoreIds);
+            }
 
             if ($search) {
                 $query->whereHas('product', fn($q) => $q->where('name', 'like', "%{$search}%")
@@ -2931,8 +2949,13 @@ class StoreManagerController extends Controller
     public function productMovementHistory(Request $request, Product $product)
     {
         $storeId = $request->query('store_id');
+        $user = Auth::user();
+        $rawUserRoles = $user ? $user->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray() : [];
+        $isGlobalAdmin = $user && ($user->isGlobalAdmin() || in_array('global_admin', $rawUserRoles) || in_array('admin', $rawUserRoles));
+        $isSiteEngineer = in_array('site_engineer', $rawUserRoles) && !$isGlobalAdmin;
 
         $inventories = Inventory::where('product_id', $product->id)
+            ->when($isSiteEngineer, fn($q) => $q->whereIn('store_id', $user->getAssignedStoreIds()))
             ->when($storeId, fn($q) => $q->where('store_id', $storeId))
             ->with('store')
             ->get();

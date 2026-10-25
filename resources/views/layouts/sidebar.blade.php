@@ -2012,6 +2012,18 @@
 
         {{-- 3. Site Logistics, BOQ & Commercial --}}
         <li class="sidebar-nav-item">
+            <a href="{{ route('inventory.index') }}" class="sidebar-nav-link {{ request()->routeIs('inventory.index') || (request()->routeIs('inventory.*') && !request()->routeIs('inventory.all-movements')) ? 'active' : '' }}">
+                <i class="fa-solid fa-boxes-stacked text-warning"></i>
+                <span>Site Inventory (ክምችት)</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('inventory.all-movements') }}" class="sidebar-nav-link {{ request()->routeIs('inventory.all-movements') ? 'active' : '' }}">
+                <i class="fa-solid fa-arrow-right-arrow-left text-info"></i>
+                <span>Site Movements (ዝውውር)</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
             <a href="{{ route('material-requests.create', ['source' => 'Emergency']) }}" class="sidebar-nav-link {{ request()->fullUrlIs('*source=Emergency*') ? 'active' : '' }}">
                 <i class="fa-solid fa-bolt text-danger"></i>
                 <span>Ask Emergency MR</span>

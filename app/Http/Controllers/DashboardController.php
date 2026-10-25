@@ -1538,6 +1538,31 @@ class DashboardController extends Controller
                 ->get();
         }, collect());
 
+        $assignedStoreIds = $user ? $user->getAssignedStoreIds() : collect();
+        $assignedStores = $user ? $user->getAssignedStores() : collect();
+
+        $siteInventoryItems = $this->safe(function() use ($assignedStoreIds) {
+            if ($assignedStoreIds->isEmpty()) {
+                return collect();
+            }
+            return \App\Models\Inventory::whereIn('store_id', $assignedStoreIds)
+                ->with(['product', 'store'])
+                ->orderByDesc('quantity_on_hand')
+                ->take(8)
+                ->get();
+        }, collect());
+
+        $siteRecentMovements = $this->safe(function() use ($assignedStoreIds) {
+            if ($assignedStoreIds->isEmpty()) {
+                return collect();
+            }
+            return \App\Models\InventoryMovement::whereHas('inventory', fn($q) => $q->whereIn('store_id', $assignedStoreIds))
+                ->with(['inventory.product', 'inventory.store', 'performer'])
+                ->latest('id')
+                ->take(8)
+                ->get();
+        }, collect());
+
         $kpi = [
             'today_manpower_count' => $this->safe(function() use ($todayManpowerReport, $user) {
                 if ($todayManpowerReport) {
@@ -1581,6 +1606,26 @@ class DashboardController extends Controller
                     ->when($assignedProjectIds->isNotEmpty(), fn($q) => $q->whereIn('project_id', $assignedProjectIds))
                     ->count();
             }, 0),
+            'site_inventory_count' => $this->safe(function() use ($assignedStoreIds) {
+                return $assignedStoreIds->isNotEmpty()
+                    ? \App\Models\Inventory::whereIn('store_id', $assignedStoreIds)->count()
+                    : 0;
+            }, 0),
+            'site_low_stock_count' => $this->safe(function() use ($assignedStoreIds) {
+                return $assignedStoreIds->isNotEmpty()
+                    ? \App\Models\Inventory::whereIn('store_id', $assignedStoreIds)
+                        ->whereColumn('quantity_on_hand', '<=', 'min_stock')
+                        ->where('min_stock', '>', 0)
+                        ->count()
+                    : 0;
+            }, 0),
+            'site_movements_7d' => $this->safe(function() use ($assignedStoreIds) {
+                return $assignedStoreIds->isNotEmpty()
+                    ? \App\Models\InventoryMovement::whereHas('inventory', fn($q) => $q->whereIn('store_id', $assignedStoreIds))
+                        ->whereDate('created_at', '>=', now()->subDays(7))
+                        ->count()
+                    : 0;
+            }, 0),
         ];
 
         return view('dashboard.site-engineer', compact(
@@ -1589,7 +1634,10 @@ class DashboardController extends Controller
             'recentManpowerReports',
             'assignedWorkOrders',
             'recentMR',
-            'recentIssues'
+            'recentIssues',
+            'assignedStores',
+            'siteInventoryItems',
+            'siteRecentMovements'
         ));
     }
 

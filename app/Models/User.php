@@ -48,6 +48,52 @@ class User extends Authenticatable
         return $this->belongsToMany(Project::class, 'project_user');
     }
 
+    /**
+     * Get IDs of stores assigned to this user based on their assigned projects,
+     * employee profile, managed stores, or direct store assignment.
+     *
+     * @return \Illuminate\Support\Collection<int, int>
+     */
+    public function getAssignedStoreIds(): \Illuminate\Support\Collection
+    {
+        $assignedProjectIds = $this->projects()->pluck('projects.id');
+        if ($this->employee && $this->employee->project_id) {
+            $assignedProjectIds->push($this->employee->project_id);
+        }
+        if ($this->store && $this->store->project_id) {
+            $assignedProjectIds->push($this->store->project_id);
+        }
+        $assignedProjectIds = $assignedProjectIds->filter()->unique();
+
+        return Store::query()
+            ->where(function ($q) use ($assignedProjectIds) {
+                if ($assignedProjectIds->isNotEmpty()) {
+                    $q->whereIn('project_id', $assignedProjectIds);
+                }
+                if ($this->store_id) {
+                    $q->orWhere('id', $this->store_id);
+                }
+                $q->orWhere('manager_id', $this->id);
+                $q->orWhereHas('users', fn($uq) => $uq->where('users.id', $this->id));
+            })
+            ->pluck('id')
+            ->unique();
+    }
+
+    /**
+     * Get the active Store models assigned to this user.
+     *
+     * @return \Illuminate\Database\Eloquent\Collection
+     */
+    public function getAssignedStores()
+    {
+        $ids = $this->getAssignedStoreIds();
+        if ($ids->isEmpty()) {
+            return collect();
+        }
+        return Store::whereIn('id', $ids)->where('is_active', true)->orderBy('name')->get();
+    }
+
     public function takeoffEditRequests()
     {
         return $this->hasMany(TakeoffEditRequest::class, 'user_id');

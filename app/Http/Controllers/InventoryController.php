@@ -19,14 +19,37 @@ class InventoryController extends Controller
     {
         $this->authorize('viewAny', Inventory::class);
 
+        $user = auth()->user();
+        $rawUserRoles = $user ? $user->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray() : [];
+        $isGlobalAdmin = $user && ($user->isGlobalAdmin() || in_array('global_admin', $rawUserRoles) || in_array('admin', $rawUserRoles));
+        $isSiteEngineer = in_array('site_engineer', $rawUserRoles) && !$isGlobalAdmin;
+
         $query = Inventory::with(['store', 'product'])
             ->join('products', 'inventory.product_id', '=', 'products.id')
             ->whereNull('products.deleted_at')
             ->select('inventory.*');
 
-        if ($request->filled('store_id')) {
-            $query->where('inventory.store_id', $request->store_id);
+        $assignedStores = collect();
+        if ($isSiteEngineer) {
+            $assignedStoreIds = $user->getAssignedStoreIds();
+            $query->whereIn('inventory.store_id', $assignedStoreIds);
+            $stores = Store::whereIn('id', $assignedStoreIds)->where('is_active', true)->orderBy('name')->get();
+            $assignedStores = $stores;
+
+            if ($request->filled('store_id')) {
+                if ($assignedStoreIds->contains((int)$request->store_id)) {
+                    $query->where('inventory.store_id', $request->store_id);
+                } else {
+                    $query->whereRaw('1 = 0');
+                }
+            }
+        } else {
+            $stores = Store::where('is_active', true)->orderBy('name')->get();
+            if ($request->filled('store_id')) {
+                $query->where('inventory.store_id', $request->store_id);
+            }
         }
+
         if ($request->filled('product_id')) {
             $query->where('inventory.product_id', $request->product_id);
         }
@@ -60,10 +83,77 @@ class InventoryController extends Controller
         /** @var \Illuminate\Pagination\LengthAwarePaginator $inventory */
         $inventory = $query->paginate(25);
         $inventory->withQueryString();
-        $stores    = Store::where('is_active', true)->orderBy('name')->get();
         $products  = Product::where('is_active', true)->orderBy('name')->get();
 
-        return view('inventory.index', compact('inventory', 'stores', 'products', 'sort', 'direction'));
+        return view('inventory.index', compact('inventory', 'stores', 'products', 'sort', 'direction', 'isSiteEngineer', 'assignedStores'));
+    }
+
+    /**
+     * View all stock movements across products (filtered to assigned site store for Site Engineer).
+     */
+    public function allMovements(Request $request)
+    {
+        $this->authorize('viewAny', Inventory::class);
+
+        $user = auth()->user();
+        $rawUserRoles = $user ? $user->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray() : [];
+        $isGlobalAdmin = $user && ($user->isGlobalAdmin() || in_array('global_admin', $rawUserRoles) || in_array('admin', $rawUserRoles));
+        $isSiteEngineer = in_array('site_engineer', $rawUserRoles) && !$isGlobalAdmin;
+
+        $query = \App\Models\InventoryMovement::with(['inventory.store', 'inventory.product', 'performer'])
+            ->latest('id');
+
+        $assignedStores = collect();
+        if ($isSiteEngineer) {
+            $assignedStoreIds = $user->getAssignedStoreIds();
+            $query->whereHas('inventory', fn($iq) => $iq->whereIn('store_id', $assignedStoreIds));
+            $stores = Store::whereIn('id', $assignedStoreIds)->where('is_active', true)->orderBy('name')->get();
+            $assignedStores = $stores;
+
+            if ($request->filled('store_id')) {
+                if ($assignedStoreIds->contains((int)$request->store_id)) {
+                    $query->whereHas('inventory', fn($iq) => $iq->where('store_id', $request->store_id));
+                } else {
+                    $query->whereRaw('1 = 0');
+                }
+            }
+        } else {
+            $stores = Store::where('is_active', true)->orderBy('name')->get();
+            if ($request->filled('store_id')) {
+                $query->whereHas('inventory', fn($iq) => $iq->where('store_id', $request->store_id));
+            }
+        }
+
+        if ($request->filled('product_id')) {
+            $query->whereHas('inventory', fn($iq) => $iq->where('product_id', $request->product_id));
+        }
+
+        if ($request->filled('type')) {
+            $query->where('type', $request->type);
+        }
+
+        if ($request->filled('search')) {
+            $s = trim($request->search);
+            $query->where(function ($q) use ($s) {
+                $q->whereHas('inventory.product', function ($pq) use ($s) {
+                    $pq->where('name', 'like', "%{$s}%")
+                       ->orWhere('sku', 'like', "%{$s}%")
+                       ->orWhere('code', 'like', "%{$s}%");
+                })->orWhere('remarks', 'like', "%{$s}%");
+            });
+        }
+
+        if ($request->filled('date_from')) {
+            $query->whereDate('created_at', '>=', $request->date_from);
+        }
+        if ($request->filled('date_to')) {
+            $query->whereDate('created_at', '<=', $request->date_to);
+        }
+
+        $movements = $query->paginate(25)->withQueryString();
+        $products = Product::where('is_active', true)->orderBy('name')->get();
+
+        return view('inventory.all-movements', compact('movements', 'stores', 'products', 'isSiteEngineer', 'assignedStores'));
     }
 
     public function show(Inventory $inventory)

@@ -4,13 +4,36 @@
 
 @section('content')
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <h1 class="h3 mb-0">Inventory</h1>
-    @can('inventory.edit')
-    <a href="{{ route('inventory.bulk-adjust') }}" class="btn btn-warning fw-semibold shadow-sm px-4" style="border-radius:10px;">
-        <i class="fa-solid fa-sliders me-2"></i> Manual Stock Adjustment
-    </a>
-    @endcan
+    <div>
+        <h1 class="h3 mb-0">Inventory</h1>
+        @if(!empty($isSiteEngineer))
+            <p class="text-muted small mb-0 mt-1">
+                <i class="fa-solid fa-hard-hat text-warning me-1"></i>
+                Site Engineer View — Showing only materials at your assigned site store(s):
+                <strong>{{ $assignedStores->pluck('name')->implode(', ') ?: 'No site stores assigned yet' }}</strong>
+            </p>
+        @endif
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{{ route('inventory.all-movements') }}" class="btn btn-outline-info fw-semibold shadow-sm px-3" style="border-radius:10px;">
+            <i class="fa-solid fa-arrow-right-arrow-left me-1"></i> Stock Movements
+        </a>
+        @can('inventory.edit')
+        <a href="{{ route('inventory.bulk-adjust') }}" class="btn btn-warning fw-semibold shadow-sm px-4" style="border-radius:10px;">
+            <i class="fa-solid fa-sliders me-2"></i> Manual Stock Adjustment
+        </a>
+        @endcan
+    </div>
 </div>
+
+@if(!empty($isSiteEngineer) && $assignedStores->isEmpty())
+    <div class="alert alert-warning border-0 shadow-sm d-flex align-items-center mb-4">
+        <i class="fa-solid fa-triangle-exclamation fs-4 me-3 text-warning"></i>
+        <div>
+            <strong>No Site Assigned</strong>: Your user account is not currently linked to an active project or site store. Please contact the administrator or project coordinator to assign you to a project site.
+        </div>
+    </div>
+@endif
 
 {{-- Filters --}}
 <div class="card border-0 shadow-sm mb-4">
@@ -24,9 +47,9 @@
                 </div>
             </div>
             <div class="col-md-2">
-                <label class="form-label small">Store</label>
+                <label class="form-label small">{{ !empty($isSiteEngineer) ? 'Assigned Store' : 'Store' }}</label>
                 <select name="store_id" class="form-select form-select-sm">
-                    <option value="">All Stores</option>
+                    <option value="">{{ !empty($isSiteEngineer) ? 'All My Site Stores' : 'All Stores' }}</option>
                     @foreach($stores as $store)
                     <option value="{{ $store->id }}" @selected(request('store_id') == $store->id)>
                         {{ $store->name }}
@@ -198,7 +221,12 @@
                     </div>
                     @endcan
                     @empty
-                    <tr><td colspan="10" class="text-center text-muted py-4">No inventory records found.</td></tr>
+                    <tr>
+                        <td colspan="11" class="text-center text-muted py-5">
+                            <i class="fa-solid fa-box-open fs-2 mb-2 d-block text-secondary"></i>
+                            {{ !empty($isSiteEngineer) ? 'No inventory records found for your assigned site store(s).' : 'No inventory records found.' }}
+                        </td>
+                    </tr>
                     @endforelse
                 </tbody>
             </table>
