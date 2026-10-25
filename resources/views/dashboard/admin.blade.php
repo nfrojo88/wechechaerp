@@ -34,7 +34,7 @@
             <a href="{{ route('system.clear-cache') }}" class="btn btn-outline-secondary btn-sm rounded-pill px-3 shadow-xs" onclick="return confirm('Clear application and route caches now?')">
                 <i class="fa-solid fa-broom me-1 text-warning"></i>Clear Cache
             </a>
-            <a href="{{ route('system.run-migrations') }}" class="btn btn-outline-teal btn-sm rounded-pill px-3 shadow-xs text-success border-success" onclick="return confirm('Run database migrations and resync now?')">
+            <a href="{{ route('system.run-migrations') }}" class="btn btn-outline-success btn-sm rounded-pill px-3 shadow-xs" onclick="return confirm('Run database migrations and resync now?')">
                 <i class="fa-solid fa-database me-1"></i>Auto Migrate DB
             </a>
             <a href="{{ route('admin.role-assignment.index') }}" class="btn btn-outline-info btn-sm rounded-pill px-3 shadow-xs">
@@ -46,11 +46,14 @@
             <a href="{{ route('coa.index') }}" class="btn btn-outline-dark btn-sm rounded-pill px-3 shadow-xs">
                 <i class="fa-solid fa-building-columns me-1 text-primary"></i>Chart of Accounts
             </a>
-            <a href="{{ route('finance.tax-deductions.index') }}" class="btn btn-outline-primary btn-sm rounded-pill px-3 shadow-xs">
-                <i class="fa-solid fa-file-invoice-dollar me-1"></i>Tax Compliance
+            <a href="#executive-approval-hub" class="btn btn-outline-warning btn-sm rounded-pill px-3 shadow-xs">
+                <i class="fa-solid fa-gavel me-1"></i>Decision Hub
+                @if(($totalUrgentActions ?? 0) > 0)
+                    <span class="badge bg-danger rounded-pill ms-1">{{ $totalUrgentActions }}</span>
+                @endif
             </a>
-            <a href="#vat-withholding-report" class="btn btn-outline-danger btn-sm rounded-pill px-3 shadow-xs">
-                <i class="fa-solid fa-receipt me-1"></i>VAT &amp; WHT
+            <a href="#vat-withholding-report" class="btn btn-outline-primary btn-sm rounded-pill px-3 shadow-xs">
+                <i class="fa-solid fa-receipt me-1"></i>Tax &amp; ERCA Ledger
             </a>
         </div>
     </div>
@@ -97,6 +100,18 @@
         </div>
     </div>
 
+    @php
+        $totalUrgentActions = $totalUrgentActions ?? (
+            ($kpi['pending_gm_prs'] ?? 0)
+            + ($kpi['unassigned_prs_count'] ?? 0)
+            + ($kpi['pending_gm_expenses'] ?? 0)
+            + ($kpi['pending_approvals'] ?? 0)
+            + ($kpi['unassigned_roles_count'] ?? 0)
+            + ($kpi['pending_maintenance'] ?? 0)
+            + ($ticketStats['open'] ?? 0)
+        );
+    @endphp
+
     {{-- ══════════════════════════════════════════════════════════════════════════
          TODAY'S OPERATIONS LIVE PULSE RIBBON
          ══════════════════════════════════════════════════════════════════════════ --}}
@@ -121,7 +136,7 @@
 
             <div class="row g-2 text-center">
                 {{-- 1. Today Inflow --}}
-                <div class="col-6 col-md-3 col-xl">
+                <div class="col-6 col-md-4 col-xl">
                     <div class="p-3 rounded-3 bg-light border h-100">
                         <small class="text-muted text-uppercase fw-bold d-block" style="font-size:0.7rem;">Today Inflow</small>
                         <div class="fs-5 fw-bold text-success font-monospace my-1">
@@ -134,7 +149,7 @@
                 </div>
 
                 {{-- 2. Today Outflow --}}
-                <div class="col-6 col-md-3 col-xl">
+                <div class="col-6 col-md-4 col-xl">
                     <div class="p-3 rounded-3 bg-light border h-100">
                         <small class="text-muted text-uppercase fw-bold d-block" style="font-size:0.7rem;">Today Disbursements</small>
                         <div class="fs-5 fw-bold text-danger font-monospace my-1">
@@ -147,7 +162,7 @@
                 </div>
 
                 {{-- 3. Today Workforce Attendance --}}
-                <div class="col-6 col-md-3 col-xl">
+                <div class="col-6 col-md-4 col-xl">
                     <div class="p-3 rounded-3 bg-light border h-100">
                         <small class="text-muted text-uppercase fw-bold d-block" style="font-size:0.7rem;">Workforce Present</small>
                         <div class="fs-5 fw-bold text-primary my-1">
@@ -160,7 +175,7 @@
                 </div>
 
                 {{-- 4. Today Material Transfers (TR) --}}
-                <div class="col-6 col-md-3 col-xl">
+                <div class="col-6 col-md-4 col-xl">
                     <div class="p-3 rounded-3 bg-light border h-100">
                         <small class="text-muted text-uppercase fw-bold d-block" style="font-size:0.7rem;">Store Transfers (TR)</small>
                         <div class="fs-5 fw-bold text-info my-1">
@@ -173,7 +188,7 @@
                 </div>
 
                 {{-- 5. Urgent Decision Pipeline --}}
-                <div class="col-12 col-md-3 col-xl">
+                <div class="col-12 col-md-4 col-xl">
                     <div class="p-3 rounded-3 bg-light border h-100">
                         <small class="text-muted text-uppercase fw-bold d-block" style="font-size:0.7rem;">Urgent Decision Queue</small>
                         <div class="fs-5 fw-bold {{ ($totalUrgentActions ?? 0) > 0 ? 'text-danger' : 'text-success' }} my-1">
@@ -191,16 +206,6 @@
     {{-- ══════════════════════════════════════════════════════════════════════════
          2. URGENT EXECUTIVE DECISION & ESCALATIONS SUMMARY
          ══════════════════════════════════════════════════════════════════════════ --}}
-    @php
-        $totalUrgentActions = ($kpi['pending_gm_prs'] ?? 0)
-            + ($kpi['unassigned_prs_count'] ?? 0)
-            + ($kpi['pending_gm_expenses'] ?? 0)
-            + ($kpi['pending_approvals'] ?? 0)
-            + ($kpi['unassigned_roles_count'] ?? 0)
-            + ($kpi['pending_maintenance'] ?? 0)
-            + ($ticketStats['open'] ?? 0);
-    @endphp
-
     @if($totalUrgentActions > 0)
         <div class="card border-0 shadow-sm rounded-4 mb-4" style="background: linear-gradient(135deg, #1e293b, #0f172a); color: #fff;">
             <div class="card-body p-3 p-md-4">
@@ -217,43 +222,43 @@
                 </div>
 
                 <div class="row g-2 text-center">
-                    <div class="col-6 col-md-3 col-xl">
-                        <a href="{{ route('procurement.my-queue', ['status' => 'pending_gm']) }}" class="text-decoration-none d-block p-2 rounded-3 bg-white bg-opacity-10 hover-bg-opacity-20 transition text-white">
+                    <div class="col-6 col-md-4 col-xl-2">
+                        <a href="{{ route('procurement.my-queue', ['status' => 'pending_gm']) }}" class="text-decoration-none d-block p-2 rounded-3 bg-white bg-opacity-10 hover-bg-opacity-20 transition text-white h-100">
                             <div class="fs-5 fw-bold text-danger">{{ $kpi['pending_gm_prs'] ?? 0 }}</div>
                             <small class="text-white-50 text-truncate d-block" style="font-size:0.75rem;">PR Decisions</small>
                             <span class="text-warning small" style="font-size:0.7rem;">{{ number_format($kpi['pending_gm_prs_amount'] ?? 0, 0) }} ETB</span>
                         </a>
                     </div>
-                    <div class="col-6 col-md-3 col-xl">
-                        <a href="{{ route('expenses.index', ['tab' => 'pending_gm']) }}" class="text-decoration-none d-block p-2 rounded-3 bg-white bg-opacity-10 hover-bg-opacity-20 transition text-white">
+                    <div class="col-6 col-md-4 col-xl-2">
+                        <a href="{{ route('expenses.index', ['tab' => 'pending_gm']) }}" class="text-decoration-none d-block p-2 rounded-3 bg-white bg-opacity-10 hover-bg-opacity-20 transition text-white h-100">
                             <div class="fs-5 fw-bold text-warning">{{ $kpi['pending_gm_expenses'] ?? 0 }}</div>
                             <small class="text-white-50 text-truncate d-block" style="font-size:0.75rem;">Expense Requests</small>
                             <span class="text-warning small" style="font-size:0.7rem;">{{ number_format($kpi['pending_gm_expenses_amount'] ?? 0, 0) }} ETB</span>
                         </a>
                     </div>
-                    <div class="col-6 col-md-3 col-xl">
-                        <a href="{{ route('admin.role-assignment.index') }}" class="text-decoration-none d-block p-2 rounded-3 bg-white bg-opacity-10 hover-bg-opacity-20 transition text-white">
+                    <div class="col-6 col-md-4 col-xl-2">
+                        <a href="{{ route('admin.role-assignment.index') }}" class="text-decoration-none d-block p-2 rounded-3 bg-white bg-opacity-10 hover-bg-opacity-20 transition text-white h-100">
                             <div class="fs-5 fw-bold text-info">{{ $kpi['unassigned_roles_count'] ?? 0 }}</div>
                             <small class="text-white-50 text-truncate d-block" style="font-size:0.75rem;">Unassigned Roles</small>
                             <span class="text-info small" style="font-size:0.7rem;">Needs System Role</span>
                         </a>
                     </div>
-                    <div class="col-6 col-md-3 col-xl">
-                        <a href="{{ route('employees.pending-approval') }}" class="text-decoration-none d-block p-2 rounded-3 bg-white bg-opacity-10 hover-bg-opacity-20 transition text-white">
+                    <div class="col-6 col-md-4 col-xl-2">
+                        <a href="{{ route('employees.pending-approval') }}" class="text-decoration-none d-block p-2 rounded-3 bg-white bg-opacity-10 hover-bg-opacity-20 transition text-white h-100">
                             <div class="fs-5 fw-bold text-primary">{{ $kpi['pending_approvals'] ?? 0 }}</div>
                             <small class="text-white-50 text-truncate d-block" style="font-size:0.75rem;">Employee Reg.</small>
                             <span class="text-primary-emphasis small" style="font-size:0.7rem;">Awaiting Approval</span>
                         </a>
                     </div>
-                    <div class="col-6 col-md-3 col-xl">
-                        <a href="{{ route('gm.maintenance-approvals.index') }}" class="text-decoration-none d-block p-2 rounded-3 bg-white bg-opacity-10 hover-bg-opacity-20 transition text-white">
+                    <div class="col-6 col-md-4 col-xl-2">
+                        <a href="{{ route('gm.maintenance-approvals.index') }}" class="text-decoration-none d-block p-2 rounded-3 bg-white bg-opacity-10 hover-bg-opacity-20 transition text-white h-100">
                             <div class="fs-5 fw-bold text-warning">{{ $kpi['pending_maintenance'] ?? 0 }}</div>
                             <small class="text-white-50 text-truncate d-block" style="font-size:0.75rem;">Maintenance</small>
                             <span class="text-warning small" style="font-size:0.7rem;">Repairs &amp; Spares</span>
                         </a>
                     </div>
-                    <div class="col-6 col-md-3 col-xl">
-                        <a href="{{ route('admin.tickets.index') }}" class="text-decoration-none d-block p-2 rounded-3 bg-white bg-opacity-10 hover-bg-opacity-20 transition text-white">
+                    <div class="col-6 col-md-4 col-xl-2">
+                        <a href="{{ route('admin.tickets.index') }}" class="text-decoration-none d-block p-2 rounded-3 bg-white bg-opacity-10 hover-bg-opacity-20 transition text-white h-100">
                             <div class="fs-5 fw-bold text-danger">{{ $ticketStats['open'] ?? 0 }}</div>
                             <small class="text-white-50 text-truncate d-block" style="font-size:0.75rem;">Support Tickets</small>
                             <span class="text-danger-emphasis small" style="font-size:0.7rem;">Open / In-Progress</span>
@@ -384,7 +389,7 @@
     <div class="row g-3 mb-4">
         {{-- Active Construction Projects --}}
         <div class="col-xl-3 col-md-6">
-            <div class="card border-0 shadow-sm h-100 rounded-3">
+            <div class="card border-0 shadow-sm h-100 position-relative overflow-hidden" style="border-left: 4px solid #3b82f6 !important; border-radius: 12px;">
                 <div class="card-body p-3">
                     <div class="d-flex align-items-center justify-content-between">
                         <div>
@@ -406,7 +411,7 @@
 
         {{-- Store Inventory Valuation & TR Status --}}
         <div class="col-xl-3 col-md-6">
-            <div class="card border-0 shadow-sm h-100 rounded-3">
+            <div class="card border-0 shadow-sm h-100 position-relative overflow-hidden" style="border-left: 4px solid #06b6d4 !important; border-radius: 12px;">
                 <div class="card-body p-3">
                     <div class="d-flex align-items-center justify-content-between">
                         <div>
@@ -430,7 +435,7 @@
 
         {{-- Total Active Workforce & Live Attendance --}}
         <div class="col-xl-3 col-md-6">
-            <div class="card border-0 shadow-sm h-100 rounded-3">
+            <div class="card border-0 shadow-sm h-100 position-relative overflow-hidden" style="border-left: 4px solid #10b981 !important; border-radius: 12px;">
                 <div class="card-body p-3">
                     <div class="d-flex align-items-center justify-content-between">
                         <div>
@@ -451,14 +456,10 @@
                 </div>
             </div>
         </div>
-                    </div>
-                </div>
-            </div>
-        </div>
 
         {{-- System Users & Security --}}
         <div class="col-xl-3 col-md-6">
-            <div class="card border-0 shadow-sm h-100 rounded-3">
+            <div class="card border-0 shadow-sm h-100 position-relative overflow-hidden" style="border-left: 4px solid #64748b !important; border-radius: 12px;">
                 <div class="card-body p-3">
                     <div class="d-flex align-items-center justify-content-between">
                         <div>
@@ -487,6 +488,15 @@
     {{-- ══════════════════════════════════════════════════════════════════════════
          5. FINANCIAL TRENDS & RESOURCE DISTRIBUTION CHARTS
          ══════════════════════════════════════════════════════════════════════════ --}}
+    <script type="application/json" id="admin-charts-json">
+    {
+        "cashFlowLabels": @json($monthlyAnalytics['labels'] ?? []),
+        "cashFlowIncomes": @json($monthlyAnalytics['incomes'] ?? []),
+        "cashFlowExpenses": @json($monthlyAnalytics['expenses'] ?? []),
+        "expenseCatLabels": @json(isset($expenseCategories) ? $expenseCategories->pluck('category') : []),
+        "expenseCatTotals": @json(isset($expenseCategories) ? $expenseCategories->pluck('total') : [])
+    }
+    </script>
     <div id="admin-charts-payload" class="d-none"
          data-cashflow-labels="@json($monthlyAnalytics['labels'] ?? [])"
          data-cashflow-incomes="@json($monthlyAnalytics['incomes'] ?? [])"
@@ -528,12 +538,19 @@
                     <a href="{{ route('expenses.index') }}" class="small text-muted text-decoration-none">View All</a>
                 </div>
                 <div class="card-body pt-0">
-                    <div style="height: 250px; position: relative;">
-                        <canvas id="expenseCategoryChart"></canvas>
-                    </div>
-                    <div class="text-center mt-2 small text-muted">
-                        Real breakdown from recorded company expense vouchers
-                    </div>
+                    @if(isset($expenseCategories) && $expenseCategories->count() > 0)
+                        <div style="height: 250px; position: relative;">
+                            <canvas id="expenseCategoryChart"></canvas>
+                        </div>
+                        <div class="text-center mt-2 small text-muted">
+                            Real breakdown from recorded company expense vouchers
+                        </div>
+                    @else
+                        <div class="text-center py-5 text-muted">
+                            <i class="fa-solid fa-chart-pie fs-1 mb-2 opacity-25"></i>
+                            <p class="mb-0 small">No expense categories recorded in this scope.</p>
+                        </div>
+                    @endif
                 </div>
             </div>
         </div>
@@ -1008,7 +1025,7 @@
                 </h6>
                 <small class="text-muted">High-priority items requiring Global Admin / GM decisions or escalation</small>
             </div>
-            <ul class="nav nav-tabs card-header-tabs" id="decisionTabs" role="tablist">
+            <ul class="nav nav-tabs card-header-tabs flex-nowrap overflow-x-auto text-nowrap pb-1 border-bottom-0" id="decisionTabs" role="tablist">
                 <li class="nav-item">
                     <button class="nav-link active fw-semibold" id="pr-tab" data-bs-toggle="tab" data-bs-target="#tab-prs" type="button" role="tab">
                         <i class="fa-solid fa-cart-arrow-down me-1 text-danger"></i>PR Decisions
@@ -1495,7 +1512,7 @@
          10. FLEET & EQUIPMENT COMPLIANCE REMINDERS
          ══════════════════════════════════════════════════════════════════════════ --}}
     @if($overdueReminders->count() > 0)
-        <div class="card border-0 shadow-sm rounded-3 mb-4 border-left-warning">
+        <div class="card border-0 shadow-sm rounded-4 mb-4" style="border-left: 5px solid #f59e0b !important;">
             <div class="card-header bg-transparent py-3 d-flex align-items-center justify-content-between border-0">
                 <div>
                     <h6 class="m-0 fw-bold text-warning text-dark">
@@ -1703,15 +1720,28 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
     document.addEventListener("DOMContentLoaded", function() {
+        var chartDataEl = document.getElementById("admin-charts-json");
+        var chartData = {};
+        if (chartDataEl) {
+            try {
+                chartData = JSON.parse(chartDataEl.textContent || '{}');
+            } catch(e) {
+                console.error("Failed to parse chart json:", e);
+            }
+        }
+
         var payload = document.getElementById("admin-charts-payload");
-        if (!payload) return;
+        var parseFallback = function(key) {
+            if (!payload) return [];
+            try { return JSON.parse(payload.dataset[key] || '[]'); } catch(e) { return []; }
+        };
 
-        var cashFlowLabels = JSON.parse(payload.dataset.cashflowLabels || '[]');
-        var cashFlowIncomes = JSON.parse(payload.dataset.cashflowIncomes || '[]');
-        var cashFlowExpenses = JSON.parse(payload.dataset.cashflowExpenses || '[]');
+        var cashFlowLabels = chartData.cashFlowLabels || parseFallback('cashflowLabels');
+        var cashFlowIncomes = chartData.cashFlowIncomes || parseFallback('cashflowIncomes');
+        var cashFlowExpenses = chartData.cashFlowExpenses || parseFallback('cashflowExpenses');
 
-        var expenseCatLabels = JSON.parse(payload.dataset.expenseCatLabels || '[]');
-        var expenseCatTotals = JSON.parse(payload.dataset.expenseCatTotals || '[]');
+        var expenseCatLabels = chartData.expenseCatLabels || parseFallback('expenseCatLabels');
+        var expenseCatTotals = chartData.expenseCatTotals || parseFallback('expenseCatTotals');
 
         // 1. 6-Month Cash Flow Trend Bar Chart
         var ctxCashFlow = document.getElementById("cashFlowBarChart");

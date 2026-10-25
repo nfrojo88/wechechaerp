@@ -867,6 +867,15 @@ class DashboardController extends Controller
             'app_timezone'    => config('app.timezone'),
         ];
 
+        // 17. Total Urgent Actions Count
+        $totalUrgentActions = $pendingGmPrs->count()
+            + $unassignedStagePrs->count()
+            + $pendingGmExpenses->count()
+            + $pendingEmployees->count()
+            + $unassignedUsers->count()
+            + ($kpi['pending_maintenance'] ?? 0)
+            + ($ticketStats['open'] ?? 0);
+
         return view('dashboard.admin', compact(
             'kpi',
             'period',
@@ -895,7 +904,8 @@ class DashboardController extends Controller
             'overdueReminders',
             'recentIssues',
             'recentLetters',
-            'systemDiagnostics'
+            'systemDiagnostics',
+            'totalUrgentActions'
         ));
     }
 
