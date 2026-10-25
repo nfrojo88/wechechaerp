@@ -7,7 +7,8 @@
     $isAuditorUser = !empty($isAuditor) || in_array('auditor', $rawUserRoles) || in_array('audit', $rawUserRoles) || in_array('internal_auditor', $rawUserRoles) || in_array('audit_team', $rawUserRoles) || ($authUser && $authUser->hasAnyRole(['auditor', 'audit', 'internal_auditor', 'Auditor', 'Audit']));
     $isStoreManagerUser = in_array('store_manager', $rawUserRoles);
     $isStoreKeeperUser = !empty($isStoreKeeper) || in_array('store_keeper', $rawUserRoles) || in_array('storekeeper', $rawUserRoles) || in_array('store_clerk', $rawUserRoles);
-    $isCoordinatorUser = in_array('coordinator', $rawUserRoles);
+    $isCoordinatorUser = in_array('coordinator', $rawUserRoles) || in_array('project_coordinator', $rawUserRoles) || in_array('site_coordinator', $rawUserRoles) || !empty($isCoordinator);
+    $isPlanningUser = in_array('planning', $rawUserRoles) || in_array('planning_manager', $rawUserRoles) || in_array('planner', $rawUserRoles) || in_array('planning_team', $rawUserRoles) || in_array('planning_officer', $rawUserRoles) || !empty($isPlanning);
     $isHrUser = in_array('hr_manager', $rawUserRoles) || in_array('hr_officer', $rawUserRoles) || in_array('hr', $rawUserRoles);
     $isPurchaseManagerUser = in_array('purchase_manager', $rawUserRoles) || in_array('procurement_manager', $rawUserRoles);
     $isProcurementTeamUser = in_array('purchase', $rawUserRoles) || in_array('procurement_team', $rawUserRoles) || in_array('purchaser', $rawUserRoles) || in_array('buyer', $rawUserRoles);
@@ -287,7 +288,7 @@
                                         @csrf
                                         <button type="submit" class="btn btn-sm btn-success"><i class="fas fa-check me-1"></i> Approve</button>
                                     </form>
-                                    <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#rejectMrModal{{ $mr->id }}">
+                                    <button type="button" class="btn btn-sm btn-danger shadow-xs fw-semibold" onclick="openRejectQueueModal('mr', {{ $mr->id }}, '{{ addslashes($mr->reference_number) }}', 'planning')" title="Reject Emergency Request (Planning)">
                                         <i class="fas fa-times me-1"></i> Reject
                                     </button>
                                     @if($isGlobalAdmin)
@@ -295,27 +296,6 @@
                                         <i class="fas fa-trash-can"></i>
                                     </button>
                                     @endif
-                                </div>
-
-                                <!-- Reject Modal -->
-                                <div class="modal fade" id="rejectMrModal{{ $mr->id }}" tabindex="-1">
-                                    <div class="modal-dialog">
-                                        <form method="POST" action="{{ route('material-requests.planning-reject', $mr->id) }}" class="modal-content">
-                                            @csrf
-                                             <div class="modal-header">
-                                                <h5 class="modal-title">Reject Emergency Request</h5>
-                                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                            </div>
-                                            <div class="modal-body">
-                                                <label class="form-label">Rejection Reason</label>
-                                                <textarea name="rejection_reason" class="form-control" rows="3" required></textarea>
-                                            </div>
-                                            <div class="modal-footer">
-                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                                                <button type="submit" class="btn btn-danger">Confirm Rejection</button>
-                                            </div>
-                                        </form>
-                                    </div>
                                 </div>
                             </td>
                         </tr>
@@ -436,6 +416,11 @@
                                                 <i class="fas fa-share me-1"></i> Dispatch to Store
                                             </button>
                                         </form>
+                                        <button type="button" class="btn btn-sm btn-danger shadow-xs fw-semibold"
+                                                onclick="openRejectQueueModal('pr', {{ $compPr->id }}, '{{ addslashes($compPr->pr_no) }}', 'coordinator')"
+                                                title="Reject this emergency purchase request">
+                                            <i class="fas fa-times me-1"></i> Reject
+                                        </button>
                                         <a href="{{ route('purchase-requests.show', $compPr->id) }}" class="btn btn-sm btn-outline-info shadow-xs">
                                             <i class="fas fa-eye me-1"></i> Review
                                         </a>
@@ -446,6 +431,11 @@
                                                 <i class="fas fa-share me-1"></i> Dispatch to Store
                                             </button>
                                         </form>
+                                        <button type="button" class="btn btn-sm btn-danger shadow-xs fw-semibold"
+                                                onclick="openRejectQueueModal('mr', {{ $cmr->id }}, '{{ addslashes($cmr->reference_number) }}', 'coordinator')"
+                                                title="Reject this emergency material request">
+                                            <i class="fas fa-times me-1"></i> Reject
+                                        </button>
                                         <a href="{{ route('material-requests.show', $cmr) }}" class="btn btn-sm btn-outline-info shadow-xs">
                                             <i class="fas fa-eye me-1"></i> Review
                                         </a>
@@ -652,6 +642,31 @@
                                                 </button>
                                             </form>
                                         @endif
+
+                                        {{-- Planning Role Action & Reject for Material Request --}}
+                                        @if(($isPlanningUser || $isGlobalAdmin || $isAdmin) && ($mr->planning_approval_status === 'pending' || $mr->status === 'pending'))
+                                            <form method="POST" action="{{ route('material-requests.planning-approve', $mr->id) }}" class="d-inline">
+                                                @csrf
+                                                <button type="submit" class="btn btn-sm btn-success fw-bold shadow-xs">
+                                                    <i class="fas fa-check me-1"></i> Approve
+                                                </button>
+                                            </form>
+                                            <button type="button" class="btn btn-sm btn-danger shadow-xs fw-semibold"
+                                                    onclick="openRejectQueueModal('mr', {{ $mr->id }}, '{{ addslashes($mr->reference_number) }}', 'planning')"
+                                                    title="Reject Material Request (Planning)">
+                                                <i class="fas fa-times me-1"></i> Reject
+                                            </button>
+                                        @endif
+
+                                        {{-- Coordinator Role Action & Reject for Material Request --}}
+                                        @if(($isCoordinatorUser || $isGlobalAdmin || $isAdmin) && ($mr->status === 'planning_approved' || $mr->status === 'pending'))
+                                            <button type="button" class="btn btn-sm btn-danger shadow-xs fw-semibold"
+                                                    onclick="openRejectQueueModal('mr', {{ $mr->id }}, '{{ addslashes($mr->reference_number) }}', 'coordinator')"
+                                                    title="Reject Material Request (Coordinator)">
+                                                <i class="fas fa-times me-1"></i> Reject
+                                            </button>
+                                        @endif
+
                                         @if($isGlobalAdmin)
                                         <button type="button" class="btn btn-sm btn-outline-danger" title="Delete MR (Admin Only)" onclick="openDeleteQueueMrModal({{ $mr->id }}, '{{ addslashes($mr->reference_number) }}')">
                                             <i class="fas fa-trash-can"></i>
@@ -721,10 +736,13 @@
                                         elseif (in_array($owner, ['gm', 'general_manager']) && $isGmUser) $canActOnThisPr = true;
                                         elseif (in_array($owner, ['finance_head', 'finance', 'finance_manager']) && $isFinanceHeadUser) $canActOnThisPr = true;
                                         elseif (in_array($owner, ['general_service', 'general_services']) && $isGeneralServiceUser) $canActOnThisPr = true;
-                                        elseif ((in_array($owner, ['coordinator', 'project_coordinator', 'site_coordinator']) || $pr->status === \App\Models\PurchaseRequest::STATUS_PENDING_HR_APPROVAL) && $isCoordinatorUser) $canActOnThisPr = true;
-                                        elseif ($pr->status === 'draft' && ($authUser && $pr->requested_by === $authUser->id || $isCoordinatorUser)) $canActOnThisPr = true;
+                                        elseif ((in_array($owner, ['planning', 'planning_manager', 'planner']) || $pr->status === \App\Models\PurchaseRequest::STATUS_PENDING_PLANNING) && ($isPlanningUser || $isGlobalAdmin || $isAdmin)) $canActOnThisPr = true;
+                                        elseif ((in_array($owner, ['coordinator', 'project_coordinator', 'site_coordinator']) || $pr->status === \App\Models\PurchaseRequest::STATUS_PENDING_HR_APPROVAL) && ($isCoordinatorUser || $isGlobalAdmin || $isAdmin)) $canActOnThisPr = true;
+                                        elseif ($pr->status === 'draft' && ($authUser && $pr->requested_by === $authUser->id || $isCoordinatorUser || $isGlobalAdmin)) $canActOnThisPr = true;
                                     }
                                 }
+                                $isPrPlanningActionable = ($pr->status === \App\Models\PurchaseRequest::STATUS_PENDING_PLANNING || in_array($pr->current_owner_role, ['planning', 'planning_manager'])) && ($isPlanningUser || $isGlobalAdmin || $isAdmin);
+                                $isPrCoordinatorActionable = ($pr->status === \App\Models\PurchaseRequest::STATUS_PENDING_HR_APPROVAL || in_array($pr->current_owner_role, ['coordinator', 'project_coordinator', 'site_coordinator']) || ($pr->status === 'draft' && ($isCoordinatorUser || $isGlobalAdmin))) && ($isCoordinatorUser || $isGlobalAdmin || $isAdmin);
                             @endphp
                             <tr class="{{ $pr->is_office_request && $pr->status === 'pending_hr_approval' ? 'table-warning bg-opacity-25' : '' }}">
                                 <td>
@@ -828,7 +846,31 @@
                                         <a href="{{ route('purchase-requests.show', $pr->id) }}" class="btn btn-sm btn-outline-info shadow-xs fw-semibold" title="See full Purchase Request details">
                                             <i class="fas fa-eye me-1"></i> See Details
                                         </a>
-                                        @if($canActOnThisPr)
+                                        @if($isPrPlanningActionable)
+                                            <form method="POST" action="{{ route('purchase-requests.planning-approve', $pr->id) }}" class="d-inline">
+                                                @csrf
+                                                <button type="submit" class="btn btn-sm btn-success fw-bold shadow-xs">
+                                                    <i class="fas fa-check me-1"></i> Approve
+                                                </button>
+                                            </form>
+                                            <button type="button" class="btn btn-sm btn-danger shadow-xs fw-semibold"
+                                                    onclick="openRejectQueueModal('pr', {{ $pr->id }}, '{{ addslashes($pr->pr_no) }}', 'planning')"
+                                                    title="Reject Purchase Request (Planning Manager)">
+                                                <i class="fas fa-times me-1"></i> Reject
+                                            </button>
+                                        @elseif($isPrCoordinatorActionable)
+                                            <form method="POST" action="{{ route('purchase-requests.coordinator-approve', $pr->id) }}" class="d-inline">
+                                                @csrf
+                                                <button type="submit" class="btn btn-sm btn-primary fw-bold shadow-xs">
+                                                    <i class="fas fa-share me-1"></i> Dispatch to Store
+                                                </button>
+                                            </form>
+                                            <button type="button" class="btn btn-sm btn-danger shadow-xs fw-semibold"
+                                                    onclick="openRejectQueueModal('pr', {{ $pr->id }}, '{{ addslashes($pr->pr_no) }}', 'coordinator')"
+                                                    title="Reject Purchase Request (Coordinator)">
+                                                <i class="fas fa-times me-1"></i> Reject
+                                            </button>
+                                        @elseif($canActOnThisPr)
                                             @if(!empty($isFinalIntakeStage))
                                                 <a href="{{ route('purchase-requests.show', $pr->id) }}" class="btn btn-sm btn-success fw-bold shadow-sm">
                                                     <i class="fas fa-boxes-packing me-1"></i> Fulfill Intake
@@ -1844,6 +1886,48 @@ function openDeleteQueueMrModal(mrId, mrRef) {
     </div>
 </div>
 
+<!-- ========================================================================= -->
+<!-- Modal: Reject Requisition / Purchase Request (Planning & Coordinator Roles) -->
+<!-- ========================================================================= -->
+<div class="modal fade" id="rejectQueueModal" tabindex="-1" aria-labelledby="rejectQueueModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <form id="rejectQueueForm" method="POST" class="modal-content border-0 shadow">
+            @csrf
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title fs-6 fw-bold" id="rejectQueueModalLabel">
+                    <i class="fas fa-times-circle me-2"></i>Reject Requisition / Purchase Request
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4 text-start">
+                <div class="mb-3">
+                    <p class="mb-1">You are rejecting <strong id="rejectQueueItemRef" class="text-danger font-monospace"></strong>.</p>
+                    <small class="text-muted d-block" id="rejectQueueRoleDesc">
+                        This action will mark the request as Rejected and log the rejection reason in the workflow history.
+                    </small>
+                </div>
+                <div class="mb-3">
+                    <label for="rejectQueueReason" class="form-label fw-bold text-dark">
+                        Rejection Reason <span class="text-danger">*</span>
+                    </label>
+                    <textarea name="rejection_reason" id="rejectQueueReason" class="form-control" rows="3" required placeholder="Please provide a clear reason why this request is being rejected..."></textarea>
+                    <div class="form-text">The requester and audit trail will receive this rejection explanation.</div>
+                </div>
+                <div class="alert alert-warning small mb-0 py-2">
+                    <i class="fas fa-triangle-exclamation me-1"></i>
+                    Rejected requests are moved to the <strong>Deleted &amp; Cancelled</strong> category in this queue.
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-danger btn-sm fw-bold">
+                    <i class="fas fa-ban me-1"></i> Confirm Rejection
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <style>
 /* Materials column and list display */
 .col-procurement-materials {
@@ -2046,6 +2130,39 @@ function escapeHtml(str) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
+}
+
+// Unified Reject Modal handler for Planning Manager and Coordinator
+function openRejectQueueModal(type, id, ref, role) {
+    const form = document.getElementById('rejectQueueForm');
+    const label = document.getElementById('rejectQueueModalLabel');
+    const refEl = document.getElementById('rejectQueueItemRef');
+    const descEl = document.getElementById('rejectQueueRoleDesc');
+    const reasonEl = document.getElementById('rejectQueueReason');
+
+    if (reasonEl) reasonEl.value = '';
+    if (refEl) refEl.textContent = ref;
+
+    let roleName = role === 'planning' ? 'Planning Manager' : (role === 'coordinator' ? 'Coordinator' : 'Reviewer');
+    if (label) label.innerHTML = `<i class="fas fa-times-circle me-2"></i>Reject as ${roleName}`;
+    if (descEl) descEl.textContent = `You are performing a rejection as ${roleName}. This will archive the request into the Deleted & Cancelled tab.`;
+
+    if (type === 'mr') {
+        if (role === 'coordinator') {
+            form.action = "{{ url('material-requests') }}/" + id + "/coordinator-reject";
+        } else {
+            form.action = "{{ url('material-requests') }}/" + id + "/planning-reject";
+        }
+    } else {
+        if (role === 'coordinator') {
+            form.action = "{{ url('purchase-requests') }}/" + id + "/coordinator-reject";
+        } else {
+            form.action = "{{ url('purchase-requests') }}/" + id + "/planning-reject";
+        }
+    }
+
+    const modal = new bootstrap.Modal(document.getElementById('rejectQueueModal'));
+    modal.show();
 }
 
 // Restore saved preference on load

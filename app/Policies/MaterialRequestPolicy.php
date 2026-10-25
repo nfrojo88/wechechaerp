@@ -60,13 +60,19 @@ class MaterialRequestPolicy
 
     public function approvePlanning(User $user, MaterialRequest $mr)
     {
-        return $user->hasAnyRole(['planning_manager', 'Planning Manager', 'planning_team', 'admin', 'global_admin'])
+        return $user->hasAnyRole(['planning_manager', 'Planning Manager', 'planning_team', 'planning', 'Planning', 'planner', 'Planner', 'planning_officer', 'admin', 'global_admin'])
             || $user->can('material_requests.planning_approve');
     }
 
     public function dispatchCoordinator(User $user, MaterialRequest $mr)
     {
-        return $user->hasAnyRole(['coordinator', 'Coordinator', 'admin', 'global_admin'])
+        return $user->hasAnyRole(['coordinator', 'Coordinator', 'site_coordinator', 'project_coordinator', 'admin', 'global_admin'])
+            || $user->can('material_requests.coordinator_dispatch');
+    }
+
+    public function rejectCoordinator(User $user, MaterialRequest $mr)
+    {
+        return $user->hasAnyRole(['coordinator', 'Coordinator', 'site_coordinator', 'project_coordinator', 'admin', 'global_admin'])
             || $user->can('material_requests.coordinator_dispatch');
     }
 

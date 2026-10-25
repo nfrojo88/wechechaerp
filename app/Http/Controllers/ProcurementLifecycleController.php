@@ -108,6 +108,7 @@ class ProcurementLifecycleController extends Controller
         $isStoreManager = $user->hasRole('store_manager');
         $isPurchaseManager = $user->hasAnyRole(['purchase_manager', 'procurement_manager', 'Purchase Manager', 'Procurement Manager']) || in_array('purchase_manager', $roles) || in_array('procurement_manager', $roles);
         $isFinanceHead = $user->hasRole('finance_head') || $user->hasRole('finance_manager') || $user->hasRole('finance') || $user->hasRole('accountant');
+        $isPlanning = $user->hasAnyRole(['planning', 'planning_manager', 'Planning Manager', 'planner', 'planning_team', 'planning_officer']) || in_array('planning', $roles) || in_array('planning_manager', $roles);
 
         // Resolve Store Keeper destination store(s)
         $assignedStore = null;
@@ -244,7 +245,10 @@ class ProcurementLifecycleController extends Controller
             if ($user->hasRole('finance_head'))       $targetRoles[] = 'finance_head';
             if ($user->hasRole('finance'))            $targetRoles[] = 'finance';
             if ($user->hasRole('general_service'))    $targetRoles[] = 'general_service';
-            if ($user->hasRole('planning'))           $targetRoles[] = 'planning';
+            if ($isPlanning) {
+                $targetRoles[] = 'planning';
+                $targetRoles[] = 'planning_manager';
+            }
         }
 
         // 2. Fetch PRs awaiting action by this user's role(s) (must have items)
@@ -347,7 +351,7 @@ class ProcurementLifecycleController extends Controller
 
         // 3. Emergency / Pending MR approval queue for Planning Team (must have items and be awaiting action)
         $emergencyMrs = collect();
-        if ($user->hasRole('planning') || $user->hasRole('planning_manager') || $isAdmin) {
+        if ($user->hasRole('planning') || $user->hasRole('planning_manager') || $isPlanning || $isAdmin) {
             $emergencyMrs = MaterialRequest::with(['project', 'creator', 'requestedBy', 'maintenanceRequest', 'items.product', 'purchaseRequests'])
                 ->whereHas('items')
                 ->where('planning_approval_status', 'pending')
@@ -570,7 +574,7 @@ class ProcurementLifecycleController extends Controller
         return view('procurement.lifecycle.my-queue', compact(
             'myPrs', 'emergencyMrs', 'coordinatorEmergencyMrs', 'materialRequestsQueue', 'kpi', 'projects',
             'myCreatedPrs', 'myCreatedMrs', 'completedPrs', 'allPrs', 'deletedPrs', 'deletedMrs', 'activeTab',
-            'isHr', 'isCoordinator', 'isStoreManager', 'isStoreKeeper', 'isPurchaseManager', 'isFinanceHead', 'isAuditor', 'isAdmin', 'isGm',
+            'isHr', 'isCoordinator', 'isStoreManager', 'isStoreKeeper', 'isPurchaseManager', 'isFinanceHead', 'isAuditor', 'isAdmin', 'isGm', 'isPlanning',
             'assignedStore'
         ));
     }

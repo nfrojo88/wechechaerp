@@ -2183,7 +2183,7 @@ class PurchaseRequestController extends Controller
     // ─── STAGE: Planning Team Review & Approval ─────────────────────────────
     public function planningApprove(Request $request, PurchaseRequest $purchaseRequest)
     {
-        $this->authorizeStageRole($purchaseRequest, ['planning', 'planning_manager']);
+        $this->authorizeStageRole($purchaseRequest, ['planning', 'planning_manager', 'planner', 'planning_team', 'planning_officer']);
 
         $targetRole = $this->lifecycle->resolveOwnerRole('coordinator', $purchaseRequest);
         $purchaseRequest->update([
@@ -2230,7 +2230,7 @@ class PurchaseRequestController extends Controller
 
     public function planningReject(Request $request, PurchaseRequest $purchaseRequest)
     {
-        $this->authorizeStageRole($purchaseRequest, ['planning', 'planning_manager']);
+        $this->authorizeStageRole($purchaseRequest, ['planning', 'planning_manager', 'planner', 'planning_team', 'planning_officer']);
         $request->validate(['rejection_reason' => 'required|string|max:1000']);
 
         $purchaseRequest->update([
@@ -2267,7 +2267,7 @@ class PurchaseRequestController extends Controller
     // ─── STAGE: Coordinator Review & Dispatch ───────────────────────────────
     public function coordinatorApprove(Request $request, PurchaseRequest $purchaseRequest)
     {
-        $this->authorizeStageRole($purchaseRequest, ['coordinator', 'hr_manager', 'hr']);
+        $this->authorizeStageRole($purchaseRequest, ['coordinator', 'hr_manager', 'hr', 'site_coordinator', 'project_coordinator']);
 
         $targetRole = $this->lifecycle->resolveOwnerRole('store_manager', $purchaseRequest);
         $purchaseRequest->update([
@@ -2311,7 +2311,7 @@ class PurchaseRequestController extends Controller
 
     public function coordinatorReject(Request $request, PurchaseRequest $purchaseRequest)
     {
-        $this->authorizeStageRole($purchaseRequest, ['coordinator', 'hr_manager', 'hr']);
+        $this->authorizeStageRole($purchaseRequest, ['coordinator', 'hr_manager', 'hr', 'site_coordinator', 'project_coordinator']);
         $request->validate(['rejection_reason' => 'required|string|max:1000']);
 
         $purchaseRequest->update([

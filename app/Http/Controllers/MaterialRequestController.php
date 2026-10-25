@@ -454,6 +454,52 @@ class MaterialRequestController extends Controller
         return back()->with('success', 'Material Request sent to Store Manager.');
     }
 
+    public function coordinatorReject(Request $request, MaterialRequest $materialRequest)
+    {
+        Gate::authorize('dispatchCoordinator', $materialRequest);
+        $request->validate(['rejection_reason' => 'required|string|max:1000']);
+
+        $materialRequest->update([
+            'status'                    => 'rejected',
+            'planning_rejection_reason' => $request->rejection_reason,
+            'approved_by'               => auth()->id(),
+            'approved_at'               => now(),
+        ]);
+
+        try {
+            $materialRequest->loadMissing('purchaseRequests');
+            foreach ($materialRequest->purchaseRequests as $pr) {
+                if (in_array($pr->status, [
+                    PurchaseRequest::STATUS_PENDING_HR_APPROVAL,
+                    PurchaseRequest::STATUS_DRAFT,
+                    PurchaseRequest::STATUS_PENDING_PLANNING
+                ])) {
+                    $pr->update([
+                        'status'           => PurchaseRequest::STATUS_REJECTED,
+                        'rejection_reason' => $request->rejection_reason,
+                    ]);
+
+                    try {
+                        PrWorkflowLog::create([
+                            'purchase_request_id' => $pr->id,
+                            'from_stage'          => $pr->status,
+                            'to_stage'            => PurchaseRequest::STATUS_REJECTED,
+                            'action'              => 'coordinator_reject',
+                            'actor_role'          => 'coordinator',
+                            'actor_id'            => auth()->id(),
+                            'notes'               => "Coordinator rejected Material Request: " . $request->rejection_reason,
+                            'created_at'          => now(),
+                        ]);
+                    } catch (\Throwable $e) {}
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::error("Failed to reject companion PRs for MR #{$materialRequest->reference_number}: " . $e->getMessage());
+        }
+
+        return back()->with('success', 'Material Request rejected by Coordinator.');
+    }
+
     // ─── Store Manager Actions: Send to PR or Create Transfer ────────────────
     public function sendToPr(MaterialRequest $materialRequest)
     {
