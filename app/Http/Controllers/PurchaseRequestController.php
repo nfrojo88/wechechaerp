@@ -2264,10 +2264,14 @@ class PurchaseRequestController extends Controller
         return back()->with('success', 'Full material intake complete! All items received into store inventory and slip sequence updated.');
     }
 
-    // ─── STAGE: Planning Team Review & Approval ─────────────────────────────
+    // ─── STAGE: Planning Manager Review & Approval ─────────────────────────────
     public function planningApprove(Request $request, PurchaseRequest $purchaseRequest)
     {
-        $this->authorizeStageRole($purchaseRequest, ['planning', 'planning_manager', 'planner', 'planning_team', 'planning_officer']);
+        $user = Auth::user();
+        $roles = $user ? $user->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray() : [];
+        if (!in_array('planning_manager', $roles)) {
+            abort(403, 'Unauthorized: Requests in planning approval stage can only be approved by the Planning Manager.');
+        }
 
         $targetRole = $this->lifecycle->resolveOwnerRole('coordinator', $purchaseRequest);
         $purchaseRequest->update([
@@ -2309,12 +2313,17 @@ class PurchaseRequestController extends Controller
             );
         } catch (\Throwable $e) {}
 
-        return back()->with('success', 'Purchase Request approved by Planning and sent to Coordinator.');
+        return back()->with('success', 'Purchase Request approved by Planning Manager and sent to Coordinator.');
     }
 
     public function planningReject(Request $request, PurchaseRequest $purchaseRequest)
     {
-        $this->authorizeStageRole($purchaseRequest, ['planning', 'planning_manager', 'planner', 'planning_team', 'planning_officer']);
+        $user = Auth::user();
+        $roles = $user ? $user->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray() : [];
+        if (!in_array('planning_manager', $roles)) {
+            abort(403, 'Unauthorized: Requests in planning approval stage can only be rejected by the Planning Manager.');
+        }
+
         $request->validate(['rejection_reason' => 'required|string|max:1000']);
 
         $purchaseRequest->update([
@@ -2345,7 +2354,7 @@ class PurchaseRequestController extends Controller
             ]);
         } catch (\Throwable $e) {}
 
-        return back()->with('success', 'Purchase Request rejected by Planning.');
+        return back()->with('success', 'Purchase Request rejected by Planning Manager.');
     }
 
     // ─── STAGE: Coordinator Review & Dispatch ───────────────────────────────

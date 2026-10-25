@@ -8,6 +8,7 @@
     $isStoreManagerUser = in_array('store_manager', $rawUserRoles);
     $isStoreKeeperUser = !empty($isStoreKeeper) || in_array('store_keeper', $rawUserRoles) || in_array('storekeeper', $rawUserRoles) || in_array('store_clerk', $rawUserRoles);
     $isCoordinatorUser = in_array('coordinator', $rawUserRoles) || in_array('project_coordinator', $rawUserRoles) || in_array('site_coordinator', $rawUserRoles) || !empty($isCoordinator);
+    $isPlanningManagerUser = in_array('planning_manager', $rawUserRoles);
     $isPlanningUser = in_array('planning', $rawUserRoles) || in_array('planning_manager', $rawUserRoles) || in_array('planner', $rawUserRoles) || in_array('planning_team', $rawUserRoles) || in_array('planning_officer', $rawUserRoles) || !empty($isPlanning);
     $isHrUser = in_array('hr_manager', $rawUserRoles) || in_array('hr_officer', $rawUserRoles) || in_array('hr', $rawUserRoles);
     $isPurchaseManagerUser = in_array('purchase_manager', $rawUserRoles) || in_array('procurement_manager', $rawUserRoles);
@@ -284,13 +285,23 @@
                             <td>{{ $mr->created_at->format('M d, Y H:i') }}</td>
                             <td>
                                 <div class="d-flex gap-1 align-items-center">
-                                    <form method="POST" action="{{ route('material-requests.planning-approve', $mr->id) }}">
-                                        @csrf
-                                        <button type="submit" class="btn btn-sm btn-success"><i class="fas fa-check me-1"></i> Approve</button>
-                                    </form>
-                                    <button type="button" class="btn btn-sm btn-danger shadow-xs fw-semibold" onclick="openRejectQueueModal('mr', {{ $mr->id }}, '{{ addslashes($mr->reference_number) }}', 'planning')" title="Reject Emergency Request (Planning)">
-                                        <i class="fas fa-times me-1"></i> Reject
-                                    </button>
+                                    @if($isPlanningManagerUser)
+                                        <form method="POST" action="{{ route('material-requests.planning-approve', $mr->id) }}">
+                                            @csrf
+                                            <button type="submit" class="btn btn-sm btn-success"><i class="fas fa-check me-1"></i> Approve</button>
+                                        </form>
+                                        <button type="button" class="btn btn-sm btn-danger shadow-xs fw-semibold" onclick="openRejectQueueModal('mr', {{ $mr->id }}, '{{ addslashes($mr->reference_number) }}', 'planning')" title="Reject Emergency Request (Planning Manager)">
+                                            <i class="fas fa-times me-1"></i> Reject
+                                        </button>
+                                    @elseif($isGlobalAdmin || $isAdmin)
+                                        <span class="badge bg-secondary-subtle text-secondary border px-2 py-1" style="font-size: 11px;" title="Planning Manager decision required. Global Admin view-only.">
+                                            <i class="fas fa-user-clock me-1"></i> Planning Manager Decision Required
+                                        </span>
+                                    @else
+                                        <span class="badge bg-light text-muted border px-2 py-1" style="font-size: 11px;">
+                                            <i class="fas fa-lock me-1"></i> Planning Manager Only
+                                        </span>
+                                    @endif
                                     @if($isGlobalAdmin)
                                     <button type="button" class="btn btn-sm btn-outline-danger" title="Delete MR (Admin Only)" onclick="openDeleteQueueMrModal({{ $mr->id }}, '{{ addslashes($mr->reference_number) }}')">
                                         <i class="fas fa-trash-can"></i>
@@ -644,7 +655,7 @@
                                         @endif
 
                                         {{-- Planning Role Action & Reject for Material Request --}}
-                                        @if(($isPlanningUser || $isGlobalAdmin || $isAdmin) && ($mr->planning_approval_status === 'pending' || $mr->status === 'pending'))
+                                        @if($isPlanningManagerUser && ($mr->planning_approval_status === 'pending' || $mr->status === 'pending'))
                                             <form method="POST" action="{{ route('material-requests.planning-approve', $mr->id) }}" class="d-inline">
                                                 @csrf
                                                 <button type="submit" class="btn btn-sm btn-success fw-bold shadow-xs">
@@ -653,9 +664,13 @@
                                             </form>
                                             <button type="button" class="btn btn-sm btn-danger shadow-xs fw-semibold"
                                                     onclick="openRejectQueueModal('mr', {{ $mr->id }}, '{{ addslashes($mr->reference_number) }}', 'planning')"
-                                                    title="Reject Material Request (Planning)">
+                                                    title="Reject Material Request (Planning Manager)">
                                                 <i class="fas fa-times me-1"></i> Reject
                                             </button>
+                                        @elseif(($isGlobalAdmin || $isAdmin || $isPlanningUser) && ($mr->planning_approval_status === 'pending' || $mr->status === 'pending'))
+                                            <span class="badge bg-secondary-subtle text-secondary border px-2 py-1" style="font-size: 11px;">
+                                                <i class="fas fa-user-clock me-1"></i> Planning Manager Decision Required
+                                            </span>
                                         @endif
 
                                         {{-- Coordinator Role Action & Reject for Material Request --}}
@@ -736,12 +751,13 @@
                                         elseif (in_array($owner, ['gm', 'general_manager']) && $isGmUser) $canActOnThisPr = true;
                                         elseif (in_array($owner, ['finance_head', 'finance', 'finance_manager']) && $isFinanceHeadUser) $canActOnThisPr = true;
                                         elseif (in_array($owner, ['general_service', 'general_services']) && $isGeneralServiceUser) $canActOnThisPr = true;
-                                        elseif ((in_array($owner, ['planning', 'planning_manager', 'planner']) || $pr->status === \App\Models\PurchaseRequest::STATUS_PENDING_PLANNING) && ($isPlanningUser || $isGlobalAdmin || $isAdmin)) $canActOnThisPr = true;
+                                        elseif ((in_array($owner, ['planning', 'planning_manager', 'planner']) || $pr->status === \App\Models\PurchaseRequest::STATUS_PENDING_PLANNING) && $isPlanningManagerUser) $canActOnThisPr = true;
                                         elseif ((in_array($owner, ['coordinator', 'project_coordinator', 'site_coordinator']) || $pr->status === \App\Models\PurchaseRequest::STATUS_PENDING_HR_APPROVAL) && ($isCoordinatorUser || $isGlobalAdmin || $isAdmin)) $canActOnThisPr = true;
                                         elseif ($pr->status === 'draft' && ($authUser && $pr->requested_by === $authUser->id || $isCoordinatorUser || $isGlobalAdmin)) $canActOnThisPr = true;
                                     }
                                 }
-                                $isPrPlanningActionable = ($pr->status === \App\Models\PurchaseRequest::STATUS_PENDING_PLANNING || in_array($pr->current_owner_role, ['planning', 'planning_manager'])) && ($isPlanningUser || $isGlobalAdmin || $isAdmin);
+                                $isPrPlanningActionable = ($pr->status === \App\Models\PurchaseRequest::STATUS_PENDING_PLANNING || in_array($pr->current_owner_role, ['planning', 'planning_manager'])) && $isPlanningManagerUser;
+                                $isPrPlanningPending = ($pr->status === \App\Models\PurchaseRequest::STATUS_PENDING_PLANNING || in_array($pr->current_owner_role, ['planning', 'planning_manager']));
                                 $isPrCoordinatorActionable = ($pr->status === \App\Models\PurchaseRequest::STATUS_PENDING_HR_APPROVAL || in_array($pr->current_owner_role, ['coordinator', 'project_coordinator', 'site_coordinator']) || ($pr->status === 'draft' && ($isCoordinatorUser || $isGlobalAdmin))) && ($isCoordinatorUser || $isGlobalAdmin || $isAdmin);
                             @endphp
                             <tr class="{{ $pr->is_office_request && $pr->status === 'pending_hr_approval' ? 'table-warning bg-opacity-25' : '' }}">
@@ -858,6 +874,10 @@
                                                     title="Reject Purchase Request (Planning Manager)">
                                                 <i class="fas fa-times me-1"></i> Reject
                                             </button>
+                                        @elseif($isPrPlanningPending && ($isGlobalAdmin || $isAdmin || $isPlanningUser))
+                                            <span class="badge bg-secondary-subtle text-secondary border px-2 py-1" style="font-size: 11px;">
+                                                <i class="fas fa-user-clock me-1"></i> Planning Manager Decision Required
+                                            </span>
                                         @elseif($isPrCoordinatorActionable)
                                             <form method="POST" action="{{ route('purchase-requests.coordinator-approve', $pr->id) }}" class="d-inline">
                                                 @csrf

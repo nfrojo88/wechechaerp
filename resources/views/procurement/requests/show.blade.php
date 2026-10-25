@@ -59,9 +59,13 @@
             </form>
         @endif
         
-        {{-- Planning Manager / Team Action --}}
+        {{-- Planning Manager Action --}}
         @if(in_array($materialRequest->status, ['pending_planning', 'submitted']))
-            @if(auth()->user()->hasAnyRole(['planning_manager', 'Planning Manager', 'planning_team', 'admin', 'global_admin']) || auth()->user()->can('material_requests.planning_approve'))
+            @php
+                $userRoles = auth()->user() ? auth()->user()->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray() : [];
+                $isPlanMgr = in_array('planning_manager', $userRoles);
+            @endphp
+            @if($isPlanMgr)
             <form method="POST" action="{{ route('material-requests.planning-approve', $materialRequest) }}" class="d-inline">
                 @csrf
                 <button type="submit" class="btn btn-success" onclick="return confirm('Approve request and send to Coordinator?');">
@@ -71,6 +75,10 @@
             <button class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#rejectPlanningModal">
                 <i class="fa-solid fa-xmark me-1"></i> Reject
             </button>
+            @else
+            <span class="badge bg-secondary-subtle text-secondary border px-3 py-2 fw-semibold">
+                <i class="fas fa-user-clock me-1"></i> Awaiting Planning Manager Decision (View Only)
+            </span>
             @endif
         @endif
 

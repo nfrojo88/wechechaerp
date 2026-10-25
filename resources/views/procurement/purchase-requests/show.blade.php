@@ -60,7 +60,8 @@
                 break;
 
             case \App\Models\PurchaseRequest::STATUS_PENDING_PLANNING:
-                $canActOnCurrentStage = $isGlobalAdmin || in_array('planning', $rawUserRoles) || in_array('planning_manager', $rawUserRoles) || in_array('planner', $rawUserRoles);
+                // Only Planning Manager can approve or reject (Global Admin and staff view only)
+                $canActOnCurrentStage = in_array('planning_manager', $rawUserRoles);
                 break;
 
             case \App\Models\PurchaseRequest::STATUS_PENDING_HR_APPROVAL:
@@ -231,6 +232,7 @@
                                 </div>
                             </div>
                         @endif
+                        @if($canActOnCurrentStage)
                         <div class="d-grid gap-2">
                             <form action="{{ route('purchase-requests.planning-approve', $purchaseRequest) }}" method="POST">
                                 @csrf
@@ -252,6 +254,16 @@
                                 </form>
                             </div>
                         </div>
+                        @else
+                        <div class="alert alert-secondary border py-2 px-3 small mb-0">
+                            <div class="fw-bold text-dark mb-1">
+                                <i class="fas fa-user-clock text-primary me-1"></i> Awaiting Planning Manager Decision
+                            </div>
+                            <div class="text-muted">
+                                This request is awaiting approval from the Planning Manager. Global Admin and other staff have view-only access at this stage.
+                            </div>
+                        </div>
+                        @endif
 
                     <!-- STAGE: Coordinator Review & Dispatch -->
                     @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_HR_APPROVAL)

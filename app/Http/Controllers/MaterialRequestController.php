@@ -299,6 +299,12 @@ class MaterialRequestController extends Controller
     // ─── Emergency & Standard MR Approval by Planning Team ──────────────────
     public function planningApprove(MaterialRequest $materialRequest)
     {
+        $user = auth()->user();
+        $roles = $user ? $user->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray() : [];
+        if (!in_array('planning_manager', $roles)) {
+            abort(403, 'Unauthorized: Emergency material requests awaiting planning approval can only be approved by the Planning Manager.');
+        }
+
         Gate::authorize('approvePlanning', $materialRequest);
         $materialRequest->update([
             'planning_approval_status' => 'approved',
@@ -353,11 +359,17 @@ class MaterialRequestController extends Controller
             Log::error("Failed to forward companion PRs to coordinator for MR #{$materialRequest->reference_number}: " . $e->getMessage());
         }
 
-        return back()->with('success', 'Material Request approved by Planning Team and sent to Coordinator.');
+        return back()->with('success', 'Material Request approved by Planning Manager and sent to Coordinator.');
     }
 
     public function planningReject(Request $request, MaterialRequest $materialRequest)
     {
+        $user = auth()->user();
+        $roles = $user ? $user->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray() : [];
+        if (!in_array('planning_manager', $roles)) {
+            abort(403, 'Unauthorized: Emergency material requests awaiting planning approval can only be rejected by the Planning Manager.');
+        }
+
         Gate::authorize('approvePlanning', $materialRequest);
         $request->validate(['rejection_reason' => 'required|string']);
         $materialRequest->update([
@@ -395,7 +407,7 @@ class MaterialRequestController extends Controller
             Log::error("Failed to reject companion PRs for MR #{$materialRequest->reference_number}: " . $e->getMessage());
         }
 
-        return back()->with('success', 'Material Request rejected by Planning Team.');
+        return back()->with('success', 'Material Request rejected by Planning Manager.');
     }
 
     // ─── Dispatch by Coordinator to Store Manager ────────────────────────────

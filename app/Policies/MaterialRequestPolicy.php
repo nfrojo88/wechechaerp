@@ -60,8 +60,9 @@ class MaterialRequestPolicy
 
     public function approvePlanning(User $user, MaterialRequest $mr)
     {
-        return $user->hasAnyRole(['planning_manager', 'Planning Manager', 'planning_team', 'planning', 'Planning', 'planner', 'Planner', 'planning_officer', 'admin', 'global_admin'])
-            || $user->can('material_requests.planning_approve');
+        $roles = $user->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray();
+        // Strictly only Planning Manager can approve/reject planning stage (staff & global admin cannot give decision)
+        return in_array('planning_manager', $roles);
     }
 
     public function dispatchCoordinator(User $user, MaterialRequest $mr)
