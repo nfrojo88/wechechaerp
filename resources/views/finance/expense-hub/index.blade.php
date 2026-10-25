@@ -1435,7 +1435,7 @@
                 </h6>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <form id="quickAddReceiptForm" method="POST" action="{{ route('finance.expense-hub.scan-receipt') }}" enctype="multipart/form-data">
+            <form id="quickAddReceiptForm" method="POST" action="javascript:void(0);" enctype="multipart/form-data" novalidate onsubmit="return false;">
                 @csrf
                 <input type="hidden" name="source_type" id="qarSourceType">
                 <input type="hidden" name="source_id" id="qarSourceId">
@@ -1468,16 +1468,16 @@
                     </div>
 
                     <!-- Drag & Drop Zone (pro.doc Action 1) -->
-                    <div id="qarDropZone" class="border border-2 border-dashed rounded-3 p-4 text-center bg-light cursor-pointer mb-3 position-relative" style="transition: background-color 0.2s, border-color 0.2s;">
+                    <div id="qarDropZone" class="border border-2 border-dashed rounded-3 p-3 text-center bg-light cursor-pointer mb-3 position-relative" style="transition: background-color 0.2s, border-color 0.2s;">
                         <div id="qarDropZonePrompt">
                             <i class="fa-solid fa-cloud-arrow-up fa-2x text-primary mb-2"></i>
-                            <div class="fw-bold text-dark text-xs mb-1">Drag &amp; drop receipt file here</div>
-                            <div class="text-xxs text-muted mb-2.5">Accepts JPG, PNG, PDF (Max 10 MB)</div>
+                            <div class="fw-bold text-dark text-xs mb-1">Drag &amp; drop receipt file here or click to browse</div>
+                            <div class="text-xxs text-muted mb-2.5">Accepts JPG, PNG, WEBP, PDF (Max 10 MB)</div>
                             <div class="d-flex justify-content-center gap-2">
-                                <button type="button" class="btn btn-xs btn-primary px-3 shadow-xs" onclick="document.getElementById('qarFileInput').click()">
+                                <button type="button" class="btn btn-xs btn-primary px-3 shadow-xs" onclick="document.getElementById('qarFileInput').click(); event.stopPropagation();">
                                     <i class="fa-solid fa-folder-open me-1"></i> Choose File
                                 </button>
-                                <button type="button" class="btn btn-xs btn-outline-secondary px-3" onclick="document.getElementById('qarCameraInput').click()">
+                                <button type="button" class="btn btn-xs btn-outline-secondary px-3" onclick="document.getElementById('qarCameraInput').click(); event.stopPropagation();">
                                     <i class="fa-solid fa-camera me-1"></i> Take Photo
                                 </button>
                             </div>
@@ -1494,7 +1494,7 @@
                                     <div class="fw-bold text-dark text-xs text-truncate" id="qarFileName">file.jpg</div>
                                     <div class="text-xxs text-muted" id="qarFileSize">0 KB</div>
                                 </div>
-                                <button type="button" class="btn btn-xs btn-outline-danger" onclick="clearSelectedFile()">
+                                <button type="button" class="btn btn-xs btn-outline-danger" onclick="clearSelectedFile(); event.stopPropagation();">
                                     <i class="fa-solid fa-trash-can"></i>
                                 </button>
                             </div>
@@ -1503,6 +1503,60 @@
                         <!-- Hidden File Inputs -->
                         <input type="file" name="receipt_file" id="qarFileInput" class="d-none" accept=".jpg,.jpeg,.png,.webp,.pdf">
                         <input type="file" id="qarCameraInput" class="d-none" accept="image/*" capture="environment">
+                    </div>
+
+                    <!-- Receipt Metadata & Fast Tax Treatment Fields -->
+                    <div class="card border rounded-3 p-2.5 mb-3 bg-white">
+                        <div class="fw-bold text-muted text-xxs text-uppercase mb-2">
+                            <i class="fa-solid fa-receipt me-1 text-primary"></i> Receipt Details (Optional for Direct Save)
+                        </div>
+                        <div class="row g-2 mb-2">
+                            <div class="col-4">
+                                <label class="form-label text-xxs text-muted mb-1">FS No #:</label>
+                                <input type="text" id="qarFsNo" class="form-control form-control-sm text-xs font-monospace" placeholder="e.g. FS-94821">
+                            </div>
+                            <div class="col-4">
+                                <label class="form-label text-xxs text-muted mb-1">MRC Code:</label>
+                                <input type="text" id="qarMrcNo" class="form-control form-control-sm text-xs font-monospace" placeholder="e.g. EFP00123" maxlength="30">
+                            </div>
+                            <div class="col-4">
+                                <label class="form-label text-xxs text-muted mb-1">Vendor TIN:</label>
+                                <input type="text" id="qarTin" class="form-control form-control-sm text-xs font-monospace" placeholder="10 digits" maxlength="15">
+                            </div>
+                        </div>
+                        <div class="row g-2 mb-2">
+                            <div class="col-7">
+                                <label class="form-label text-xxs text-muted mb-1">Seller / Merchant Name:</label>
+                                <input type="text" id="qarSellerName" class="form-control form-control-sm text-xs" placeholder="Vendor / Store name">
+                            </div>
+                            <div class="col-5">
+                                <label class="form-label text-xxs text-muted mb-1">Receipt Date:</label>
+                                <input type="date" id="qarReceiptDate" class="form-control form-control-sm text-xs">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="form-label text-xxs text-muted mb-1 d-block">Tax Treatment:</label>
+                            <div class="d-flex gap-3 flex-wrap">
+                                <div class="form-check form-check-inline mb-0">
+                                    <input class="form-check-input" type="radio" name="qar_tax_treatment" id="qarOptVat" value="vat_applies">
+                                    <label class="form-check-label text-xs fw-semibold text-success" for="qarOptVat">
+                                        <i class="fa-solid fa-percent me-0.5"></i> 15% VAT Applies
+                                    </label>
+                                </div>
+                                <div class="form-check form-check-inline mb-0">
+                                    <input class="form-check-input" type="radio" name="qar_tax_treatment" id="qarOptNoVat" value="no_vat">
+                                    <label class="form-check-label text-xs text-muted" for="qarOptNoVat">
+                                        0% Non-VAT / TAS
+                                    </label>
+                                </div>
+                                <div class="form-check form-check-inline mb-0">
+                                    <input class="form-check-input" type="radio" name="qar_tax_treatment" id="qarOptPending" value="pending_decision" checked>
+                                    <label class="form-check-label text-xs text-warning fw-semibold" for="qarOptPending">
+                                        <i class="fa-solid fa-clock me-0.5"></i> Keep Pending Decision
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Upload & OCR Progress Bar (pro.doc Action 1) -->
@@ -1523,18 +1577,21 @@
                     </div>
 
                     <div class="text-xxs text-muted d-flex align-items-center gap-1.5">
-                        <i class="fa-solid fa-wand-magic-sparkles text-primary"></i>
-                        <span>Uploading runs AI OCR automatically and transitions into Side-by-Side Review (Action 6).</span>
+                        <i class="fa-solid fa-circle-info text-primary"></i>
+                        <span>You can <strong>Save Receipt</strong> directly or click <strong>Scan with AI OCR</strong> to auto-extract fields.</span>
                     </div>
                 </div>
-                <div class="modal-footer bg-light py-2 d-flex justify-content-between">
+                <div class="modal-footer bg-light py-2 d-flex justify-content-between flex-wrap gap-2">
                     <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <div class="d-flex gap-2">
+                    <div class="d-flex gap-2 flex-wrap">
                         <button type="button" class="btn btn-sm btn-outline-secondary" id="btnQarManualReview" onclick="openManualReviewFromQar()">
-                            Skip OCR &amp; Review Manually
+                            Side-by-Side Studio
                         </button>
-                        <button type="submit" class="btn btn-sm btn-primary px-3 shadow-xs" id="qarSubmitBtn">
-                            <i class="fa-solid fa-wand-magic-sparkles me-1"></i> Upload &amp; Scan OCR
+                        <button type="button" class="btn btn-sm btn-outline-primary px-3 shadow-xs" id="qarSubmitBtn" onclick="uploadAndScanQarFile()">
+                            <i class="fa-solid fa-wand-magic-sparkles me-1"></i> Scan with AI OCR
+                        </button>
+                        <button type="button" class="btn btn-sm btn-success px-3 shadow-xs fw-semibold" id="btnQarSaveDirect" onclick="saveQuickAddReceiptDirect()">
+                            <i class="fa-solid fa-floppy-disk me-1"></i> Save Receipt
                         </button>
                     </div>
                 </div>
@@ -2709,6 +2766,7 @@ function openAddReceiptAction(arg1, arg2, buttonEl) {
         setVal('qarSellerName', item.payee_supplier || '');
         setVal('qarTin', item.tin || '');
         setVal('qarFsNo', item.fs_no || '');
+        setVal('qarMrcNo', item.mrc_no || '');
 
         const rDate = document.getElementById('qarReceiptDate');
         if (rDate) {
@@ -2716,7 +2774,15 @@ function openAddReceiptAction(arg1, arg2, buttonEl) {
         }
 
         const fileInput = document.getElementById('qarFileInput');
-        if (fileInput) fileInput.value = '';
+        if (fileInput) {
+            fileInput.value = '';
+            fileInput.removeAttribute('required');
+        }
+        selectedQarFile = null;
+        if (typeof clearSelectedFile === 'function') {
+            clearSelectedFile();
+        }
+
         const spinner = document.getElementById('qarOcrSpinner');
         if (spinner) spinner.classList.add('d-none');
         const resultBox = document.getElementById('qarOcrResult');
@@ -2724,6 +2790,10 @@ function openAddReceiptAction(arg1, arg2, buttonEl) {
             resultBox.classList.add('d-none');
             resultBox.innerHTML = '';
         }
+        const duplicateAlert = document.getElementById('qarDuplicateAlert');
+        if (duplicateAlert) duplicateAlert.classList.add('d-none');
+        const progressContainer = document.getElementById('qarProgressContainer');
+        if (progressContainer) progressContainer.classList.add('d-none');
 
         const alertBox = document.getElementById('qarCurrentReceiptAlert');
         const alertLink = document.getElementById('qarCurrentReceiptLink');
@@ -2734,21 +2804,21 @@ function openAddReceiptAction(arg1, arg2, buttonEl) {
                     ? rUrl
                     : ('{{ asset("storage") }}/' + rUrl.replace(/^\/+/, ''));
                 alertBox.classList.remove('d-none');
-                if (fileInput) fileInput.removeAttribute('required');
             } else {
                 alertBox.classList.add('d-none');
-                if (fileInput) fileInput.setAttribute('required', 'required');
             }
         }
 
         const optVat = document.getElementById('qarOptVat');
         const optNoVat = document.getElementById('qarOptNoVat');
-        if (optVat && optNoVat) {
-            if (item.vat_status === 'vat_applies') {
-                optVat.checked = true;
-            } else {
-                optNoVat.checked = true;
-            }
+        const optPending = document.getElementById('qarOptPending');
+        if (item.vat_status === 'vat_applies') {
+            if (optVat) optVat.checked = true;
+        } else if (item.vat_status === 'no_vat') {
+            if (optNoVat) optNoVat.checked = true;
+        } else {
+            if (optPending) optPending.checked = true;
+            else if (optVat) optVat.checked = true;
         }
 
         showModalSafe('quickAddReceiptModal');
@@ -4102,6 +4172,12 @@ function setupQuickAddReceiptDragAndDrop() {
 
     if (!dropZone) return;
 
+    // Dropzone click opens file selector when clicking outside buttons
+    dropZone.addEventListener('click', function(e) {
+        if (e.target.closest('button') || e.target.closest('input')) return;
+        if (fileInput) fileInput.click();
+    });
+
     ['dragenter', 'dragover'].forEach(eventName => {
         dropZone.addEventListener(eventName, function(e) {
             e.preventDefault();
@@ -4147,7 +4223,7 @@ function setupQuickAddReceiptDragAndDrop() {
     if (form) {
         form.addEventListener('submit', function(e) {
             e.preventDefault();
-            uploadAndScanQarFile();
+            return false;
         });
     }
 }
@@ -4225,12 +4301,13 @@ function openManualReviewFromQar() {
 function uploadAndScanQarFile() {
     const existingPath = document.getElementById('qarExistingPath')?.value;
     if (!selectedQarFile && !existingPath) {
-        alert('Please choose or drop a receipt file to attach.');
+        alert('Please choose or drop a receipt file to scan.');
         return;
     }
 
     const progressContainer = document.getElementById('qarProgressContainer');
     const submitBtn = document.getElementById('qarSubmitBtn');
+    const saveDirectBtn = document.getElementById('btnQarSaveDirect');
     const duplicateAlert = document.getElementById('qarDuplicateAlert');
     const originalHtml = submitBtn ? submitBtn.innerHTML : '';
 
@@ -4240,6 +4317,7 @@ function uploadAndScanQarFile() {
         submitBtn.disabled = true;
         submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Scanning with AI OCR...';
     }
+    if (saveDirectBtn) saveDirectBtn.disabled = true;
 
     const fd = new FormData();
     if (selectedQarFile) {
@@ -4258,35 +4336,58 @@ function uploadAndScanQarFile() {
         headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
         body: fd
     })
-    .then(r => r.json())
+    .then(r => r.json().then(data => ({ ok: r.ok, status: r.status, body: data })).catch(() => ({ ok: r.ok, status: r.status, body: null })))
     .then(res => {
         if (progressContainer) progressContainer.classList.add('d-none');
         if (submitBtn) {
             submitBtn.disabled = false;
             submitBtn.innerHTML = originalHtml;
         }
+        if (saveDirectBtn) saveDirectBtn.disabled = false;
+
+        if (!res.ok || !res.body || res.body.success === false) {
+            const msg = res.body?.message || 'OCR processing could not read the receipt or an error occurred.';
+            showHubToast('OCR Unavailable', msg, 'warning');
+            hideModalSafe('quickAddReceiptModal');
+            setTimeout(() => {
+                sbsCurrentItem = currentEditingItem;
+                sbsRotation = 0;
+                populateSideBySideModal(currentEditingItem, null);
+                showModalSafe('ocrSideBySideReviewModal');
+            }, 350);
+            return;
+        }
+
+        const data = res.body;
 
         // Action 1 Duplicate Check
-        if (res.is_duplicate) {
+        if (data.is_duplicate) {
             if (duplicateAlert) {
                 duplicateAlert.classList.remove('d-none');
-                document.getElementById('qarDuplicateMsg').textContent = res.duplicate_message || 'Duplicate receipt warning.';
+                document.getElementById('qarDuplicateMsg').textContent = data.duplicate_message || 'Duplicate receipt warning.';
             }
         }
 
         // Update current editing item with receipt path
-        if (res.file_path && currentEditingItem) {
-            currentEditingItem.receipt_url = res.file_path;
+        if (data.file_path && currentEditingItem) {
+            currentEditingItem.receipt_url = data.file_path;
         }
 
+        // Pre-fill local fields as well
+        if (data.fs_no) { const el = document.getElementById('qarFsNo'); if (el) el.value = data.fs_no; }
+        if (data.supplier_tin) { const el = document.getElementById('qarTin'); if (el) el.value = data.supplier_tin; }
+        if (data.mrc_no) { const el = document.getElementById('qarMrcNo'); if (el) el.value = data.mrc_no; }
+        if (data.vendor_name) { const el = document.getElementById('qarSellerName'); if (el) el.value = data.vendor_name; }
+        if (data.receipt_date) { const el = document.getElementById('qarReceiptDate'); if (el) el.value = data.receipt_date; }
+
         // Store last OCR result and smoothly transition into Action 6 Side-by-Side Review
-        lastOcrResult = res;
+        lastOcrResult = data;
         hideModalSafe('quickAddReceiptModal');
 
         setTimeout(() => {
             sbsCurrentItem = currentEditingItem;
             sbsRotation = 0;
-            populateSideBySideModal(currentEditingItem, res);
+            populateSideBySideModal(currentEditingItem, data);
             showModalSafe('ocrSideBySideReviewModal');
             showHubToast('AI OCR Finished', 'Review extracted fields and confirm classification.', 'success');
         }, 350);
@@ -4297,7 +4398,8 @@ function uploadAndScanQarFile() {
             submitBtn.disabled = false;
             submitBtn.innerHTML = originalHtml;
         }
-        // Fallback per pro.doc Action 1: Never block, open Action 6 with empty fields
+        if (saveDirectBtn) saveDirectBtn.disabled = false;
+        console.error('OCR Error:', err);
         hideModalSafe('quickAddReceiptModal');
         setTimeout(() => {
             sbsCurrentItem = currentEditingItem;
@@ -4306,6 +4408,134 @@ function uploadAndScanQarFile() {
             showModalSafe('ocrSideBySideReviewModal');
             showHubToast('Manual Review', 'OCR request was unavailable. You can enter fields manually.', 'warning');
         }, 350);
+    });
+}
+
+function saveQuickAddReceiptDirect() {
+    if (!currentEditingItem) {
+        alert('No expense row selected. Please close and re-open from an expense row.');
+        return;
+    }
+
+    const existingPath = document.getElementById('qarExistingPath')?.value || currentEditingItem.receipt_url || '';
+    if (!selectedQarFile && !existingPath) {
+        alert('Please choose or drag & drop a receipt file before saving.');
+        return;
+    }
+
+    const fsNo = document.getElementById('qarFsNo')?.value.trim() || '';
+    const tin = document.getElementById('qarTin')?.value.trim() || '';
+    const mrcNo = document.getElementById('qarMrcNo')?.value.trim() || '';
+    const sellerName = document.getElementById('qarSellerName')?.value.trim() || '';
+    const receiptDate = document.getElementById('qarReceiptDate')?.value || '';
+
+    let vatStatus = 'pending_decision';
+    const optVat = document.getElementById('qarOptVat');
+    const optNoVat = document.getElementById('qarOptNoVat');
+    const optPending = document.getElementById('qarOptPending');
+
+    if (optVat && optVat.checked) {
+        vatStatus = 'vat_applies';
+    } else if (optNoVat && optNoVat.checked) {
+        vatStatus = 'no_vat';
+    } else if (optPending && optPending.checked) {
+        vatStatus = 'pending_decision';
+    }
+
+    // Client-side compliance validation if claiming 15% VAT
+    if (vatStatus === 'vat_applies') {
+        const tinDigits = tin.replace(/\D/g, '');
+        let missing = [];
+        if (!fsNo) missing.push('Fiscal Receipt No (FS #)');
+        if (!mrcNo) missing.push('Machine Reg Code (MRC Code)');
+        if (!tin) missing.push('Vendor TIN');
+        else if (tinDigits.length !== 10) missing.push('Valid 10-digit Vendor TIN');
+
+        if (missing.length > 0) {
+            alert('Cannot record as 15% VAT: Missing required tax fields:\n• ' + missing.join('\n• ') +
+                  '\n\nTip: You can use "Scan with AI OCR" to automatically extract these, or choose "Keep Pending Decision" to attach the receipt file now.');
+            return;
+        }
+    }
+
+    const saveBtn = document.getElementById('btnQarSaveDirect');
+    const scanBtn = document.getElementById('qarSubmitBtn');
+    const origHtml = saveBtn ? saveBtn.innerHTML : '';
+
+    if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Saving...';
+    }
+    if (scanBtn) scanBtn.disabled = true;
+
+    const fd = new FormData();
+    fd.append('source_type', currentEditingItem.source_type);
+    fd.append('source_id', currentEditingItem.source_id);
+    fd.append('amount', currentEditingItem.amount || 0);
+    fd.append('vat_status', vatStatus);
+    fd.append('custom_fs_no', fsNo);
+    fd.append('custom_seller_tin', tin);
+    fd.append('custom_mrc_no', mrcNo);
+    fd.append('custom_seller_name', sellerName || currentEditingItem.payee_supplier || '');
+    fd.append('custom_receipt_date', receiptDate || '');
+    fd.append('reference_no', currentEditingItem.reference_no || '');
+    fd.append('payee_supplier', sellerName || currentEditingItem.payee_supplier || '');
+    fd.append('is_inclusive', '1');
+    fd.append('vat_rate', vatStatus === 'vat_applies' ? '15.00' : '0.00');
+    fd.append('purc_type', currentEditingItem.purc_type || 'PUR_GD');
+
+    if (selectedQarFile) {
+        fd.append('receipt_file', selectedQarFile);
+    } else if (existingPath) {
+        fd.append('receipt_path', existingPath);
+    }
+
+    fd.append('_token', '{{ csrf_token() }}');
+
+    fetch("{{ route('finance.expense-hub.decision') }}", {
+        method: 'POST',
+        headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
+        body: fd
+    })
+    .then(r => r.json().then(data => ({ ok: r.ok, status: r.status, body: data })).catch(() => ({ ok: r.ok, status: r.status, body: null })))
+    .then(res => {
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = origHtml;
+        }
+        if (scanBtn) scanBtn.disabled = false;
+
+        if (!res.ok || !res.body || res.body.success === false) {
+            const errMsg = res.body?.message || 'Failed to save receipt. Please check required fields.';
+            const duplicateAlert = document.getElementById('qarDuplicateAlert');
+            if (res.body?.is_duplicate && duplicateAlert) {
+                duplicateAlert.classList.remove('d-none');
+                document.getElementById('qarDuplicateMsg').textContent = errMsg;
+            } else {
+                alert(errMsg);
+            }
+            return;
+        }
+
+        const data = res.body;
+
+        // Update local object & table
+        if (data.item) {
+            Object.assign(currentEditingItem, data.item);
+            updateRowAndSummaryInPage(data.item, data.summary);
+        }
+
+        hideModalSafe('quickAddReceiptModal');
+        showHubToast('Receipt Saved', data.message || 'Receipt attached and saved successfully.', 'success');
+    })
+    .catch(err => {
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = origHtml;
+        }
+        if (scanBtn) scanBtn.disabled = false;
+        console.error('Save Receipt Error:', err);
+        alert('An unexpected network or server error occurred while saving the receipt. Please try again.');
     });
 }
 
