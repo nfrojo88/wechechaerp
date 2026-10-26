@@ -5192,17 +5192,25 @@ class FinanceTaxReportController extends Controller
                 }
             }
 
-            // 2. Resolve parent Receipt (numeric, REC-xx, or receipt_number)
-            if (!$receipt) {
-                $candReceiptIds = array_values(array_filter([$rawReceiptId, $rawId]));
+            // 2. Resolve parent Receipt (numeric, REC-xx, receipt_number, or fs_no)
+            if (!$receipt && Schema::hasTable('receipts')) {
+                $candReceiptIds = array_values(array_filter([$rawReceiptId, $rawId, $rawRequestNumber, $rawFsNo]));
                 foreach ($candReceiptIds as $crid) {
                     $cleanRId = preg_replace('/^REC-/i', '', (string)$crid);
-                    if (is_numeric($cleanRId) && Schema::hasTable('receipts')) {
+                    if (is_numeric($cleanRId)) {
                         $receipt = \App\Models\Receipt::find($cleanRId);
                         if ($receipt) break;
                     }
-                    if (Schema::hasTable('receipts')) {
-                        $receipt = \App\Models\Receipt::where('receipt_number', (string)$crid)->first();
+                    $receipt = \App\Models\Receipt::where('receipt_number', (string)$crid)->first();
+                    if ($receipt) break;
+
+                    // Match by fs_no or fs_no_raw (e.g. fs00016028 or 00016028)
+                    $cleanFs = preg_replace('/\D/', '', (string)$crid);
+                    if (!empty($cleanFs)) {
+                        $receipt = \App\Models\Receipt::where('fs_no', $cleanFs)
+                            ->orWhere('fs_no_raw', (string)$crid)
+                            ->orWhere('fs_no', (string)$crid)
+                            ->first();
                         if ($receipt) break;
                     }
                 }
@@ -5210,7 +5218,7 @@ class FinanceTaxReportController extends Controller
 
             // 3. Resolve ExpenseRequest (EXP-xx, numeric id, or request_number)
             if (Schema::hasTable('expense_requests')) {
-                $candExpIds = array_values(array_filter([$rawExpenseReqId, $rawReceiptId, $rawId]));
+                $candExpIds = array_values(array_filter([$rawExpenseReqId, $rawReceiptId, $rawId, $rawRequestNumber]));
                 foreach ($candExpIds as $ceid) {
                     if (preg_match('/^EXP-(\d+)$/i', (string)$ceid, $mExp)) {
                         $expReq = \App\Models\ExpenseRequest::find($mExp[1]);
@@ -5225,7 +5233,12 @@ class FinanceTaxReportController extends Controller
                     }
                 }
                 if (!$expReq && !empty($rawRequestNumber)) {
-                    $expReq = \App\Models\ExpenseRequest::where('request_number', (string)$rawRequestNumber)->first();
+                    $expReq = \App\Models\ExpenseRequest::where('request_number', (string)$rawRequestNumber)
+                        ->orWhere('payment_reference', 'like', '%' . $rawRequestNumber . '%')
+                        ->first();
+                    if (!$expReq && preg_match('/(\d{4,10})/', (string)$rawRequestNumber, $mDigits)) {
+                        $expReq = \App\Models\ExpenseRequest::where('payment_reference', 'like', '%' . $mDigits[1] . '%')->first();
+                    }
                 }
 
                 if (!$receipt && $expReq) {
@@ -5250,7 +5263,11 @@ class FinanceTaxReportController extends Controller
                 }
                 if (!$procPayment && !empty($rawRequestNumber)) {
                     $procPayment = \App\Models\ProcurementPayment::where('notes', 'like', '%' . $rawRequestNumber . '%')
-                        ->orWhereHas('purchaseRequest', fn($pq) => $pq->where('request_number', $rawRequestNumber))
+                        ->orWhereHas('purchaseRequest', function ($pq) use ($rawRequestNumber) {
+                            if (Schema::hasColumn('purchase_requests', 'pr_no')) {
+                                $pq->where('pr_no', $rawRequestNumber);
+                            }
+                        })
                         ->first();
                 }
                 if (!$receipt && $procPayment) {
@@ -5300,12 +5317,17 @@ class FinanceTaxReportController extends Controller
             }
 
             // 7. Resolve via fs_no match in Receipts
-            if (!$receipt && !empty($rawFsNo) && Schema::hasTable('receipts')) {
-                $cleanFs = preg_replace('/\D/', '', (string)$rawFsNo);
-                if (!empty($cleanFs)) {
-                    $receipt = \App\Models\Receipt::where('fs_no', $cleanFs)
-                        ->orWhere('fs_no_raw', (string)$rawFsNo)
-                        ->first();
+            if (!$receipt && Schema::hasTable('receipts')) {
+                $candFsList = array_values(array_filter([$rawFsNo, $rawRequestNumber, $rawReceiptId, $rawId]));
+                foreach ($candFsList as $cFs) {
+                    $cleanFs = preg_replace('/\D/', '', (string)$cFs);
+                    if (!empty($cleanFs)) {
+                        $receipt = \App\Models\Receipt::where('fs_no', $cleanFs)
+                            ->orWhere('fs_no_raw', (string)$cFs)
+                            ->orWhere('fs_no', (string)$cFs)
+                            ->first();
+                        if ($receipt) break;
+                    }
                 }
             }
 
