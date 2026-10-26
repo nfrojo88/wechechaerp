@@ -181,6 +181,7 @@ class ExpenseRequestController extends Controller
         $isGm = str_contains($userRoleNames, 'gm') || $user->hasAnyRole(['gm', 'admin', 'global_admin']);
         $isFinanceHead = str_contains($userRoleNames, 'finance_head') || str_contains($userRoleNames, 'finance_manager') || $user->hasAnyRole(['finance_head', 'admin', 'global_admin']);
         $isFinanceStaff = str_contains($userRoleNames, 'finance') || str_contains($userRoleNames, 'cashier') || str_contains($userRoleNames, 'accountant') || $user->hasAnyRole(['admin', 'global_admin']);
+        $isAdminOrFinanceHead = $isFinanceHead || $user->hasAnyRole(['admin', 'global_admin']);
 
         // Tab selection
         $tab = $request->query('tab', 'my_requests');
@@ -189,16 +190,22 @@ class ExpenseRequestController extends Controller
         }
 
         // Scope to match requests submitted by this user OR assigned to this employee profile OR assigned to this user as finance staff
-        $baseUserScope = function ($q) use ($user, $userEmpId) {
-            $q->where('user_id', $user->id);
-            if ($userEmpId) {
-                $q->orWhere('employee_id', $userEmpId);
+        $baseUserScope = function ($q) use ($user, $userEmpId, $isAdminOrFinanceHead) {
+            if ($isAdminOrFinanceHead) {
+                // Global admin and finance head can see all department requests for processing
+                return;
             }
-            $q->orWhereHas('employee', function ($e) use ($user) {
-                $e->where('user_id', $user->id);
+            $q->where(function ($sub) use ($user, $userEmpId) {
+                $sub->where('user_id', $user->id);
+                if ($userEmpId) {
+                    $sub->orWhere('employee_id', $userEmpId);
+                }
+                $sub->orWhereHas('employee', function ($e) use ($user) {
+                    $e->where('user_id', $user->id);
+                });
+                $sub->orWhere('assigned_finance_staff_id', $user->id)
+                    ->orWhere('finance_staff_id', $user->id);
             });
-            $q->orWhere('assigned_finance_staff_id', $user->id)
-              ->orWhere('finance_staff_id', $user->id);
         };
 
         $filterNonProcurementScope = function ($q) {
@@ -1050,8 +1057,10 @@ class ExpenseRequestController extends Controller
             'withholding_receipt' => 'nullable|file|mimes:jpeg,png,jpg,pdf,webp|max:10240',
             'withholding_receipt_number' => 'nullable|string|max:100',
             'vendor_name'        => 'nullable|string|max:255',
+            'seller_name'        => 'nullable|string|max:255',
             'supplier_tin'       => 'nullable|string|max:20',
             'fs_no'              => 'nullable|string|max:20',
+            'mrc_no'             => 'nullable|string|max:50',
             'receipt_date'       => 'nullable|string|max:30',
             'ocr_subtotal'       => 'nullable|numeric|min:0',
             'ocr_vat_amount'     => 'nullable|numeric|min:0',
@@ -1097,13 +1106,15 @@ class ExpenseRequestController extends Controller
             $vatType = $validated['vat_type'] ?? ($expenseRequest->vat_type ?? 'none');
             $vatRate = isset($validated['vat_rate']) ? (float)$validated['vat_rate'] : (float)($expenseRequest->vat_rate ?? 15.00);
             $hasWithholding = isset($validated['has_withholding']) ? $request->boolean('has_withholding') : (bool)($expenseRequest->has_withholding ?? false);
-            $withholdingRate = 3.00; // Strict 3.00% Withholding Tax per Ethiopian Tax Regulation
-
+            
+            // Respect adjusted withholding rate (2%, 3%, 30%, or custom)
+            $withholdingRate = isset($validated['withholding_rate']) && (float)$validated['withholding_rate'] > 0
+                ? (float)$validated['withholding_rate']
+                : (isset($expenseRequest->withholding_rate) && (float)$expenseRequest->withholding_rate > 0 ? (float)$expenseRequest->withholding_rate : 3.00);
 
             $vatAmount = 0.0;
             $baseAmount = $gross;
             $withholdingAmount = 0.0;
-            $netAmount = $gross;
 
             if ($vatType === 'exclusive') {
                 $vatAmount = round($gross * ($vatRate / 100), 2);
@@ -1112,30 +1123,62 @@ class ExpenseRequestController extends Controller
                 if ($hasWithholding) {
                     $withholdingAmount = round($baseAmount * ($withholdingRate / 100), 2);
                 }
-                $netAmount = $totalGrossWithVat - $withholdingAmount;
             } elseif ($vatType === 'inclusive' || $vatType === 'vat_b') {
                 $baseAmount = round($gross / (1 + ($vatRate / 100)), 2);
                 $vatAmount = round($gross - $baseAmount, 2);
+                $totalGrossWithVat = $gross;
                 if ($hasWithholding) {
                     $withholdingAmount = round($baseAmount * ($withholdingRate / 100), 2);
                 }
-                $netAmount = $gross - $withholdingAmount;
             } else {
                 $baseAmount = $gross;
                 $vatAmount = 0.0;
+                $totalGrossWithVat = $gross;
                 if ($hasWithholding) {
                     $withholdingAmount = round($baseAmount * ($withholdingRate / 100), 2);
                 }
-                $netAmount = $gross - $withholdingAmount;
             }
+
+            // Respect direct user input for VAT amount if supplied
+            if ($request->has('vat_amount') && is_numeric($request->input('vat_amount'))) {
+                $vatAmount = (float)$request->input('vat_amount');
+                if ($vatType === 'exclusive') {
+                    $totalGrossWithVat = $baseAmount + $vatAmount;
+                }
+            }
+
+            // Respect direct user input for Withholding amount if supplied
+            if ($hasWithholding && $request->has('withholding_amount') && is_numeric($request->input('withholding_amount')) && (float)$request->input('withholding_amount') > 0) {
+                $withholdingAmount = (float)$request->input('withholding_amount');
+            } elseif (!$hasWithholding) {
+                $withholdingAmount = 0.0;
+            }
+
+            $calcNet = max(0, $totalGrossWithVat - $withholdingAmount);
 
             // Actual disbursed amount to deduct from funding account
             $disbursedAmount = isset($validated['net_amount']) && (float)$validated['net_amount'] > 0
                 ? (float)$validated['net_amount']
-                : (isset($validated['paid_amount']) && (float)$validated['paid_amount'] > 0 ? (float)$validated['paid_amount'] : $netAmount);
+                : (isset($validated['paid_amount']) && (float)$validated['paid_amount'] > 0 ? (float)$validated['paid_amount'] : $calcNet);
 
             if ($disbursedAmount <= 0) {
-                $disbursedAmount = (float)$expenseRequest->amount;
+                $disbursedAmount = $calcNet > 0 ? $calcNet : (float)$expenseRequest->amount;
+            }
+
+            $fsNoScanned   = trim((string)($request->input('fs_no') ?: ''));
+            $tinScanned    = trim((string)($request->input('supplier_tin') ?: ''));
+            $vendorScanned = trim((string)($request->input('seller_name') ?: ($request->input('vendor_name') ?: '')));
+            $mrcScanned    = trim((string)($request->input('mrc_no') ?: ''));
+            $receiptDateIn = $request->input('receipt_date') ?: now()->toDateString();
+
+            if (!empty($fsNoScanned) && !str_contains($paymentRef, 'FS:')) {
+                $paymentRef .= ' | FS: ' . $fsNoScanned;
+            }
+            if (!empty($tinScanned) && !str_contains($paymentRef, 'TIN:')) {
+                $paymentRef .= ' | TIN: ' . $tinScanned;
+            }
+            if (!empty($mrcScanned) && !str_contains($paymentRef, 'MRC:')) {
+                $paymentRef .= ' | MRC: ' . $mrcScanned;
             }
 
             // 1. Update Expense Request Status & Tax Breakdown
@@ -1146,7 +1189,8 @@ class ExpenseRequestController extends Controller
                 'finance_staff_id'   => $user->id,
                 'payment_reference'  => $paymentRef,
                 'payment_notes'      => $validated['payment_notes'] ?? null,
-                'gross_amount'       => $gross,
+                'amount'             => $baseAmount,
+                'gross_amount'       => $totalGrossWithVat,
                 'vat_type'           => $vatType,
                 'vat_rate'           => $vatRate,
                 'vat_amount'         => $vatAmount,
@@ -1158,6 +1202,14 @@ class ExpenseRequestController extends Controller
                 'withholding_receipt_number' => $request->input('withholding_receipt_number', $expenseRequest->withholding_receipt_number),
                 'net_amount'         => $disbursedAmount,
             ];
+
+            $cleanSeller = trim((string)($request->input('seller_name') ?: $request->input('vendor_name')));
+            if (!empty($cleanSeller)) {
+                $updateData['payee'] = $cleanSeller;
+                if (\Illuminate\Support\Facades\Schema::hasColumn('expense_requests', 'account_name')) {
+                    $updateData['account_name'] = $cleanSeller;
+                }
+            }
 
 
             if (!empty($validated['category'])) {
@@ -1306,80 +1358,154 @@ class ExpenseRequestController extends Controller
 
             DB::commit();
 
-            // If attachment receipt uploaded, auto-sync to central Receipt & ReceiptItem table
-            if (!empty($attachmentUrl)) {
+            // Auto-sync to central Receipt & ReceiptItem table and ExpenseHubVatDecision
+            if (!empty($attachmentUrl) || !empty($fsNoScanned) || !empty($tinScanned) || !empty($vendorScanned) || $vatAmount > 0) {
                 try {
-                    $ocrService = app(\App\Services\ReceiptOcrService::class);
-                    $rawItems   = json_decode($request->input('ocr_items_json'), true) ?: [];
-                    $ocrItems   = [];
+                    $cleanTinDigits = preg_replace('/\D/', '', $tinScanned);
+                    $isTinValid = strlen($cleanTinDigits) === 10;
+                    $isFsValid = !empty($fsNoScanned) && strlen($fsNoScanned) === 8;
 
-                    if (!empty($rawItems) && is_array($rawItems)) {
-                        foreach ($rawItems as $it) {
-                            $qty      = (float)($it['qty'] ?? 1);
-                            $price    = (float)($it['unit_price'] ?? 0);
-                            $totVal   = (float)($it['total_value'] ?? round($qty * $price, 2));
-                            $vatVal   = (float)($it['vat'] ?? round($totVal * 0.15, 2));
-                            $afterVat = (float)($it['value_after_vat'] ?? round($totVal + $vatVal, 2));
+                    $existingReceipt = null;
+                    if (Schema::hasTable('receipts')) {
+                        $existingReceipt = \App\Models\Receipt::where(function ($rq) use ($expenseRequest) {
+                            $rq->whereIn('purchasable_type', [ExpenseRequest::class, 'App\\Models\\ExpenseRequest', 'expense_request', 'expense'])
+                               ->where('purchasable_id', $expenseRequest->id);
+                        })->orWhere('receipt_number', $expenseRequest->request_number)->latest('id')->first();
+                    }
 
+                    if ($existingReceipt) {
+                        $existingReceipt->update([
+                            'vendor_name'  => $vendorScanned ?: ($existingReceipt->vendor_name ?: ($expenseRequest->payee ?: 'Disbursed Vendor')),
+                            'vendor_tin'   => $tinScanned ?: $existingReceipt->vendor_tin,
+                            'tin_valid'    => $isTinValid || $existingReceipt->tin_valid,
+                            'fs_no'        => $fsNoScanned ?: $existingReceipt->fs_no,
+                            'fs_no_raw'    => $fsNoScanned ?: $existingReceipt->fs_no_raw,
+                            'fs_no_valid'  => $isFsValid || $existingReceipt->fs_no_valid,
+                            'mrc_no'       => $mrcScanned ?: $existingReceipt->mrc_no,
+                            'receipt_date' => $receiptDateIn ?: ($existingReceipt->receipt_date ?: now()->toDateString()),
+                            'subtotal'     => $baseAmount,
+                            'vat_amount'   => $vatAmount,
+                            'total_amount' => $totalGrossWithVat,
+                            'file_path'    => $attachmentUrl ?: ($existingReceipt->file_path ?: 'receipts/disbursed-slip.pdf'),
+                            'status'       => 'approved',
+                            'needs_review' => false,
+                        ]);
+                    } else {
+                        $ocrService = app(\App\Services\ReceiptOcrService::class);
+                        $rawItems   = json_decode($request->input('ocr_items_json'), true) ?: [];
+                        $ocrItems   = [];
+
+                        if (!empty($rawItems) && is_array($rawItems)) {
+                            foreach ($rawItems as $it) {
+                                $qty      = (float)($it['qty'] ?? 1);
+                                $price    = (float)($it['unit_price'] ?? 0);
+                                $totVal   = (float)($it['total_value'] ?? round($qty * $price, 2));
+                                $vatVal   = (float)($it['vat'] ?? round($totVal * 0.15, 2));
+                                $afterVat = (float)($it['value_after_vat'] ?? round($totVal + $vatVal, 2));
+
+                                $ocrItems[] = [
+                                    'item_description' => $it['item_description'] ?? ($it['name'] ?? $expenseRequest->description),
+                                    'uom'              => (string)($it['uom'] ?? '9'),
+                                    'qty'              => $qty,
+                                    'unit_price'       => $price,
+                                    'total_value'      => $totVal,
+                                    'vat'              => $vatVal,
+                                    'value_after_vat'  => $afterVat,
+                                ];
+                            }
+                        }
+
+                        if (empty($ocrItems)) {
                             $ocrItems[] = [
-                                'item_description' => $it['item_description'] ?? ($it['name'] ?? $expenseRequest->description),
-                                'uom'              => (string)($it['uom'] ?? '9'),
-                                'qty'              => $qty,
-                                'unit_price'       => $price,
-                                'total_value'      => $totVal,
-                                'vat'              => $vatVal,
-                                'value_after_vat'  => $afterVat,
+                                'item_description' => $expenseRequest->description ?: "Expense Request #{$expenseRequest->request_number}",
+                                'uom'              => '9',
+                                'qty'              => 1.0,
+                                'unit_price'       => $baseAmount,
+                                'total_value'      => $baseAmount,
+                                'vat'              => $vatAmount,
+                                'value_after_vat'  => $totalGrossWithVat,
                             ];
+                        }
+
+                        $scanData = [
+                            'vendor_name'       => $vendorScanned ?: ($expenseRequest->payee ?: ($expenseRequest->applicant_name ?: 'Disbursed Vendor')),
+                            'supplier_tin'      => $tinScanned,
+                            'tin_valid'         => $isTinValid,
+                            'buyer_tin'         => '0038480010',
+                            'fs_no'             => $fsNoScanned,
+                            'fs_no_raw'         => $fsNoScanned,
+                            'fs_no_valid'       => $isFsValid,
+                            'mrc_no'            => $mrcScanned,
+                            'receipt_date_ymd'  => $receiptDateIn,
+                            'subtotal'          => (float)($request->input('ocr_subtotal') ?: $baseAmount),
+                            'vat_amount'        => (float)($request->input('ocr_vat_amount') ?: $vatAmount),
+                            'total_amount'      => (float)($request->input('ocr_total_amount') ?: $totalGrossWithVat),
+                            'currency'          => 'ETB',
+                            'description'       => "Disbursed Expense #{$expenseRequest->request_number}: " . ($expenseRequest->description ?: $expenseRequest->category),
+                            'engine'            => 'OCR / Disburse Payment',
+                            'engine_slug'       => 'expense_disbursement',
+                            'confidence'        => 'high',
+                            'confidence_score'  => 100,
+                            'qc_notes'          => "Auto-synced from Disburse Payment (#{$expenseRequest->request_number})",
+                            'items'             => $ocrItems,
+                            'is_verified'       => true,
+                        ];
+
+                        $createdReceipt = $ocrService->saveReceipt(
+                            $scanData,
+                            $attachmentUrl ?: 'receipts/disbursed-voucher.pdf',
+                            $expenseRequest,
+                            $user->id,
+                            $expenseRequest->project_id ?? null,
+                            $expenseRequest->category ?: 'service'
+                        );
+
+                        if ($createdReceipt && Schema::hasColumn('expense_requests', 'receipt_id')) {
+                            $expenseRequest->update(['receipt_id' => $createdReceipt->id]);
                         }
                     }
 
-                    if (empty($ocrItems)) {
-                        $ocrItems[] = [
-                            'item_description' => $expenseRequest->description ?: "Expense Request #{$expenseRequest->request_number}",
-                            'uom'              => '9',
-                            'qty'              => 1.0,
-                            'unit_price'       => $baseAmount,
-                            'total_value'      => $baseAmount,
-                            'vat'              => $vatAmount,
-                            'value_after_vat'  => $baseAmount + $vatAmount,
-                        ];
+                    // Auto-sync or create ExpenseHubVatDecision
+                    if (Schema::hasTable('expense_hub_vat_decisions')) {
+                        $vatStatusDec = ($vatAmount > 0) ? \App\Models\ExpenseHubVatDecision::STATUS_VAT_APPLIES : \App\Models\ExpenseHubVatDecision::STATUS_NO_VAT;
+                        $noVatReason = ($vatAmount <= 0) ? 'exempt_item' : null;
+                        $noVatNote = ($vatAmount <= 0) ? 'TAS 0% VAT / exempt purchase' : null;
+
+                        \App\Models\ExpenseHubVatDecision::updateOrCreate(
+                            [
+                                'source_type' => 'expense_request',
+                                'source_id'   => $expenseRequest->id,
+                            ],
+                            [
+                                'vat_status'              => $vatStatusDec,
+                                'vat_rate'                => $vatRate,
+                                'is_inclusive'            => ($vatType === 'inclusive' || $vatType === 'vat_b'),
+                                'has_withholding'         => $hasWithholding,
+                                'withholding_rate'        => $hasWithholding ? $withholdingRate : 0.00,
+                                'withholding_amount'      => $withholdingAmount,
+                                'withholding_receipt'     => $withholdingReceiptUrl ?: null,
+                                'withholding_receipt_number' => $request->input('withholding_receipt_number', $expenseRequest->withholding_receipt_number),
+                                'net_payable_amount'      => $disbursedAmount,
+                                'base_amount'             => $baseAmount,
+                                'vat_amount'              => $vatAmount,
+                                'total_amount'            => $totalGrossWithVat,
+                                'no_vat_reason_code'      => $noVatReason,
+                                'no_vat_reason_note'      => $noVatNote,
+                                'custom_seller_name'      => $vendorScanned ?: ($expenseRequest->payee ?: null),
+                                'custom_seller_tin'       => $tinScanned ?: null,
+                                'custom_fs_no'            => $fsNoScanned ?: null,
+                                'custom_mrc_no'           => $mrcScanned ?: null,
+                                'custom_item_description' => $expenseRequest->description ?: "Expense #{$expenseRequest->request_number}",
+                                'custom_receipt_date'     => $receiptDateIn,
+                                'quantity'                => 1.0,
+                                'unit_price'              => $baseAmount,
+                                'receipt_path'            => $attachmentUrl ?: null,
+                                'is_verified_without_receipt' => false,
+                                'decided_by'              => $user->id,
+                                'decided_at'              => now(),
+                            ]
+                        );
                     }
-
-                    $fsNoScanned = trim((string)($request->input('fs_no') ?: ''));
-                    $tinScanned  = trim((string)($request->input('supplier_tin') ?: ''));
-                    $vendorScanned = trim((string)($request->input('vendor_name') ?: ''));
-
-                    $scanData = [
-                        'vendor_name'       => $vendorScanned ?: ($expenseRequest->applicant_name ?: 'Disbursed Vendor'),
-                        'supplier_tin'      => $tinScanned,
-                        'tin_valid'         => !empty($tinScanned) && strlen($tinScanned) === 10,
-                        'buyer_tin'         => '0038480010',
-                        'fs_no'             => $fsNoScanned,
-                        'fs_no_raw'         => $fsNoScanned,
-                        'fs_no_valid'       => !empty($fsNoScanned) && strlen($fsNoScanned) === 8,
-                        'receipt_date_ymd'  => $request->input('receipt_date') ?: now()->toDateString(),
-                        'subtotal'          => (float)($request->input('ocr_subtotal') ?: $baseAmount),
-                        'vat_amount'        => (float)($request->input('ocr_vat_amount') ?: $vatAmount),
-                        'total_amount'      => (float)($request->input('ocr_total_amount') ?: ($baseAmount + $vatAmount)),
-                        'currency'          => 'ETB',
-                        'description'       => "Disbursed Expense #{$expenseRequest->request_number}: " . ($expenseRequest->description ?: $expenseRequest->category),
-                        'engine'            => 'OCR / Disburse Payment',
-                        'engine_slug'       => 'expense_disbursement',
-                        'confidence'        => 'high',
-                        'confidence_score'  => 95,
-                        'qc_notes'          => "Auto-synced from Disburse Payment (#{$expenseRequest->request_number})",
-                        'items'             => $ocrItems,
-                        'is_verified'       => true,
-                    ];
-
-                    $ocrService->saveReceipt(
-                        $scanData,
-                        $attachmentUrl,
-                        $expenseRequest,
-                        $user->id,
-                        $expenseRequest->project_id ?? null,
-                        $expenseRequest->category ?: 'service'
-                    );
                 } catch (\Throwable $oe) {
                     Log::warning("Could not persist linked Receipt for Expense #{$expenseRequest->request_number}: " . $oe->getMessage());
                 }

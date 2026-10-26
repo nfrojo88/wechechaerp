@@ -325,10 +325,16 @@
                                     </button>
                                 @endif
 
-                                {{-- Finance Staff Payment Button --}}
-                                @if($req->status === 'Assigned to Finance' && (auth()->user()->id == ($req->assigned_finance_staff_id ?? $req->finance_staff_id) || $isFinanceHeadUser))
-                                    <button type="button" class="btn btn-sm btn-success fw-bold py-1 px-2" data-bs-toggle="modal" data-bs-target="#markPaidModal{{ $req->id }}">
-                                        <i class="fa-solid fa-money-bill-wave me-1"></i>Process Payment
+                                {{-- Finance Staff / Admin Adjust & Payment Button --}}
+                                @php
+                                    $canPayThisRequest = !in_array($req->status, ['Paid', 'Rejected', \App\Models\ExpenseRequest::STATUS_PAID, \App\Models\ExpenseRequest::STATUS_REJECTED]) && (
+                                        $isFinanceHeadUser ||
+                                        ($req->status === 'Assigned to Finance' && auth()->user()->id == ($req->assigned_finance_staff_id ?? $req->finance_staff_id))
+                                    );
+                                @endphp
+                                @if($canPayThisRequest)
+                                    <button type="button" class="btn btn-sm btn-success fw-bold py-1 px-2" data-bs-toggle="modal" data-bs-target="#markPaidModal{{ $req->id }}" title="Adjust financial amounts, configure VAT/WHT, and disburse payment">
+                                        <i class="fa-solid fa-money-bill-wave me-1"></i>Adjust &amp; Pay
                                     </button>
                                 @endif
 
@@ -799,34 +805,50 @@
     </div>
     @endif
 
-    {{-- Process Payment Modal --}}
-    @if($req->status === 'Assigned to Finance' && (auth()->user()->id == ($req->assigned_finance_staff_id ?? $req->finance_staff_id) || $isFinanceHeadUser))
+    {{-- Adjust & Process Payment Modal --}}
+    @php
+        $canPayThisModal = !in_array($req->status, ['Paid', 'Rejected', \App\Models\ExpenseRequest::STATUS_PAID, \App\Models\ExpenseRequest::STATUS_REJECTED]) && (
+            $isFinanceHeadUser ||
+            ($req->status === 'Assigned to Finance' && auth()->user()->id == ($req->assigned_finance_staff_id ?? $req->finance_staff_id))
+        );
+    @endphp
+    @if($canPayThisModal)
     <div class="modal fade" id="markPaidModal{{ $req->id }}" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
             <div class="modal-content shadow border-0">
                 <form method="POST" action="{{ route('expense-requests.mark-paid', $req->id) }}" enctype="multipart/form-data">
                     @csrf
-                    <input type="hidden" name="coa_id" value="{{ $req->chart_of_account_id ?? $req->coa_id }}">
-                    <div class="modal-header bg-success bg-gradient text-white">
-                        <h5 class="modal-title fw-bold"><i class="fa-solid fa-money-bill-wave me-2"></i>Process Payment — Request #{{ $req->request_number }}</h5>
+                    <div class="modal-header bg-success bg-gradient text-white py-3 px-4">
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                            <h5 class="modal-title fw-bold mb-0">
+                                <i class="fa-solid fa-money-bill-wave me-2"></i>Adjust &amp; Pay — Request #{{ $req->request_number }}
+                            </h5>
+                            <span class="badge bg-white text-success rounded-pill px-2.5 py-1 small fw-bold font-monospace shadow-xs">
+                                <i class="fa-solid fa-lock-open me-1"></i>Adjustment Unlocked
+                            </span>
+                        </div>
                         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-body p-4">
-                        @if(!$req->chart_of_account_id && !$req->coa_id)
-                            <div class="mb-3">
-                                <label class="form-label small fw-bold text-dark"><i class="fa-solid fa-sitemap text-primary me-1"></i>Select Funding Account (COA) <span class="text-danger">*</span></label>
-                                <select name="coa_id" class="form-select form-select-sm" required>
-                                    <option value="">-- Choose Account from COA --</option>
-                                    @foreach($coaBankAccounts ?? ($chartOfAccounts ?? []) as $coaItem)
-                                        <option value="{{ $coaItem->id }}">[{{ $coaItem->code }}] {{ $coaItem->name }} — ETB {{ number_format($coaItem->current_balance ?? 0, 2) }}</option>
-                                    @endforeach
-                                </select>
-                            </div>
-                        @endif
+                        {{-- Funding Account Selector --}}
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-dark mb-1">
+                                <i class="fa-solid fa-sitemap text-primary me-1"></i>Funding Account (COA / Bank Account) <span class="text-danger">*</span>
+                            </label>
+                            <select name="coa_id" class="form-select form-select-sm" required>
+                                <option value="">-- Choose Account from COA --</option>
+                                @foreach($coaBankAccounts ?? ($chartOfAccounts ?? []) as $coaItem)
+                                    <option value="{{ $coaItem->id }}" {{ (old('coa_id', $req->chart_of_account_id ?? $req->coa_id) == $coaItem->id) ? 'selected' : '' }}>
+                                        [{{ $coaItem->code }}] {{ $coaItem->name }} — ETB {{ number_format($coaItem->current_balance ?? 0, 2) }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+
                         <div class="bg-light p-3 rounded-3 mb-3 border">
                             <div class="row g-2 small">
                                 <div class="col-md-6">
-                                    <span class="text-muted">Payee Employee:</span>
+                                    <span class="text-muted">Applicant / Staff:</span>
                                     <strong class="d-block text-dark">{{ $req->user->name ?? 'N/A' }}</strong>
                                 </div>
                                 <div class="col-md-6">
@@ -834,12 +856,12 @@
                                     <strong class="d-block text-dark">{{ $req->category }} @if($req->other_reason)({{ $req->other_reason }})@endif</strong>
                                 </div>
                                 <div class="col-md-6">
-                                    <span class="text-muted">Funding Account (COA):</span>
-                                    <strong class="d-block text-dark">{{ $req->chartOfAccount->name ?? 'N/A' }} ([{{ $req->chartOfAccount->code ?? 'N/A' }}])</strong>
+                                    <span class="text-muted">Current Assigned Status:</span>
+                                    <strong class="d-block text-dark font-monospace">{{ $req->status }}</strong>
                                 </div>
                                 <div class="col-md-6">
-                                    <span class="text-muted">Available Balance:</span>
-                                    <strong class="d-block text-success font-monospace">ETB {{ number_format($req->chartOfAccount->current_balance ?? 0, 2) }}</strong>
+                                    <span class="text-muted">Assigned Finance Staff:</span>
+                                    <strong class="d-block text-dark">{{ $req->assignedFinanceStaff->name ?? ($req->financeStaff->name ?? 'Unassigned / Direct Payment') }}</strong>
                                 </div>
                             </div>
                         </div>
@@ -874,12 +896,17 @@
 
                         {{-- Invoice / Base Amount --}}
                         <div class="mb-3">
-                            <label class="form-label fw-bold small text-dark">Invoice / Base Amount (ETB) <span class="text-danger">*</span></label>
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <label class="form-label fw-bold small text-dark mb-0">
+                                    Invoice Base Amount (ETB) <span class="text-danger">*</span>
+                                </label>
+                                <span class="text-muted small" style="font-size:0.75rem;">Adjust as needed before disbursement</span>
+                            </div>
                             <div class="input-group">
                                 <span class="input-group-text fw-bold bg-light">ETB</span>
                                 <input type="number" step="0.01" min="0.01" name="gross_amount" id="modalGrossAmount{{ $req->id }}" 
                                        class="form-control fw-bold fs-5 text-dark" 
-                                       value="{{ $req->gross_amount ?? $req->amount }}" 
+                                       value="{{ number_format((float)($req->gross_amount ?? $req->amount), 2, '.', '') }}" 
                                        oninput="recalculatePaymentTax({{ $req->id }})" required>
                             </div>
                         </div>
@@ -890,36 +917,70 @@
                                 <strong class="text-primary small text-uppercase">
                                     <i class="fa-solid fa-receipt me-1"></i>Service Tax &amp; Deduction Config (VAT &amp; Withholding)
                                 </strong>
-                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-0">Tax Calculator</span>
+                                <div class="d-flex gap-1">
+                                    <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-2 rounded-pill small" onclick="setModalVatZero({{ $req->id }})" title="Set 0% VAT / TAS Purchase">
+                                        0% VAT (TAS)
+                                    </button>
+                                    <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2 rounded-pill small" onclick="setModalVat15Exclusive({{ $req->id }})" title="Add 15% VAT">
+                                        +15% VAT Added
+                                    </button>
+                                    <button type="button" class="btn btn-xs btn-outline-info py-0 px-2 rounded-pill small" onclick="setModalVat15Inclusive({{ $req->id }})" title="Include 15% VAT (VAT B)">
+                                        15% VAT Included
+                                    </button>
+                                </div>
                             </div>
 
                             <div class="row g-3">
                                 {{-- VAT Option --}}
                                 <div class="col-md-6">
-                                    <label class="form-label small fw-semibold mb-1">VAT Option (ቫት)</label>
-                                    <select name="vat_type" id="modalVatType{{ $req->id }}" class="form-select form-select-sm" onchange="recalculatePaymentTax({{ $req->id }})">
-                                        <option value="none" {{ ($req->vat_type ?? 'none') === 'none' ? 'selected' : '' }}>No VAT (0% / ያለ ቫት)</option>
-                                        <option value="exclusive" {{ ($req->vat_type ?? '') === 'exclusive' ? 'selected' : '' }}>15% VAT Added (+15% ተጨማሪ ቫት)</option>
-                                        <option value="vat_b" {{ in_array(($req->vat_type ?? ''), ['vat_b', 'inclusive']) ? 'selected' : '' }}>15% VAT Included / VAT B (ከቫት 15% ጋር የተካተተ - ቫት ቢ)</option>
-                                    </select>
-                                    <input type="hidden" name="vat_rate" id="modalVatRate{{ $req->id }}" value="{{ $req->vat_rate ?? 15.00 }}">
-                                    <input type="hidden" name="vat_amount" id="modalVatAmount{{ $req->id }}" value="{{ $req->vat_amount ?? 0.00 }}">
+                                    <div class="row g-2">
+                                        <div class="col-7">
+                                            <label class="form-label small fw-semibold mb-1">VAT Type (ቫት)</label>
+                                            <select name="vat_type" id="modalVatType{{ $req->id }}" class="form-select form-select-sm" onchange="recalculatePaymentTax({{ $req->id }})">
+                                                <option value="none" {{ ($req->vat_type ?? 'none') === 'none' ? 'selected' : '' }}>No VAT (0% / TAS)</option>
+                                                <option value="exclusive" {{ ($req->vat_type ?? '') === 'exclusive' ? 'selected' : '' }}>15% VAT Added (+15%)</option>
+                                                <option value="vat_b" {{ in_array(($req->vat_type ?? ''), ['vat_b', 'inclusive']) ? 'selected' : '' }}>15% VAT Included (VAT B)</option>
+                                            </select>
+                                            <input type="hidden" name="vat_rate" id="modalVatRate{{ $req->id }}" value="{{ $req->vat_rate ?? 15.00 }}">
+                                        </div>
+                                        <div class="col-5">
+                                            <label class="form-label small fw-semibold mb-1">VAT Amount (ETB)</label>
+                                            <input type="number" step="0.01" min="0" name="vat_amount" id="modalVatAmount{{ $req->id }}" 
+                                                   class="form-control form-control-sm font-monospace fw-semibold" 
+                                                   value="{{ number_format((float)($req->vat_amount ?? 0), 2, '.', '') }}" 
+                                                   oninput="recalculatePaymentTax({{ $req->id }}, true)">
+                                        </div>
+                                    </div>
                                 </div>
 
                                 {{-- Withholding Tax --}}
                                 <div class="col-md-6">
-                                    <label class="form-label small fw-semibold mb-1">Withholding Tax (የቅድመ ግብር 3%)</label>
-                                    <div class="form-check form-switch mt-1">
-                                        <input class="form-check-input" type="checkbox" role="switch" name="has_withholding" value="1" 
-                                               id="modalWithholdingToggle{{ $req->id }}" 
-                                               {{ ($req->has_withholding ?? false) ? 'checked' : '' }}
-                                               onchange="recalculatePaymentTax({{ $req->id }})">
-                                        <label class="form-check-label small" for="modalWithholdingToggle{{ $req->id }}">
-                                            Apply 3% Service Withholding Deduction
-                                        </label>
+                                    <div class="row g-2">
+                                        <div class="col-7">
+                                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                                <label class="form-label small fw-semibold mb-0">Withholding Tax (WHT)</label>
+                                                <div class="form-check form-switch m-0">
+                                                    <input class="form-check-input" type="checkbox" role="switch" name="has_withholding" value="1" 
+                                                           id="modalWithholdingToggle{{ $req->id }}" 
+                                                           {{ ($req->has_withholding ?? false) ? 'checked' : '' }}
+                                                           onchange="recalculatePaymentTax({{ $req->id }})">
+                                                </div>
+                                            </div>
+                                            <select name="withholding_rate" id="modalWithholdingRate{{ $req->id }}" class="form-select form-select-sm" onchange="recalculatePaymentTax({{ $req->id }})">
+                                                <option value="3.00" {{ (float)($req->withholding_rate ?? 3.00) == 3.00 ? 'selected' : '' }}>3% Services</option>
+                                                <option value="2.00" {{ (float)($req->withholding_rate ?? 0) == 2.00 ? 'selected' : '' }}>2% Goods / Supplies</option>
+                                                <option value="30.00" {{ (float)($req->withholding_rate ?? 0) == 30.00 ? 'selected' : '' }}>30% No TIN / Informal</option>
+                                                <option value="custom">Custom Rate / Manual</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-5">
+                                            <label class="form-label small fw-semibold mb-1">WHT Deduction (ETB)</label>
+                                            <input type="number" step="0.01" min="0" name="withholding_amount" id="modalWithholdingAmount{{ $req->id }}" 
+                                                   class="form-control form-control-sm font-monospace fw-semibold text-danger" 
+                                                   value="{{ number_format((float)($req->withholding_amount ?? 0), 2, '.', '') }}" 
+                                                   oninput="recalculatePaymentTax({{ $req->id }}, true)">
+                                        </div>
                                     </div>
-                                    <input type="hidden" name="withholding_rate" id="modalWithholdingRate{{ $req->id }}" value="{{ $req->withholding_rate ?? 3.00 }}">
-                                    <input type="hidden" name="withholding_amount" id="modalWithholdingAmount{{ $req->id }}" value="{{ $req->withholding_amount ?? 0.00 }}">
                                 </div>
                             </div>
 
@@ -931,15 +992,15 @@
                                         <strong class="text-dark" id="displayBaseAmount{{ $req->id }}">ETB {{ number_format($req->gross_amount ?? $req->amount, 2) }}</strong>
                                     </div>
                                     <div class="col-3 border-end">
-                                        <span class="text-muted d-block" style="font-size:0.75rem;">VAT (15%)</span>
+                                        <span class="text-muted d-block" style="font-size:0.75rem;">VAT (+15%)</span>
                                         <strong class="text-info" id="displayVatAmount{{ $req->id }}">+ ETB {{ number_format($req->vat_amount ?? 0, 2) }}</strong>
                                     </div>
                                     <div class="col-3 border-end">
-                                        <span class="text-muted d-block" style="font-size:0.75rem;">Withholding (3%)</span>
+                                        <span class="text-muted d-block" style="font-size:0.75rem;">Withholding Tax</span>
                                         <strong class="text-danger" id="displayWhtAmount{{ $req->id }}">- ETB {{ number_format($req->withholding_amount ?? 0, 2) }}</strong>
                                     </div>
                                     <div class="col-3">
-                                        <span class="text-muted d-block" style="font-size:0.75rem;">Net Payable</span>
+                                        <span class="text-muted d-block" style="font-size:0.75rem;">Net Disbursed</span>
                                         <strong class="text-success" id="displayNetAmount{{ $req->id }}">ETB {{ number_format($req->net_amount ?? $req->amount, 2) }}</strong>
                                     </div>
                                 </div>
@@ -949,17 +1010,16 @@
                             <div id="withholdingReceiptSection{{ $req->id }}" class="mt-3 p-3 bg-white rounded-3 border border-danger-subtle shadow-sm" style="{{ ($req->has_withholding ?? false) ? '' : 'display:none;' }}">
                                 <div class="d-flex align-items-center justify-content-between mb-2">
                                     <label class="form-label small fw-bold text-danger text-uppercase mb-0">
-                                        <i class="fa-solid fa-file-invoice-dollar me-1"></i>Withholding Tax Receipt / Slip Upload (የቅድመ ግብር ደረሰኝ) <span class="text-danger">*</span>
+                                        <i class="fa-solid fa-file-invoice-dollar me-1"></i>Withholding Tax Receipt / Slip Upload (የቅድመ ግብር ደረሰኝ)
                                     </label>
-                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-0">Required for 3% WHT</span>
+                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-0">WHT Attachment</span>
                                 </div>
                                 <div class="row g-2 align-items-center">
                                     <div class="col-md-7">
                                         <input type="file" name="withholding_receipt" id="modalWithholdingReceipt{{ $req->id }}" 
                                                class="form-control form-control-sm" 
                                                accept="image/jpeg,image/png,image/jpg,application/pdf,image/webp"
-                                               data-has-existing="{{ !empty($req->withholding_receipt) ? '1' : '0' }}"
-                                               {{ ($req->has_withholding ?? false) && empty($req->withholding_receipt) ? 'required' : '' }}>
+                                               data-has-existing="{{ !empty($req->withholding_receipt) ? '1' : '0' }}">
                                         <small class="text-muted" style="font-size:0.75rem;">Upload official Withholding receipt image or PDF.</small>
                                     </div>
                                     <div class="col-md-5">
@@ -976,6 +1036,43 @@
                                         <a href="{{ $req->withholding_receipt_url }}" target="_blank" class="fw-bold text-decoration-underline text-success">View Current Withholding Slip</a>
                                     </div>
                                 @endif
+                            </div>
+                        </div>
+
+                        {{-- Payee & Fiscal Tax Receipt Details (e-Tax / TAS sync) --}}
+                        <div class="card border border-info-subtle bg-white rounded-3 p-3 mb-3 shadow-xs">
+                            <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom">
+                                <strong class="text-info-emphasis small text-uppercase">
+                                    <i class="fa-solid fa-file-invoice me-1"></i>Payee &amp; Fiscal Tax Receipt Details (e-Tax / TAS)
+                                </strong>
+                                <span class="badge bg-info-subtle text-info border border-info-subtle px-2 py-0">Syncs to Tax Audit</span>
+                            </div>
+                            <div class="row g-2">
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-semibold text-muted mb-0">Payee / Vendor Name</label>
+                                    <input type="text" name="seller_name" id="modalSellerName{{ $req->id }}" class="form-control form-control-sm"
+                                           value="{{ $req->payee ?: ($req->account_name ?: ($req->user->name ?? '')) }}" placeholder="e.g. TotalEnergies Ethiopia">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-semibold text-muted mb-0">Seller TIN (10 Digits)</label>
+                                    <input type="text" name="supplier_tin" id="modalSupplierTin{{ $req->id }}" class="form-control form-control-sm font-monospace"
+                                           maxlength="10" placeholder="e.g. 0012345678" value="{{ $req->supplier_tin ?? '' }}">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-semibold text-muted mb-0">Fiscal Receipt # (FS #)</label>
+                                    <input type="text" name="fs_no" id="modalFsNo{{ $req->id }}" class="form-control form-control-sm font-monospace"
+                                           placeholder="e.g. 00012345" value="{{ $req->fs_no ?? '' }}">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-semibold text-muted mb-0">Machine Reg. Code (MRC #)</label>
+                                    <input type="text" name="mrc_no" id="modalMrcNo{{ $req->id }}" class="form-control form-control-sm font-monospace"
+                                           placeholder="e.g. MOR-12345" value="{{ $req->mrc_no ?? '' }}">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-semibold text-muted mb-0">Receipt Date</label>
+                                    <input type="date" name="receipt_date" id="modalReceiptDate{{ $req->id }}" class="form-control form-control-sm"
+                                           value="{{ now()->toDateString() }}">
+                                </div>
                             </div>
                         </div>
 
@@ -1014,7 +1111,7 @@
 
                         <div class="mb-3">
                             <label class="form-label fw-bold small">Payment Reference / Transaction ID <span class="text-danger">*</span></label>
-                            <input type="text" name="payment_reference" class="form-control" placeholder="e.g., CBE-TR-9823410" value="{{ 'PAY-' . strtoupper(Illuminate\Support\Str::random(6)) }}" required>
+                            <input type="text" name="payment_reference" class="form-control font-monospace" placeholder="e.g., CBE-TR-9823410" value="{{ 'PAY-' . strtoupper(Illuminate\Support\Str::random(6)) }}" required>
                         </div>
 
                         <div class="mb-3">
@@ -1023,7 +1120,7 @@
                         </div>
 
                         <div class="alert alert-warning py-2 small mb-0">
-                            <i class="fa-solid fa-triangle-exclamation me-1"></i>Confirming will deduct the net amount (<strong id="alertDeductAmount{{ $req->id }}">ETB {{ number_format($req->net_amount ?? $req->amount, 2) }}</strong>) from the selected account balance and record journal entries atomically.
+                            <i class="fa-solid fa-triangle-exclamation me-1"></i>Confirming will disburse the adjusted net amount (<strong id="alertDeductAmount{{ $req->id }}">ETB {{ number_format($req->net_amount ?? $req->amount, 2) }}</strong>) from the selected funding account and automatically sync to Financial Movements &amp; Tax Audit.
                         </div>
                     </div>
                     <div class="modal-footer bg-light border-top-0 d-flex justify-content-between">
@@ -2187,57 +2284,108 @@ function autoDetectFinanceStaff(selectEl) {
 }
 
 /**
+ * Quick VAT Preset buttons
+ */
+function setModalVatZero(reqId) {
+    const sel = document.getElementById('modalVatType' + reqId);
+    if (sel) sel.value = 'none';
+    const vatAmt = document.getElementById('modalVatAmount' + reqId);
+    if (vatAmt) vatAmt.value = '0.00';
+    recalculatePaymentTax(reqId, false);
+}
+
+function setModalVat15Exclusive(reqId) {
+    const sel = document.getElementById('modalVatType' + reqId);
+    if (sel) sel.value = 'exclusive';
+    recalculatePaymentTax(reqId, false);
+}
+
+function setModalVat15Inclusive(reqId) {
+    const sel = document.getElementById('modalVatType' + reqId);
+    if (sel) sel.value = 'vat_b';
+    recalculatePaymentTax(reqId, false);
+}
+
+/**
  * Real-time VAT and Withholding Tax calculation for Payment Modal
  */
-function recalculatePaymentTax(reqId) {
+function recalculatePaymentTax(reqId, isDirectManualOverride = false) {
     const grossInput = document.getElementById('modalGrossAmount' + reqId);
     const vatTypeSelect = document.getElementById('modalVatType' + reqId);
     const whtToggle = document.getElementById('modalWithholdingToggle' + reqId);
+    const whtRateSelect = document.getElementById('modalWithholdingRate' + reqId);
+    const vatAmountInput = document.getElementById('modalVatAmount' + reqId);
+    const whtAmountInput = document.getElementById('modalWithholdingAmount' + reqId);
 
     if (!grossInput) return;
     const gross = parseFloat(grossInput.value) || 0;
     const vatType = vatTypeSelect ? vatTypeSelect.value : 'none';
     const vatRate = 15.00;
     const hasWht = whtToggle ? whtToggle.checked : false;
-    const whtRate = 3.00;
+
+    let whtRate = 3.00;
+    if (whtRateSelect && whtRateSelect.value !== 'custom') {
+        whtRate = parseFloat(whtRateSelect.value) || 0;
+    }
 
     let vatAmount = 0.0;
     let baseAmount = gross;
     let whtAmount = 0.0;
-    let netAmount = gross;
+    let totalGrossWithVat = gross;
 
-    if (vatType === 'exclusive') {
-        vatAmount = Math.round(gross * (vatRate / 100) * 100) / 100;
-        baseAmount = gross;
-        const totalGrossWithVat = gross + vatAmount;
-        if (hasWht) {
-            whtAmount = Math.round(baseAmount * (whtRate / 100) * 100) / 100;
+    if (isDirectManualOverride && vatAmountInput) {
+        vatAmount = parseFloat(vatAmountInput.value) || 0.0;
+        if (vatType === 'exclusive') {
+            baseAmount = gross;
+            totalGrossWithVat = gross + vatAmount;
+        } else if (vatType === 'vat_b' || vatType === 'inclusive') {
+            baseAmount = Math.max(0, gross - vatAmount);
+            totalGrossWithVat = gross;
+        } else {
+            baseAmount = gross;
+            totalGrossWithVat = gross;
         }
-        netAmount = Math.round((totalGrossWithVat - whtAmount) * 100) / 100;
-    } else if (vatType === 'inclusive' || vatType === 'vat_b') {
-        baseAmount = Math.round((gross / (1 + (vatRate / 100))) * 100) / 100;
-        vatAmount = Math.round((gross - baseAmount) * 100) / 100;
-        if (hasWht) {
-            whtAmount = Math.round(baseAmount * (whtRate / 100) * 100) / 100;
-        }
-        netAmount = Math.round((gross - whtAmount) * 100) / 100;
     } else {
-        baseAmount = gross;
-        vatAmount = 0.0;
-        if (hasWht) {
-            whtAmount = Math.round(baseAmount * (whtRate / 100) * 100) / 100;
+        if (vatType === 'exclusive') {
+            vatAmount = Math.round(gross * (vatRate / 100) * 100) / 100;
+            baseAmount = gross;
+            totalGrossWithVat = gross + vatAmount;
+        } else if (vatType === 'inclusive' || vatType === 'vat_b') {
+            baseAmount = Math.round((gross / (1 + (vatRate / 100))) * 100) / 100;
+            vatAmount = Math.round((gross - baseAmount) * 100) / 100;
+            totalGrossWithVat = gross;
+        } else {
+            baseAmount = gross;
+            vatAmount = 0.0;
+            totalGrossWithVat = gross;
         }
-        netAmount = Math.round((gross - whtAmount) * 100) / 100;
+        if (vatAmountInput) {
+            vatAmountInput.value = vatAmount.toFixed(2);
+        }
     }
 
+    if (hasWht) {
+        if (isDirectManualOverride && whtAmountInput && whtRateSelect && whtRateSelect.value === 'custom') {
+            whtAmount = parseFloat(whtAmountInput.value) || 0.0;
+        } else {
+            whtAmount = Math.round(baseAmount * (whtRate / 100) * 100) / 100;
+            if (whtAmountInput) {
+                whtAmountInput.value = whtAmount.toFixed(2);
+            }
+        }
+    } else {
+        whtAmount = 0.0;
+        if (whtAmountInput) {
+            whtAmountInput.value = '0.00';
+        }
+    }
+
+    const netAmount = Math.max(0, Math.round((totalGrossWithVat - whtAmount) * 100) / 100);
+
     // Set hidden inputs
-    const hiddenVat = document.getElementById('modalVatAmount' + reqId);
-    const hiddenWht = document.getElementById('modalWithholdingAmount' + reqId);
     const hiddenNet = document.getElementById('modalNetAmount' + reqId);
     const hiddenPaid = document.getElementById('modalPaidAmount' + reqId);
 
-    if (hiddenVat) hiddenVat.value = vatAmount.toFixed(2);
-    if (hiddenWht) hiddenWht.value = whtAmount.toFixed(2);
     if (hiddenNet) hiddenNet.value = netAmount.toFixed(2);
     if (hiddenPaid) hiddenPaid.value = netAmount.toFixed(2);
 
@@ -2260,19 +2408,8 @@ function recalculatePaymentTax(reqId) {
 
     // Toggle Withholding Receipt Upload Requirement and Visibility
     const whtReceiptGroup = document.getElementById('withholdingReceiptSection' + reqId);
-    const whtReceiptInput = document.getElementById('modalWithholdingReceipt' + reqId);
     if (whtReceiptGroup) {
-        if (hasWht) {
-            whtReceiptGroup.style.display = 'block';
-            if (whtReceiptInput && whtReceiptInput.dataset.hasExisting !== '1') {
-                whtReceiptInput.required = true;
-            }
-        } else {
-            whtReceiptGroup.style.display = 'none';
-            if (whtReceiptInput) {
-                whtReceiptInput.required = false;
-            }
-        }
+        whtReceiptGroup.style.display = hasWht ? 'block' : 'none';
     }
 }
 

@@ -107,9 +107,16 @@ class ExpenseRequestPolicy
             (int)$expenseRequest->finance_staff_id === (int)$user->id
         );
 
-        $isFinanceHead = $user->hasAnyRole(['Finance head', 'finance_head', 'finance_manager', 'admin', 'global_admin']);
+        $roleNames = strtolower(implode(' ', $user->getRoleNames()->toArray()));
+        $isFinanceHead = $user->hasAnyRole(['Finance head', 'finance_head', 'finance_manager', 'admin', 'global_admin'])
+            || str_contains($roleNames, 'finance_head')
+            || str_contains($roleNames, 'finance_manager')
+            || str_contains($roleNames, 'admin');
 
-        return ($isAssignedStaff || $isFinanceHead) && in_array($expenseRequest->status, ['Approved - Assigned to Finance', 'Assigned to Finance', ExpenseRequest::STATUS_APPROVED_ASSIGNED, ExpenseRequest::STATUS_ASSIGNED]);
+        $isAssignedStatus = in_array($expenseRequest->status, ['Approved - Assigned to Finance', 'Assigned to Finance', ExpenseRequest::STATUS_APPROVED_ASSIGNED, ExpenseRequest::STATUS_ASSIGNED]);
+
+        return ($isAssignedStaff && $isAssignedStatus)
+            || ($isFinanceHead && !in_array($expenseRequest->status, [ExpenseRequest::STATUS_PAID, ExpenseRequest::STATUS_REJECTED]));
     }
 
     /**
