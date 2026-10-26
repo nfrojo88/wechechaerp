@@ -98,6 +98,26 @@ class FinanceTaxReportController extends Controller
                     if (!Schema::hasColumn('expense_requests', 'withholding_settled_at')) {
                         $table->timestamp('withholding_settled_at')->nullable();
                     }
+                    if (!Schema::hasColumn('expense_requests', 'is_verified_without_receipt')) {
+                        $table->boolean('is_verified_without_receipt')->default(false)->index();
+                    }
+                    if (!Schema::hasColumn('expense_requests', 'verified_without_receipt_at')) {
+                        $table->timestamp('verified_without_receipt_at')->nullable();
+                    }
+                    if (!Schema::hasColumn('expense_requests', 'verified_without_receipt_by')) {
+                        $table->unsignedBigInteger('verified_without_receipt_by')->nullable();
+                    }
+                    if (!Schema::hasColumn('expense_requests', 'verified_without_receipt_notes')) {
+                        $table->string('verified_without_receipt_notes', 500)->nullable();
+                    }
+                });
+            }
+
+            if (Schema::hasTable('expense_hub_vat_decisions')) {
+                Schema::table('expense_hub_vat_decisions', function (\Illuminate\Database\Schema\Blueprint $table) {
+                    if (!Schema::hasColumn('expense_hub_vat_decisions', 'is_verified_without_receipt')) {
+                        $table->boolean('is_verified_without_receipt')->default(false)->index();
+                    }
                 });
             }
 
@@ -1259,8 +1279,9 @@ class FinanceTaxReportController extends Controller
 
             $expenses = ExpenseRequest::with($withRelations)
                 ->where(function ($q) {
-                    $q->whereIn('status', [ExpenseRequest::STATUS_PAID, 'paid', 'PAID'])
-                      ->orWhereNotNull('paid_at');
+                    $q->whereIn('status', [ExpenseRequest::STATUS_PAID, 'paid', 'PAID', 'approved', 'completed'])
+                      ->orWhereNotNull('paid_at')
+                      ->orWhereNotNull('payment_reference');
                 })
                 ->whereNotIn('status', [ExpenseRequest::STATUS_REJECTED, 'rejected', 'Rejected'])
                 ->where(function ($q) use ($start, $end) {
@@ -1269,10 +1290,11 @@ class FinanceTaxReportController extends Controller
                           $sub->whereNull('paid_at')
                               ->whereBetween('created_at', [$start, $end]);
                       })
-                      ->orWhereBetween('created_at', [$start, $end]);
-                })
-                ->where(function ($q) {
-                    $q->whereNull('vat_type')->orWhere('vat_type', '!=', 'vat_b');
+                      ->orWhereBetween('created_at', [$start, $end])
+                      ->orWhere(function ($sub) use ($start, $end) {
+                          $sub->whereNotNull('paid_at')
+                              ->whereBetween('updated_at', [$start, $end]);
+                      });
                 })
                 ->orderByRaw('COALESCE(paid_at, created_at) asc')
                 ->get();
@@ -1478,6 +1500,22 @@ class FinanceTaxReportController extends Controller
                 || ($dec?->no_vat_reason_code === 'fuel_zero_vat')
                 || ($r?->category === 'fuel'));
 
+            $isVerifiedNoRec = (bool)($item->is_verified_without_receipt ?? ($dec?->is_verified_without_receipt ?? false));
+            $hasReceipt = (bool)(
+                !empty($receiptSlipUrl)
+                || !empty($r?->file_path)
+                || !empty($item->attachment)
+                || !empty($item->attachment_url)
+                || !empty($r?->id)
+                || (!empty($fsNo) && $fsNo !== '-')
+            );
+
+            if ($isVerifiedNoRec) {
+                $vatAmount = 0.0;
+                $vatType = 'none';
+                $vatRate = 0.0;
+            }
+
             return [
                 'id'                 => $item->id,
                 'request_number'     => $item->request_number,
@@ -1522,6 +1560,8 @@ class FinanceTaxReportController extends Controller
                 'receipt_id'              => $r?->id,
                 'receipt_slip_url'        => $receiptSlipUrl,
                 'is_fuel'                 => $isFuel,
+                'is_verified_without_receipt' => $isVerifiedNoRec,
+                'has_receipt'                 => $hasReceipt,
             ];
         });
 
@@ -1633,6 +1673,8 @@ class FinanceTaxReportController extends Controller
                         'receipt_id'              => null,
                         'receipt_slip_url'        => $attachmentUrl,
                         'is_fuel'                 => false,
+                        'is_verified_without_receipt' => false,
+                        'has_receipt'                 => (!empty($attachmentUrl) || !empty($p->receipt_no) || !empty($p->fs_no)),
                     ]);
                 }
             } catch (\Throwable $e) {
@@ -1720,6 +1762,8 @@ class FinanceTaxReportController extends Controller
                         'receipt_id'              => null,
                         'receipt_slip_url'        => $attachmentUrl,
                         'is_fuel'                 => false,
+                        'is_verified_without_receipt' => empty($attachmentUrl),
+                        'has_receipt'                 => !empty($attachmentUrl),
                     ]);
                 }
             } catch (\Throwable $e) {
@@ -1827,10 +1871,264 @@ class FinanceTaxReportController extends Controller
                         'receipt_id'              => $tr->id,
                         'receipt_slip_url'        => $slipUrl,
                         'is_fuel'                 => ($tr->category === 'fuel'),
+                        'is_verified_without_receipt' => false,
+                        'has_receipt'                 => true,
                     ]);
                 }
             } catch (\Throwable $e) {
                 Log::warning("monthMovements standalone TAS receipts error: " . $e->getMessage());
+            }
+        }
+
+        // Include Procurement Payments (Purchase Requests paid by Finance) in this Ethiopian month
+        if (Schema::hasTable('procurement_payments')) {
+            try {
+                $procPayments = \App\Models\ProcurementPayment::with([
+                    'purchaseRequest.project',
+                    'purchaseRequest.supplier',
+                    'purchaseRequest.items.product',
+                    'coaAccount',
+                    'paidByUser',
+                ])
+                ->where(function ($q) {
+                    $q->where('status', 'paid')
+                      ->orWhereNotNull('paid_at');
+                })
+                ->where(function ($q) use ($startDate, $endDate, $start, $end) {
+                    $q->whereBetween('paid_at', [$start, $end])
+                      ->orWhere(function ($sub) use ($start, $end) {
+                          $sub->whereNull('paid_at')
+                              ->whereBetween('created_at', [$start, $end]);
+                      })
+                      ->orWhereBetween('created_at', [$start, $end]);
+                })
+                ->orderByRaw('COALESCE(paid_at, created_at) asc')
+                ->get();
+
+                $existingExpNumbers = $formattedExpenses->pluck('request_number')->filter()->all();
+                $existingExpIds = $formattedExpenses->pluck('id')->filter()->all();
+
+                foreach ($procPayments as $pp) {
+                    $pr = $pp->purchaseRequest;
+                    $refNo = $pr?->pr_no ? ('PR-' . $pr->pr_no) : ('PR-PAY-' . $pp->id);
+                    if (in_array($refNo, $existingExpNumbers) || in_array('PROC-' . $pp->id, $existingExpIds)) {
+                        continue;
+                    }
+
+                    $ppGross = (float)($pp->gross_amount > 0 ? $pp->gross_amount : $pp->amount);
+                    $ppDate = $pp->paid_at ?: $pp->created_at;
+                    $ppVat = (float)($pp->vat_amount ?? 0);
+                    $ppBase = $ppGross;
+                    if ($ppVat > 0 && $ppGross > $ppVat) {
+                        $ppBase = round($ppGross - $ppVat, 2);
+                    }
+                    $ppWht = (float)($pp->withholding_amount ?? 0);
+                    $ppNet = (float)($pp->net_amount > 0 ? $pp->net_amount : ($ppBase + $ppVat - $ppWht));
+
+                    $supplierName = $pr?->supplier?->name ?: ($pr?->vendor_name ?: 'Procurement Supplier');
+                    $supplierTin = $pr?->supplier?->tin ?: '-';
+                    $projectName = $pr?->project?->name ?: 'General Procurement';
+                    $accountName = $pp->coaAccount?->name ?: ($pp->method ? ucfirst($pp->method) . ' Payment' : 'Finance Procurement');
+
+                    $ppSlipUrl = null;
+                    if (Schema::hasTable('procurement_receipts')) {
+                        $prReceipt = \App\Models\ProcurementReceipt::where('purchase_request_id', $pp->purchase_request_id)->latest('id')->first();
+                        if ($prReceipt && $prReceipt->file_path) {
+                            try {
+                                $ppSlipUrl = \App\Services\FileUploadService::url($prReceipt->file_path);
+                            } catch (\Throwable $e) {
+                                $ppSlipUrl = asset('storage/' . ltrim($prReceipt->file_path, '/'));
+                            }
+                        }
+                    }
+
+                    $ppDec = null;
+                    if (Schema::hasTable('expense_hub_vat_decisions')) {
+                        $ppDec = \App\Models\ExpenseHubVatDecision::where('source_type', 'procurement_payment')
+                            ->where('source_id', $pp->id)
+                            ->latest('id')
+                            ->first();
+                    }
+                    $isVerifiedNoRec = (bool)($ppDec?->is_verified_without_receipt ?? false);
+                    $hasRec = !empty($ppSlipUrl) || !empty($pp->withholding_receipt);
+
+                    if ($isVerifiedNoRec) {
+                        $ppVat = 0.0;
+                    }
+
+                    $desc = $pp->notes;
+                    if (empty($desc) && $pr && $pr->items && $pr->items->isNotEmpty()) {
+                        $desc = $pr->items->map(fn($it) => ($it->product?->name ?: ($it->specifications ?: 'Item')) . ' (' . (float)$it->quantity . ' ' . ($it->unit ?: 'pcs') . ')')->take(3)->implode(', ');
+                    }
+                    if (empty($desc)) {
+                        $desc = 'Procurement Purchase Settlement';
+                    }
+
+                    $formattedExpenses->push([
+                        'id'                         => 'PROC-' . $pp->id,
+                        'request_number'             => $refNo,
+                        'payment_reference'          => 'PR #' . ($pr?->pr_no ?: $pp->purchase_request_id),
+                        'date_ec'                    => $ppDate ? EthiopianDate::formatDateEc($ppDate, 'DD/MM/YYYY EC') : '-',
+                        'date_gc'                    => $ppDate ? Carbon::parse($ppDate)->format('M d, Y') : '-',
+                        'raw_date'                   => $ppDate ? Carbon::parse($ppDate)->toDateTimeString() : '',
+                        'payee'                      => $supplierName,
+                        'project_name'               => $projectName,
+                        'category'                   => 'Procurement Purchase',
+                        'account_name'               => $accountName,
+                        'base_amount'                => $ppBase,
+                        'vat_type'                   => ($ppVat > 0 ? 'exclusive' : 'none'),
+                        'vat_rate'                   => ($ppVat > 0 ? (float)($pp->vat_rate ?: 15.0) : 0.0),
+                        'vat_amount'                 => $ppVat,
+                        'has_withholding'            => (bool)($pp->has_withholding || $ppWht > 0),
+                        'withholding_rate'           => (float)($pp->withholding_rate ?: ($ppWht > 0 ? round(($ppWht / max(1, $ppBase)) * 100, 1) : 0)),
+                        'withholding_amount'         => $ppWht,
+                        'withholding_receipt_number' => $pp->withholding_receipt_number ?: '-',
+                        'withholding_receipt_url'    => !empty($pp->withholding_receipt) ? asset('storage/' . ltrim($pp->withholding_receipt, '/')) : null,
+                        'withholding_settled'        => false,
+                        'net_disbursed'              => $ppNet,
+                        'description'                => $desc,
+                        'attachment_url'             => $ppSlipUrl,
+                        'status'                     => $pp->status ?: 'paid',
+                        'is_settled'                 => false,
+                        'source_type'                => 'procurement_payment',
+                        'source_label'               => 'Procurement Purchase',
+                        'is_vat_purchase'            => ($ppVat > 0),
+                        'is_tas_purchase'            => ($ppVat <= 0),
+                        'purchase_category'          => ($ppVat > 0 ? 'vat_purchase' : 'tas_purchase'),
+                        'purchase_category_label'    => ($ppVat > 0 ? 'VAT Purchase (15%)' : 'TAS Purchase (0% VAT)'),
+                        'purchase_category_badge'    => ($ppVat > 0 ? 'bg-success-subtle text-success border border-success-subtle' : 'bg-primary-subtle text-primary border border-primary-subtle'),
+                        'fs_no'                      => '-',
+                        'mrc_no'                     => '-',
+                        'seller_tin'                 => $supplierTin,
+                        'purchaser_tin'              => $defaultPurchaserDigits,
+                        'purc_type'                  => 'PUR_GD',
+                        'encoded_by'                 => 'wechacha',
+                        'receipt_date_ec'            => $ppDate ? EthiopianDate::formatDateEc($ppDate, 'd-m-Y') : EthiopianDate::formatDateEc(now(), 'd-m-Y'),
+                        'encoding_date_ec'           => EthiopianDate::formatDateEc($pp->created_at ?: now(), 'd-m-Y'),
+                        'receipt_id'                 => null,
+                        'receipt_slip_url'           => $ppSlipUrl,
+                        'is_fuel'                    => false,
+                        'is_verified_without_receipt'=> $isVerifiedNoRec,
+                        'has_receipt'                => $hasRec,
+                    ]);
+                }
+            } catch (\Throwable $e) {
+                Log::warning("monthMovements procurement payments mapping error: " . $e->getMessage());
+            }
+        }
+
+        // Include CreditStorePayment in this Ethiopian month if not already included
+        if (Schema::hasTable('credit_store_payments')) {
+            try {
+                $cspPayments = \App\Models\CreditStorePayment::with([
+                    'ledger.project',
+                    'ledger.purchaseRequest.supplier',
+                    'recordedByUser',
+                ])
+                ->where(function ($q) use ($startDate, $endDate, $start, $end) {
+                    $q->whereBetween('payment_date', [$startDate, $endDate])
+                      ->orWhere(function ($sub) use ($start, $end) {
+                          $sub->whereNull('payment_date')
+                              ->whereBetween('created_at', [$start, $end]);
+                      })
+                      ->orWhereBetween('created_at', [$start, $end]);
+                })
+                ->get();
+
+                $existingExpNumbers = $formattedExpenses->pluck('request_number')->filter()->all();
+                $existingExpIds = $formattedExpenses->pluck('id')->filter()->all();
+
+                foreach ($cspPayments as $csp) {
+                    $ledger = $csp->ledger;
+                    $refNo = $csp->reference_no ?: ($ledger?->pr_no ? ('CS-PR-' . $ledger->pr_no) : ('CS-PAY-' . $csp->id));
+                    if (in_array($refNo, $existingExpNumbers) || in_array('CS-' . $csp->id, $existingExpIds)) {
+                        continue;
+                    }
+
+                    $cspGross = (float)$csp->amount;
+                    $cspDate = $csp->payment_date ?: $csp->created_at;
+                    $cspVat = (float)($csp->vat_amount ?? 0);
+                    $cspBase = (float)($csp->gross_amount > 0 ? $csp->gross_amount : max(0, $cspGross - $cspVat));
+                    $cspWht = (float)($csp->withholding_amount ?? 0);
+                    $cspNet = (float)($cspGross);
+
+                    $supplierName = $ledger?->supplier_name ?: 'Credit Supplier';
+                    $supplierTin = $ledger?->purchaseRequest?->supplier?->tin ?: '-';
+                    $projectName = $ledger?->project?->name ?: 'General Store';
+
+                    $attachmentUrl = null;
+                    if (!empty($csp->receipt_path)) {
+                        try {
+                            $attachmentUrl = \App\Services\FileUploadService::url($csp->receipt_path);
+                        } catch (\Throwable $e) {
+                            $attachmentUrl = asset('storage/' . ltrim($csp->receipt_path, '/'));
+                        }
+                    }
+
+                    $cspDec = null;
+                    if (Schema::hasTable('expense_hub_vat_decisions')) {
+                        $cspDec = \App\Models\ExpenseHubVatDecision::where('source_type', 'credit_store_payment')
+                            ->where('source_id', $csp->id)
+                            ->latest('id')
+                            ->first();
+                    }
+                    $isVerifiedNoRec = (bool)($cspDec?->is_verified_without_receipt ?? false);
+                    $hasRec = !empty($attachmentUrl) || !empty($csp->reference_no);
+
+                    if ($isVerifiedNoRec) {
+                        $cspVat = 0.0;
+                    }
+
+                    $formattedExpenses->push([
+                        'id'                         => 'CS-' . $csp->id,
+                        'request_number'             => $refNo,
+                        'payment_reference'          => $csp->reference_no ?: ('CS #' . $csp->id),
+                        'date_ec'                    => $cspDate ? EthiopianDate::formatDateEc($cspDate, 'DD/MM/YYYY EC') : '-',
+                        'date_gc'                    => $cspDate ? Carbon::parse($cspDate)->format('M d, Y') : '-',
+                        'raw_date'                   => $cspDate ? Carbon::parse($cspDate)->toDateTimeString() : '',
+                        'payee'                      => $supplierName,
+                        'project_name'               => $projectName,
+                        'category'                   => 'Credit Store Settlement',
+                        'account_name'               => 'Credit Store Ledger',
+                        'base_amount'                => $cspBase,
+                        'vat_type'                   => ($cspVat > 0 ? 'exclusive' : 'none'),
+                        'vat_rate'                   => ($cspVat > 0 ? 15.0 : 0.0),
+                        'vat_amount'                 => $cspVat,
+                        'has_withholding'            => (bool)($csp->has_withholding || $cspWht > 0),
+                        'withholding_rate'           => (float)($csp->withholding_rate ?: ($cspWht > 0 ? round(($cspWht / max(1, $cspBase)) * 100, 1) : 0)),
+                        'withholding_amount'         => $cspWht,
+                        'withholding_receipt_number' => '-',
+                        'withholding_receipt_url'    => null,
+                        'withholding_settled'        => false,
+                        'net_disbursed'              => $cspNet,
+                        'description'                => 'Credit Settlement: ' . ($ledger?->item_description ?: ($ledger?->notes ?: 'Materials')),
+                        'attachment_url'             => $attachmentUrl,
+                        'status'                     => 'paid',
+                        'is_settled'                 => false,
+                        'source_type'                => 'credit_store_payment',
+                        'source_label'               => 'Credit Settlement',
+                        'is_vat_purchase'            => ($cspVat > 0),
+                        'is_tas_purchase'            => ($cspVat <= 0),
+                        'purchase_category'          => ($cspVat > 0 ? 'vat_purchase' : 'tas_purchase'),
+                        'purchase_category_label'    => ($cspVat > 0 ? 'VAT Purchase (15%)' : 'TAS Purchase (0% VAT)'),
+                        'purchase_category_badge'    => ($cspVat > 0 ? 'bg-success-subtle text-success border border-success-subtle' : 'bg-primary-subtle text-primary border border-primary-subtle'),
+                        'fs_no'                      => $csp->reference_no ?: '-',
+                        'mrc_no'                     => '-',
+                        'seller_tin'                 => $supplierTin,
+                        'purchaser_tin'              => $defaultPurchaserDigits,
+                        'purc_type'                  => 'PUR_GD',
+                        'encoded_by'                 => 'wechacha',
+                        'receipt_date_ec'            => $cspDate ? EthiopianDate::formatDateEc($cspDate, 'd-m-Y') : EthiopianDate::formatDateEc(now(), 'd-m-Y'),
+                        'encoding_date_ec'           => EthiopianDate::formatDateEc($csp->created_at ?: now(), 'd-m-Y'),
+                        'receipt_id'                 => null,
+                        'receipt_slip_url'           => $attachmentUrl,
+                        'is_fuel'                    => false,
+                        'is_verified_without_receipt'=> $isVerifiedNoRec,
+                        'has_receipt'                => $hasRec,
+                    ]);
+                }
+            } catch (\Throwable $e) {
+                Log::warning("monthMovements credit store payments mapping error: " . $e->getMessage());
             }
         }
 
@@ -2438,12 +2736,16 @@ class FinanceTaxReportController extends Controller
                 'ocr_vat_count'          => $formattedVatOcrItems->count(),
                 'ocr_tas_count'          => $formattedTasOcrItems->count(),
                 'ocr_all_count'          => $formattedAllOcrItems->count(),
+                'missing_receipt_count'  => $formattedExpenses->where('has_receipt', false)->where('is_verified_without_receipt', false)->count(),
+                'verified_no_receipt_count' => $formattedExpenses->where('is_verified_without_receipt', true)->count(),
                 'total_count'            => $formattedIncomes->count() + $formattedExpenses->count() + $formattedOcrItems->count(),
             ],
             'vat_only'      => $vatOnly,
             'incomes'       => $formattedIncomes->values(),
             'expenses'      => $formattedExpenses->values(),
             'vat_purchases' => $formattedExpenses->where('is_vat_purchase', true)->values(),
+            'verified_no_receipt' => $formattedExpenses->where('is_verified_without_receipt', true)->values(),
+            'missing_receipt'     => $formattedExpenses->where('has_receipt', false)->where('is_verified_without_receipt', false)->values(),
             'tas_purchases' => $tasPurchasesCollection->values(),
             'tas_purchases_count' => $tasPurchasesCollection->count(),
             'tas_purchases_total_amount' => $tasTotalAmount,
@@ -4822,6 +5124,7 @@ class FinanceTaxReportController extends Controller
             'total_value'                => 'nullable|numeric|min:0',
             'vat_amount'                 => 'nullable|numeric|min:0',
             'value_after_vat'            => 'nullable|numeric|min:0',
+            'is_verified_without_receipt'=> 'nullable',
             'has_withholding'            => 'nullable',
             'withholding_rate'           => 'nullable|numeric|min:0|max:100',
             'withholding_amount'         => 'nullable|numeric|min:0',
@@ -5357,6 +5660,15 @@ class FinanceTaxReportController extends Controller
                             $linkedExp->withholding_receipt = $uploadedWhtPath;
                         }
                     }
+                    if ($request->has('is_verified_without_receipt') && Schema::hasColumn('expense_requests', 'is_verified_without_receipt')) {
+                        $isVerifiedVal = filter_var($request->input('is_verified_without_receipt'), FILTER_VALIDATE_BOOLEAN);
+                        $linkedExp->is_verified_without_receipt = $isVerifiedVal;
+                        $linkedExp->verified_without_receipt_at = $isVerifiedVal ? now() : null;
+                        $linkedExp->verified_without_receipt_by = $isVerifiedVal ? (Auth::id() ?: 1) : null;
+                        if ($isVerifiedVal && Schema::hasColumn('expense_requests', 'verified_without_receipt_notes')) {
+                            $linkedExp->verified_without_receipt_notes = 'Verified via ERCA Inspector modal';
+                        }
+                    }
                     $linkedExp->net_amount   = max(0, $valAfter - (float)($linkedExp->withholding_amount ?? 0));
                     if ($request->filled('seller_name')) {
                         $cleanSeller = trim((string)$request->seller_name);
@@ -5434,6 +5746,15 @@ class FinanceTaxReportController extends Controller
                         }
                         if (Schema::hasColumn('expense_hub_vat_decisions', 'net_payable_amount')) {
                             $vatDec->net_payable_amount = max(0, $valAfter - (float)($linkedExp->withholding_amount ?? 0));
+                        }
+                        if ($request->has('is_verified_without_receipt') && Schema::hasColumn('expense_hub_vat_decisions', 'is_verified_without_receipt')) {
+                            $isVerifiedVal = filter_var($request->input('is_verified_without_receipt'), FILTER_VALIDATE_BOOLEAN);
+                            $vatDec->is_verified_without_receipt = $isVerifiedVal;
+                            if ($isVerifiedVal) {
+                                $vatDec->decision = 'no_vat';
+                                $vatDec->vat_status = 'no_vat';
+                                $vatDec->no_vat_reason_code = 'no_fiscal_receipt';
+                            }
                         }
                         if ($vat <= 0) {
                             $vatDec->decision = 'no_vat';
@@ -5580,6 +5901,7 @@ class FinanceTaxReportController extends Controller
                     'net_disbursed'              => (float)($linkedExp?->net_amount ?? max(0, $valAfter - ($whtAmount ?: 0))),
                     'is_vat_receipt'             => ($vat > 0 && $vatCategory !== 'E'),
                     'is_no_vat'                  => ($vat <= 0 || $vatCategory === 'E'),
+                    'is_verified_without_receipt' => (bool)($linkedExp?->is_verified_without_receipt ?? (filter_var($request->input('is_verified_without_receipt'), FILTER_VALIDATE_BOOLEAN))),
                 ]
             ]);
         } catch (\Throwable $e) {
@@ -5589,5 +5911,135 @@ class FinanceTaxReportController extends Controller
                 'message' => 'Failed to update invoice item: ' . $e->getMessage(),
             ], 422);
         }
+    }
+
+    /**
+     * AJAX endpoint to toggle or mark an expense as Verified Without Receipt (operational 0% VAT / exempt).
+     */
+    public function verifyWithoutReceipt(Request $request)
+    {
+        $this->ensureSchema();
+
+        $validated = $request->validate([
+            'expense_id'     => 'nullable',
+            'request_number' => 'nullable|string',
+            'is_verified'    => 'nullable',
+            'notes'          => 'nullable|string|max:500',
+        ]);
+
+        $rawId = $request->input('expense_id');
+        $reqNo = $request->input('request_number');
+        $isVerified = filter_var($request->input('is_verified', true), FILTER_VALIDATE_BOOLEAN);
+        $notes = $request->input('notes', 'Verified as operational expense without fiscal receipt (0% VAT / Exempt)');
+
+        $expReq = null;
+        if (!empty($rawId)) {
+            $cleanId = preg_replace('/^EXP-/i', '', (string)$rawId);
+            if (is_numeric($cleanId)) {
+                $expReq = \App\Models\ExpenseRequest::find($cleanId);
+            }
+        }
+        if (!$expReq && !empty($reqNo)) {
+            $expReq = \App\Models\ExpenseRequest::where('request_number', $reqNo)->first();
+        }
+
+        if ($expReq) {
+            if (Schema::hasColumn('expense_requests', 'is_verified_without_receipt')) {
+                $expReq->is_verified_without_receipt = $isVerified;
+                $expReq->verified_without_receipt_at = $isVerified ? now() : null;
+                $expReq->verified_without_receipt_by = $isVerified ? (Auth::id() ?: 1) : null;
+                if ($isVerified && Schema::hasColumn('expense_requests', 'verified_without_receipt_notes')) {
+                    $expReq->verified_without_receipt_notes = $notes;
+                }
+                $expReq->save();
+            }
+
+            if (Schema::hasTable('expense_hub_vat_decisions')) {
+                $dec = \App\Models\ExpenseHubVatDecision::firstOrNew([
+                    'source_type' => 'expense_request',
+                    'source_id'   => $expReq->id,
+                ]);
+                if (Schema::hasColumn('expense_hub_vat_decisions', 'is_verified_without_receipt')) {
+                    $dec->is_verified_without_receipt = $isVerified;
+                }
+                if ($isVerified) {
+                    $dec->decision = 'no_vat';
+                    $dec->vat_status = 'no_vat';
+                    $dec->no_vat_reason_code = 'no_fiscal_receipt';
+                    $dec->decision_by = Auth::id() ?: 1;
+                    $dec->decided_at = now();
+                }
+                $dec->save();
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => $isVerified ? 'Expense verified without receipt (operational 0% VAT).' : 'Verification without receipt removed.',
+                'is_verified_without_receipt' => $isVerified,
+                'expense_id' => $expReq->id,
+                'request_number' => $expReq->request_number,
+            ]);
+        }
+
+        // Check if it's a Procurement Payment (e.g. PROC-12)
+        if (!empty($rawId) && preg_match('/^PROC-(\d+)$/i', (string)$rawId, $mProc)) {
+            if (Schema::hasTable('expense_hub_vat_decisions')) {
+                $dec = \App\Models\ExpenseHubVatDecision::firstOrNew([
+                    'source_type' => 'procurement_payment',
+                    'source_id'   => $mProc[1],
+                ]);
+                if (Schema::hasColumn('expense_hub_vat_decisions', 'is_verified_without_receipt')) {
+                    $dec->is_verified_without_receipt = $isVerified;
+                }
+                if ($isVerified) {
+                    $dec->decision = 'no_vat';
+                    $dec->vat_status = 'no_vat';
+                    $dec->no_vat_reason_code = 'no_fiscal_receipt';
+                    $dec->decision_by = Auth::id() ?: 1;
+                    $dec->decided_at = now();
+                }
+                $dec->save();
+
+                return response()->json([
+                    'success' => true,
+                    'message' => $isVerified ? 'Procurement purchase verified without receipt.' : 'Verification removed.',
+                    'is_verified_without_receipt' => $isVerified,
+                    'expense_id' => $rawId,
+                ]);
+            }
+        }
+
+        // Check if it's a Credit Store Payment (e.g. CS-12)
+        if (!empty($rawId) && preg_match('/^CS-(\d+)$/i', (string)$rawId, $mCs)) {
+            if (Schema::hasTable('expense_hub_vat_decisions')) {
+                $dec = \App\Models\ExpenseHubVatDecision::firstOrNew([
+                    'source_type' => 'credit_store_payment',
+                    'source_id'   => $mCs[1],
+                ]);
+                if (Schema::hasColumn('expense_hub_vat_decisions', 'is_verified_without_receipt')) {
+                    $dec->is_verified_without_receipt = $isVerified;
+                }
+                if ($isVerified) {
+                    $dec->decision = 'no_vat';
+                    $dec->vat_status = 'no_vat';
+                    $dec->no_vat_reason_code = 'no_fiscal_receipt';
+                    $dec->decision_by = Auth::id() ?: 1;
+                    $dec->decided_at = now();
+                }
+                $dec->save();
+
+                return response()->json([
+                    'success' => true,
+                    'message' => $isVerified ? 'Credit purchase verified without receipt.' : 'Verification removed.',
+                    'is_verified_without_receipt' => $isVerified,
+                    'expense_id' => $rawId,
+                ]);
+            }
+        }
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Expense or purchase record not found for verification.',
+        ], 404);
     }
 }

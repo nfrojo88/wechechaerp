@@ -435,6 +435,12 @@
                             <button type="button" class="btn btn-sm rounded-pill px-2.5 py-1 fw-semibold text-muted btn-expense-filter" id="btnExpenseFilter-tas" onclick="filterExpensePurchaseType('tas')" title="Purchases with 0% VAT (Declared in TAS)">
                                 <i class="fa-solid fa-receipt me-1"></i>TAS Purchases (0% VAT) ({{ count($movementsData['tas_purchases'] ?? []) }})
                             </button>
+                            <button type="button" class="btn btn-sm rounded-pill px-2.5 py-1 fw-semibold text-muted btn-expense-filter" id="btnExpenseFilter-missing_receipt" onclick="filterExpensePurchaseType('missing_receipt')" title="Purchases missing receipts and not verified">
+                                <i class="fa-solid fa-triangle-exclamation me-1 text-danger"></i>Missing Receipt (<span id="filterCountMissingReceipt">{{ $movementsData['summary']['missing_receipt_count'] ?? 0 }}</span>)
+                            </button>
+                            <button type="button" class="btn btn-sm rounded-pill px-2.5 py-1 fw-semibold text-muted btn-expense-filter" id="btnExpenseFilter-verified_no_receipt" onclick="filterExpensePurchaseType('verified_no_receipt')" title="Verified operational expenses without receipt">
+                                <i class="fa-solid fa-shield-check me-1 text-info"></i>Verified (No Receipt) (<span id="filterCountVerifiedNoReceipt">{{ $movementsData['summary']['verified_no_receipt_count'] ?? 0 }}</span>)
+                            </button>
                         </div>
                         <div class="btn-group shadow-xs rounded-pill overflow-hidden">
                             <a href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_tas', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}" 
@@ -554,6 +560,8 @@
                                     data-receipt-id="{{ $exp['receipt_id'] ?? '' }}"
                                     data-fs="{{ ($exp['fs_no'] ?? '') !== '-' ? ($exp['fs_no'] ?? '') : '' }}"
                                     data-purchase-category="{{ $isVatExp ? 'vat' : 'tas' }}"
+                                    data-verified-no-receipt="{{ !empty($exp['is_verified_without_receipt']) ? '1' : '0' }}"
+                                    data-has-receipt="{{ !empty($exp['has_receipt']) ? '1' : '0' }}"
                                     data-base="{{ $expBase }}"
                                     data-vat="{{ $expVat }}"
                                     data-wht="{{ $expWht }}"
@@ -584,6 +592,15 @@
                                                 <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-pill small" style="font-size:0.65rem;"><i class="fa-solid fa-coins me-0.5"></i>Petty Cash</span>
                                             @elseif(($exp['source_type'] ?? '') === 'direct_expense')
                                                 <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle rounded-pill small" style="font-size:0.65rem;">Direct</span>
+                                            @endif
+                                            @if(!empty($exp['is_verified_without_receipt']))
+                                                <span class="badge bg-info-subtle text-info border border-info-subtle rounded-pill font-monospace cell-exp-verified-no-rec-badge" style="font-size:0.65rem;">
+                                                    <i class="fa-solid fa-shield-check me-0.5"></i>Verified (No Receipt)
+                                                </span>
+                                            @elseif(empty($exp['has_receipt']))
+                                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill font-monospace cell-exp-missing-rec-badge" style="font-size:0.65rem;">
+                                                    <i class="fa-solid fa-triangle-exclamation me-0.5"></i>Missing Receipt
+                                                </span>
                                             @endif
                                         </div>
                                         @if(!empty($exp['payment_reference']) && $exp['payment_reference'] !== '-')
@@ -675,6 +692,16 @@
                                                 <span>Detail</span>
                                             </button>
 
+                                            {{-- Verify Without Receipt Action Button --}}
+                                            <button type="button" 
+                                                    class="btn btn-xs {{ !empty($exp['is_verified_without_receipt']) ? 'btn-info text-white' : 'btn-outline-warning text-dark' }} rounded-pill px-2 py-0.5 d-inline-flex align-items-center gap-1 shadow-2xs btn-verify-no-receipt" 
+                                                    onclick="toggleVerifyWithoutReceipt('{{ $exp['id'] ?? $idx }}', '{{ $exp['request_number'] ?? '' }}', {{ $idx }}, {{ !empty($exp['is_verified_without_receipt']) ? '1' : '0' }})" 
+                                                    id="btn-verify-no-rec-{{ $exp['id'] ?? $idx }}"
+                                                    title="{{ !empty($exp['is_verified_without_receipt']) ? 'Verified without fiscal receipt (Click to toggle)' : 'Verify expense without fiscal cash receipt (Operational 0% VAT)' }}">
+                                                <i class="fa-solid {{ !empty($exp['is_verified_without_receipt']) ? 'fa-shield-check' : 'fa-shield-halved text-warning' }}"></i>
+                                                <span class="verify-btn-text">{{ !empty($exp['is_verified_without_receipt']) ? 'Verified (No Rec)' : 'Verify No Rec' }}</span>
+                                            </button>
+
                                             {{-- Scanned Slip Link or Attach Button --}}
                                             @if(!empty($expSlip))
                                                 <a href="{{ $expSlip }}" target="_blank" class="btn btn-xs {{ $isExpPdf ? 'btn-outline-danger' : 'btn-outline-primary' }} rounded-pill px-2 py-0.5 d-inline-flex align-items-center gap-1 shadow-2xs cell-exp-slip-link" title="View Scanned Receipt Slip">
@@ -735,6 +762,15 @@
                                                             <div class="d-flex align-items-center justify-content-between mb-2 pb-1 border-bottom">
                                                                 <span class="fw-bold small text-dark"><i class="fa-solid fa-receipt text-primary me-1"></i>1. Fiscal Cash Receipt Details</span>
                                                                 <span class="badge bg-light text-muted border font-monospace" style="font-size:0.65rem;">ERCA Fiscal</span>
+                                                            </div>
+
+                                                            <div class="p-2 bg-info bg-opacity-10 rounded-2 border border-info border-opacity-25 mb-2.5">
+                                                                <div class="form-check form-switch mb-0">
+                                                                    <input class="form-check-input" type="checkbox" name="is_verified_without_receipt" value="1" id="quickVerifyNoRecToggle-{{ $exp['id'] ?? $idx }}" {{ !empty($exp['is_verified_without_receipt']) ? 'checked' : '' }} onchange="onToggleQuickVerifyNoRec({{ $idx }}, this.checked)">
+                                                                    <label class="form-check-label small fw-semibold text-dark" for="quickVerifyNoRecToggle-{{ $exp['id'] ?? $idx }}">
+                                                                        <i class="fa-solid fa-shield-check text-info me-1"></i>Verify Without Receipt (Operational 0% VAT)
+                                                                    </label>
+                                                                </div>
                                                             </div>
 
                                                             <div class="mb-2">
@@ -1789,6 +1825,22 @@
                                         </div>
                                     </div>
 
+                                    {{-- Verify Without Receipt Switch --}}
+                                    <div class="p-2.5 bg-info bg-opacity-10 rounded-3 border border-info border-opacity-25 mb-2.5">
+                                        <div class="d-flex align-items-center justify-content-between">
+                                            <div class="form-check form-switch mb-0">
+                                                <input class="form-check-input" type="checkbox" id="movement_edit_is_verified_without_receipt" name="is_verified_without_receipt" value="1" onchange="onToggleVerifyWithoutReceiptModal(this.checked)">
+                                                <label class="form-check-label small fw-bold text-dark" for="movement_edit_is_verified_without_receipt">
+                                                    <i class="fa-solid fa-shield-check text-info me-1"></i>Verify Without Receipt (Operational / No Fiscal Slip)
+                                                </label>
+                                            </div>
+                                            <span class="badge bg-secondary-subtle text-muted font-monospace" style="font-size:0.68rem;" id="movement_verified_no_rec_badge">0% Exempt</span>
+                                        </div>
+                                        <small class="text-muted d-block mt-1" style="font-size:0.72rem;">
+                                            Mark this expense as an approved operational expenditure without an official fiscal machine receipt (applies 0% VAT / exempt for ERCA audit).
+                                        </small>
+                                    </div>
+
                                     {{-- Financial Amounts & Live Recalculation --}}
                                     <div class="p-2.5 bg-light rounded-3 border mb-0">
                                         <div class="d-flex align-items-center justify-content-between mb-2">
@@ -2385,7 +2437,18 @@
 
         trs.forEach(tr => {
             if (tableId === 'pageExpenseTable') {
-                const rowMatchesCategory = (_activeExpenseFilter === 'all' || tr.getAttribute('data-purchase-category') === _activeExpenseFilter);
+                if (tr.classList.contains('expense-quick-fill-row')) return;
+                const rowType = tr.getAttribute('data-purchase-category');
+                const hasRec = tr.getAttribute('data-has-receipt') === '1';
+                const isVerifiedNoRec = tr.getAttribute('data-verified-no-receipt') === '1';
+
+                let rowMatchesCategory = false;
+                if (_activeExpenseFilter === 'all') rowMatchesCategory = true;
+                else if (_activeExpenseFilter === 'vat') rowMatchesCategory = (rowType === 'vat');
+                else if (_activeExpenseFilter === 'tas') rowMatchesCategory = (rowType === 'tas');
+                else if (_activeExpenseFilter === 'missing_receipt') rowMatchesCategory = (!hasRec && !isVerifiedNoRec);
+                else if (_activeExpenseFilter === 'verified_no_receipt') rowMatchesCategory = isVerifiedNoRec;
+
                 if (!rowMatchesCategory) {
                     tr.style.display = 'none';
                     return;
@@ -2432,7 +2495,22 @@
 
         rows.forEach(tr => {
             const rowType = tr.getAttribute('data-purchase-category');
-            const matchesType = (type === 'all' || rowType === type);
+            const hasRec = tr.getAttribute('data-has-receipt') === '1';
+            const isVerifiedNoRec = tr.getAttribute('data-verified-no-receipt') === '1';
+
+            let matchesType = false;
+            if (type === 'all') {
+                matchesType = true;
+            } else if (type === 'vat') {
+                matchesType = (rowType === 'vat');
+            } else if (type === 'tas') {
+                matchesType = (rowType === 'tas');
+            } else if (type === 'missing_receipt') {
+                matchesType = (!hasRec && !isVerifiedNoRec);
+            } else if (type === 'verified_no_receipt') {
+                matchesType = isVerifiedNoRec;
+            }
+
             if (matchesType) {
                 tr.style.display = '';
                 visibleCount++;
@@ -2446,7 +2524,7 @@
         });
 
         // Update active filter button styles
-        ['all', 'vat', 'tas'].forEach(t => {
+        ['all', 'vat', 'tas', 'missing_receipt', 'verified_no_receipt'].forEach(t => {
             const btn = document.getElementById('btnExpenseFilter-' + t);
             if (!btn) return;
             if (t === type) {
@@ -2455,11 +2533,15 @@
                     btn.classList.add('btn-success', 'text-white', 'shadow-xs');
                 } else if (t === 'tas') {
                     btn.classList.add('btn-primary', 'text-white', 'shadow-xs');
+                } else if (t === 'missing_receipt') {
+                    btn.classList.add('btn-danger', 'text-white', 'shadow-xs');
+                } else if (t === 'verified_no_receipt') {
+                    btn.classList.add('btn-info', 'text-white', 'shadow-xs');
                 } else {
                     btn.classList.add('btn-danger', 'text-white', 'shadow-xs');
                 }
             } else {
-                btn.classList.remove('btn-danger', 'btn-success', 'btn-primary', 'text-white', 'shadow-xs');
+                btn.classList.remove('btn-danger', 'btn-success', 'btn-primary', 'btn-info', 'text-white', 'shadow-xs');
                 btn.classList.add('text-muted');
             }
         });
@@ -2472,9 +2554,17 @@
         const footNet   = document.getElementById('pageExpenseFootNet');
 
         if (footLabel) {
-            footLabel.textContent = type === 'vat' 
-                ? `Total VAT Purchases (${visibleCount} items)` 
-                : (type === 'tas' ? `Total TAS Purchases (${visibleCount} items)` : `Total Purchases & Deductions (${visibleCount} items)`);
+            if (type === 'vat') {
+                footLabel.textContent = `Total VAT Purchases (${visibleCount} items)`;
+            } else if (type === 'tas') {
+                footLabel.textContent = `Total TAS Purchases (${visibleCount} items)`;
+            } else if (type === 'missing_receipt') {
+                footLabel.textContent = `Total Missing Receipt Purchases (${visibleCount} items)`;
+            } else if (type === 'verified_no_receipt') {
+                footLabel.textContent = `Total Verified Without Receipt Purchases (${visibleCount} items)`;
+            } else {
+                footLabel.textContent = `Total Purchases & Deductions (${visibleCount} items)`;
+            }
         }
         if (footBase) footBase.textContent = 'ETB ' + totalBase.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
         if (footVat)  footVat.textContent  = 'ETB ' + totalVat.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
@@ -3622,6 +3712,14 @@
         }
         recalcMovementWht();
 
+        // Populate Verify Without Receipt Switch
+        const isVerifiedNoRec = !!exp.is_verified_without_receipt;
+        const verifiedNoRecSwitch = document.getElementById('movement_edit_is_verified_without_receipt');
+        if (verifiedNoRecSwitch) {
+            verifiedNoRecSwitch.checked = isVerifiedNoRec;
+            onToggleVerifyWithoutReceiptModal(isVerifiedNoRec);
+        }
+
         // Clear alerts
         const alertBox = document.getElementById('movementOcrModalAlert');
         if (alertBox) {
@@ -3639,6 +3737,158 @@
         } else if (window.$ && typeof $(modalEl).modal === 'function') {
             $(modalEl).modal('show');
         }
+    }
+
+    function onToggleVerifyWithoutReceiptModal(isChecked) {
+        const badge = document.getElementById('movement_verified_no_rec_badge');
+        const vatCategory = document.getElementById('movement_edit_vat_category');
+        const vatAmount = document.getElementById('movement_edit_vat_amount');
+        const totalValInput = document.getElementById('movement_edit_total_value');
+        const afterValInput = document.getElementById('movement_edit_value_after_vat');
+
+        if (badge) {
+            badge.textContent = isChecked ? 'Verified (No Slip)' : '0% Exempt';
+            badge.className = isChecked ? 'badge bg-info text-white font-monospace' : 'badge bg-secondary-subtle text-muted font-monospace';
+        }
+        if (isChecked) {
+            if (vatCategory) vatCategory.value = 'E';
+            if (vatAmount) vatAmount.value = '0.00';
+            if (afterValInput && totalValInput) {
+                afterValInput.value = totalValInput.value;
+            }
+            recalcMovementWht();
+        }
+    }
+
+    function onToggleQuickVerifyNoRec(idx, isChecked) {
+        const row = document.getElementById('expense-quick-fill-row-' + idx)
+            || document.querySelector(`tr.expense-quick-fill-row[data-idx="${idx}"]`);
+        if (!row) return;
+
+        const tinInput = row.querySelector('input[name="supplier_tin"]');
+        const fsInput = row.querySelector('input[name="fs_no"]');
+        if (isChecked) {
+            if (tinInput && !tinInput.value) tinInput.removeAttribute('required');
+            if (fsInput && !fsInput.value) fsInput.removeAttribute('required');
+        }
+    }
+
+    function toggleVerifyWithoutReceipt(expenseId, reqNo, idx, currentStatus) {
+        const newStatus = currentStatus === 1 ? 0 : 1;
+        const isVerified = (newStatus === 1);
+
+        const btn = document.getElementById('btn-verify-no-rec-' + expenseId)
+            || document.querySelector(`tr.expense-row[data-idx="${idx}"] .btn-verify-no-receipt`);
+        const origHtml = btn ? btn.innerHTML : '';
+        if (btn) {
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+            btn.disabled = true;
+        }
+
+        const csrfToken = '{{ csrf_token() }}';
+
+        fetch('{{ route("finance.tax-deductions.verify-without-receipt") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': csrfToken,
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: JSON.stringify({
+                expense_id: expenseId,
+                request_number: reqNo,
+                is_verified: isVerified
+            })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (btn) btn.disabled = false;
+            if (data.success) {
+                if (window._pageExpenses && window._pageExpenses[idx]) {
+                    window._pageExpenses[idx].is_verified_without_receipt = data.is_verified_without_receipt;
+                    if (data.is_verified_without_receipt) {
+                        window._pageExpenses[idx].vat_amount = 0;
+                        window._pageExpenses[idx].purchase_category = 'tas';
+                        window._pageExpenses[idx].is_vat_purchase = false;
+                        window._pageExpenses[idx].is_tas_purchase = true;
+                    }
+                }
+                syncExpenseRowDom(idx, {
+                    is_verified_without_receipt: data.is_verified_without_receipt,
+                    vat_amount: data.is_verified_without_receipt ? 0 : undefined
+                });
+                updateFilterCounters();
+                showMovementToast(data.message || 'Verification updated successfully', 'success');
+            } else {
+                if (btn) btn.innerHTML = origHtml;
+                showMovementToast(data.message || 'Failed to update verification', 'danger');
+            }
+        })
+        .catch(err => {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = origHtml;
+            }
+            showMovementToast('Error: ' + err.message, 'danger');
+        });
+    }
+
+    function updateFilterCounters() {
+        const rows = document.querySelectorAll('#pageExpenseTable tbody tr.expense-row');
+        let missingRec = 0;
+        let verifiedNoRec = 0;
+
+        rows.forEach(tr => {
+            const hasRec = tr.getAttribute('data-has-receipt') === '1';
+            const isVerified = tr.getAttribute('data-verified-no-receipt') === '1';
+            if (isVerified) {
+                verifiedNoRec++;
+            } else if (!hasRec) {
+                missingRec++;
+            }
+        });
+
+        const missingEl = document.getElementById('filterCountMissingReceipt');
+        if (missingEl) missingEl.textContent = missingRec;
+
+        const verifiedEl = document.getElementById('filterCountVerifiedNoReceipt');
+        if (verifiedEl) verifiedEl.textContent = verifiedNoRec;
+    }
+
+    function showMovementToast(message, type = 'info') {
+        let toastContainer = document.getElementById('movementToastContainer');
+        if (!toastContainer) {
+            toastContainer = document.createElement('div');
+            toastContainer.id = 'movementToastContainer';
+            toastContainer.className = 'toast-container position-fixed bottom-0 end-0 p-3';
+            toastContainer.style.zIndex = '9999';
+            document.body.appendChild(toastContainer);
+        }
+
+        const toastEl = document.createElement('div');
+        const bgClass = type === 'success' ? 'bg-success text-white' : (type === 'danger' || type === 'error' ? 'bg-danger text-white' : 'bg-primary text-white');
+        const iconClass = type === 'success' ? 'fa-circle-check' : (type === 'danger' || type === 'error' ? 'fa-triangle-exclamation' : 'fa-circle-info');
+
+        toastEl.className = `toast align-items-center ${bgClass} border-0 shadow-lg show`;
+        toastEl.setAttribute('role', 'alert');
+        toastEl.setAttribute('aria-live', 'assertive');
+        toastEl.setAttribute('aria-atomic', 'true');
+        toastEl.innerHTML = `
+            <div class="d-flex">
+                <div class="toast-body d-flex align-items-center gap-2 py-2.5 px-3">
+                    <i class="fa-solid ${iconClass} fs-6"></i>
+                    <span class="small fw-semibold">${message}</span>
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close" onclick="this.closest('.toast').remove()"></button>
+            </div>
+        `;
+        toastContainer.appendChild(toastEl);
+        setTimeout(() => {
+            toastEl.style.transition = 'opacity 0.5s ease';
+            toastEl.style.opacity = '0';
+            setTimeout(() => toastEl.remove(), 500);
+        }, 4000);
     }
 
     // Modal Withholding Tax handlers
@@ -3890,6 +4140,7 @@
         }
 
         const formData = new FormData(form);
+        formData.set('is_verified_without_receipt', form.elements['is_verified_without_receipt']?.checked ? '1' : '0');
 
         fetch('{{ route("finance.tax-deductions.update-ocr-item") }}', {
             method: 'POST',
@@ -3954,6 +4205,7 @@
                 // Sync the parent row in the table
                 syncExpenseRowDom(idx, itm);
                 recomputeExpenseTableFooters();
+                updateFilterCounters();
 
                 // Also sync TAS table if matching
                 syncMatchingTasRowDom(itm);
@@ -4100,6 +4352,58 @@
                     newLink.title = 'View Attached Withholding Tax (WHT) Receipt / Certificate';
                     newLink.innerHTML = '<i class="fa-solid fa-file-invoice-dollar text-danger"></i><span>WHT Slip</span>';
                     actionsContainer.appendChild(newLink);
+                }
+            }
+        }
+
+        // Update Verification without Receipt & Has Receipt attributes
+        if (itm.is_verified_without_receipt !== undefined) {
+            const isVer = !!itm.is_verified_without_receipt;
+            tr.setAttribute('data-verified-no-receipt', isVer ? '1' : '0');
+            if (isVer) {
+                tr.setAttribute('data-purchase-category', 'tas');
+            }
+
+            // Update badge in Column 3
+            const badgeContainer = tr.querySelector('td:nth-child(3) .d-flex');
+            if (badgeContainer) {
+                let verBadge = badgeContainer.querySelector('.cell-exp-verified-no-rec-badge');
+                let missBadge = badgeContainer.querySelector('.cell-exp-missing-rec-badge');
+                if (isVer) {
+                    if (missBadge) missBadge.remove();
+                    if (!verBadge) {
+                        verBadge = document.createElement('span');
+                        verBadge.className = 'badge bg-info-subtle text-info border border-info-subtle rounded-pill font-monospace cell-exp-verified-no-rec-badge';
+                        verBadge.style.fontSize = '0.65rem';
+                        verBadge.innerHTML = '<i class="fa-solid fa-shield-check me-0.5"></i>Verified (No Receipt)';
+                        badgeContainer.appendChild(verBadge);
+                    }
+                } else {
+                    if (verBadge) verBadge.remove();
+                    const hasRec = tr.getAttribute('data-has-receipt') === '1';
+                    if (!hasRec && !missBadge) {
+                        missBadge = document.createElement('span');
+                        missBadge.className = 'badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill font-monospace cell-exp-missing-rec-badge';
+                        missBadge.style.fontSize = '0.65rem';
+                        missBadge.innerHTML = '<i class="fa-solid fa-triangle-exclamation me-0.5"></i>Missing Receipt';
+                        badgeContainer.appendChild(missBadge);
+                    }
+                }
+            }
+
+            // Update Action Button in Column 11
+            const verBtn = tr.querySelector('.btn-verify-no-receipt');
+            if (verBtn) {
+                if (isVer) {
+                    verBtn.className = 'btn btn-xs btn-info text-white rounded-pill px-2 py-0.5 d-inline-flex align-items-center gap-1 shadow-2xs btn-verify-no-receipt';
+                    verBtn.title = 'Verified without fiscal receipt (Click to toggle)';
+                    verBtn.innerHTML = '<i class="fa-solid fa-shield-check"></i><span class="verify-btn-text">Verified (No Rec)</span>';
+                    verBtn.setAttribute('onclick', `toggleVerifyWithoutReceipt('${exp.id ?? idx}', '${exp.request_number ?? ''}', ${idx}, 1)`);
+                } else {
+                    verBtn.className = 'btn btn-xs btn-outline-warning text-dark rounded-pill px-2 py-0.5 d-inline-flex align-items-center gap-1 shadow-2xs btn-verify-no-receipt';
+                    verBtn.title = 'Verify expense without fiscal cash receipt (Operational 0% VAT)';
+                    verBtn.innerHTML = '<i class="fa-solid fa-shield-halved text-warning"></i><span class="verify-btn-text">Verify No Rec</span>';
+                    verBtn.setAttribute('onclick', `toggleVerifyWithoutReceipt('${exp.id ?? idx}', '${exp.request_number ?? ''}', ${idx}, 0)`);
                 }
             }
         }
@@ -4348,6 +4652,7 @@
         }
 
         const formData = new FormData(form);
+        formData.set('is_verified_without_receipt', form.elements['is_verified_without_receipt']?.checked ? '1' : '0');
 
         fetch('{{ route("finance.tax-deductions.update-ocr-item") }}', {
             method: 'POST',
@@ -4631,6 +4936,7 @@
                         }
                     });
                     recomputeExpenseTableFooters();
+                    updateFilterCounters();
                 } else {
                     const expRows = document.querySelectorAll('#pageExpenseTable tbody tr');
                     expRows.forEach(expTr => {
