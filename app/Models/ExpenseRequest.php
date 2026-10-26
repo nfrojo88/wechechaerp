@@ -80,6 +80,10 @@ class ExpenseRequest extends Model
         'vat_settled_at',
         'withholding_settled_at',
         'coa_deducted',
+        'is_verified_without_receipt',
+        'verified_without_receipt_at',
+        'verified_without_receipt_by',
+        'verified_without_receipt_notes',
     ];
 
 
@@ -105,6 +109,8 @@ class ExpenseRequest extends Model
         'gm_approved_at' => 'datetime',
         'finance_assigned_at' => 'datetime',
         'paid_at' => 'datetime',
+        'is_verified_without_receipt' => 'boolean',
+        'verified_without_receipt_at' => 'datetime',
     ];
 
     // Status Constants

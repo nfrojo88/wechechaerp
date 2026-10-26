@@ -2678,6 +2678,9 @@ class FinanceTaxReportController extends Controller
             return (float)($it['total_amount'] ?? ($it['gross_amount'] ?? (($it['base_amount'] ?? 0) + ($it['vat_amount'] ?? 0))));
         });
 
+        $verifiedNoReceiptCollection = $formattedExpenses->where('is_verified_without_receipt', true)->values();
+        $unverifiedExpensesCollection = $formattedExpenses->where('is_verified_without_receipt', false)->values();
+
         return [
             'success' => true,
             'month' => [
@@ -2720,12 +2723,12 @@ class FinanceTaxReportController extends Controller
                 'ocr_vat'                => $ocrInputVat,
                 'ocr_total'              => round($ocrPurchasesBase + $ocrInputVat, 2),
                 'income_count'           => $formattedIncomes->count(),
-                'expense_count'          => $formattedExpenses->count(),
-                'vat_purchases_count'    => $formattedExpenses->where('is_vat_purchase', true)->count(),
-                'vat_purchases_base'     => (float)$formattedExpenses->where('is_vat_purchase', true)->sum('base_amount'),
-                'vat_purchases_vat'      => (float)$formattedExpenses->where('is_vat_purchase', true)->sum('vat_amount'),
-                'vat_purchases_wht'      => (float)$formattedExpenses->where('is_vat_purchase', true)->sum('withholding_amount'),
-                'vat_purchases_net'      => (float)$formattedExpenses->where('is_vat_purchase', true)->sum('net_disbursed'),
+                'expense_count'          => $unverifiedExpensesCollection->count(),
+                'vat_purchases_count'    => $unverifiedExpensesCollection->where('is_vat_purchase', true)->count(),
+                'vat_purchases_base'     => (float)$unverifiedExpensesCollection->where('is_vat_purchase', true)->sum('base_amount'),
+                'vat_purchases_vat'      => (float)$unverifiedExpensesCollection->where('is_vat_purchase', true)->sum('vat_amount'),
+                'vat_purchases_wht'      => (float)$unverifiedExpensesCollection->where('is_vat_purchase', true)->sum('withholding_amount'),
+                'vat_purchases_net'      => (float)$unverifiedExpensesCollection->where('is_vat_purchase', true)->sum('net_disbursed'),
                 'tas_purchases_count'    => $tasPurchasesCollection->count(),
                 'tas_purchases_base'     => (float)$tasPurchasesCollection->sum('base_amount'),
                 'tas_purchases_vat'      => (float)$tasPurchasesCollection->sum('vat_amount'),
@@ -2736,16 +2739,17 @@ class FinanceTaxReportController extends Controller
                 'ocr_vat_count'          => $formattedVatOcrItems->count(),
                 'ocr_tas_count'          => $formattedTasOcrItems->count(),
                 'ocr_all_count'          => $formattedAllOcrItems->count(),
-                'missing_receipt_count'  => $formattedExpenses->where('has_receipt', false)->where('is_verified_without_receipt', false)->count(),
-                'verified_no_receipt_count' => $formattedExpenses->where('is_verified_without_receipt', true)->count(),
-                'total_count'            => $formattedIncomes->count() + $formattedExpenses->count() + $formattedOcrItems->count(),
+                'missing_receipt_count'  => $unverifiedExpensesCollection->where('has_receipt', false)->count(),
+                'verified_no_receipt_count' => $verifiedNoReceiptCollection->count(),
+                'total_count'            => $formattedIncomes->count() + $unverifiedExpensesCollection->count() + $formattedOcrItems->count(),
             ],
             'vat_only'      => $vatOnly,
             'incomes'       => $formattedIncomes->values(),
-            'expenses'      => $formattedExpenses->values(),
-            'vat_purchases' => $formattedExpenses->where('is_vat_purchase', true)->values(),
-            'verified_no_receipt' => $formattedExpenses->where('is_verified_without_receipt', true)->values(),
-            'missing_receipt'     => $formattedExpenses->where('has_receipt', false)->where('is_verified_without_receipt', false)->values(),
+            'expenses'      => $unverifiedExpensesCollection,
+            'all_expenses'  => $formattedExpenses->values(),
+            'vat_purchases' => $unverifiedExpensesCollection->where('is_vat_purchase', true)->values(),
+            'verified_no_receipt' => $verifiedNoReceiptCollection,
+            'missing_receipt'     => $unverifiedExpensesCollection->where('has_receipt', false)->values(),
             'tas_purchases' => $tasPurchasesCollection->values(),
             'tas_purchases_count' => $tasPurchasesCollection->count(),
             'tas_purchases_total_amount' => $tasTotalAmount,
@@ -5751,13 +5755,16 @@ class FinanceTaxReportController extends Controller
                             $isVerifiedVal = filter_var($request->input('is_verified_without_receipt'), FILTER_VALIDATE_BOOLEAN);
                             $vatDec->is_verified_without_receipt = $isVerifiedVal;
                             if ($isVerifiedVal) {
-                                $vatDec->decision = 'no_vat';
                                 $vatDec->vat_status = 'no_vat';
+                                $vatDec->vat_rate = 0.00;
+                                $vatDec->vat_amount = 0.00;
+                                $vatDec->purchase_type = 6;
                                 $vatDec->no_vat_reason_code = 'no_fiscal_receipt';
+                                $vatDec->decided_by = Auth::id() ?: 1;
+                                $vatDec->decided_at = now();
                             }
                         }
                         if ($vat <= 0) {
-                            $vatDec->decision = 'no_vat';
                             $vatDec->vat_status = 'no_vat';
                         }
                         $vatDec->save();
@@ -5963,11 +5970,18 @@ class FinanceTaxReportController extends Controller
                     $dec->is_verified_without_receipt = $isVerified;
                 }
                 if ($isVerified) {
-                    $dec->decision = 'no_vat';
                     $dec->vat_status = 'no_vat';
+                    $dec->vat_rate = 0.00;
+                    $dec->vat_amount = 0.00;
+                    $dec->purchase_type = 6;
                     $dec->no_vat_reason_code = 'no_fiscal_receipt';
-                    $dec->decision_by = Auth::id() ?: 1;
+                    $dec->decided_by = Auth::id() ?: 1;
                     $dec->decided_at = now();
+                } else {
+                    $dec->vat_status = 'pending_decision';
+                    $dec->no_vat_reason_code = null;
+                    $dec->decided_by = null;
+                    $dec->decided_at = null;
                 }
                 $dec->save();
             }
@@ -5992,11 +6006,18 @@ class FinanceTaxReportController extends Controller
                     $dec->is_verified_without_receipt = $isVerified;
                 }
                 if ($isVerified) {
-                    $dec->decision = 'no_vat';
                     $dec->vat_status = 'no_vat';
+                    $dec->vat_rate = 0.00;
+                    $dec->vat_amount = 0.00;
+                    $dec->purchase_type = 6;
                     $dec->no_vat_reason_code = 'no_fiscal_receipt';
-                    $dec->decision_by = Auth::id() ?: 1;
+                    $dec->decided_by = Auth::id() ?: 1;
                     $dec->decided_at = now();
+                } else {
+                    $dec->vat_status = 'pending_decision';
+                    $dec->no_vat_reason_code = null;
+                    $dec->decided_by = null;
+                    $dec->decided_at = null;
                 }
                 $dec->save();
 
@@ -6020,11 +6041,18 @@ class FinanceTaxReportController extends Controller
                     $dec->is_verified_without_receipt = $isVerified;
                 }
                 if ($isVerified) {
-                    $dec->decision = 'no_vat';
                     $dec->vat_status = 'no_vat';
+                    $dec->vat_rate = 0.00;
+                    $dec->vat_amount = 0.00;
+                    $dec->purchase_type = 6;
                     $dec->no_vat_reason_code = 'no_fiscal_receipt';
-                    $dec->decision_by = Auth::id() ?: 1;
+                    $dec->decided_by = Auth::id() ?: 1;
                     $dec->decided_at = now();
+                } else {
+                    $dec->vat_status = 'pending_decision';
+                    $dec->no_vat_reason_code = null;
+                    $dec->decided_by = null;
+                    $dec->decided_at = null;
                 }
                 $dec->save();
 
