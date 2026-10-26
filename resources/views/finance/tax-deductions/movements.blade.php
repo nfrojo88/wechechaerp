@@ -527,7 +527,8 @@
                                 <th class="py-2.5 text-end">Purchases Base</th>
                                 <th class="py-2.5 text-end text-success">Input VAT (15%)</th>
                                 <th class="py-2.5 text-end text-danger">3% WHT</th>
-                                <th class="py-2.5 text-end text-dark pe-3">Net Disbursed</th>
+                                <th class="py-2.5 text-end text-dark">Net Disbursed</th>
+                                <th class="py-2.5 text-center pe-3 d-print-none">Actions / Slip</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y">
@@ -538,8 +539,20 @@
                                     $expWht  = (float)($exp['withholding_amount'] ?? 0);
                                     $expNet  = (float)($exp['net_disbursed'] ?? ($expBase + $expVat - $expWht));
                                     $isVatExp = !empty($exp['is_vat_purchase']) || $expVat > 0;
+                                    $cleanExpTin = preg_replace('/\D/', '', (string)($exp['seller_tin'] ?? ''));
+                                    $hasValidExpTin = strlen($cleanExpTin) === 10;
+                                    $hasPartialExpTin = !empty($cleanExpTin) && strlen($cleanExpTin) !== 10;
+                                    $hasExpWht = !empty($exp['has_withholding']) || $expWht > 0;
+                                    $expSlip = $exp['receipt_slip_url'] ?? ($exp['attachment_url'] ?? null);
+                                    $isExpPdf = $expSlip && str_contains(strtolower($expSlip), '.pdf');
+                                    $expWhtSlip = $exp['withholding_receipt_url'] ?? null;
                                 @endphp
                                 <tr class="expense-row" 
+                                    id="page-expense-row-{{ $exp['id'] ?? $idx }}"
+                                    data-idx="{{ $idx }}"
+                                    data-expense-id="{{ $exp['id'] ?? '' }}"
+                                    data-receipt-id="{{ $exp['receipt_id'] ?? '' }}"
+                                    data-fs="{{ ($exp['fs_no'] ?? '') !== '-' ? ($exp['fs_no'] ?? '') : '' }}"
                                     data-purchase-category="{{ $isVatExp ? 'vat' : 'tas' }}"
                                     data-base="{{ $expBase }}"
                                     data-vat="{{ $expVat }}"
@@ -576,18 +589,36 @@
                                         @if(!empty($exp['payment_reference']) && $exp['payment_reference'] !== '-')
                                             <small class="text-muted d-block font-monospace">Ref: {{ $exp['payment_reference'] }}</small>
                                         @endif
-                                        @if(!empty($exp['fs_no']) && $exp['fs_no'] !== '-')
-                                            <small class="text-primary font-monospace d-block" style="font-size:0.7rem;"><i class="fa-solid fa-barcode me-0.5"></i>FS #: {{ $exp['fs_no'] }}</small>
-                                        @endif
-                                        @if(!empty($exp['mrc_no']) && $exp['mrc_no'] !== '-')
-                                            <small class="text-muted font-monospace d-block" style="font-size:0.68rem;">MRC: {{ $exp['mrc_no'] }}</small>
-                                        @endif
+                                        <small class="text-primary font-monospace cell-exp-fs {{ (!empty($exp['fs_no']) && $exp['fs_no'] !== '-') ? 'd-block' : 'd-none' }}" style="font-size:0.7rem;"><i class="fa-solid fa-barcode me-0.5"></i>FS #: {{ $exp['fs_no'] ?? '' }}</small>
+                                        <small class="text-muted font-monospace cell-exp-mrc {{ (!empty($exp['mrc_no']) && $exp['mrc_no'] !== '-') ? 'd-block' : 'd-none' }}" style="font-size:0.68rem;">MRC: {{ $exp['mrc_no'] ?? '' }}</small>
                                     </td>
                                     <td>
-                                        <span class="fw-semibold text-dark d-block">{{ $exp['payee'] ?? 'Vendor' }}</span>
-                                        @if(!empty($exp['seller_tin']) && $exp['seller_tin'] !== '-')
-                                            <small class="text-muted font-monospace d-block" style="font-size:0.72rem;">TIN: {{ $exp['seller_tin'] }}</small>
-                                        @endif
+                                        <div class="d-flex align-items-center gap-1 flex-wrap mb-0.5">
+                                            @if($hasValidExpTin)
+                                                <span class="badge bg-success-subtle text-success border border-success-subtle font-monospace px-1.5 py-0.5 rounded-2 cell-exp-tin fw-bold" title="ERCA Valid 10-Digit Seller TIN">
+                                                    <i class="fa-solid fa-circle-check text-success me-0.5"></i>{{ $cleanExpTin }}
+                                                </span>
+                                            @elseif($hasPartialExpTin)
+                                                <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle font-monospace px-1.5 py-0.5 rounded-2 cell-exp-tin fw-bold" title="{{ strlen($cleanExpTin) }}/10 Digits - Incomplete ERCA TIN">
+                                                    <i class="fa-solid fa-triangle-exclamation text-warning me-0.5"></i>{{ $exp['seller_tin'] }}
+                                                </span>
+                                            @else
+                                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle font-monospace px-1.5 py-0.5 rounded-2 cell-exp-tin fw-semibold" title="Missing Seller TIN">
+                                                    <i class="fa-solid fa-circle-xmark me-0.5"></i>No TIN
+                                                </span>
+                                            @endif
+
+                                            <button type="button" 
+                                                    class="btn btn-xs {{ $hasValidExpTin ? 'btn-link text-muted p-0' : 'btn-outline-danger rounded-pill px-1.5 py-0.5 shadow-2xs' }} d-inline-flex align-items-center gap-1 fw-semibold d-print-none" 
+                                                    onclick="openExpenseInspector({{ $idx }})" 
+                                                    title="{{ $hasValidExpTin ? 'Edit Seller TIN / Slip' : 'Fill Seller TIN in Inspector' }}">
+                                                <i class="fa-solid fa-pen-to-square"></i>
+                                                @if(!$hasValidExpTin)
+                                                    <span style="font-size:0.65rem;">Fill TIN</span>
+                                                @endif
+                                            </button>
+                                        </div>
+                                        <span class="fw-semibold text-dark d-block text-truncate cell-exp-payee" style="max-width: 175px;">{{ $exp['payee'] ?? 'Vendor' }}</span>
                                     </td>
                                     <td>
                                         <span class="badge bg-info-subtle text-info border border-info-subtle rounded-pill small">{{ $exp['category'] ?? 'General' }}</span>
@@ -596,25 +627,261 @@
                                     <td class="small text-muted">
                                         <i class="fa-solid fa-wallet me-1 text-danger"></i>{{ $exp['account_name'] ?? '-' }}
                                     </td>
-                                    <td class="text-end font-monospace">ETB {{ number_format($expBase, 2) }}</td>
-                                    <td class="text-end font-monospace text-success fw-semibold">ETB {{ number_format($expVat, 2) }}</td>
-                                    <td class="text-end font-monospace text-danger">{{ $expWht > 0 ? '- ETB ' . number_format($expWht, 2) : '-' }}</td>
-                                    <td class="text-end pe-3">
-                                        <div class="font-monospace text-dark fw-bold">ETB {{ number_format($expNet, 2) }}</div>
-                                        @php
-                                            $expSlip = $exp['receipt_slip_url'] ?? ($exp['attachment_url'] ?? null);
-                                        @endphp
-                                        @if(!empty($expSlip))
-                                            <a href="{{ $expSlip }}" target="_blank" class="btn btn-xs btn-outline-info rounded-pill px-2 py-0.5 d-inline-flex align-items-center gap-1 shadow-2xs mt-1" style="font-size:0.65rem;" title="View Receipt / Voucher Slip">
-                                                <i class="fa-solid fa-receipt"></i>
-                                                <span>Slip</span>
-                                            </a>
+                                    <td class="text-end font-monospace cell-exp-base">ETB {{ number_format($expBase, 2) }}</td>
+                                    <td class="text-end font-monospace text-success fw-semibold cell-exp-vat">ETB {{ number_format($expVat, 2) }}</td>
+                                    <td class="text-end font-monospace text-danger cell-exp-wht">
+                                        @if($expWht > 0)
+                                            <div class="fw-bold">- ETB {{ number_format($expWht, 2) }}</div>
+                                            <small class="text-danger d-block font-monospace" style="font-size:0.68rem;">
+                                                <i class="fa-solid fa-hand-holding-dollar me-0.5"></i>{{ number_format($exp['withholding_rate'] ?? 3, 1) }}% WHT
+                                            </small>
+                                        @else
+                                            <span class="text-muted">-</span>
+                                            <button type="button" class="btn btn-xs btn-outline-warning text-dark border-warning rounded-pill px-1.5 py-0.2 d-block ms-auto mt-0.5 d-print-none shadow-2xs" onclick="toggleExpenseQuickRow({{ $idx }})" style="font-size:0.65rem;" title="Fill Withholding Tax Deduction">
+                                                <i class="fa-solid fa-plus me-0.5"></i>WHT
+                                            </button>
                                         @endif
+                                    </td>
+                                    <td class="text-end font-monospace text-dark fw-bold cell-exp-net">
+                                        ETB {{ number_format($expNet, 2) }}
+                                    </td>
+                                    <td class="text-center pe-3 d-print-none">
+                                        <div class="d-inline-flex align-items-center gap-1 flex-wrap justify-content-center">
+                                            {{-- Inline Quick Fill Row Toggle --}}
+                                            <button type="button" 
+                                                    class="btn btn-xs btn-outline-primary rounded-pill px-2 py-1 d-inline-flex align-items-center gap-1 fw-semibold shadow-2xs btn-quick-toggle" 
+                                                    onclick="toggleExpenseQuickRow({{ $idx }})" 
+                                                    id="btn-quick-row-{{ $exp['id'] ?? $idx }}"
+                                                    title="Expand Inline Row to Fill Receipt & Withholding Details">
+                                                <i class="fa-solid fa-pen-to-square"></i>
+                                                <span class="quick-toggle-text">Fill / Edit</span>
+                                            </button>
+
+                                            {{-- Inspector Modal Button --}}
+                                            <button type="button" 
+                                                    class="btn btn-xs btn-outline-secondary rounded-pill px-2 py-1 d-inline-flex align-items-center gap-1 fw-semibold shadow-2xs" 
+                                                    onclick="openExpenseInspector({{ $idx }})" 
+                                                    title="Open ERCA Slip Inspector to Edit FS / TIN / Amounts & Scanned Slip">
+                                                <i class="fa-solid fa-receipt"></i>
+                                                <span>Inspector</span>
+                                            </button>
+
+                                            {{-- Detail Modal Button --}}
+                                            <button type="button" 
+                                                    class="btn btn-xs btn-outline-info rounded-pill px-2 py-1 d-inline-flex align-items-center gap-1 fw-semibold shadow-2xs" 
+                                                    onclick="openExpenseDetailModal({{ $idx }})" 
+                                                    title="View Full Expense Request, Withholding Tax & Purpose Details">
+                                                <i class="fa-solid fa-circle-info text-info"></i>
+                                                <span>Detail</span>
+                                            </button>
+
+                                            {{-- Scanned Slip Link or Attach Button --}}
+                                            @if(!empty($expSlip))
+                                                <a href="{{ $expSlip }}" target="_blank" class="btn btn-xs {{ $isExpPdf ? 'btn-outline-danger' : 'btn-outline-primary' }} rounded-pill px-2 py-0.5 d-inline-flex align-items-center gap-1 shadow-2xs cell-exp-slip-link" title="View Scanned Receipt Slip">
+                                                    <i class="fa-solid {{ $isExpPdf ? 'fa-file-pdf text-danger' : 'fa-receipt text-primary' }}"></i>
+                                                    <span>{{ $isExpPdf ? 'PDF Slip' : 'Slip' }}</span>
+                                                </a>
+                                            @else
+                                                <button type="button" class="btn btn-xs btn-outline-dashed rounded-pill px-2 py-0.5 text-muted border cell-exp-attach-btn" onclick="openExpenseInspector({{ $idx }})" title="Attach or Upload Receipt Slip" style="font-size:0.68rem;">
+                                                    <i class="fa-solid fa-arrow-up-from-bracket me-0.5"></i>Attach
+                                                </button>
+                                            @endif
+
+                                            @if(!empty($expWhtSlip))
+                                                <a href="{{ $expWhtSlip }}" target="_blank" class="btn btn-xs btn-outline-danger rounded-pill px-2 py-0.5 d-inline-flex align-items-center gap-1 shadow-2xs cell-exp-wht-slip-link" style="font-size:0.68rem;" title="View Attached Withholding Tax (WHT) Receipt / Certificate">
+                                                    <i class="fa-solid fa-file-invoice-dollar text-danger"></i>
+                                                    <span>WHT Slip</span>
+                                                </a>
+                                            @endif
+                                        </div>
+                                    </td>
+                                </tr>
+
+                                {{-- ── INLINE QUICK FILL ROW: RECEIPT & WITHHOLDING ── --}}
+                                <tr class="expense-quick-fill-row d-none bg-light bg-opacity-75 border-bottom border-primary border-2" id="expense-quick-fill-row-{{ $exp['id'] ?? $idx }}" data-idx="{{ $idx }}">
+                                    <td colspan="11" class="p-3">
+                                        <div class="card border-0 shadow-sm rounded-3 overflow-hidden bg-white">
+                                            <div class="card-header bg-dark text-white py-2 px-3 d-flex align-items-center justify-content-between flex-wrap gap-2" style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%) !important;">
+                                                <div class="d-flex align-items-center gap-2">
+                                                    <span class="badge bg-primary text-white rounded-pill px-2 py-1 small font-monospace">
+                                                        <i class="fa-solid fa-file-invoice me-1"></i>{{ $exp['request_number'] ?? ('EXP #' . ($idx + 1)) }}
+                                                    </span>
+                                                    <span class="fw-bold text-white small">Fill Receipt Details &amp; Withholding Tax (WHT)</span>
+                                                    <span class="text-white-50 small d-none d-md-inline">&bull; {{ $exp['payee'] ?? 'Vendor' }} &bull; Base: ETB {{ number_format($expBase, 2) }}</span>
+                                                </div>
+                                                <div class="d-flex align-items-center gap-2">
+                                                    <button type="button" class="btn btn-xs btn-outline-info rounded-pill px-2.5 py-0.5 text-white border-light border-opacity-50" onclick="openExpenseInspector({{ $idx }})">
+                                                        <i class="fa-solid fa-up-right-and-down-left-from-center me-1"></i>Full Inspector
+                                                    </button>
+                                                    <button type="button" class="btn btn-xs btn-link text-white-50 p-0 fs-6" onclick="toggleExpenseQuickRow({{ $idx }})" title="Close Quick Row">
+                                                        <i class="fa-solid fa-xmark"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div class="card-body p-3">
+                                                <div id="quickRowAlert-{{ $exp['id'] ?? $idx }}" class="alert d-none py-1.5 px-3 small rounded-3 mb-2.5"></div>
+
+                                                <form id="quickRowForm-{{ $exp['id'] ?? $idx }}" onsubmit="saveExpenseQuickRow(event, {{ $idx }}); return false;">
+                                                    <input type="hidden" name="id" value="{{ $exp['receipt_id'] ?? '' }}">
+                                                    <input type="hidden" name="receipt_id" value="{{ $exp['receipt_id'] ? ('REC-' . $exp['receipt_id']) : ($exp['id'] ? ('EXP-' . $exp['id']) : '') }}">
+                                                    <input type="hidden" name="expense_request_id" value="{{ $exp['id'] ?? '' }}">
+                                                    <input type="hidden" name="request_number" value="{{ $exp['request_number'] ?? '' }}">
+                                                    <input type="hidden" name="receipt_path" value="{{ $exp['attachment_url'] ?? '' }}">
+                                                    <input type="hidden" name="withholding_receipt_path" value="{{ $exp['withholding_receipt_url'] ?? '' }}">
+
+                                                    <div class="row g-3">
+                                                        {{-- ── SECTION 1: FISCAL RECEIPT DETAILS ── --}}
+                                                        <div class="col-12 col-lg-5 border-end-lg pe-lg-3">
+                                                            <div class="d-flex align-items-center justify-content-between mb-2 pb-1 border-bottom">
+                                                                <span class="fw-bold small text-dark"><i class="fa-solid fa-receipt text-primary me-1"></i>1. Fiscal Cash Receipt Details</span>
+                                                                <span class="badge bg-light text-muted border font-monospace" style="font-size:0.65rem;">ERCA Fiscal</span>
+                                                            </div>
+
+                                                            <div class="mb-2">
+                                                                <label class="form-label small fw-semibold text-muted mb-0.5" style="font-size:0.72rem;">Supplier / Payee Name <span class="text-danger">*</span></label>
+                                                                <input type="text" name="seller_name" class="form-control form-control-sm rounded-2 font-monospace" value="{{ $exp['payee'] ?? '' }}" required placeholder="e.g. TotalEnergies Marketing Ethiopia">
+                                                            </div>
+
+                                                            <div class="row g-2 mb-2">
+                                                                <div class="col-6">
+                                                                    <label class="form-label small fw-semibold text-muted mb-0.5" style="font-size:0.72rem;">Seller TIN (10 Digits) <span class="text-danger">*</span></label>
+                                                                    <input type="text" name="supplier_tin" maxlength="12" class="form-control form-control-sm font-monospace fw-bold" value="{{ ($exp['seller_tin'] ?? '') !== '-' ? ($exp['seller_tin'] ?? '') : '' }}" placeholder="10 Digits" oninput="this.value = this.value.replace(/\D/g, '').slice(0, 10)">
+                                                                    <div class="form-text text-muted" style="font-size:0.65rem;">Must be 10 digits</div>
+                                                                </div>
+                                                                <div class="col-6">
+                                                                    <label class="form-label small fw-semibold text-muted mb-0.5" style="font-size:0.72rem;">FS / Receipt # <span class="text-danger">*</span></label>
+                                                                    <input type="text" name="fs_no" maxlength="15" class="form-control form-control-sm font-monospace text-primary fw-bold" value="{{ ($exp['fs_no'] ?? '') !== '-' ? ($exp['fs_no'] ?? '') : '' }}" placeholder="e.g. 00012345">
+                                                                    <div class="form-text text-muted" style="font-size:0.65rem;">8-digit fiscal slip</div>
+                                                                </div>
+                                                            </div>
+
+                                                            <div class="row g-2 mb-2">
+                                                                <div class="col-6">
+                                                                    <label class="form-label small fw-semibold text-muted mb-0.5" style="font-size:0.72rem;">Machine MRC #</label>
+                                                                    <input type="text" name="mrc_no" class="form-control form-control-sm font-monospace" value="{{ ($exp['mrc_no'] ?? '') !== '-' ? ($exp['mrc_no'] ?? '') : '' }}" placeholder="e.g. MTR12345678">
+                                                                </div>
+                                                                <div class="col-6">
+                                                                    <label class="form-label small fw-semibold text-muted mb-0.5" style="font-size:0.72rem;">Receipt Date</label>
+                                                                    <input type="date" name="receipt_date" class="form-control form-control-sm font-monospace" value="{{ !empty($exp['raw_date']) ? \Carbon\Carbon::parse($exp['raw_date'])->format('Y-m-d') : '' }}">
+                                                                </div>
+                                                            </div>
+
+                                                            <div>
+                                                                <label class="form-label small fw-semibold text-muted mb-0.5" style="font-size:0.72rem;">Attach Scanned Slip (Image / PDF)</label>
+                                                                <div class="d-flex align-items-center gap-1.5">
+                                                                    <input type="file" name="receipt_file" class="form-control form-control-sm" accept=".jpg,.jpeg,.png,.webp,.pdf">
+                                                                    @if(!empty($expSlip))
+                                                                        <a href="{{ $expSlip }}" target="_blank" class="btn btn-xs btn-outline-info text-nowrap py-1 px-2" title="View Current Slip">
+                                                                            <i class="fa-solid fa-receipt"></i> View
+                                                                        </a>
+                                                                    @endif
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        {{-- ── SECTION 2: WITHHOLDING TAX (WHT) ── --}}
+                                                        <div class="col-12 col-lg-4 border-end-lg pe-lg-3">
+                                                            <div class="d-flex align-items-center justify-content-between mb-2 pb-1 border-bottom">
+                                                                <span class="fw-bold small text-dark"><i class="fa-solid fa-hand-holding-dollar text-warning me-1"></i>2. Withholding Tax (WHT)</span>
+                                                                <div class="form-check form-switch mb-0">
+                                                                    <input class="form-check-input" type="checkbox" name="has_withholding" value="1" id="quickWhtToggle-{{ $exp['id'] ?? $idx }}" {{ (!empty($exp['has_withholding']) || $expWht > 0) ? 'checked' : '' }} onchange="toggleQuickWhtSection({{ $idx }}, this.checked)">
+                                                                    <label class="form-check-label small fw-semibold text-dark" for="quickWhtToggle-{{ $exp['id'] ?? $idx }}">Apply WHT</label>
+                                                                </div>
+                                                            </div>
+
+                                                            <div id="quickWhtBody-{{ $exp['id'] ?? $idx }}" class="{{ (!empty($exp['has_withholding']) || $expWht > 0) ? '' : 'd-none' }}">
+                                                                <div class="row g-2 mb-2">
+                                                                    <div class="col-6">
+                                                                        <label class="form-label small fw-semibold text-muted mb-0.5" style="font-size:0.72rem;">WHT Rate</label>
+                                                                        <select name="withholding_rate" class="form-select form-select-sm font-monospace" onchange="calcQuickWht({{ $idx }})">
+                                                                            <option value="2" {{ (float)($exp['withholding_rate'] ?? 0) == 2 ? 'selected' : '' }}>2.0% (Goods Supply)</option>
+                                                                            <option value="3" {{ ((float)($exp['withholding_rate'] ?? 3) == 3 || empty($exp['withholding_rate'])) ? 'selected' : '' }}>3.0% (Services Standard)</option>
+                                                                            <option value="30" {{ (float)($exp['withholding_rate'] ?? 0) == 30 ? 'selected' : '' }}>30.0% (No TIN / Unregistered)</option>
+                                                                        </select>
+                                                                    </div>
+                                                                    <div class="col-6">
+                                                                        <label class="form-label small fw-semibold text-danger mb-0.5" style="font-size:0.72rem;">WHT Deduction (ETB)</label>
+                                                                        <input type="number" step="0.01" min="0" name="withholding_amount" class="form-control form-control-sm font-monospace text-danger fw-bold" value="{{ $expWht > 0 ? number_format($expWht, 2, '.', '') : '' }}" oninput="calcQuickNet({{ $idx }})">
+                                                                    </div>
+                                                                </div>
+
+                                                                <div class="mb-2">
+                                                                    <label class="form-label small fw-semibold text-muted mb-0.5" style="font-size:0.72rem;">WHT Certificate / Voucher #</label>
+                                                                    <input type="text" name="withholding_receipt_number" class="form-control form-control-sm font-monospace" value="{{ ($exp['withholding_receipt_number'] ?? '') !== '-' ? ($exp['withholding_receipt_number'] ?? '') : '' }}" placeholder="e.g. WHT-2026-0098">
+                                                                </div>
+
+                                                                <div>
+                                                                    <label class="form-label small fw-semibold text-muted mb-0.5" style="font-size:0.72rem;">Attach WHT Certificate (Image / PDF)</label>
+                                                                    <div class="d-flex align-items-center gap-1.5">
+                                                                        <input type="file" name="withholding_file" class="form-control form-control-sm" accept=".jpg,.jpeg,.png,.webp,.pdf">
+                                                                        @if(!empty($exp['withholding_receipt_url']))
+                                                                            <a href="{{ $exp['withholding_receipt_url'] }}" target="_blank" class="btn btn-xs btn-outline-warning text-nowrap py-1 px-2" title="View WHT Certificate">
+                                                                                <i class="fa-solid fa-file-invoice-dollar"></i> View
+                                                                            </a>
+                                                                        @endif
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+
+                                                            <div id="quickWhtNone-{{ $exp['id'] ?? $idx }}" class="{{ (!empty($exp['has_withholding']) || $expWht > 0) ? 'd-none' : '' }} text-center py-4 bg-light rounded-2 text-muted">
+                                                                <i class="fa-solid fa-shield-halved text-secondary me-1"></i>No Withholding Tax deduction applied.
+                                                                <small class="d-block text-muted mt-1">Toggle switch above to record 2%, 3%, or 30% WHT.</small>
+                                                            </div>
+                                                        </div>
+
+                                                        {{-- ── SECTION 3: RECONCILIATION & ACTION ── --}}
+                                                        <div class="col-12 col-lg-3 d-flex flex-column justify-content-between">
+                                                            <div>
+                                                                <div class="d-flex align-items-center justify-content-between mb-2 pb-1 border-bottom">
+                                                                    <span class="fw-bold small text-dark"><i class="fa-solid fa-calculator text-success me-1"></i>3. Financial Net</span>
+                                                                    <span class="badge {{ $isVatExp ? 'bg-success-subtle text-success' : 'bg-primary-subtle text-primary' }} rounded-pill" style="font-size:0.65rem;">
+                                                                        {{ $isVatExp ? '15% VAT' : '0% TAS' }}
+                                                                    </span>
+                                                                </div>
+
+                                                                <div class="bg-light p-2.5 rounded-3 border mb-2 font-monospace" style="font-size:0.75rem;">
+                                                                    <div class="d-flex justify-content-between mb-1">
+                                                                        <span class="text-muted">Purchases Base:</span>
+                                                                        <span class="fw-semibold text-dark">ETB {{ number_format($expBase, 2) }}</span>
+                                                                    </div>
+                                                                    <div class="d-flex justify-content-between mb-1">
+                                                                        <span class="text-success">Input VAT:</span>
+                                                                        <span class="fw-bold text-success">+ ETB {{ number_format($expVat, 2) }}</span>
+                                                                    </div>
+                                                                    <div class="d-flex justify-content-between mb-1">
+                                                                        <span class="text-danger">WHT Deducted:</span>
+                                                                        <span class="fw-bold text-danger quick-wht-display" id="quickWhtDisplay-{{ $exp['id'] ?? $idx }}">- ETB {{ number_format($expWht, 2) }}</span>
+                                                                    </div>
+                                                                    <div class="d-flex justify-content-between pt-1 border-top fw-bold">
+                                                                        <span class="text-dark">Net Disbursed:</span>
+                                                                        <span class="text-dark quick-net-display" id="quickNetDisplay-{{ $exp['id'] ?? $idx }}">ETB {{ number_format($expNet, 2) }}</span>
+                                                                    </div>
+                                                                </div>
+
+                                                                <input type="hidden" name="total_value" value="{{ $expBase }}">
+                                                                <input type="hidden" name="vat_amount" value="{{ $expVat }}">
+                                                                <input type="hidden" name="value_after_vat" value="{{ $expBase + $expVat }}">
+                                                                <input type="hidden" name="item_description" value="{{ $exp['description'] ?: ($exp['category'] ?? 'General Purchase') }}">
+                                                                <input type="hidden" name="category" value="{{ $exp['category'] ?? 'materials' }}">
+                                                                <input type="hidden" name="purchase_type" value="{{ $exp['purc_type'] ?? 'PUR_GD' }}">
+                                                            </div>
+
+                                                            <div class="pt-2">
+                                                                <button type="submit" class="btn btn-primary btn-sm w-100 rounded-pill py-2 fw-semibold shadow-xs d-inline-flex align-items-center justify-content-center gap-1.5" id="btnQuickSave-{{ $exp['id'] ?? $idx }}">
+                                                                    <i class="fa-solid fa-circle-check"></i>
+                                                                    <span>Save Receipt &amp; Withholding</span>
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </form>
+                                            </div>
+                                        </div>
                                     </td>
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="10" class="text-center py-4 text-muted">
+                                    <td colspan="11" class="text-center py-4 text-muted">
                                         <i class="fa-solid fa-folder-open me-2 text-secondary"></i>No purchases or paid expenses recorded for this Ethiopian month.
                                     </td>
                                 </tr>
@@ -626,7 +893,8 @@
                                 <td class="text-end py-2 font-monospace text-dark" id="pageExpenseFootBase">ETB {{ number_format($purchasesBase, 2) }}</td>
                                 <td class="text-end py-2 font-monospace text-success" id="pageExpenseFootVat">ETB {{ number_format($inputVat, 2) }}</td>
                                 <td class="text-end py-2 font-monospace text-danger" id="pageExpenseFootWht">- ETB {{ number_format($wht, 2) }}</td>
-                                <td class="text-end py-2 font-monospace text-dark pe-3" id="pageExpenseFootNet">ETB {{ number_format($netDisbursed, 2) }}</td>
+                                <td class="text-end py-2 font-monospace text-dark" id="pageExpenseFootNet">ETB {{ number_format($netDisbursed, 2) }}</td>
+                                <td class="d-print-none"></td>
                             </tr>
                         </tfoot>
                     </table>
@@ -1509,6 +1777,65 @@
                                             </button>
                                         </div>
                                     </div>
+
+                                    {{-- Withholding Tax (WHT) Section --}}
+                                    <div class="p-2.5 bg-warning bg-opacity-10 rounded-3 border border-warning border-opacity-25 mt-2.5">
+                                        <div class="d-flex align-items-center justify-content-between mb-1.5">
+                                            <div class="form-check form-switch mb-0">
+                                                <input class="form-check-input" type="checkbox" id="movement_edit_has_withholding" name="has_withholding" value="1" onchange="toggleMovementWithholding(this.checked)">
+                                                <label class="form-check-label small fw-bold text-dark" for="movement_edit_has_withholding">
+                                                    <i class="fa-solid fa-hand-holding-dollar text-warning me-1"></i>Apply Withholding Tax (WHT)
+                                                </label>
+                                            </div>
+                                            <span class="badge bg-secondary-subtle text-muted font-monospace" style="font-size:0.68rem;" id="movement_wht_status_badge">No WHT</span>
+                                        </div>
+
+                                        <div id="movement_wht_fields_container" class="d-none">
+                                            <div class="row g-2 mb-2">
+                                                <div class="col-4">
+                                                    <label class="form-label small fw-semibold text-muted mb-0.5" style="font-size:0.7rem;">WHT Rate</label>
+                                                    <select class="form-select form-select-sm font-monospace" id="movement_edit_withholding_rate" name="withholding_rate" onchange="onMovementWhtRateChange(this.value)">
+                                                        <option value="2">2.0% (Goods Supply)</option>
+                                                        <option value="3" selected>3.0% (Services Standard)</option>
+                                                        <option value="30">30.0% (No TIN / Unregistered)</option>
+                                                        <option value="custom">Custom Rate...</option>
+                                                    </select>
+                                                    <input type="number" step="0.1" min="0" max="100" class="form-control form-control-sm font-monospace d-none mt-1" id="movement_edit_custom_wht_rate" placeholder="Custom %" oninput="recalcMovementWht()">
+                                                </div>
+                                                <div class="col-4">
+                                                    <label class="form-label small fw-semibold text-danger mb-0.5" style="font-size:0.7rem;">WHT Amount</label>
+                                                    <div class="input-group input-group-sm">
+                                                        <span class="input-group-text px-1 text-danger" style="font-size:0.7rem;">-</span>
+                                                        <input type="number" step="0.01" min="0" class="form-control font-monospace fw-bold text-danger" id="movement_edit_withholding_amount" name="withholding_amount" oninput="recalcMovementWhtCustomAmount(this.value)">
+                                                    </div>
+                                                </div>
+                                                <div class="col-4">
+                                                    <label class="form-label small fw-semibold text-dark mb-0.5" style="font-size:0.7rem;">Net Disbursed</label>
+                                                    <div class="input-group input-group-sm">
+                                                        <span class="input-group-text px-1 text-dark" style="font-size:0.7rem;">=</span>
+                                                        <input type="text" class="form-control font-monospace fw-bold text-dark bg-white" id="movement_edit_net_disbursed_display" readonly>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div class="row g-2">
+                                                <div class="col-6">
+                                                    <label class="form-label small fw-semibold text-muted mb-0.5" style="font-size:0.7rem;">WHT Certificate / Voucher #</label>
+                                                    <input type="text" class="form-control form-control-sm font-monospace" id="movement_edit_withholding_receipt_number" name="withholding_receipt_number" placeholder="e.g. WHT-2026-0042">
+                                                </div>
+                                                <div class="col-6">
+                                                    <label class="form-label small fw-semibold text-muted mb-0.5" style="font-size:0.7rem;">WHT Certificate Voucher Slip</label>
+                                                    <div class="d-flex align-items-center gap-1">
+                                                        <input type="file" class="form-control form-control-sm" id="movement_edit_withholding_file" name="withholding_file" accept=".jpg,.jpeg,.png,.webp,.pdf">
+                                                        <a id="movement_edit_current_wht_slip_link" href="#" target="_blank" class="btn btn-xs btn-outline-warning text-nowrap d-none py-1 px-2" title="View attached WHT certificate">
+                                                            <i class="fa-solid fa-file-invoice"></i> View
+                                                        </a>
+                                                    </div>
+                                                    <input type="hidden" id="movement_edit_withholding_receipt_path" name="withholding_receipt_path">
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </form>
                             </div>
                         </div>
@@ -1900,6 +2227,7 @@
     // Cached items for live inspector and table sync
     window._pageOcrItems = @json($movementsData['all_ocr_items'] ?? ($movementsData['ocr_items'] ?? []));
     window._pageTasPurchases = @json($movementsData['tas_purchases'] ?? []);
+    window._pageExpenses = @json($movementsData['expenses'] ?? []);
 
     // Toggle TAS Purchases by Seller TIN / WHT status: 'all', 'with_tin', 'missing_tin', 'with_wht'
     let _activeTasTinFilter = 'all';
@@ -2518,6 +2846,46 @@
         const totalInput = document.getElementById('movement_edit_value_after_vat');
         if (totalInput) totalInput.value = cleanNum(ocr.value_after_vat).toFixed(2);
 
+        // Populate Withholding fields for OCR item
+        const hasOcrWht = !!(ocr.has_withholding || (cleanNum(ocr.withholding_amount) > 0));
+        const whtCheck = document.getElementById('movement_edit_has_withholding');
+        if (whtCheck) {
+            whtCheck.checked = hasOcrWht;
+            toggleMovementWithholding(hasOcrWht);
+        }
+        const whtRateSelect = document.getElementById('movement_edit_withholding_rate');
+        const ocrWhtRate = cleanNum(ocr.withholding_rate) || 3;
+        if (whtRateSelect) {
+            if ([2, 3, 30].includes(Math.round(ocrWhtRate))) {
+                whtRateSelect.value = String(Math.round(ocrWhtRate));
+            } else {
+                whtRateSelect.value = 'custom';
+                const customRateInput = document.getElementById('movement_edit_custom_wht_rate');
+                if (customRateInput) {
+                    customRateInput.value = ocrWhtRate;
+                    customRateInput.classList.remove('d-none');
+                }
+            }
+        }
+        const whtAmtInput = document.getElementById('movement_edit_withholding_amount');
+        if (whtAmtInput) {
+            whtAmtInput.value = cleanNum(ocr.withholding_amount).toFixed(2);
+        }
+        const whtCertInput = document.getElementById('movement_edit_withholding_receipt_number');
+        if (whtCertInput) {
+            whtCertInput.value = (ocr.withholding_receipt_number && ocr.withholding_receipt_number !== '-') ? ocr.withholding_receipt_number : '';
+        }
+        const whtSlipLink = document.getElementById('movement_edit_current_wht_slip_link');
+        if (whtSlipLink) {
+            if (ocr.withholding_receipt_url) {
+                whtSlipLink.href = ocr.withholding_receipt_url;
+                whtSlipLink.classList.remove('d-none');
+            } else {
+                whtSlipLink.classList.add('d-none');
+            }
+        }
+        recalcMovementWht();
+
         // Clear alerts
         const alertBox = document.getElementById('movementOcrModalAlert');
         if (alertBox) {
@@ -2670,6 +3038,46 @@
         const totalInput = document.getElementById('movement_edit_value_after_vat');
         if (totalInput) totalInput.value = amt.toFixed(2);
 
+        // Populate Withholding fields in modal for TAS item
+        const hasTasWht = !!(tas.has_withholding || (cleanNum(tas.withholding_amount) > 0));
+        const whtCheck = document.getElementById('movement_edit_has_withholding');
+        if (whtCheck) {
+            whtCheck.checked = hasTasWht;
+            toggleMovementWithholding(hasTasWht);
+        }
+        const whtRateSelect = document.getElementById('movement_edit_withholding_rate');
+        const tasWhtRate = cleanNum(tas.withholding_rate) || 3;
+        if (whtRateSelect) {
+            if ([2, 3, 30].includes(Math.round(tasWhtRate))) {
+                whtRateSelect.value = String(Math.round(tasWhtRate));
+            } else {
+                whtRateSelect.value = 'custom';
+                const customRateInput = document.getElementById('movement_edit_custom_wht_rate');
+                if (customRateInput) {
+                    customRateInput.value = tasWhtRate;
+                    customRateInput.classList.remove('d-none');
+                }
+            }
+        }
+        const whtAmtInput = document.getElementById('movement_edit_withholding_amount');
+        if (whtAmtInput) {
+            whtAmtInput.value = cleanNum(tas.withholding_amount).toFixed(2);
+        }
+        const whtCertInput = document.getElementById('movement_edit_withholding_receipt_number');
+        if (whtCertInput) {
+            whtCertInput.value = (tas.withholding_receipt_number && tas.withholding_receipt_number !== '-') ? tas.withholding_receipt_number : '';
+        }
+        const whtSlipLink = document.getElementById('movement_edit_current_wht_slip_link');
+        if (whtSlipLink) {
+            if (tas.withholding_receipt_url) {
+                whtSlipLink.href = tas.withholding_receipt_url;
+                whtSlipLink.classList.remove('d-none');
+            } else {
+                whtSlipLink.classList.add('d-none');
+            }
+        }
+        recalcMovementWht();
+
         // Clear alerts
         const alertBox = document.getElementById('movementOcrModalAlert');
         if (alertBox) {
@@ -2689,13 +3097,12 @@
         }
     }
 
-    // Active index for detail modal
+    // Active index and source type for expense detail modal
     let _activeTasDetailIdx = null;
+    let _activeExpenseDetailType = 'tas'; // 'tas' | 'expense'
 
-    // Open Expense Request & Withholding Tax (WHT) Detail Modal for TAS Purchase
-    function openTasExpenseDetailModal(idx) {
-        _activeTasDetailIdx = idx;
-        const tas = (window._pageTasPurchases && window._pageTasPurchases[idx]) || {};
+    // Shared renderer for Expense Request & Withholding Tax Detail Modal
+    function _renderExpenseDetailModal(tas, idx, type) {
         const modalEl = document.getElementById('tasExpenseDetailModal');
         if (!modalEl) return;
 
@@ -2704,13 +3111,13 @@
         const whtAmount  = parseFloat(tas.withholding_amount || 0) || 0;
         const hasWht     = (tas.has_withholding || whtAmount > 0);
         const whtRate    = parseFloat(tas.withholding_rate || (whtAmount > 0 ? (whtAmount / Math.max(1, baseAmount) * 100).toFixed(1) : 0)) || 0;
-        const netAmount  = parseFloat(tas.net_disbursed || (baseAmount - whtAmount)) || 0;
+        const netAmount  = parseFloat(tas.net_disbursed || (baseAmount + vatAmount - whtAmount)) || 0;
 
         const formatMoney = (val) => 'ETB ' + (parseFloat(val) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
         // Header subtitles & badges
         const voucherBadge = document.getElementById('tasModalVoucherBadge');
-        if (voucherBadge) voucherBadge.textContent = tas.request_number || (tas.id ? ('EXP-' + tas.id) : ('TAS #' + (idx + 1)));
+        if (voucherBadge) voucherBadge.textContent = tas.request_number || (tas.id ? ('EXP-' + tas.id) : (type === 'tas' ? ('TAS #' + (idx + 1)) : ('EXP #' + (idx + 1))));
 
         const payeeSub = document.getElementById('tasModalPayeeSubtitle');
         if (payeeSub) payeeSub.textContent = tas.payee || tas.seller_name || 'Vendor';
@@ -2719,7 +3126,17 @@
         if (amtSub) amtSub.textContent = formatMoney(baseAmount);
 
         const catSub = document.getElementById('tasModalCategorySubtitle');
-        if (catSub) catSub.textContent = tas.category || (tas.is_fuel ? 'Fuel Expense' : 'TAS Purchase (0% VAT)');
+        if (catSub) {
+            if (tas.category) {
+                catSub.textContent = tas.category;
+            } else if (tas.is_fuel) {
+                catSub.textContent = 'Fuel Expense';
+            } else if (vatAmount > 0) {
+                catSub.textContent = 'VAT Purchase (15%)';
+            } else {
+                catSub.textContent = 'TAS Purchase (0% VAT)';
+            }
+        }
 
         const statusBadge = document.getElementById('tasModalWhtStatusBadge');
         if (statusBadge) {
@@ -2926,6 +3343,22 @@
         }
     }
 
+    // Open Expense Request & WHT Detail Modal for TAS Purchase
+    function openTasExpenseDetailModal(idx) {
+        _activeTasDetailIdx = idx;
+        _activeExpenseDetailType = 'tas';
+        const tas = (window._pageTasPurchases && window._pageTasPurchases[idx]) || {};
+        _renderExpenseDetailModal(tas, idx, 'tas');
+    }
+
+    // Open Expense Request & WHT Detail Modal for Expense Row
+    function openExpenseDetailModal(idx) {
+        _activeTasDetailIdx = idx;
+        _activeExpenseDetailType = 'expense';
+        const exp = (window._pageExpenses && window._pageExpenses[idx]) || {};
+        _renderExpenseDetailModal(exp, idx, 'expense');
+    }
+
     // Switch from Detail Modal to ERCA Slip Inspector
     function openPageTasInspectorFromDetail() {
         const modalEl = document.getElementById('tasExpenseDetailModal');
@@ -2939,9 +3372,709 @@
         }
         if (_activeTasDetailIdx !== null) {
             setTimeout(() => {
-                openPageTasInspector(_activeTasDetailIdx);
+                if (_activeExpenseDetailType === 'expense') {
+                    openExpenseInspector(_activeTasDetailIdx);
+                } else {
+                    openPageTasInspector(_activeTasDetailIdx);
+                }
             }, 300);
         }
+    }
+
+    // Open Side-by-Side ERCA Inspector for an Expense in #pageExpenseTable
+    function openExpenseInspector(idx) {
+        const exp = (window._pageExpenses && window._pageExpenses[idx]) || {};
+        const modalEl = document.getElementById('movementSlipModal');
+        if (!modalEl) return;
+
+        const cleanNum = (v) => {
+            const n = parseFloat(String(v ?? '0').replace(/[^0-9.-]/g, ''));
+            return isNaN(n) ? 0 : n;
+        };
+
+        const idInput = document.getElementById('movement_edit_ocr_item_id');
+        if (idInput) idInput.value = exp.receipt_id || '';
+
+        const rcptIdInput = document.getElementById('movement_edit_receipt_id');
+        if (rcptIdInput) rcptIdInput.value = exp.receipt_id ? ('REC-' + exp.receipt_id) : (exp.id ? ('EXP-' + exp.id) : (exp.request_number || ''));
+
+        const expIdInput = document.getElementById('movement_edit_expense_request_id');
+        if (expIdInput) expIdInput.value = exp.id || '';
+
+        const reqNumInput = document.getElementById('movement_edit_request_number');
+        if (reqNumInput) reqNumInput.value = exp.request_number || '';
+
+        const pathInput = document.getElementById('movement_edit_receipt_file_path');
+        if (pathInput) pathInput.value = exp.receipt_slip_url || exp.attachment_url || '';
+
+        const fileInput = document.getElementById('movementSlipFileInput');
+        if (fileInput) fileInput.value = '';
+
+        const camInput = document.getElementById('movementSlipCameraInput');
+        if (camInput) camInput.value = '';
+
+        const progBox = document.getElementById('movementUploadProgress');
+        if (progBox) progBox.className = 'alert alert-info py-2 px-3 small rounded-3 mb-2 d-none align-items-center justify-content-between flex-shrink-0';
+
+        const badgeId = document.getElementById('movement_edit_ocr_badge_id');
+        if (badgeId) badgeId.textContent = exp.request_number || ('EXP #' + (idx + 1));
+
+        const fsDisplay = document.getElementById('movementModalFsNoDisplay');
+        if (fsDisplay) {
+            fsDisplay.textContent = exp.fs_no && exp.fs_no !== '-' 
+                ? ('FS #' + exp.fs_no + ' (' + (exp.request_number || 'Expense') + ')') 
+                : (exp.request_number ? (exp.request_number + ' Expense Inspector') : 'Expense Inspector');
+        }
+
+        const sellerName = document.getElementById('movement_edit_seller_name');
+        if (sellerName) sellerName.value = exp.payee || exp.seller_name || '';
+
+        const tinInput = document.getElementById('movement_edit_supplier_tin');
+        if (tinInput) {
+            const rawTin = exp.seller_tin === '-' ? '' : (exp.seller_tin || '');
+            tinInput.value = rawTin;
+            validateMovementTin(rawTin);
+        }
+
+        const fsInput = document.getElementById('movement_edit_fs_no');
+        if (fsInput) {
+            const rawFs = exp.fs_no === '-' ? '' : (exp.fs_no || '');
+            fsInput.value = rawFs;
+            validateMovementFs(rawFs);
+        }
+
+        const mrcInput = document.getElementById('movement_edit_mrc_no');
+        if (mrcInput) mrcInput.value = (exp.mrc_no === '-' ? '' : exp.mrc_no) || '';
+
+        const dateInput = document.getElementById('movement_edit_receipt_date');
+        if (dateInput) {
+            let ymd = exp.receipt_date_ymd || '';
+            if (!ymd && (exp.raw_date || exp.date_gc)) {
+                try {
+                    const parsed = new Date(exp.raw_date || exp.date_gc);
+                    if (!isNaN(parsed.getTime())) {
+                        const yr = parsed.getFullYear();
+                        const mo = String(parsed.getMonth() + 1).padStart(2, '0');
+                        const da = String(parsed.getDate()).padStart(2, '0');
+                        ymd = `${yr}-${mo}-${da}`;
+                    }
+                } catch (e) {}
+            }
+            dateInput.value = ymd;
+        }
+
+        const dateEcPreview = document.getElementById('movement_edit_date_ec_preview');
+        if (dateEcPreview) dateEcPreview.textContent = exp.date_ec ? ('EC: ' + exp.date_ec) : '';
+
+        const descInput = document.getElementById('movement_edit_item_description');
+        if (descInput) descInput.value = exp.description && exp.description !== '-' ? exp.description : (exp.category || 'Expense Voucher');
+
+        const projSelect = document.getElementById('movement_edit_project_id');
+        if (projSelect) projSelect.value = exp.project_id || '';
+
+        const catSelect = document.getElementById('movement_edit_category');
+        if (catSelect) catSelect.value = exp.category || 'materials';
+
+        const isVat = cleanNum(exp.vat_amount) > 0 || exp.purchase_category === 'vat';
+        const vatCatSelect = document.getElementById('movement_edit_vat_category');
+        if (vatCatSelect) vatCatSelect.value = isVat ? 'G' : 'E';
+
+        const purcTypeSelect = document.getElementById('movement_edit_purchase_type');
+        if (purcTypeSelect) purcTypeSelect.value = exp.purc_type || 'PUR_GD';
+
+        const baseVal = cleanNum(exp.base_amount || exp.amount);
+        const vatVal  = cleanNum(exp.vat_amount);
+        const totalVal = cleanNum(exp.gross_amount || exp.total_amount || (baseVal + vatVal));
+
+        const baseInput = document.getElementById('movement_edit_total_value');
+        if (baseInput) baseInput.value = baseVal.toFixed(2);
+
+        const vatInput = document.getElementById('movement_edit_vat_amount');
+        if (vatInput) vatInput.value = vatVal.toFixed(2);
+
+        const totalInput = document.getElementById('movement_edit_value_after_vat');
+        if (totalInput) totalInput.value = totalVal.toFixed(2);
+
+        // Populate Withholding fields
+        const hasExpWht = !!(exp.has_withholding || (cleanNum(exp.withholding_amount) > 0));
+        const whtCheck = document.getElementById('movement_edit_has_withholding');
+        if (whtCheck) {
+            whtCheck.checked = hasExpWht;
+            toggleMovementWithholding(hasExpWht);
+        }
+        const whtRateSelect = document.getElementById('movement_edit_withholding_rate');
+        const expWhtRate = cleanNum(exp.withholding_rate) || 3;
+        if (whtRateSelect) {
+            if ([2, 3, 30].includes(Math.round(expWhtRate))) {
+                whtRateSelect.value = String(Math.round(expWhtRate));
+            } else {
+                whtRateSelect.value = 'custom';
+                const customRateInput = document.getElementById('movement_edit_custom_wht_rate');
+                if (customRateInput) {
+                    customRateInput.value = expWhtRate;
+                    customRateInput.classList.remove('d-none');
+                }
+            }
+        }
+        const whtAmtInput = document.getElementById('movement_edit_withholding_amount');
+        if (whtAmtInput) {
+            whtAmtInput.value = cleanNum(exp.withholding_amount).toFixed(2);
+        }
+        const whtCertInput = document.getElementById('movement_edit_withholding_receipt_number');
+        if (whtCertInput) {
+            whtCertInput.value = (exp.withholding_receipt_number && exp.withholding_receipt_number !== '-') ? exp.withholding_receipt_number : '';
+        }
+        const whtSlipLink = document.getElementById('movement_edit_current_wht_slip_link');
+        if (whtSlipLink) {
+            if (exp.withholding_receipt_url) {
+                whtSlipLink.href = exp.withholding_receipt_url;
+                whtSlipLink.classList.remove('d-none');
+            } else {
+                whtSlipLink.classList.add('d-none');
+            }
+        }
+        recalcMovementWht();
+
+        // Clear alerts
+        const alertBox = document.getElementById('movementOcrModalAlert');
+        if (alertBox) {
+            alertBox.className = 'alert d-none';
+            alertBox.innerHTML = '';
+        }
+
+        // Set preview
+        const slipUrl = exp.receipt_slip_url || exp.attachment_url || exp.attachment;
+        _setPageSlipPreview(slipUrl);
+
+        // Show modal
+        if (window.bootstrap && bootstrap.Modal) {
+            bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        } else if (window.$ && typeof $(modalEl).modal === 'function') {
+            $(modalEl).modal('show');
+        }
+    }
+
+    // Modal Withholding Tax handlers
+    function toggleMovementWithholding(isChecked) {
+        const container = document.getElementById('movement_wht_fields_container');
+        const badge = document.getElementById('movement_wht_status_badge');
+        if (container) {
+            if (isChecked) {
+                container.classList.remove('d-none');
+            } else {
+                container.classList.add('d-none');
+            }
+        }
+        if (badge) {
+            if (isChecked) {
+                badge.className = 'badge bg-danger-subtle text-danger border border-danger-subtle font-monospace';
+                badge.textContent = 'WHT Active';
+            } else {
+                badge.className = 'badge bg-secondary-subtle text-muted font-monospace';
+                badge.textContent = 'No WHT';
+            }
+        }
+        recalcMovementWht();
+    }
+
+    function onMovementWhtRateChange(rateVal) {
+        const customInput = document.getElementById('movement_edit_custom_wht_rate');
+        if (customInput) {
+            if (rateVal === 'custom') {
+                customInput.classList.remove('d-none');
+                customInput.focus();
+            } else {
+                customInput.classList.add('d-none');
+            }
+        }
+        recalcMovementWht();
+    }
+
+    function recalcMovementWht() {
+        const hasWhtCheck = document.getElementById('movement_edit_has_withholding');
+        const hasWht = hasWhtCheck ? hasWhtCheck.checked : false;
+        const totalInput = document.getElementById('movement_edit_value_after_vat');
+        const baseInput = document.getElementById('movement_edit_total_value');
+        const whtAmtInput = document.getElementById('movement_edit_withholding_amount');
+        const netDisplay = document.getElementById('movement_edit_net_disbursed_display');
+        const badge = document.getElementById('movement_wht_status_badge');
+
+        const base = parseFloat(baseInput?.value || 0) || 0;
+        const total = parseFloat(totalInput?.value || 0) || 0;
+
+        if (!hasWht) {
+            if (whtAmtInput) whtAmtInput.value = '0.00';
+            if (netDisplay) netDisplay.value = 'ETB ' + total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            if (badge) {
+                badge.className = 'badge bg-secondary-subtle text-muted font-monospace';
+                badge.textContent = 'No WHT';
+            }
+            return;
+        }
+
+        const rateSelect = document.getElementById('movement_edit_withholding_rate');
+        let rate = 3.0;
+        if (rateSelect) {
+            if (rateSelect.value === 'custom') {
+                const customInput = document.getElementById('movement_edit_custom_wht_rate');
+                rate = parseFloat(customInput?.value || 0) || 0;
+            } else {
+                rate = parseFloat(rateSelect.value) || 3.0;
+            }
+        }
+
+        const whtAmount = Math.round(base * (rate / 100) * 100) / 100;
+        if (whtAmtInput) {
+            whtAmtInput.value = whtAmount.toFixed(2);
+        }
+
+        const net = Math.max(0, total - whtAmount);
+        if (netDisplay) {
+            netDisplay.value = 'ETB ' + net.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+        if (badge) {
+            badge.className = 'badge bg-danger text-white font-monospace';
+            badge.textContent = rate + '% WHT (-' + whtAmount.toFixed(2) + ')';
+        }
+    }
+
+    function recalcMovementWhtCustomAmount(val) {
+        const whtAmount = parseFloat(val) || 0;
+        const totalInput = document.getElementById('movement_edit_value_after_vat');
+        const netDisplay = document.getElementById('movement_edit_net_disbursed_display');
+        const badge = document.getElementById('movement_wht_status_badge');
+        const total = parseFloat(totalInput?.value || 0) || 0;
+
+        const net = Math.max(0, total - whtAmount);
+        if (netDisplay) {
+            netDisplay.value = 'ETB ' + net.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+        if (badge) {
+            badge.className = 'badge bg-danger text-white font-monospace';
+            badge.textContent = 'WHT: -ETB ' + whtAmount.toFixed(2);
+        }
+    }
+
+    // Inline Quick Fill Row Handlers for #pageExpenseTable
+    function toggleExpenseQuickRow(idx) {
+        const exp = (window._pageExpenses && window._pageExpenses[idx]) || {};
+        const rowId = exp.id ?? idx;
+        const quickRow = document.getElementById('expense-quick-fill-row-' + rowId)
+            || document.querySelector(`tr.expense-quick-fill-row[data-idx="${idx}"]`);
+        if (!quickRow) return;
+
+        const btnToggle = document.getElementById('btn-quick-row-' + rowId)
+            || document.querySelector(`#page-expense-row-${rowId} .btn-quick-toggle`);
+        const textSpan = btnToggle ? btnToggle.querySelector('.quick-toggle-text') : null;
+
+        if (quickRow.classList.contains('d-none')) {
+            // Close any other open quick fill rows
+            document.querySelectorAll('tr.expense-quick-fill-row:not(.d-none)').forEach(r => {
+                r.classList.add('d-none');
+                const rIdx = r.getAttribute('data-idx');
+                const otherBtn = document.querySelector(`button[onclick="toggleExpenseQuickRow(${rIdx})"]`);
+                if (otherBtn) {
+                    otherBtn.classList.remove('btn-primary', 'text-white');
+                    otherBtn.classList.add('btn-outline-primary');
+                    const oTxt = otherBtn.querySelector('.quick-toggle-text');
+                    if (oTxt) oTxt.textContent = 'Fill / Edit';
+                }
+            });
+
+            quickRow.classList.remove('d-none');
+            if (btnToggle) {
+                btnToggle.classList.remove('btn-outline-primary');
+                btnToggle.classList.add('btn-primary', 'text-white');
+                if (textSpan) textSpan.textContent = 'Close';
+            }
+            quickRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        } else {
+            quickRow.classList.add('d-none');
+            if (btnToggle) {
+                btnToggle.classList.remove('btn-primary', 'text-white');
+                btnToggle.classList.add('btn-outline-primary');
+                if (textSpan) textSpan.textContent = 'Fill / Edit';
+            }
+        }
+    }
+
+    function toggleQuickWhtSection(idx, isChecked) {
+        const exp = (window._pageExpenses && window._pageExpenses[idx]) || {};
+        const rowId = exp.id ?? idx;
+        const body = document.getElementById('quickWhtBody-' + rowId);
+        const noneBox = document.getElementById('quickWhtNone-' + rowId);
+
+        if (isChecked) {
+            if (body) body.classList.remove('d-none');
+            if (noneBox) noneBox.classList.add('d-none');
+            calcQuickWht(idx);
+        } else {
+            if (body) body.classList.add('d-none');
+            if (noneBox) noneBox.classList.remove('d-none');
+            const whtInput = document.querySelector(`#quickRowForm-${rowId} input[name="withholding_amount"]`);
+            if (whtInput) whtInput.value = '';
+            calcQuickNet(idx);
+        }
+    }
+
+    function calcQuickWht(idx) {
+        const exp = (window._pageExpenses && window._pageExpenses[idx]) || {};
+        const rowId = exp.id ?? idx;
+        const form = document.getElementById('quickRowForm-' + rowId);
+        if (!form) return;
+
+        const rateSelect = form.elements['withholding_rate'];
+        const rate = parseFloat(rateSelect ? rateSelect.value : 3) || 3;
+
+        const base = parseFloat(exp.base_amount || exp.amount || 0) || 0;
+        const whtAmt = Math.round(base * (rate / 100) * 100) / 100;
+
+        const amtInput = form.elements['withholding_amount'];
+        if (amtInput) amtInput.value = whtAmt.toFixed(2);
+
+        calcQuickNet(idx);
+    }
+
+    function calcQuickNet(idx) {
+        const exp = (window._pageExpenses && window._pageExpenses[idx]) || {};
+        const rowId = exp.id ?? idx;
+        const form = document.getElementById('quickRowForm-' + rowId);
+        if (!form) return;
+
+        const toggle = document.getElementById('quickWhtToggle-' + rowId);
+        const isWht = toggle ? toggle.checked : false;
+
+        const base = parseFloat(exp.base_amount || exp.amount || 0) || 0;
+        const vat = parseFloat(exp.vat_amount || 0) || 0;
+        const total = base + vat;
+
+        let wht = 0;
+        if (isWht) {
+            const amtInput = form.elements['withholding_amount'];
+            wht = parseFloat(amtInput ? amtInput.value : 0) || 0;
+        }
+
+        const net = Math.max(0, total - wht);
+
+        const whtDisp = document.getElementById('quickWhtDisplay-' + rowId);
+        const netDisp = document.getElementById('quickNetDisplay-' + rowId);
+
+        if (whtDisp) {
+            whtDisp.textContent = isWht && wht > 0 
+                ? '- ETB ' + wht.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                : 'ETB 0.00';
+        }
+        if (netDisp) {
+            netDisp.textContent = 'ETB ' + net.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+    }
+
+    function saveExpenseQuickRow(event, idx) {
+        if (event && typeof event.preventDefault === 'function') event.preventDefault();
+        const exp = (window._pageExpenses && window._pageExpenses[idx]) || {};
+        const rowId = exp.id ?? idx;
+        const form = document.getElementById('quickRowForm-' + rowId);
+        if (!form) return;
+
+        const alertBox = document.getElementById('quickRowAlert-' + rowId);
+        const submitBtn = document.getElementById('btnQuickSave-' + rowId);
+        const origBtnHtml = submitBtn ? submitBtn.innerHTML : '';
+
+        // Validate supplier name
+        const sellerInput = form.elements['seller_name'];
+        if (sellerInput && !sellerInput.value.trim()) {
+            sellerInput.focus();
+            if (alertBox) {
+                alertBox.className = 'alert alert-warning py-1.5 px-3 small rounded-3 mb-2.5 d-flex align-items-center gap-2';
+                alertBox.innerHTML = '<i class="fa-solid fa-triangle-exclamation text-warning"></i> Supplier / Payee Name is required.';
+                alertBox.classList.remove('d-none');
+            }
+            return;
+        }
+
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1.5"></i>Saving...';
+        }
+        if (alertBox) {
+            alertBox.className = 'alert alert-info py-1.5 px-3 small rounded-3 mb-2.5 d-flex align-items-center gap-2';
+            alertBox.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i> Saving receipt and withholding details...';
+            alertBox.classList.remove('d-none');
+        }
+
+        const formData = new FormData(form);
+
+        fetch('{{ route("finance.tax-deductions.update-ocr-item") }}', {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(async res => {
+            const isJson = (res.headers.get('content-type') || '').includes('application/json');
+            const data = isJson ? await res.json() : { success: false, message: await res.text() };
+            if (!res.ok) {
+                let errMsg = data.message || ('Server returned HTTP ' + res.status);
+                if (data.errors && typeof data.errors === 'object') {
+                    const errLines = Object.values(data.errors).flat().join('<br>');
+                    if (errLines) errMsg = errLines;
+                }
+                throw new Error(errMsg);
+            }
+            return data;
+        })
+        .then(data => {
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = origBtnHtml;
+            }
+
+            if (data.success && data.item) {
+                const itm = data.item;
+                window._hasMovementOcrEditsSaved = true;
+
+                // Update local memory object
+                if (window._pageExpenses && window._pageExpenses[idx]) {
+                    Object.assign(window._pageExpenses[idx], {
+                        payee: itm.vendor_name || form.elements['seller_name']?.value,
+                        seller_tin: itm.vendor_tin || form.elements['supplier_tin']?.value,
+                        fs_no: itm.fs_no || form.elements['fs_no']?.value,
+                        mrc_no: itm.mrc_no || form.elements['mrc_no']?.value,
+                        has_withholding: !!itm.has_withholding,
+                        withholding_rate: itm.withholding_rate,
+                        withholding_amount: itm.withholding_amount,
+                        withholding_receipt_number: itm.withholding_receipt_number,
+                        withholding_receipt_url: itm.withholding_receipt_url,
+                        net_disbursed: itm.net_disbursed,
+                        attachment_url: itm.file_url || window._pageExpenses[idx].attachment_url
+                    });
+                }
+
+                if (alertBox) {
+                    alertBox.className = 'alert alert-success py-1.5 px-3 small rounded-3 mb-2.5 d-flex align-items-center justify-content-between gap-2';
+                    alertBox.innerHTML = `
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="fa-solid fa-circle-check text-success"></i>
+                            <span class="fw-semibold">${data.message || 'Saved successfully!'}</span>
+                        </div>
+                        <button type="button" class="btn btn-xs btn-outline-success rounded-pill px-2 py-0.5" onclick="toggleExpenseQuickRow(${idx})">Close Row</button>
+                    `;
+                }
+
+                // Sync the parent row in the table
+                syncExpenseRowDom(idx, itm);
+                recomputeExpenseTableFooters();
+
+                // Also sync TAS table if matching
+                syncMatchingTasRowDom(itm);
+            } else {
+                if (alertBox) {
+                    alertBox.className = 'alert alert-danger py-1.5 px-3 small rounded-3 mb-2.5 d-flex align-items-center gap-2';
+                    alertBox.innerHTML = '<i class="fa-solid fa-triangle-exclamation text-danger"></i> ' + (data.message || 'Failed to save.');
+                }
+            }
+        })
+        .catch(err => {
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = origBtnHtml;
+            }
+            if (alertBox) {
+                alertBox.className = 'alert alert-danger py-1.5 px-3 small rounded-3 mb-2.5 d-flex align-items-center gap-2';
+                alertBox.innerHTML = '<i class="fa-solid fa-triangle-exclamation text-danger"></i> ' + err.message;
+            }
+        });
+    }
+
+    function syncExpenseRowDom(idx, itm) {
+        const exp = (window._pageExpenses && window._pageExpenses[idx]) || {};
+        const rowId = exp.id ?? idx;
+        const tr = document.getElementById('page-expense-row-' + rowId)
+            || document.querySelector(`tr.expense-row[data-idx="${idx}"]`);
+        if (!tr) return;
+
+        const baseVal = parseFloat(itm.base_value !== undefined ? itm.base_value : (exp.base_amount || exp.amount || 0)) || 0;
+        const vatVal = parseFloat(itm.vat_amount !== undefined ? itm.vat_amount : (exp.vat_amount || 0)) || 0;
+        const whtVal = parseFloat(itm.withholding_amount !== undefined ? itm.withholding_amount : (exp.withholding_amount || 0)) || 0;
+        const whtRate = parseFloat(itm.withholding_rate !== undefined ? itm.withholding_rate : (exp.withholding_rate || 3)) || 3;
+        const netVal = Math.max(0, (baseVal + vatVal) - whtVal);
+
+        tr.setAttribute('data-base', baseVal);
+        tr.setAttribute('data-vat', vatVal);
+        tr.setAttribute('data-wht', whtVal);
+        tr.setAttribute('data-net', netVal);
+
+        // Update Payee
+        const payeeEl = tr.querySelector('.cell-exp-payee');
+        if (payeeEl && (itm.vendor_name || exp.payee)) {
+            payeeEl.textContent = itm.vendor_name || exp.payee;
+        }
+
+        // Update Seller TIN Badge
+        const rawTin = itm.vendor_tin || exp.seller_tin || '';
+        const cleanTin = rawTin.replace(/\D/g, '');
+        const tinBadge = tr.querySelector('.cell-exp-tin');
+        if (tinBadge) {
+            if (cleanTin.length === 10) {
+                tinBadge.className = 'badge bg-success-subtle text-success border border-success-subtle font-monospace px-1.5 py-0.5 rounded-2 cell-exp-tin fw-bold';
+                tinBadge.innerHTML = '<i class="fa-solid fa-circle-check text-success me-0.5"></i>' + cleanTin;
+                tinBadge.title = 'ERCA Valid 10-Digit Seller TIN';
+            } else if (cleanTin.length > 0) {
+                tinBadge.className = 'badge bg-warning-subtle text-warning-emphasis border border-warning-subtle font-monospace px-1.5 py-0.5 rounded-2 cell-exp-tin fw-bold';
+                tinBadge.innerHTML = '<i class="fa-solid fa-triangle-exclamation text-warning me-0.5"></i>' + rawTin;
+                tinBadge.title = cleanTin.length + '/10 Digits - Incomplete ERCA TIN';
+            } else {
+                tinBadge.className = 'badge bg-danger-subtle text-danger border border-danger-subtle font-monospace px-1.5 py-0.5 rounded-2 cell-exp-tin fw-semibold';
+                tinBadge.innerHTML = '<i class="fa-solid fa-circle-xmark me-0.5"></i>No TIN';
+                tinBadge.title = 'Missing Seller TIN';
+            }
+        }
+
+        // Update FS & MRC
+        const fsSmall = tr.querySelector('.cell-exp-fs');
+        const fsNo = itm.fs_no || exp.fs_no;
+        if (fsSmall) {
+            if (fsNo && fsNo !== '-') {
+                fsSmall.innerHTML = '<i class="fa-solid fa-barcode me-0.5"></i>FS #: ' + fsNo;
+                fsSmall.classList.remove('d-none');
+                fsSmall.classList.add('d-block');
+            } else {
+                fsSmall.classList.remove('d-block');
+                fsSmall.classList.add('d-none');
+            }
+        }
+
+        const mrcSmall = tr.querySelector('.cell-exp-mrc');
+        const mrcNo = itm.mrc_no || exp.mrc_no;
+        if (mrcSmall) {
+            if (mrcNo && mrcNo !== '-') {
+                mrcSmall.textContent = 'MRC: ' + mrcNo;
+                mrcSmall.classList.remove('d-none');
+                mrcSmall.classList.add('d-block');
+            } else {
+                mrcSmall.classList.remove('d-block');
+                mrcSmall.classList.add('d-none');
+            }
+        }
+
+        // Update Withholding Column
+        const whtCell = tr.querySelector('.cell-exp-wht');
+        if (whtCell) {
+            if (whtVal > 0) {
+                whtCell.innerHTML = `
+                    <div class="fw-bold">- ETB ${whtVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                    <small class="text-danger d-block font-monospace" style="font-size:0.68rem;">
+                        <i class="fa-solid fa-hand-holding-dollar me-0.5"></i>${whtRate.toFixed(1)}% WHT
+                    </small>
+                `;
+            } else {
+                whtCell.innerHTML = `
+                    <span class="text-muted">-</span>
+                    <button type="button" class="btn btn-xs btn-outline-warning text-dark border-warning rounded-pill px-1.5 py-0.2 d-block ms-auto mt-0.5 d-print-none shadow-2xs" onclick="toggleExpenseQuickRow(${idx})" style="font-size:0.65rem;" title="Fill Withholding Tax Deduction">
+                        <i class="fa-solid fa-plus me-0.5"></i>WHT
+                    </button>
+                `;
+            }
+        }
+
+        // Update Net Disbursed Column
+        const netCell = tr.querySelector('.cell-exp-net');
+        if (netCell) {
+            netCell.textContent = 'ETB ' + netVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        // Update Slip links
+        const slipUrl = itm.file_url || exp.attachment_url;
+        if (slipUrl) {
+            let slipLink = tr.querySelector('.cell-exp-slip-link');
+            const attachBtn = tr.querySelector('.cell-exp-attach-btn');
+            if (attachBtn) attachBtn.remove();
+            if (slipLink) {
+                slipLink.href = slipUrl;
+            }
+        }
+
+        const whtSlipUrl = itm.withholding_receipt_url || exp.withholding_receipt_url;
+        if (whtSlipUrl) {
+            let whtSlipLink = tr.querySelector('.cell-exp-wht-slip-link');
+            if (whtSlipLink) {
+                whtSlipLink.href = whtSlipUrl;
+            } else {
+                const actionsContainer = tr.querySelector('td:last-child div');
+                if (actionsContainer) {
+                    const newLink = document.createElement('a');
+                    newLink.href = whtSlipUrl;
+                    newLink.target = '_blank';
+                    newLink.className = 'btn btn-xs btn-outline-danger rounded-pill px-2 py-0.5 d-inline-flex align-items-center gap-1 shadow-2xs cell-exp-wht-slip-link';
+                    newLink.style.fontSize = '0.68rem';
+                    newLink.title = 'View Attached Withholding Tax (WHT) Receipt / Certificate';
+                    newLink.innerHTML = '<i class="fa-solid fa-file-invoice-dollar text-danger"></i><span>WHT Slip</span>';
+                    actionsContainer.appendChild(newLink);
+                }
+            }
+        }
+
+        // Flash green
+        tr.style.transition = 'background-color 0.4s ease';
+        tr.style.backgroundColor = '#d1e7dd';
+        setTimeout(() => { tr.style.backgroundColor = ''; }, 2000);
+    }
+
+    function recomputeExpenseTableFooters() {
+        let sumBase = 0, sumVat = 0, sumWht = 0, sumNet = 0;
+        const allRows = document.querySelectorAll('#pageExpenseTable tbody tr.expense-row');
+        allRows.forEach(r => {
+            sumBase += parseFloat(r.getAttribute('data-base') || 0);
+            sumVat  += parseFloat(r.getAttribute('data-vat') || 0);
+            sumWht  += parseFloat(r.getAttribute('data-wht') || 0);
+            sumNet  += parseFloat(r.getAttribute('data-net') || 0);
+        });
+
+        const fBase = document.getElementById('pageExpenseFootBase');
+        const fVat  = document.getElementById('pageExpenseFootVat');
+        const fWht  = document.getElementById('pageExpenseFootWht');
+        const fNet  = document.getElementById('pageExpenseFootNet');
+
+        const fmt = (n) => 'ETB ' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        if (fBase) fBase.textContent = fmt(sumBase);
+        if (fVat)  fVat.textContent  = fmt(sumVat);
+        if (fWht)  fWht.textContent  = '- ' + fmt(sumWht);
+        if (fNet)  fNet.textContent  = fmt(sumNet);
+    }
+
+    function syncMatchingTasRowDom(itm) {
+        if (!itm) return;
+        const tasRows = document.querySelectorAll('#pageTasTable tbody tr.tas-row');
+        tasRows.forEach(tasTr => {
+            const rowRcptId = tasTr.getAttribute('data-receipt-id');
+            const rowFs = tasTr.getAttribute('data-fs');
+            const rowExpId = tasTr.getAttribute('data-expense-id');
+
+            const matchById = rowRcptId && (rowRcptId == itm.id || rowRcptId == itm.receipt_id || rowRcptId == ('REC-' + itm.receipt_id));
+            const matchByFs = rowFs && itm.fs_no && rowFs === itm.fs_no;
+            const matchByExp = rowExpId && (itm.expense_request_id && rowExpId == itm.expense_request_id);
+
+            if (matchById || matchByFs || matchByExp) {
+                const fsBadge = tasTr.querySelector('.cell-tas-fs');
+                const tinBadge = tasTr.querySelector('.cell-tas-tin');
+                const sellerName = tasTr.querySelector('.cell-tas-vendor');
+                if (fsBadge && itm.fs_no && itm.fs_no !== '-') fsBadge.textContent = itm.fs_no;
+                if (sellerName && itm.vendor_name) sellerName.textContent = itm.vendor_name;
+
+                const rawTin = itm.vendor_tin || '';
+                const cleanTinDigits = rawTin.replace(/\D/g, '');
+                if (cleanTinDigits.length === 10) {
+                    tasTr.setAttribute('data-has-tin', '1');
+                    if (tinBadge) {
+                        tinBadge.className = 'badge bg-success-subtle text-success border border-success-subtle font-monospace px-2 py-0.5 rounded-2 cell-tas-tin fw-bold';
+                        tinBadge.innerHTML = '<i class="fa-solid fa-circle-check text-success me-1"></i>' + cleanTinDigits;
+                    }
+                }
+            }
+        });
     }
 
     // Validation functions
@@ -3030,6 +4163,7 @@
         const totalInput = document.getElementById('movement_edit_value_after_vat');
         if (vatInput) vatInput.value = vat.toFixed(2);
         if (totalInput) totalInput.value = total.toFixed(2);
+        recalcMovementWht();
     }
 
     function recalcMovementFromVat(val) {
@@ -3041,6 +4175,7 @@
         const totalInput = document.getElementById('movement_edit_value_after_vat');
         if (baseInput) baseInput.value = base.toFixed(2);
         if (totalInput) totalInput.value = total.toFixed(2);
+        recalcMovementWht();
     }
 
     function recalcMovementFromTotal(val) {
@@ -3055,6 +4190,7 @@
         const vatInput = document.getElementById('movement_edit_vat_amount');
         if (baseInput) baseInput.value = base.toFixed(2);
         if (vatInput) vatInput.value = vat.toFixed(2);
+        recalcMovementWht();
     }
 
     function autoCalcMovementVatFromBase() {
@@ -3084,6 +4220,7 @@
         if (purcType && (purcType.value === '3' || !purcType.value)) {
             purcType.value = 'PUR_GD';
         }
+        recalcMovementWht();
     }
 
     function autoExtractMovementBaseFromTotal() {
@@ -3382,33 +4519,60 @@
                 if (sumPct) sumPct.textContent = '(' + pct + '%)';
 
                 // Update matching rows in Expenses Table (#pageExpenseTable)
-                const expRows = document.querySelectorAll('#pageExpenseTable tbody tr');
-                expRows.forEach(expTr => {
-                    const rowRcptId = expTr.getAttribute('data-receipt-id');
-                    const rowFs = expTr.getAttribute('data-fs');
-                    const matchById = rowRcptId && (rowRcptId == itm.id || rowRcptId == itm.receipt_id || rowRcptId == ('REC-' + itm.receipt_id));
-                    const matchByFs = rowFs && itm.fs_no && rowFs === itm.fs_no;
+                if (window._pageExpenses && window._pageExpenses.length > 0) {
+                    window._pageExpenses.forEach((exp, eIdx) => {
+                        const matchExp = exp.id && (submittedReceiptId == ('EXP-' + exp.id) || submittedId == ('EXP-' + exp.id) || (itm.expense_request_id && exp.id == itm.expense_request_id));
+                        const matchRcpt = exp.receipt_id && (exp.receipt_id == itm.receipt_id || exp.receipt_id == itm.id || exp.receipt_id == submittedReceiptId);
+                        const matchFs = exp.fs_no && itm.fs_no && exp.fs_no === itm.fs_no;
+                        if (matchExp || matchRcpt || matchFs) {
+                            Object.assign(exp, {
+                                payee: itm.vendor_name || exp.payee,
+                                seller_tin: itm.vendor_tin || exp.seller_tin,
+                                fs_no: itm.fs_no || exp.fs_no,
+                                mrc_no: itm.mrc_no || exp.mrc_no,
+                                base_amount: itm.base_value !== undefined ? itm.base_value : exp.base_amount,
+                                vat_amount: itm.vat_amount !== undefined ? itm.vat_amount : exp.vat_amount,
+                                has_withholding: !!itm.has_withholding,
+                                withholding_rate: itm.withholding_rate,
+                                withholding_amount: itm.withholding_amount,
+                                withholding_receipt_number: itm.withholding_receipt_number,
+                                withholding_receipt_url: itm.withholding_receipt_url,
+                                net_disbursed: itm.net_disbursed,
+                                attachment_url: itm.file_url || exp.attachment_url
+                            });
+                            syncExpenseRowDom(eIdx, itm);
+                        }
+                    });
+                    recomputeExpenseTableFooters();
+                } else {
+                    const expRows = document.querySelectorAll('#pageExpenseTable tbody tr');
+                    expRows.forEach(expTr => {
+                        const rowRcptId = expTr.getAttribute('data-receipt-id');
+                        const rowFs = expTr.getAttribute('data-fs');
+                        const matchById = rowRcptId && (rowRcptId == itm.id || rowRcptId == itm.receipt_id || rowRcptId == ('REC-' + itm.receipt_id));
+                        const matchByFs = rowFs && itm.fs_no && rowFs === itm.fs_no;
 
-                    if (matchById || matchByFs) {
-                        const payeeSpan = expTr.querySelector('td:nth-child(4) .fw-semibold');
-                        const tinSmall = expTr.querySelector('td:nth-child(4) small');
-                        const fsSmall = expTr.querySelector('td:nth-child(3) .text-primary');
-                        const baseCell = expTr.querySelector('td:nth-child(7)');
-                        const vatCell = expTr.querySelector('td:nth-child(8)');
-                        const netCell = expTr.querySelector('td:nth-child(10)');
+                        if (matchById || matchByFs) {
+                            const payeeSpan = expTr.querySelector('td:nth-child(4) .fw-semibold');
+                            const tinSmall = expTr.querySelector('td:nth-child(4) small');
+                            const fsSmall = expTr.querySelector('td:nth-child(3) .text-primary');
+                            const baseCell = expTr.querySelector('td:nth-child(7)');
+                            const vatCell = expTr.querySelector('td:nth-child(8)');
+                            const netCell = expTr.querySelector('td:nth-child(10)');
 
-                        if (payeeSpan && itm.vendor_name) payeeSpan.textContent = itm.vendor_name;
-                        if (tinSmall && itm.vendor_tin) tinSmall.textContent = 'TIN: ' + itm.vendor_tin;
-                        if (fsSmall && itm.fs_no && itm.fs_no !== '-') fsSmall.innerHTML = '<i class="fa-solid fa-barcode me-0.5"></i>FS #: ' + itm.fs_no;
-                        if (baseCell && itm.base_value !== undefined) baseCell.textContent = 'ETB ' + parseFloat(itm.base_value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                        if (vatCell && itm.vat_amount !== undefined) vatCell.textContent = 'ETB ' + parseFloat(itm.vat_amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                        if (netCell && itm.total_value !== undefined) netCell.textContent = 'ETB ' + parseFloat(itm.total_value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                            if (payeeSpan && itm.vendor_name) payeeSpan.textContent = itm.vendor_name;
+                            if (tinSmall && itm.vendor_tin) tinSmall.textContent = 'TIN: ' + itm.vendor_tin;
+                            if (fsSmall && itm.fs_no && itm.fs_no !== '-') fsSmall.innerHTML = '<i class="fa-solid fa-barcode me-0.5"></i>FS #: ' + itm.fs_no;
+                            if (baseCell && itm.base_value !== undefined) baseCell.textContent = 'ETB ' + parseFloat(itm.base_value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                            if (vatCell && itm.vat_amount !== undefined) vatCell.textContent = 'ETB ' + parseFloat(itm.vat_amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                            if (netCell && itm.total_value !== undefined) netCell.textContent = 'ETB ' + parseFloat(itm.total_value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-                        expTr.style.transition = 'background-color 0.4s ease';
-                        expTr.style.backgroundColor = '#d1e7dd';
-                        setTimeout(() => { expTr.style.backgroundColor = ''; }, 2000);
-                    }
-                });
+                            expTr.style.transition = 'background-color 0.4s ease';
+                            expTr.style.backgroundColor = '#d1e7dd';
+                            setTimeout(() => { expTr.style.backgroundColor = ''; }, 2000);
+                        }
+                    });
+                }
 
                 // Attach modal auto-refresh on close if edits were saved
                 const modalEl = document.getElementById('movementSlipModal');

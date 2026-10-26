@@ -4630,27 +4630,33 @@ class FinanceTaxReportController extends Controller
         $this->ensureSchema();
 
         $request->validate([
-            'id'                 => 'nullable',
-            'receipt_id'         => 'nullable',
-            'expense_request_id' => 'nullable',
-            'request_number'     => 'nullable|string|max:100',
-            'receipt_file'       => 'nullable|file|mimes:jpeg,jpg,png,webp,pdf|max:25600',
-            'receipt_path'       => 'nullable|string|max:500',
-            'seller_name'        => 'nullable|string|max:255',
-            'supplier_tin'       => 'nullable|string|max:50',
-            'receipt_date'       => 'nullable|string',
-            'mrc_no'             => 'nullable|string|max:100',
-            'fs_no'              => 'nullable|string|max:100',
-            'item_description'   => 'nullable|string|max:500',
-            'vat_category'       => 'nullable|string',
-            'purchase_type'      => 'nullable',
-            'project_id'         => 'nullable',
-            'category'           => 'nullable|string|max:100',
-            'qty'                => 'nullable|numeric|min:0',
-            'unit_price'         => 'nullable|numeric|min:0',
-            'total_value'        => 'nullable|numeric|min:0',
-            'vat_amount'         => 'nullable|numeric|min:0',
-            'value_after_vat'    => 'nullable|numeric|min:0',
+            'id'                         => 'nullable',
+            'receipt_id'                 => 'nullable',
+            'expense_request_id'         => 'nullable',
+            'request_number'             => 'nullable|string|max:100',
+            'receipt_file'               => 'nullable|file|mimes:jpeg,jpg,png,webp,pdf|max:25600',
+            'receipt_path'               => 'nullable|string|max:500',
+            'seller_name'                => 'nullable|string|max:255',
+            'supplier_tin'               => 'nullable|string|max:50',
+            'receipt_date'               => 'nullable|string',
+            'mrc_no'                     => 'nullable|string|max:100',
+            'fs_no'                      => 'nullable|string|max:100',
+            'item_description'           => 'nullable|string|max:500',
+            'vat_category'               => 'nullable|string',
+            'purchase_type'              => 'nullable',
+            'project_id'                 => 'nullable',
+            'category'                   => 'nullable|string|max:100',
+            'qty'                        => 'nullable|numeric|min:0',
+            'unit_price'                 => 'nullable|numeric|min:0',
+            'total_value'                => 'nullable|numeric|min:0',
+            'vat_amount'                 => 'nullable|numeric|min:0',
+            'value_after_vat'            => 'nullable|numeric|min:0',
+            'has_withholding'            => 'nullable',
+            'withholding_rate'           => 'nullable|numeric|min:0|max:100',
+            'withholding_amount'         => 'nullable|numeric|min:0',
+            'withholding_receipt_number' => 'nullable|string|max:100',
+            'withholding_file'           => 'nullable|file|mimes:jpeg,jpg,png,webp,pdf|max:25600',
+            'withholding_receipt_path'   => 'nullable|string|max:500',
         ]);
 
         try {
@@ -4664,6 +4670,23 @@ class FinanceTaxReportController extends Controller
             } elseif ($request->filled('receipt_path')) {
                 $uploadedPath = trim((string)$request->input('receipt_path'));
             }
+
+            $uploadedWhtPath = null;
+            if ($request->hasFile('withholding_file')) {
+                try {
+                    $uploadedWhtPath = \App\Services\FileUploadService::upload($request->file('withholding_file'), 'withholding');
+                } catch (\Throwable $e) {
+                    Log::warning('updateOcrItem withholding file upload error: ' . $e->getMessage());
+                }
+            } elseif ($request->filled('withholding_receipt_path')) {
+                $uploadedWhtPath = trim((string)$request->input('withholding_receipt_path'));
+            }
+
+            $hasWhtInput = $request->input('has_withholding');
+            $hasWht = ($hasWhtInput === '1' || $hasWhtInput === 1 || $hasWhtInput === true || $hasWhtInput === 'true' || $hasWhtInput === 'on');
+            $whtRate = $request->filled('withholding_rate') ? (float)$request->input('withholding_rate') : null;
+            $whtAmount = $request->filled('withholding_amount') ? (float)$request->input('withholding_amount') : null;
+            $whtReceiptNo = $request->filled('withholding_receipt_number') ? trim((string)$request->input('withholding_receipt_number')) : null;
 
             $rawId            = $request->input('id');
             $rawReceiptId     = $request->input('receipt_id');
@@ -5082,6 +5105,17 @@ class FinanceTaxReportController extends Controller
             if ($vat <= 0) {
                 $parsed['no_vat_reason_code'] = $parsed['no_vat_reason_code'] ?? 'fuel_zero_vat';
             }
+            if ($request->has('has_withholding')) {
+                $parsed['has_withholding'] = $hasWht;
+                $parsed['withholding_rate'] = $whtRate ?: 0;
+                $parsed['withholding_amount'] = $whtAmount ?: 0;
+            }
+            if ($whtReceiptNo !== null) {
+                $parsed['withholding_receipt_number'] = $whtReceiptNo;
+            }
+            if ($uploadedWhtPath) {
+                $parsed['withholding_receipt'] = $uploadedWhtPath;
+            }
             $receiptUpdates['parsed_data'] = $parsed;
 
             if (Schema::hasColumn('receipts', 'tax_type')) {
@@ -5135,7 +5169,24 @@ class FinanceTaxReportController extends Controller
                     $linkedExp->amount       = $totalVal;
                     $linkedExp->vat_amount   = $vat;
                     $linkedExp->gross_amount = $valAfter;
-                    $linkedExp->net_amount   = max(0, $valAfter - (float)$linkedExp->withholding_amount);
+                    if ($request->has('has_withholding') || $request->has('withholding_amount') || $request->has('withholding_rate') || $uploadedWhtPath || $request->has('withholding_receipt_number')) {
+                        if (Schema::hasColumn('expense_requests', 'has_withholding')) {
+                            $linkedExp->has_withholding = $hasWht;
+                        }
+                        if ($whtRate !== null && Schema::hasColumn('expense_requests', 'withholding_rate')) {
+                            $linkedExp->withholding_rate = $whtRate;
+                        }
+                        if ($whtAmount !== null && Schema::hasColumn('expense_requests', 'withholding_amount')) {
+                            $linkedExp->withholding_amount = $whtAmount;
+                        }
+                        if ($whtReceiptNo !== null && Schema::hasColumn('expense_requests', 'withholding_receipt_number')) {
+                            $linkedExp->withholding_receipt_number = $whtReceiptNo;
+                        }
+                        if ($uploadedWhtPath && Schema::hasColumn('expense_requests', 'withholding_receipt')) {
+                            $linkedExp->withholding_receipt = $uploadedWhtPath;
+                        }
+                    }
+                    $linkedExp->net_amount   = max(0, $valAfter - (float)($linkedExp->withholding_amount ?? 0));
                     if ($request->filled('seller_name')) {
                         $cleanSeller = trim((string)$request->seller_name);
                         $linkedExp->payee = $cleanSeller;
@@ -5195,6 +5246,24 @@ class FinanceTaxReportController extends Controller
                         $vatDec->vat_amount = $vat;
                         $vatDec->base_amount = $totalVal;
                         $vatDec->total_amount = $valAfter;
+                        if ($request->has('has_withholding') && Schema::hasColumn('expense_hub_vat_decisions', 'has_withholding')) {
+                            $vatDec->has_withholding = $hasWht;
+                        }
+                        if ($whtRate !== null && Schema::hasColumn('expense_hub_vat_decisions', 'withholding_rate')) {
+                            $vatDec->withholding_rate = $whtRate;
+                        }
+                        if ($whtAmount !== null && Schema::hasColumn('expense_hub_vat_decisions', 'withholding_amount')) {
+                            $vatDec->withholding_amount = $whtAmount;
+                        }
+                        if ($whtReceiptNo !== null && Schema::hasColumn('expense_hub_vat_decisions', 'withholding_receipt_number')) {
+                            $vatDec->withholding_receipt_number = $whtReceiptNo;
+                        }
+                        if ($uploadedWhtPath && Schema::hasColumn('expense_hub_vat_decisions', 'withholding_receipt')) {
+                            $vatDec->withholding_receipt = $uploadedWhtPath;
+                        }
+                        if (Schema::hasColumn('expense_hub_vat_decisions', 'net_payable_amount')) {
+                            $vatDec->net_payable_amount = max(0, $valAfter - (float)($linkedExp->withholding_amount ?? 0));
+                        }
                         if ($vat <= 0) {
                             $vatDec->decision = 'no_vat';
                             $vatDec->vat_status = 'no_vat';
@@ -5282,41 +5351,64 @@ class FinanceTaxReportController extends Controller
                 }
             }
 
+            $calcWhtUrl = null;
+            if (!empty($uploadedWhtPath)) {
+                try {
+                    $calcWhtUrl = \App\Services\FileUploadService::url($uploadedWhtPath);
+                } catch (\Throwable $e) {
+                    $calcWhtUrl = asset('storage/' . ltrim($uploadedWhtPath, '/'));
+                }
+            } elseif ($linkedExp?->withholding_receipt_url) {
+                $calcWhtUrl = $linkedExp->withholding_receipt_url;
+            } elseif (!empty($linkedExp?->withholding_receipt)) {
+                try {
+                    $calcWhtUrl = \App\Services\FileUploadService::url($linkedExp->withholding_receipt);
+                } catch (\Throwable $e) {
+                    $calcWhtUrl = asset('storage/' . ltrim($linkedExp->withholding_receipt, '/'));
+                }
+            }
+
             return response()->json([
                 'success' => true,
                 'message' => "Invoice / Receipt #{$receipt->id} updated successfully and reconciled with system tax records.",
                 'item'    => [
-                    'id'                 => $item->id,
-                    'receipt_id'         => $receipt->id,
-                    'expense_request_id' => $linkedExp?->id,
-                    'request_number'     => $linkedExp?->request_number ?: $receipt->receipt_number,
-                    'file_path'          => $receipt->file_path,
-                    'file_url'           => $calcFileUrl,
-                    'vendor_name'        => $receipt->vendor_name ?: 'Unknown Vendor',
-                    'vendor_tin'         => $receipt->vendor_tin ?: '-',
-                    'seller_tin'         => $receipt->vendor_tin ?: '-',
-                    'tin_valid'          => (bool)($receipt->tin_valid ?? (strlen(preg_replace('/\D/', '', $receipt->vendor_tin ?? '')) === 10)),
-                    'fs_no'              => $receipt->fs_no ?: '-',
-                    'fs_no_raw'          => $receipt->fs_no_raw ?: ($receipt->fs_no ?: '-'),
-                    'fs_no_valid'        => (bool)($receipt->fs_no_valid ?? (strlen(preg_replace('/\D/', '', $receipt->fs_no ?? '')) === 8)),
-                    'mrc_no'             => $receipt->mrc_no ?: '-',
-                    'receipt_date_ymd'   => $receipt->receipt_date ? Carbon::parse($receipt->receipt_date)->format('Y-m-d') : '',
-                    'receipt_date_ec'    => $receipt->receipt_date ? EthiopianDate::formatDateEc($receipt->receipt_date, 'DD/MM/YYYY EC') : '',
-                    'date_ec'            => $receipt->receipt_date ? EthiopianDate::formatDateEc($receipt->receipt_date, 'DD/MM/YYYY EC') : '-',
-                    'date_gc'            => $receipt->receipt_date ? Carbon::parse($receipt->receipt_date)->format('M d, Y') : '-',
-                    'item_description'   => $item->item_description,
-                    'vat_category'       => $item->vat_category ?: 'G',
-                    'purchase_type'      => (string)($item->purchase_type ?: 3),
-                    'purc_type'          => (string)($item->purchase_type ?: 3),
-                    'project_id'         => $receipt->project_id,
-                    'project_name'       => $receipt->project?->name ?: 'General',
-                    'category'           => $receipt->category ?: 'materials',
-                    'base_value'         => (float)$item->total_value,
-                    'vat_amount'         => (float)$item->vat_amount,
-                    'total_value'        => (float)$item->value_after_vat,
-                    'value_after_vat'    => (float)$item->value_after_vat,
-                    'is_vat_receipt'     => ($vat > 0 && $vatCategory !== 'E'),
-                    'is_no_vat'          => ($vat <= 0 || $vatCategory === 'E'),
+                    'id'                         => $item->id,
+                    'receipt_id'                 => $receipt->id,
+                    'expense_request_id'         => $linkedExp?->id,
+                    'request_number'             => $linkedExp?->request_number ?: $receipt->receipt_number,
+                    'file_path'                  => $receipt->file_path,
+                    'file_url'                   => $calcFileUrl,
+                    'vendor_name'                => $receipt->vendor_name ?: 'Unknown Vendor',
+                    'vendor_tin'                 => $receipt->vendor_tin ?: '-',
+                    'seller_tin'                 => $receipt->vendor_tin ?: '-',
+                    'tin_valid'                  => (bool)($receipt->tin_valid ?? (strlen(preg_replace('/\D/', '', $receipt->vendor_tin ?? '')) === 10)),
+                    'fs_no'                      => $receipt->fs_no ?: '-',
+                    'fs_no_raw'                  => $receipt->fs_no_raw ?: ($receipt->fs_no ?: '-'),
+                    'fs_no_valid'                => (bool)($receipt->fs_no_valid ?? (strlen(preg_replace('/\D/', '', $receipt->fs_no ?? '')) === 8)),
+                    'mrc_no'                     => $receipt->mrc_no ?: '-',
+                    'receipt_date_ymd'           => $receipt->receipt_date ? Carbon::parse($receipt->receipt_date)->format('Y-m-d') : '',
+                    'receipt_date_ec'            => $receipt->receipt_date ? EthiopianDate::formatDateEc($receipt->receipt_date, 'DD/MM/YYYY EC') : '',
+                    'date_ec'                    => $receipt->receipt_date ? EthiopianDate::formatDateEc($receipt->receipt_date, 'DD/MM/YYYY EC') : '-',
+                    'date_gc'                    => $receipt->receipt_date ? Carbon::parse($receipt->receipt_date)->format('M d, Y') : '-',
+                    'item_description'           => $item->item_description,
+                    'vat_category'               => $item->vat_category ?: 'G',
+                    'purchase_type'              => (string)($item->purchase_type ?: 3),
+                    'purc_type'                  => (string)($item->purchase_type ?: 3),
+                    'project_id'                 => $receipt->project_id,
+                    'project_name'               => $receipt->project?->name ?: 'General',
+                    'category'                   => $receipt->category ?: 'materials',
+                    'base_value'                 => (float)$item->total_value,
+                    'vat_amount'                 => (float)$item->vat_amount,
+                    'total_value'                => (float)$item->value_after_vat,
+                    'value_after_vat'            => (float)$item->value_after_vat,
+                    'has_withholding'            => (bool)($linkedExp?->has_withholding ?? $hasWht),
+                    'withholding_rate'           => (float)($linkedExp?->withholding_rate ?? ($whtRate ?: 0)),
+                    'withholding_amount'         => (float)($linkedExp?->withholding_amount ?? ($whtAmount ?: 0)),
+                    'withholding_receipt_number' => (string)($linkedExp?->withholding_receipt_number ?? ($whtReceiptNo ?: '')),
+                    'withholding_receipt_url'    => $calcWhtUrl,
+                    'net_disbursed'              => (float)($linkedExp?->net_amount ?? max(0, $valAfter - ($whtAmount ?: 0))),
+                    'is_vat_receipt'             => ($vat > 0 && $vatCategory !== 'E'),
+                    'is_no_vat'                  => ($vat <= 0 || $vatCategory === 'E'),
                 ]
             ]);
         } catch (\Throwable $e) {
