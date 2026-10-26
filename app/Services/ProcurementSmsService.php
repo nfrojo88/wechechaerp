@@ -45,9 +45,9 @@ class ProcurementSmsService
      */
     public function send(int $purchaseRequestId, string $phone, string $recipientRole, string $message): void
     {
-        // Disable SMS for purchase requests / procurement section
-        if ($purchaseRequestId > 0 && config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', true)) === false) {
-            Log::info("Procurement SMS is disabled. Skipping send to {$phone} on PR #{$purchaseRequestId}");
+        // Admin master switch check (default ON)
+        if (config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', true)) === false) {
+            Log::info("Procurement SMS is globally disabled by master switch. Skipping send to {$phone}.");
             return;
         }
 
@@ -138,7 +138,7 @@ class ProcurementSmsService
     public function notifyRole(int $purchaseRequestId, string $roleName, string $message, ?int $projectId = null, ?int $storeId = null): void
     {
         try {
-            if ($purchaseRequestId > 0 && config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', true)) === false) {
+            if (config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', true)) === false) {
                 return;
             }
 
@@ -443,15 +443,25 @@ class ProcurementSmsService
 
     public function normalizePhone(string $phone): string
     {
-        $phone = preg_replace('/[^0-9+]/', '', $phone);
+        $phone = trim($phone);
+        if (empty($phone)) {
+            return '';
+        }
+
+        $digits = preg_replace('/[^0-9]/', '', $phone);
+        if (empty($digits)) {
+            return '';
+        }
+
         // Ethiopian numbers: starts with 09 or 07 → +2519 or +2517
         if ((str_starts_with($phone, '09') || str_starts_with($phone, '07')) && strlen($phone) === 10) {
-            $phone = '+251' . substr($phone, 1);
+            return '+251' . substr($phone, 1);
         } elseif (str_starts_with($phone, '251') && strlen($phone) === 12) {
-            $phone = '+' . $phone;
-        } elseif (!str_starts_with($phone, '+')) {
-            $phone = '+' . $phone;
+            return '+' . $phone;
+        } elseif (str_starts_with($phone, '+')) {
+            return '+' . $digits;
         }
-        return $phone;
+
+        return '+' . $digits;
     }
 }

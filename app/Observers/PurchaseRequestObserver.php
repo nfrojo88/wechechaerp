@@ -3,7 +3,7 @@
 namespace App\Observers;
 
 use App\Models\PurchaseRequest;
-use App\Services\ProcurementStatusOwnerService;
+use App\Services\ProcurementTransitionNotifier;
 use Illuminate\Support\Facades\Log;
 
 class PurchaseRequestObserver
@@ -24,10 +24,11 @@ class PurchaseRequestObserver
         // Only notify if not a local draft
         if ($pr->status && $pr->status !== PurchaseRequest::STATUS_DRAFT) {
             try {
-                app(ProcurementStatusOwnerService::class)->dispatchStatusChangeSms(
+                app(ProcurementTransitionNotifier::class)->notify(
                     model: $pr,
                     newStatus: $pr->status,
-                    oldStatus: null
+                    oldStatus: null,
+                    actor: auth()->user() ?? $pr->creator
                 );
             } catch (\Throwable $e) {
                 Log::error("PurchaseRequestObserver created error for PR #{$pr->id}: " . $e->getMessage());
@@ -42,14 +43,36 @@ class PurchaseRequestObserver
     {
         if ($pr->wasChanged('status')) {
             try {
-                app(ProcurementStatusOwnerService::class)->dispatchStatusChangeSms(
+                app(ProcurementTransitionNotifier::class)->notify(
                     model: $pr,
                     newStatus: $pr->status,
-                    oldStatus: $pr->getOriginal('status')
+                    oldStatus: $pr->getOriginal('status'),
+                    actor: auth()->user(),
+                    extraContext: [
+                        'reason' => $pr->rejection_reason,
+                    ]
                 );
             } catch (\Throwable $e) {
                 Log::error("PurchaseRequestObserver updated error for PR #{$pr->id}: " . $e->getMessage());
             }
+        }
+    }
+
+    /**
+     * Handle the PurchaseRequest "deleted" event.
+     */
+    public function deleted(PurchaseRequest $pr): void
+    {
+        try {
+            app(ProcurementTransitionNotifier::class)->notify(
+                model: $pr,
+                newStatus: PurchaseRequest::STATUS_CANCELLED,
+                oldStatus: $pr->status,
+                actor: auth()->user(),
+                extraContext: ['is_fyi' => true]
+            );
+        } catch (\Throwable $e) {
+            Log::error("PurchaseRequestObserver deleted error for PR #{$pr->id}: " . $e->getMessage());
         }
     }
 }

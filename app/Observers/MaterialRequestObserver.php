@@ -3,7 +3,7 @@
 namespace App\Observers;
 
 use App\Models\MaterialRequest;
-use App\Services\ProcurementStatusOwnerService;
+use App\Services\ProcurementTransitionNotifier;
 use Illuminate\Support\Facades\Log;
 
 class MaterialRequestObserver
@@ -23,10 +23,14 @@ class MaterialRequestObserver
     {
         $status = $mr->status ?? 'submitted';
         try {
-            app(ProcurementStatusOwnerService::class)->dispatchStatusChangeSms(
+            app(ProcurementTransitionNotifier::class)->notify(
                 model: $mr,
                 newStatus: $status,
-                oldStatus: null
+                oldStatus: null,
+                actor: auth()->user() ?? $mr->creator,
+                extraContext: [
+                    'reason' => $mr->planning_rejection_reason,
+                ]
             );
         } catch (\Throwable $e) {
             Log::error("MaterialRequestObserver created error for MR #{$mr->id}: " . $e->getMessage());
@@ -43,21 +47,43 @@ class MaterialRequestObserver
 
         if ($statusChanged || $planningChanged) {
             $effectiveStatus = $mr->status;
-            if ($planningChanged && $mr->planning_approval_status === 'approved' && $mr->status !== 'planning_approved') {
+            if ($planningChanged && $mr->planning_approval_status === 'approved' && !in_array($mr->status, ['planning_approved', 'sent_to_store_manager', 'approved_for_petty_cash'])) {
                 $effectiveStatus = 'planning_approved';
             } elseif ($planningChanged && $mr->planning_approval_status === 'rejected') {
                 $effectiveStatus = 'rejected';
             }
 
             try {
-                app(ProcurementStatusOwnerService::class)->dispatchStatusChangeSms(
+                app(ProcurementTransitionNotifier::class)->notify(
                     model: $mr,
                     newStatus: $effectiveStatus,
-                    oldStatus: $mr->getOriginal('status')
+                    oldStatus: $mr->getOriginal('status'),
+                    actor: auth()->user() ?? $mr->planningApprover,
+                    extraContext: [
+                        'reason' => $mr->planning_rejection_reason,
+                    ]
                 );
             } catch (\Throwable $e) {
                 Log::error("MaterialRequestObserver updated error for MR #{$mr->id}: " . $e->getMessage());
             }
+        }
+    }
+
+    /**
+     * Handle the MaterialRequest "deleted" event.
+     */
+    public function deleted(MaterialRequest $mr): void
+    {
+        try {
+            app(ProcurementTransitionNotifier::class)->notify(
+                model: $mr,
+                newStatus: 'cancelled',
+                oldStatus: $mr->status,
+                actor: auth()->user(),
+                extraContext: ['is_fyi' => true]
+            );
+        } catch (\Throwable $e) {
+            Log::error("MaterialRequestObserver deleted error for MR #{$mr->id}: " . $e->getMessage());
         }
     }
 }
