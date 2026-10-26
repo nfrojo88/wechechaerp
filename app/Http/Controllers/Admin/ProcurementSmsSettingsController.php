@@ -189,6 +189,54 @@ class ProcurementSmsSettingsController extends Controller
     }
 
     /**
+     * Retry a failed SMS dispatch.
+     */
+    public function retry(Request $request, $id)
+    {
+        $this->ensureAuthorized();
+
+        $log = NotificationLog::findOrFail($id);
+
+        if (empty($log->phone) || $log->phone === 'N/A') {
+            return back()->with('error', 'Cannot retry: Recipient has no valid phone number configured.');
+        }
+
+        try {
+            $result = $this->smsProvider->send($log->phone, $log->message);
+            $log->retries = ($log->retries ?? 0) + 1;
+
+            if (!empty($result['success'])) {
+                $log->status = 'sent';
+                $log->error = null;
+                $log->save();
+
+                // Also update procurement_sms_logs if exists
+                if ($log->request_id) {
+                    \Illuminate\Support\Facades\DB::table('procurement_sms_logs')
+                        ->where(function($q) use ($log) {
+                            $q->where('purchase_request_id', $log->request_id)
+                              ->orWhere('material_request_id', $log->request_id);
+                        })
+                        ->where('recipient_phone', $log->phone)
+                        ->where('status', 'failed')
+                        ->update(['status' => 'sent', 'error_message' => null]);
+                }
+
+                return back()->with('success', "SMS to {$log->phone} successfully resent!");
+            } else {
+                $log->error = $result['error'] ?? 'Gateway retry failed';
+                $log->save();
+                return back()->with('error', "SMS retry to {$log->phone} failed: {$log->error}");
+            }
+        } catch (\Throwable $e) {
+            $log->error = $e->getMessage();
+            $log->retries = ($log->retries ?? 0) + 1;
+            $log->save();
+            return back()->with('error', "SMS retry exception: {$e->getMessage()}");
+        }
+    }
+
+    /**
      * Check authorization: Global Admin, Admin, or Purchase Manager.
      */
     protected function ensureAuthorized(): void

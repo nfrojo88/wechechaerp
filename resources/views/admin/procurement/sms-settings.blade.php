@@ -349,6 +349,7 @@
                                     <th style="width: 160px;">Target Role & Phone</th>
                                     <th>Message Payload</th>
                                     <th style="width: 200px;">Failure Reason</th>
+                                    <th style="width: 100px;" class="text-center">Action</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -372,10 +373,18 @@
                                             {{ $fLog->error ?? 'Delivery failure' }}
                                         </div>
                                     </td>
+                                    <td class="text-center">
+                                        <form action="{{ route('admin.procurement.sms-settings.retry', $fLog->id) }}" method="POST" class="d-inline" onsubmit="this.querySelector('button').disabled = true;">
+                                            @csrf
+                                            <button type="submit" class="btn btn-sm btn-outline-danger shadow-xs fw-semibold" title="Retry sending this SMS">
+                                                <i class="fa-solid fa-rotate-right me-1"></i> Retry
+                                            </button>
+                                        </form>
+                                    </td>
                                 </tr>
                                 @empty
                                 <tr>
-                                    <td colspan="6" class="text-center py-4 text-success fw-semibold">
+                                    <td colspan="7" class="text-center py-4 text-success fw-semibold">
                                         <i class="fa-solid fa-circle-check me-2"></i>No failed SMS dispatches recorded. All messages have delivered successfully!
                                     </td>
                                 </tr>
