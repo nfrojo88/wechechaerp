@@ -5172,234 +5172,135 @@ class FinanceTaxReportController extends Controller
             $rawRequestNumber = $request->input('request_number');
             $rawFsNo          = $request->input('fs_no');
 
-            $receipt = null;
-            $item    = null;
-            $expReq  = null;
+            $receipt     = null;
+            $item        = null;
+            $expReq      = null;
+            $procPayment = null;
+            $csPayment   = null;
+            $pcPurchase  = null;
 
-            // 1. Resolve ExpenseRequest first if explicit expense_request_id or request_number provided
+            // 1. Resolve through ReceiptItem first (numeric id, or OCR-xx prefix)
+            $candItemIds = array_values(array_filter([$rawId, $rawReceiptId, $rawExpenseReqId]));
+            foreach ($candItemIds as $cid) {
+                $cleanCid = preg_replace('/^OCR-/i', '', (string)$cid);
+                if (is_numeric($cleanCid) && Schema::hasTable('receipt_items')) {
+                    $item = \App\Models\ReceiptItem::with('receipt')->find($cleanCid);
+                    if ($item && $item->receipt) {
+                        $receipt = $item->receipt;
+                        break;
+                    }
+                }
+            }
+
+            // 2. Resolve parent Receipt (numeric, REC-xx, or receipt_number)
+            if (!$receipt) {
+                $candReceiptIds = array_values(array_filter([$rawReceiptId, $rawId]));
+                foreach ($candReceiptIds as $crid) {
+                    $cleanRId = preg_replace('/^REC-/i', '', (string)$crid);
+                    if (is_numeric($cleanRId) && Schema::hasTable('receipts')) {
+                        $receipt = \App\Models\Receipt::find($cleanRId);
+                        if ($receipt) break;
+                    }
+                    if (Schema::hasTable('receipts')) {
+                        $receipt = \App\Models\Receipt::where('receipt_number', (string)$crid)->first();
+                        if ($receipt) break;
+                    }
+                }
+            }
+
+            // 3. Resolve ExpenseRequest (EXP-xx, numeric id, or request_number)
             if (Schema::hasTable('expense_requests')) {
-                if (!empty($rawExpenseReqId)) {
-                    $cleanExpId = preg_replace('/^EXP-/i', '', (string)$rawExpenseReqId);
-                    if (is_numeric($cleanExpId)) {
-                        $expReq = \App\Models\ExpenseRequest::find($cleanExpId);
+                $candExpIds = array_values(array_filter([$rawExpenseReqId, $rawReceiptId, $rawId]));
+                foreach ($candExpIds as $ceid) {
+                    if (preg_match('/^EXP-(\d+)$/i', (string)$ceid, $mExp)) {
+                        $expReq = \App\Models\ExpenseRequest::find($mExp[1]);
+                        if ($expReq) break;
+                    } elseif (is_numeric($ceid)) {
+                        $expReq = \App\Models\ExpenseRequest::find($ceid);
+                        if ($expReq) break;
+                    } elseif (str_starts_with(strtoupper((string)$ceid), 'EXP-')) {
+                        $expReq = \App\Models\ExpenseRequest::where('request_number', (string)$ceid)->first()
+                            ?: \App\Models\ExpenseRequest::where('request_number', 'like', '%' . $ceid . '%')->first();
+                        if ($expReq) break;
                     }
                 }
                 if (!$expReq && !empty($rawRequestNumber)) {
                     $expReq = \App\Models\ExpenseRequest::where('request_number', (string)$rawRequestNumber)->first();
                 }
-            }
 
-            // 2. Check if rawReceiptId or rawId points to an ExpenseRequest (e.g. 'EXP-276' or 'EXP-FUEL-2026-0276')
-            if (!$expReq && Schema::hasTable('expense_requests')) {
-                foreach ([$rawReceiptId, $rawId] as $cand) {
-                    if (empty($cand)) continue;
-                    if (preg_match('/^EXP-(\d+)$/i', (string)$cand, $mExp)) {
-                        $expReq = \App\Models\ExpenseRequest::find($mExp[1]);
-                        if ($expReq) break;
-                    }
-                    if (str_starts_with(strtoupper((string)$cand), 'EXP-')) {
-                        $expReq = \App\Models\ExpenseRequest::where('request_number', (string)$cand)->first()
-                            ?: \App\Models\ExpenseRequest::where('request_number', 'like', '%' . $cand . '%')->first();
-                        if ($expReq) break;
-                    }
-                }
-            }
-
-            // 3. Resolve parent Receipt if receipt_id or id is provided
-            if (!empty($rawReceiptId)) {
-                $cleanReceiptId = preg_replace('/^REC-/i', '', (string)$rawReceiptId);
-                if (is_numeric($cleanReceiptId)) {
-                    $receipt = \App\Models\Receipt::find($cleanReceiptId);
-                }
-                if (!$receipt) {
-                    $receipt = \App\Models\Receipt::where('receipt_number', (string)$rawReceiptId)->first();
-                }
-                if (!$receipt && preg_match('/^P(\d+)$/i', (string)$rawReceiptId, $mP)) {
-                    if (Schema::hasTable('credit_store_payments')) {
-                        $payment = \App\Models\CreditStorePayment::find($mP[1]);
-                        if ($payment) {
-                            $receipt = \App\Models\Receipt::where('purchasable_type', \App\Models\CreditStorePayment::class)
-                                ->where('purchasable_id', $payment->id)
-                                ->first();
-                            if (!$receipt) {
-                                $receipt = new \App\Models\Receipt([
-                                    'purchasable_type' => \App\Models\CreditStorePayment::class,
-                                    'purchasable_id'   => $payment->id,
-                                    'vendor_name'      => $payment->ledger?->supplier_name ?: 'Credit Vendor',
-                                    'fs_no'            => $payment->reference_no ?: null,
-                                    'receipt_date'     => $payment->payment_date ?: $payment->created_at?->toDateString(),
-                                    'file_path'        => $uploadedPath ?: ($payment->receipt_path ?: ''),
-                                    'total_amount'     => (float)$payment->amount,
-                                    'subtotal'         => (float)$payment->amount,
-                                    'vat_amount'       => 0,
-                                ]);
-                                $receipt->save();
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 4. Resolve ReceiptItem if numeric id provided
-            if (!empty($rawId) && is_numeric($rawId)) {
-                if ($receipt) {
-                    $item = \App\Models\ReceiptItem::where('id', $rawId)->where('receipt_id', $receipt->id)->first();
-                } else {
-                    $item = \App\Models\ReceiptItem::with('receipt')->find($rawId);
-                    if ($item && $item->receipt) {
-                        $receipt = $item->receipt;
-                    }
-                }
-            }
-
-            // 5. Fallback receipt resolution if receipt still null
-            if (!$receipt && !empty($rawId)) {
-                $cleanId = preg_replace('/^REC-/i', '', (string)$rawId);
-                if (is_numeric($cleanId)) {
-                    $receipt = \App\Models\Receipt::find($cleanId);
-                }
-                if (!$receipt) {
-                    $receipt = \App\Models\Receipt::where('receipt_number', (string)$rawId)->first();
-                }
-            }
-
-            // 6. If we found an expReq but still no receipt, find or create the receipt for it
-            if (!$receipt && $expReq) {
-                $receipt = \App\Models\Receipt::where('purchasable_type', \App\Models\ExpenseRequest::class)
-                    ->where('purchasable_id', $expReq->id)
-                    ->first()
-                    ?: \App\Models\Receipt::where('purchasable_type', 'expense_request')
-                        ->where('purchasable_id', $expReq->id)
-                        ->first()
-                    ?: \App\Models\Receipt::where('receipt_number', $expReq->request_number)->first();
-
-                if (!$receipt) {
-                    $candidateReceiptNo = $expReq->request_number;
-                    if (empty($candidateReceiptNo) || \App\Models\Receipt::where('receipt_number', $candidateReceiptNo)->exists()) {
-                        $candidateReceiptNo = 'RCP-EXP-' . now()->format('Ymd') . '-' . $expReq->id . '-' . strtoupper(substr(uniqid(), -4));
-                    }
-                    $receipt = new \App\Models\Receipt([
-                        'purchasable_type' => \App\Models\ExpenseRequest::class,
-                        'purchasable_id'   => $expReq->id,
-                        'receipt_number'   => $candidateReceiptNo,
-                        'vendor_name'      => $request->seller_name ?: ($expReq->payee ?: 'Vendor'),
-                        'vendor_tin'       => $request->supplier_tin ?: null,
-                        'fs_no'            => $request->fs_no ?: null,
-                        'fs_no_raw'        => $request->fs_no ?: null,
-                        'mrc_no'           => $request->mrc_no ?: null,
-                        'uploaded_by'      => Auth::id() ?: ($expReq->user_id ?: 1),
-                        'project_id'       => $request->project_id ?: $expReq->project_id,
-                        'file_path'        => $uploadedPath ?: (string)($expReq->attachment ?? ''),
-                        'file_type'        => 'image',
-                        'category'         => $request->category ?: ($expReq->category ?: 'general'),
-                        'parsed_data'      => ['tax_type' => ((float)($request->vat_amount ?? 0) <= 0) ? 'no_vat' : 'vat_standard', 'purc_type' => (string)($request->purchase_type ?: 'PUR_GD')],
-                        'subtotal'         => (float)($request->total_value ?: $expReq->amount),
-                        'vat_amount'       => (float)($request->vat_amount ?: $expReq->vat_amount),
-                        'total_amount'     => (float)($request->value_after_vat ?: ($expReq->gross_amount ?: $expReq->amount)),
-                    ]);
-                    $receipt->save();
-                }
-            }
-
-            // 7. Check if id / receipt_id corresponds to an ExpenseRequest as fallback
-            if (!$receipt && Schema::hasTable('expense_requests')) {
-                $expReq = \App\Models\ExpenseRequest::where('request_number', (string)$rawReceiptId)
-                    ->orWhere('id', is_numeric($rawReceiptId) ? $rawReceiptId : 0)
-                    ->orWhere('request_number', (string)$rawId)
-                    ->orWhere('id', is_numeric($rawId) ? $rawId : 0)
-                    ->first();
-                if ($expReq) {
+                if (!$receipt && $expReq) {
                     $receipt = \App\Models\Receipt::where('purchasable_type', \App\Models\ExpenseRequest::class)
                         ->where('purchasable_id', $expReq->id)
                         ->first()
+                        ?: \App\Models\Receipt::where('purchasable_type', 'expense_request')
+                            ->where('purchasable_id', $expReq->id)
+                            ->first()
                         ?: \App\Models\Receipt::where('receipt_number', $expReq->request_number)->first();
-                    if (!$receipt) {
-                        $candidateReceiptNo = $expReq->request_number;
-                        if (empty($candidateReceiptNo) || \App\Models\Receipt::where('receipt_number', $candidateReceiptNo)->exists()) {
-                            $candidateReceiptNo = 'RCP-EXP-' . now()->format('Ymd') . '-' . $expReq->id . '-' . strtoupper(substr(uniqid(), -4));
-                        }
-                        $receipt = new \App\Models\Receipt([
-                            'purchasable_type' => \App\Models\ExpenseRequest::class,
-                            'purchasable_id'   => $expReq->id,
-                            'receipt_number'   => $candidateReceiptNo,
-                            'vendor_name'      => $request->seller_name ?: ($expReq->payee ?: 'Vendor'),
-                            'vendor_tin'       => $request->supplier_tin ?: null,
-                            'fs_no'            => $request->fs_no ?: null,
-                            'fs_no_raw'        => $request->fs_no ?: null,
-                            'mrc_no'           => $request->mrc_no ?: null,
-                            'uploaded_by'      => Auth::id() ?: ($expReq->user_id ?: 1),
-                            'project_id'       => $request->project_id ?: $expReq->project_id,
-                            'file_path'        => $uploadedPath ?: (string)($expReq->attachment ?? ''),
-                            'file_type'        => 'image',
-                            'category'         => $request->category ?: ($expReq->category ?: 'general'),
-                            'parsed_data'      => ['tax_type' => ((float)($request->vat_amount ?? 0) <= 0) ? 'no_vat' : 'vat_standard', 'purc_type' => (string)($request->purchase_type ?: 'PUR_GD')],
-                            'subtotal'         => (float)($request->total_value ?: $expReq->amount),
-                            'vat_amount'       => (float)($request->vat_amount ?: $expReq->vat_amount),
-                            'total_amount'     => (float)($request->value_after_vat ?: ($expReq->gross_amount ?: $expReq->amount)),
-                        ]);
-                        $receipt->save();
+                }
+            }
+
+            // 4. Resolve ProcurementPayment (PROC-xx, PP-xx, or PR-xx)
+            if (Schema::hasTable('procurement_payments')) {
+                $candProcIds = array_values(array_filter([$rawExpenseReqId, $rawReceiptId, $rawId, $rawRequestNumber]));
+                foreach ($candProcIds as $cpid) {
+                    if (preg_match('/^PROC-(\d+)$/i', (string)$cpid, $mProc)) {
+                        $procPayment = \App\Models\ProcurementPayment::find($mProc[1]);
+                        if ($procPayment) break;
+                    }
+                }
+                if (!$procPayment && !empty($rawRequestNumber)) {
+                    $procPayment = \App\Models\ProcurementPayment::where('notes', 'like', '%' . $rawRequestNumber . '%')
+                        ->orWhereHas('purchaseRequest', fn($pq) => $pq->where('request_number', $rawRequestNumber))
+                        ->first();
+                }
+                if (!$receipt && $procPayment) {
+                    $receipt = \App\Models\Receipt::where('purchasable_type', \App\Models\ProcurementPayment::class)
+                        ->where('purchasable_id', $procPayment->id)
+                        ->first()
+                        ?: \App\Models\Receipt::where('purchasable_type', 'procurement_payment')
+                            ->where('purchasable_id', $procPayment->id)
+                            ->first();
+                }
+            }
+
+            // 5. Resolve CreditStorePayment (CS-xx, Pxx, or reference_no)
+            if (Schema::hasTable('credit_store_payments')) {
+                $candCsIds = array_values(array_filter([$rawExpenseReqId, $rawReceiptId, $rawId, $rawRequestNumber]));
+                foreach ($candCsIds as $csid) {
+                    if (preg_match('/^CS-(\d+)$/i', (string)$csid, $mCs)) {
+                        $csPayment = \App\Models\CreditStorePayment::find($mCs[1]);
+                        if ($csPayment) break;
+                    } elseif (preg_match('/^P(\d+)$/i', (string)$csid, $mP)) {
+                        $csPayment = \App\Models\CreditStorePayment::find($mP[1]);
+                        if ($csPayment) break;
+                    }
+                }
+                if (!$csPayment && !empty($rawRequestNumber)) {
+                    $csPayment = \App\Models\CreditStorePayment::where('reference_no', (string)$rawRequestNumber)->first();
+                }
+                if (!$receipt && $csPayment) {
+                    $receipt = \App\Models\Receipt::where('purchasable_type', \App\Models\CreditStorePayment::class)
+                        ->where('purchasable_id', $csPayment->id)
+                        ->first()
+                        ?: \App\Models\Receipt::where('purchasable_type', 'credit_store_payment')
+                            ->where('purchasable_id', $csPayment->id)
+                            ->first();
+                }
+            }
+
+            // 6. Resolve PettyCashMaterialPurchase (PC-xx)
+            if (Schema::hasTable('petty_cash_material_purchases')) {
+                $candPcIds = array_values(array_filter([$rawExpenseReqId, $rawReceiptId, $rawId, $rawRequestNumber]));
+                foreach ($candPcIds as $pcid) {
+                    if (preg_match('/^PC-(\d+)$/i', (string)$pcid, $mPc)) {
+                        $pcPurchase = \App\Models\PettyCashMaterialPurchase::find($mPc[1]);
+                        if ($pcPurchase) break;
                     }
                 }
             }
 
-            // 8. Fallback resolution via VehicleFuelRequest
-            if (!$receipt && Schema::hasTable('vehicle_fuel_requests')) {
-                try {
-                    $cands = array_values(array_filter([(string)$rawRequestNumber, (string)$rawReceiptId]));
-                    $hasReqNo = Schema::hasColumn('vehicle_fuel_requests', 'request_no');
-                    $hasReqNum = Schema::hasColumn('vehicle_fuel_requests', 'request_number');
-                    $fuel = null;
-                    if (!empty($cands) && ($hasReqNo || $hasReqNum)) {
-                        $fuel = \App\Models\VehicleFuelRequest::where(function ($q) use ($cands, $hasReqNo, $hasReqNum) {
-                            if ($hasReqNo && $hasReqNum) {
-                                $q->whereIn('request_no', $cands)->orWhereIn('request_number', $cands);
-                            } elseif ($hasReqNo) {
-                                $q->whereIn('request_no', $cands);
-                            } else {
-                                $q->whereIn('request_number', $cands);
-                            }
-                        })->first();
-                    }
-                    if ($fuel && !empty($fuel->expense_request_id)) {
-                        $expReq = \App\Models\ExpenseRequest::find($fuel->expense_request_id);
-                        if ($expReq) {
-                            $receipt = \App\Models\Receipt::where('purchasable_type', \App\Models\ExpenseRequest::class)
-                                ->where('purchasable_id', $expReq->id)
-                                ->first();
-                            if (!$receipt) {
-                                $candidateReceiptNo = $expReq->request_number ?: ('RCP-FUEL-' . $fuel->id);
-                                if (\App\Models\Receipt::where('receipt_number', $candidateReceiptNo)->exists()) {
-                                    $candidateReceiptNo = 'RCP-EXP-' . now()->format('Ymd') . '-' . $expReq->id . '-' . strtoupper(substr(uniqid(), -4));
-                                }
-                                $receipt = new \App\Models\Receipt([
-                                    'purchasable_type' => \App\Models\ExpenseRequest::class,
-                                    'purchasable_id'   => $expReq->id,
-                                    'receipt_number'   => $candidateReceiptNo,
-                                    'vendor_name'      => $request->seller_name ?: ($expReq->payee ?: 'Fuel Station'),
-                                    'vendor_tin'       => $request->supplier_tin ?: ($fuel->fuel_station_tin ?? null),
-                                    'fs_no'            => $request->fs_no ?: ($fuel->fs_no ?? null),
-                                    'mrc_no'           => $request->mrc_no ?: ($fuel->mrc_no ?? null),
-                                    'uploaded_by'      => Auth::id() ?: ($expReq->user_id ?: 1),
-                                    'project_id'       => $request->project_id ?: $expReq->project_id,
-                                    'file_path'        => $uploadedPath ?: (string)($expReq->attachment ?? ''),
-                                    'file_type'        => 'image',
-                                    'category'         => 'fuel',
-                                    'parsed_data'      => ['tax_type' => ((float)($request->vat_amount ?? 0) <= 0) ? 'no_vat' : 'vat_standard', 'purc_type' => (string)($request->purchase_type ?: 'PUR_GD')],
-                                    'subtotal'         => (float)($request->total_value ?: $expReq->amount),
-                                    'vat_amount'       => (float)($request->vat_amount ?: $expReq->vat_amount),
-                                    'total_amount'     => (float)($request->value_after_vat ?: ($expReq->gross_amount ?: $expReq->amount)),
-                                ]);
-                                $receipt->save();
-                            }
-                        }
-                    }
-                } catch (\Throwable $e) {
-                    // Suppress
-                }
-            }
-
-            // 9. Fallback resolution via fs_no match
-            if (!$receipt && !empty($rawFsNo)) {
+            // 7. Resolve via fs_no match in Receipts
+            if (!$receipt && !empty($rawFsNo) && Schema::hasTable('receipts')) {
                 $cleanFs = preg_replace('/\D/', '', (string)$rawFsNo);
                 if (!empty($cleanFs)) {
                     $receipt = \App\Models\Receipt::where('fs_no', $cleanFs)
@@ -5408,12 +5309,64 @@ class FinanceTaxReportController extends Controller
                 }
             }
 
-            // 10. If receipt exists, ensure it has a ReceiptItem
+            // 8. Dynamic creation fallback if receipt is not found yet - NEVER fail with record not found
+            if (!$receipt && Schema::hasTable('receipts')) {
+                $candidateReceiptNo = $rawRequestNumber ?: ($rawReceiptId ?: null);
+                if (empty($candidateReceiptNo) || \App\Models\Receipt::where('receipt_number', $candidateReceiptNo)->exists()) {
+                    $candidateReceiptNo = 'RCP-' . now()->format('Ymd') . '-' . strtoupper(substr(uniqid(), -5));
+                }
+
+                $purchasableType = null;
+                $purchasableId = null;
+                $defaultCategory = 'materials';
+                $defaultVendor = $request->seller_name ?: 'Vendor';
+
+                if ($expReq) {
+                    $purchasableType = \App\Models\ExpenseRequest::class;
+                    $purchasableId   = $expReq->id;
+                    $defaultCategory = $expReq->category ?: 'general';
+                    $defaultVendor   = $expReq->payee ?: $defaultVendor;
+                } elseif ($procPayment) {
+                    $purchasableType = \App\Models\ProcurementPayment::class;
+                    $purchasableId   = $procPayment->id;
+                    $defaultCategory = 'procurement';
+                } elseif ($csPayment) {
+                    $purchasableType = \App\Models\CreditStorePayment::class;
+                    $purchasableId   = $csPayment->id;
+                    $defaultCategory = 'credit_settlement';
+                }
+
+                $receipt = new \App\Models\Receipt([
+                    'purchasable_type' => $purchasableType,
+                    'purchasable_id'   => $purchasableId,
+                    'receipt_number'   => $candidateReceiptNo,
+                    'vendor_name'      => $request->seller_name ?: $defaultVendor,
+                    'vendor_tin'       => $request->supplier_tin ?: null,
+                    'fs_no'            => $request->fs_no ?: null,
+                    'fs_no_raw'        => $request->fs_no ?: null,
+                    'mrc_no'           => $request->mrc_no ?: null,
+                    'uploaded_by'      => Auth::id() ?: 1,
+                    'project_id'       => $request->project_id ?: ($expReq?->project_id ?? null),
+                    'file_path'        => $uploadedPath ?: ($expReq?->attachment ?? ''),
+                    'file_type'        => 'image',
+                    'category'         => $request->category ?: $defaultCategory,
+                    'parsed_data'      => [
+                        'tax_type'  => ((float)($request->vat_amount ?? 0) <= 0) ? 'no_vat' : 'vat_standard',
+                        'purc_type' => (string)($request->purchase_type ?: 'PUR_GD')
+                    ],
+                    'subtotal'         => (float)($request->total_value ?? 0),
+                    'vat_amount'       => (float)($request->vat_amount ?? 0),
+                    'total_amount'     => (float)($request->value_after_vat ?? 0),
+                ]);
+                $receipt->save();
+            }
+
+            // 9. Ensure Receipt has an associated ReceiptItem
             if ($receipt) {
                 if (!$item || $item->receipt_id !== $receipt->id) {
                     $item = $receipt->items()->first();
                 }
-                if (!$item) {
+                if (!$item && Schema::hasTable('receipt_items')) {
                     $rawVatCat = strtoupper(trim((string)($request->vat_category ?: '')));
                     if (!in_array($rawVatCat, ['G', 'S', 'E'])) {
                         $rawVatCat = ((float)($request->vat_amount ?? 0) > 0) ? 'G' : 'E';
@@ -5434,7 +5387,9 @@ class FinanceTaxReportController extends Controller
                     ]);
                     $item->save();
                 }
-                $item->setRelation('receipt', $receipt);
+                if ($item) {
+                    $item->setRelation('receipt', $receipt);
+                }
             }
 
             if (!$item || !$receipt) {
@@ -5817,23 +5772,124 @@ class FinanceTaxReportController extends Controller
             }
 
             // Sync linked CreditStorePayment
+            $csTarget = $csPayment;
             try {
-                if ($receipt->purchasable_type && str_contains($receipt->purchasable_type, 'CreditStorePayment') && $receipt->purchasable_id) {
-                    $payment = \App\Models\CreditStorePayment::find($receipt->purchasable_id);
-                    if ($payment) {
-                        if ($receipt->fs_no) {
-                            $payment->reference_no = $receipt->fs_no;
-                        }
-                        if (!empty($uploadedPath) && Schema::hasColumn('credit_store_payments', 'receipt_path')) {
-                            $payment->receipt_path = $uploadedPath;
-                        }
-                        $payment->amount = $valAfter;
-                        $payment->vat_amount = $vat;
-                        $payment->save();
+                if (!$csTarget && $receipt->purchasable_type && str_contains($receipt->purchasable_type, 'CreditStorePayment') && $receipt->purchasable_id) {
+                    $csTarget = \App\Models\CreditStorePayment::find($receipt->purchasable_id);
+                }
+                if ($csTarget) {
+                    if ($receipt->fs_no) {
+                        $csTarget->reference_no = $receipt->fs_no;
                     }
+                    if (!empty($uploadedPath) && Schema::hasColumn('credit_store_payments', 'receipt_path')) {
+                        $csTarget->receipt_path = $uploadedPath;
+                    }
+                    $csTarget->amount = $totalVal;
+                    if (Schema::hasColumn('credit_store_payments', 'gross_amount')) {
+                        $csTarget->gross_amount = $valAfter;
+                    }
+                    if (Schema::hasColumn('credit_store_payments', 'vat_amount')) {
+                        $csTarget->vat_amount = $vat;
+                    }
+                    if (Schema::hasColumn('credit_store_payments', 'vat_type')) {
+                        $csTarget->vat_type = ($vat > 0) ? 'exclusive' : 'none';
+                    }
+                    if (Schema::hasColumn('credit_store_payments', 'vat_rate')) {
+                        $csTarget->vat_rate = ($vat > 0) ? 15.00 : 0.00;
+                    }
+                    if ($request->has('has_withholding') || $request->has('withholding_amount') || $request->has('withholding_rate') || $uploadedWhtPath || $request->has('withholding_receipt_number')) {
+                        if (Schema::hasColumn('credit_store_payments', 'has_withholding')) {
+                            $csTarget->has_withholding = $hasWht;
+                        }
+                        if ($whtRate !== null && Schema::hasColumn('credit_store_payments', 'withholding_rate')) {
+                            $csTarget->withholding_rate = $whtRate;
+                        }
+                        if ($whtAmount !== null && Schema::hasColumn('credit_store_payments', 'withholding_amount')) {
+                            $csTarget->withholding_amount = $whtAmount;
+                        }
+                        if ($whtReceiptNo !== null && Schema::hasColumn('credit_store_payments', 'withholding_receipt_number')) {
+                            $csTarget->withholding_receipt_number = $whtReceiptNo;
+                        }
+                        if ($uploadedWhtPath && Schema::hasColumn('credit_store_payments', 'withholding_receipt')) {
+                            $csTarget->withholding_receipt = $uploadedWhtPath;
+                        }
+                    }
+                    if (Schema::hasColumn('credit_store_payments', 'net_amount')) {
+                        $csTarget->net_amount = max(0, $valAfter - (float)($csTarget->withholding_amount ?? 0));
+                    }
+                    $csTarget->save();
                 }
             } catch (\Throwable $e) {
                 Log::warning('updateOcrItem credit payment sync error: ' . $e->getMessage());
+            }
+
+            // Sync linked ProcurementPayment
+            $procTarget = $procPayment;
+            try {
+                if (!$procTarget && $receipt->purchasable_type && str_contains($receipt->purchasable_type, 'ProcurementPayment') && $receipt->purchasable_id) {
+                    $procTarget = \App\Models\ProcurementPayment::find($receipt->purchasable_id);
+                }
+                if ($procTarget) {
+                    $procTarget->amount = $totalVal;
+                    if (Schema::hasColumn('procurement_payments', 'gross_amount')) {
+                        $procTarget->gross_amount = $valAfter;
+                    }
+                    if (Schema::hasColumn('procurement_payments', 'vat_amount')) {
+                        $procTarget->vat_amount = $vat;
+                    }
+                    if (Schema::hasColumn('procurement_payments', 'vat_type')) {
+                        $procTarget->vat_type = ($vat > 0) ? 'exclusive' : 'none';
+                    }
+                    if (Schema::hasColumn('procurement_payments', 'vat_rate')) {
+                        $procTarget->vat_rate = ($vat > 0) ? 15.00 : 0.00;
+                    }
+                    if ($request->has('has_withholding') || $request->has('withholding_amount') || $request->has('withholding_rate') || $uploadedWhtPath || $request->has('withholding_receipt_number')) {
+                        if (Schema::hasColumn('procurement_payments', 'has_withholding')) {
+                            $procTarget->has_withholding = $hasWht;
+                        }
+                        if ($whtRate !== null && Schema::hasColumn('procurement_payments', 'withholding_rate')) {
+                            $procTarget->withholding_rate = $whtRate;
+                        }
+                        if ($whtAmount !== null && Schema::hasColumn('procurement_payments', 'withholding_amount')) {
+                            $procTarget->withholding_amount = $whtAmount;
+                        }
+                        if ($whtReceiptNo !== null && Schema::hasColumn('procurement_payments', 'withholding_receipt_number')) {
+                            $procTarget->withholding_receipt_number = $whtReceiptNo;
+                        }
+                        if ($uploadedWhtPath && Schema::hasColumn('procurement_payments', 'withholding_receipt')) {
+                            $procTarget->withholding_receipt = $uploadedWhtPath;
+                        }
+                    }
+                    if (Schema::hasColumn('procurement_payments', 'net_amount')) {
+                        $procTarget->net_amount = max(0, $valAfter - (float)($procTarget->withholding_amount ?? 0));
+                    }
+                    $procTarget->save();
+                }
+            } catch (\Throwable $e) {
+                Log::warning('updateOcrItem procurement payment sync error: ' . $e->getMessage());
+            }
+
+            // Sync linked PettyCashMaterialPurchase
+            $pcTarget = $pcPurchase;
+            try {
+                if (!$pcTarget && $receipt->purchasable_type && str_contains($receipt->purchasable_type, 'PettyCashMaterialPurchase') && $receipt->purchasable_id) {
+                    $pcTarget = \App\Models\PettyCashMaterialPurchase::find($receipt->purchasable_id);
+                }
+                if ($pcTarget) {
+                    if ($receipt->vendor_name) $pcTarget->supplier_name = $receipt->vendor_name;
+                    if ($receipt->vendor_tin) $pcTarget->supplier_tin = $receipt->vendor_tin;
+                    if ($receipt->fs_no) {
+                        $pcTarget->fs_no = $receipt->fs_no;
+                        $pcTarget->receipt_no = $receipt->fs_no;
+                    }
+                    if (!empty($uploadedPath)) {
+                        $pcTarget->attachment_path = $uploadedPath;
+                    }
+                    $pcTarget->total_amount = $valAfter;
+                    $pcTarget->save();
+                }
+            } catch (\Throwable $e) {
+                Log::warning('updateOcrItem petty cash sync error: ' . $e->getMessage());
             }
 
             $item->refresh();
@@ -5865,6 +5921,18 @@ class FinanceTaxReportController extends Controller
                 } catch (\Throwable $e) {
                     $calcWhtUrl = asset('storage/' . ltrim($linkedExp->withholding_receipt, '/'));
                 }
+            } elseif (!empty($procTarget?->withholding_receipt)) {
+                try {
+                    $calcWhtUrl = \App\Services\FileUploadService::url($procTarget->withholding_receipt);
+                } catch (\Throwable $e) {
+                    $calcWhtUrl = asset('storage/' . ltrim($procTarget->withholding_receipt, '/'));
+                }
+            } elseif (!empty($csTarget?->withholding_receipt)) {
+                try {
+                    $calcWhtUrl = \App\Services\FileUploadService::url($csTarget->withholding_receipt);
+                } catch (\Throwable $e) {
+                    $calcWhtUrl = asset('storage/' . ltrim($csTarget->withholding_receipt, '/'));
+                }
             }
 
             return response()->json([
@@ -5874,7 +5942,7 @@ class FinanceTaxReportController extends Controller
                     'id'                         => $item->id,
                     'receipt_id'                 => $receipt->id,
                     'expense_request_id'         => $linkedExp?->id,
-                    'request_number'             => $linkedExp?->request_number ?: $receipt->receipt_number,
+                    'request_number'             => $linkedExp?->request_number ?: ($procTarget?->purchaseRequest?->pr_no ?: ($csTarget?->reference_no ?: $receipt->receipt_number)),
                     'file_path'                  => $receipt->file_path,
                     'file_url'                   => $calcFileUrl,
                     'vendor_name'                => $receipt->vendor_name ?: 'Unknown Vendor',
@@ -5900,12 +5968,12 @@ class FinanceTaxReportController extends Controller
                     'vat_amount'                 => (float)$item->vat_amount,
                     'total_value'                => (float)$item->value_after_vat,
                     'value_after_vat'            => (float)$item->value_after_vat,
-                    'has_withholding'            => (bool)($linkedExp?->has_withholding ?? $hasWht),
-                    'withholding_rate'           => (float)($linkedExp?->withholding_rate ?? ($whtRate ?: 0)),
-                    'withholding_amount'         => (float)($linkedExp?->withholding_amount ?? ($whtAmount ?: 0)),
-                    'withholding_receipt_number' => (string)($linkedExp?->withholding_receipt_number ?? ($whtReceiptNo ?: '')),
+                    'has_withholding'            => (bool)($linkedExp?->has_withholding ?? ($procTarget?->has_withholding ?? ($csTarget?->has_withholding ?? $hasWht))),
+                    'withholding_rate'           => (float)($linkedExp?->withholding_rate ?? ($procTarget?->withholding_rate ?? ($csTarget?->withholding_rate ?? ($whtRate ?: 0)))),
+                    'withholding_amount'         => (float)($linkedExp?->withholding_amount ?? ($procTarget?->withholding_amount ?? ($csTarget?->withholding_amount ?? ($whtAmount ?: 0)))),
+                    'withholding_receipt_number' => (string)($linkedExp?->withholding_receipt_number ?? ($procTarget?->withholding_receipt_number ?? ($csTarget?->withholding_receipt_number ?? ($whtReceiptNo ?: '')))),
                     'withholding_receipt_url'    => $calcWhtUrl,
-                    'net_disbursed'              => (float)($linkedExp?->net_amount ?? max(0, $valAfter - ($whtAmount ?: 0))),
+                    'net_disbursed'              => (float)($linkedExp?->net_amount ?? ($procTarget?->net_amount ?? ($csTarget?->net_amount ?? max(0, $valAfter - ($whtAmount ?: 0))))),
                     'is_vat_receipt'             => ($vat > 0 && $vatCategory !== 'E'),
                     'is_no_vat'                  => ($vat <= 0 || $vatCategory === 'E'),
                     'is_verified_without_receipt' => (bool)($linkedExp?->is_verified_without_receipt ?? (filter_var($request->input('is_verified_without_receipt'), FILTER_VALIDATE_BOOLEAN))),

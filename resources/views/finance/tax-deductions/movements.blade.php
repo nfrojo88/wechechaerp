@@ -751,8 +751,8 @@
                                                 <div id="quickRowAlert-{{ $exp['id'] ?? $idx }}" class="alert d-none py-1.5 px-3 small rounded-3 mb-2.5"></div>
 
                                                 <form id="quickRowForm-{{ $exp['id'] ?? $idx }}" onsubmit="saveExpenseQuickRow(event, {{ $idx }}); return false;">
-                                                    <input type="hidden" name="id" value="{{ $exp['receipt_id'] ?? '' }}">
-                                                    <input type="hidden" name="receipt_id" value="{{ $exp['receipt_id'] ? ('REC-' . $exp['receipt_id']) : ($exp['id'] ? ('EXP-' . $exp['id']) : '') }}">
+                                                    <input type="hidden" name="id" value="{{ $exp['receipt_id'] ?: ($exp['id'] ?? '') }}">
+                                                    <input type="hidden" name="receipt_id" value="{{ $exp['receipt_id'] ? ('REC-' . $exp['receipt_id']) : (str_starts_with((string)$exp['id'], 'EXP-') || str_starts_with((string)$exp['id'], 'PROC-') || str_starts_with((string)$exp['id'], 'CS-') || str_starts_with((string)$exp['id'], 'PC-') ? $exp['id'] : 'EXP-' . $exp['id']) }}">
                                                     <input type="hidden" name="expense_request_id" value="{{ $exp['id'] ?? '' }}">
                                                     <input type="hidden" name="request_number" value="{{ $exp['request_number'] ?? '' }}">
                                                     <input type="hidden" name="receipt_path" value="{{ $exp['attachment_url'] ?? '' }}">
@@ -871,34 +871,56 @@
                                                         <div class="col-12 col-lg-3 d-flex flex-column justify-content-between">
                                                             <div>
                                                                 <div class="d-flex align-items-center justify-content-between mb-2 pb-1 border-bottom">
-                                                                    <span class="fw-bold small text-dark"><i class="fa-solid fa-calculator text-success me-1"></i>3. Financial Net</span>
-                                                                    <span class="badge {{ $isVatExp ? 'bg-success-subtle text-success' : 'bg-primary-subtle text-primary' }} rounded-pill" style="font-size:0.65rem;">
-                                                                        {{ $isVatExp ? '15% VAT' : '0% TAS' }}
+                                                                    <span class="fw-bold small text-dark"><i class="fa-solid fa-calculator text-success me-1"></i>3. Financial Adjustment</span>
+                                                                    <span class="badge bg-primary text-white rounded-pill px-2 py-0.5" style="font-size:0.65rem;">
+                                                                        <i class="fa-solid fa-lock-open me-1"></i>Unlocked (Admin)
                                                                     </span>
                                                                 </div>
 
                                                                 <div class="bg-light p-2.5 rounded-3 border mb-2 font-monospace" style="font-size:0.75rem;">
-                                                                    <div class="d-flex justify-content-between mb-1">
-                                                                        <span class="text-muted">Purchases Base:</span>
-                                                                        <span class="fw-semibold text-dark">ETB {{ number_format($expBase, 2) }}</span>
+                                                                    {{-- Taxable Base Input --}}
+                                                                    <div class="mb-1.5">
+                                                                        <div class="d-flex justify-content-between align-items-center mb-0.5">
+                                                                            <label class="form-label text-muted mb-0" style="font-size:0.7rem;">Taxable Base:</label>
+                                                                            <span class="text-xs text-muted font-monospace">ETB</span>
+                                                                        </div>
+                                                                        <input type="number" step="0.01" min="0" name="total_value" id="quickBase-{{ $exp['id'] ?? $idx }}" class="form-control form-control-sm font-monospace fw-semibold py-1 px-2" value="{{ number_format($expBase, 2, '.', '') }}" oninput="calcQuickAmounts({{ $idx }}, 'base')">
                                                                     </div>
-                                                                    <div class="d-flex justify-content-between mb-1">
-                                                                        <span class="text-success">Input VAT:</span>
-                                                                        <span class="fw-bold text-success">+ ETB {{ number_format($expVat, 2) }}</span>
+
+                                                                    {{-- Input VAT Input + Quick Buttons --}}
+                                                                    <div class="mb-1.5">
+                                                                        <div class="d-flex justify-content-between align-items-center mb-0.5">
+                                                                            <label class="form-label text-success mb-0" style="font-size:0.7rem;">Input VAT:</label>
+                                                                            <div class="btn-group btn-group-xs" role="group">
+                                                                                <button type="button" class="btn btn-outline-success py-0 px-1" style="font-size:0.65rem;" onclick="setQuickVat15({{ $idx }})" title="Set 15% VAT">15%</button>
+                                                                                <button type="button" class="btn btn-outline-secondary py-0 px-1" style="font-size:0.65rem;" onclick="setQuickVatZero({{ $idx }})" title="Set 0% VAT">0%</button>
+                                                                            </div>
+                                                                        </div>
+                                                                        <input type="number" step="0.01" min="0" name="vat_amount" id="quickVat-{{ $exp['id'] ?? $idx }}" class="form-control form-control-sm font-monospace fw-bold text-success py-1 px-2" value="{{ number_format($expVat, 2, '.', '') }}" oninput="calcQuickAmounts({{ $idx }}, 'vat')">
                                                                     </div>
-                                                                    <div class="d-flex justify-content-between mb-1">
+
+                                                                    {{-- Gross Total Input --}}
+                                                                    <div class="mb-1.5">
+                                                                        <div class="d-flex justify-content-between align-items-center mb-0.5">
+                                                                            <label class="form-label text-dark mb-0 fw-bold" style="font-size:0.7rem;">Gross Total:</label>
+                                                                            <span class="text-xs text-muted font-monospace">ETB</span>
+                                                                        </div>
+                                                                        <input type="number" step="0.01" min="0" name="value_after_vat" id="quickGross-{{ $exp['id'] ?? $idx }}" class="form-control form-control-sm font-monospace fw-bold text-dark py-1 px-2" value="{{ number_format($expBase + $expVat, 2, '.', '') }}" oninput="calcQuickAmounts({{ $idx }}, 'gross')">
+                                                                    </div>
+
+                                                                    {{-- WHT Deducted Display --}}
+                                                                    <div class="d-flex justify-content-between mb-1 pt-1 border-top">
                                                                         <span class="text-danger">WHT Deducted:</span>
                                                                         <span class="fw-bold text-danger quick-wht-display" id="quickWhtDisplay-{{ $exp['id'] ?? $idx }}">- ETB {{ number_format($expWht, 2) }}</span>
                                                                     </div>
+
+                                                                    {{-- Net Disbursed Display --}}
                                                                     <div class="d-flex justify-content-between pt-1 border-top fw-bold">
                                                                         <span class="text-dark">Net Disbursed:</span>
                                                                         <span class="text-dark quick-net-display" id="quickNetDisplay-{{ $exp['id'] ?? $idx }}">ETB {{ number_format($expNet, 2) }}</span>
                                                                     </div>
                                                                 </div>
 
-                                                                <input type="hidden" name="total_value" value="{{ $expBase }}">
-                                                                <input type="hidden" name="vat_amount" value="{{ $expVat }}">
-                                                                <input type="hidden" name="value_after_vat" value="{{ $expBase + $expVat }}">
                                                                 <input type="hidden" name="item_description" value="{{ $exp['description'] ?: ($exp['category'] ?? 'General Purchase') }}">
                                                                 <input type="hidden" name="category" value="{{ $exp['category'] ?? 'materials' }}">
                                                                 <input type="hidden" name="purchase_type" value="{{ $exp['purc_type'] ?? 'PUR_GD' }}">
@@ -1685,6 +1707,7 @@
                     </div>
                 </div>
                 <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-primary text-white rounded-pill px-2.5 py-1 small font-monospace"><i class="fa-solid fa-lock-open me-1"></i>Amount Adjustment Unlocked (Global Admin)</span>
                     <span id="movementModalHeaderStatusBadge" class="badge bg-info-subtle text-info border border-info-subtle rounded-pill px-2.5 py-1 small font-monospace">ERCA Invoice</span>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
@@ -3233,10 +3256,18 @@
         };
 
         const idInput = document.getElementById('movement_edit_ocr_item_id');
-        if (idInput) idInput.value = '';
+        if (idInput) idInput.value = tas.receipt_item_id || tas.receipt_id || tas.id || '';
 
+        let resolvedTasRcptId = '';
+        if (tas.receipt_id) {
+            resolvedTasRcptId = String(tas.receipt_id).startsWith('REC-') ? tas.receipt_id : ('REC-' + tas.receipt_id);
+        } else if (tas.id) {
+            resolvedTasRcptId = String(tas.id).match(/^(EXP|PROC|CS|PC|REC)-/i) ? String(tas.id) : ('EXP-' + tas.id);
+        } else if (tas.request_number) {
+            resolvedTasRcptId = tas.request_number;
+        }
         const rcptIdInput = document.getElementById('movement_edit_receipt_id');
-        if (rcptIdInput) rcptIdInput.value = tas.receipt_id || (tas.id ? ('EXP-' + tas.id) : (tas.request_number || ''));
+        if (rcptIdInput) rcptIdInput.value = resolvedTasRcptId;
 
         const expIdInput = document.getElementById('movement_edit_expense_request_id');
         if (expIdInput) expIdInput.value = tas.expense_request_id || tas.id || '';
@@ -3693,10 +3724,18 @@
         };
 
         const idInput = document.getElementById('movement_edit_ocr_item_id');
-        if (idInput) idInput.value = exp.receipt_id || '';
+        if (idInput) idInput.value = exp.receipt_id || exp.id || '';
 
+        let resolvedExpRcptId = '';
+        if (exp.receipt_id) {
+            resolvedExpRcptId = String(exp.receipt_id).startsWith('REC-') ? exp.receipt_id : ('REC-' + exp.receipt_id);
+        } else if (exp.id) {
+            resolvedExpRcptId = String(exp.id).match(/^(EXP|PROC|CS|PC|REC)-/i) ? String(exp.id) : ('EXP-' + exp.id);
+        } else if (exp.request_number) {
+            resolvedExpRcptId = exp.request_number;
+        }
         const rcptIdInput = document.getElementById('movement_edit_receipt_id');
-        if (rcptIdInput) rcptIdInput.value = exp.receipt_id ? ('REC-' + exp.receipt_id) : (exp.id ? ('EXP-' + exp.id) : (exp.request_number || ''));
+        if (rcptIdInput) rcptIdInput.value = resolvedExpRcptId;
 
         const expIdInput = document.getElementById('movement_edit_expense_request_id');
         if (expIdInput) expIdInput.value = exp.id || '';
@@ -4287,6 +4326,83 @@
         }
     }
 
+    function calcQuickAmounts(idx, source) {
+        const exp = (window._pageExpenses && window._pageExpenses[idx]) || {};
+        const rowId = exp.id ?? idx;
+        const form = document.getElementById('quickRowForm-' + rowId);
+        if (!form) return;
+
+        const baseInput  = form.elements['total_value'];
+        const vatInput   = form.elements['vat_amount'];
+        const grossInput = form.elements['value_after_vat'];
+
+        let base  = parseFloat(baseInput ? baseInput.value : 0) || 0;
+        let vat   = parseFloat(vatInput ? vatInput.value : 0) || 0;
+        let gross = parseFloat(grossInput ? grossInput.value : 0) || 0;
+
+        if (source === 'base') {
+            if (vat > 0) {
+                vat = Math.round(base * 0.15 * 100) / 100;
+                if (vatInput) vatInput.value = vat.toFixed(2);
+            }
+            gross = Math.round((base + vat) * 100) / 100;
+            if (grossInput) grossInput.value = gross.toFixed(2);
+        } else if (source === 'vat') {
+            gross = Math.round((base + vat) * 100) / 100;
+            if (grossInput) grossInput.value = gross.toFixed(2);
+        } else if (source === 'gross') {
+            if (vat > 0) {
+                base = Math.round((gross / 1.15) * 100) / 100;
+                vat  = Math.round((gross - base) * 100) / 100;
+                if (baseInput) baseInput.value = base.toFixed(2);
+                if (vatInput)  vatInput.value  = vat.toFixed(2);
+            } else {
+                base = gross;
+                if (baseInput) baseInput.value = base.toFixed(2);
+                if (vatInput)  vatInput.value  = '0.00';
+            }
+        }
+
+        calcQuickWht(idx);
+    }
+
+    function setQuickVat15(idx) {
+        const exp = (window._pageExpenses && window._pageExpenses[idx]) || {};
+        const rowId = exp.id ?? idx;
+        const form = document.getElementById('quickRowForm-' + rowId);
+        if (!form) return;
+
+        const baseInput  = form.elements['total_value'];
+        const vatInput   = form.elements['vat_amount'];
+        const grossInput = form.elements['value_after_vat'];
+
+        const base = parseFloat(baseInput ? baseInput.value : 0) || 0;
+        const vat  = Math.round(base * 0.15 * 100) / 100;
+        const gross = Math.round((base + vat) * 100) / 100;
+
+        if (vatInput)  vatInput.value  = vat.toFixed(2);
+        if (grossInput) grossInput.value = gross.toFixed(2);
+
+        calcQuickWht(idx);
+    }
+
+    function setQuickVatZero(idx) {
+        const exp = (window._pageExpenses && window._pageExpenses[idx]) || {};
+        const rowId = exp.id ?? idx;
+        const form = document.getElementById('quickRowForm-' + rowId);
+        if (!form) return;
+
+        const baseInput  = form.elements['total_value'];
+        const vatInput   = form.elements['vat_amount'];
+        const grossInput = form.elements['value_after_vat'];
+
+        const base = parseFloat(baseInput ? baseInput.value : 0) || 0;
+        if (vatInput)  vatInput.value  = '0.00';
+        if (grossInput) grossInput.value = base.toFixed(2);
+
+        calcQuickWht(idx);
+    }
+
     function calcQuickWht(idx) {
         const exp = (window._pageExpenses && window._pageExpenses[idx]) || {};
         const rowId = exp.id ?? idx;
@@ -4296,7 +4412,8 @@
         const rateSelect = form.elements['withholding_rate'];
         const rate = parseFloat(rateSelect ? rateSelect.value : 3) || 3;
 
-        const base = parseFloat(exp.base_amount || exp.amount || 0) || 0;
+        const baseInput = form.elements['total_value'];
+        const base = parseFloat(baseInput ? baseInput.value : (exp.base_amount || exp.amount || 0)) || 0;
         const whtAmt = Math.round(base * (rate / 100) * 100) / 100;
 
         const amtInput = form.elements['withholding_amount'];
@@ -4314,8 +4431,11 @@
         const toggle = document.getElementById('quickWhtToggle-' + rowId);
         const isWht = toggle ? toggle.checked : false;
 
-        const base = parseFloat(exp.base_amount || exp.amount || 0) || 0;
-        const vat = parseFloat(exp.vat_amount || 0) || 0;
+        const baseInput = form.elements['total_value'];
+        const vatInput  = form.elements['vat_amount'];
+
+        const base = parseFloat(baseInput ? baseInput.value : (exp.base_amount || exp.amount || 0)) || 0;
+        const vat  = parseFloat(vatInput ? vatInput.value : (exp.vat_amount || 0)) || 0;
         const total = base + vat;
 
         let wht = 0;
@@ -4559,6 +4679,16 @@
                 mrcSmall.classList.remove('d-block');
                 mrcSmall.classList.add('d-none');
             }
+        }
+
+        // Update Base and VAT Columns
+        const baseCell = tr.querySelector('.cell-exp-base');
+        if (baseCell) {
+            baseCell.textContent = 'ETB ' + baseVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+        const vatCell = tr.querySelector('.cell-exp-vat');
+        if (vatCell) {
+            vatCell.textContent = 'ETB ' + vatVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         }
 
         // Update Withholding Column
