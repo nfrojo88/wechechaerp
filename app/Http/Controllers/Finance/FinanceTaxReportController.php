@@ -2419,8 +2419,191 @@ class FinanceTaxReportController extends Controller
                 'is_pdf'             => $isPdf,
                 'is_vat_receipt'     => ($vatVal > 0 && !$isNoVat),
                 'is_no_vat'          => $isNoVat,
+                'receipt_timestamp'  => $r?->receipt_date ? Carbon::parse($r->receipt_date)->timestamp : ($date ? Carbon::parse($date)->timestamp : 0),
+                'created_timestamp'  => $ocr->created_at ? Carbon::parse($ocr->created_at)->timestamp : ($r?->created_at ? Carbon::parse($r->created_at)->timestamp : 0),
             ];
         });
+
+        $ocrTotalScannedCount = $formattedAllOcrItems->count();
+
+        // ── DUPLICATE CHECK FOR SCANNED OCR RECEIPTS ─────────────────────────────
+        // DUPLICATE RULE:
+        // A receipt is a duplicate of another IF AND ONLY IF BOTH:
+        // 1. FS No. (fiscal receipt number)
+        // 2. Seller TIN
+        // are identical. If only one matches, it is NOT a duplicate. Keep both receipts.
+        //
+        // HOW TO COMPARE:
+        // Normalize before comparing: trim spaces, remove dashes and special characters,
+        // ignore case, and remove leading zeros from the FS No.
+        // Compare every receipt against all other receipts in this section only.
+        //
+        // FLAG, DON'T GUESS:
+        // If FS No. or Seller TIN is unreadable or missing, keep the receipt and flag as
+        // "Needs manual review". Do NOT treat as duplicate.
+        //
+        // WHICH ONE TO KEEP:
+        // Keep only ONE receipt: the LATEST one (most recent receipt date/time; if identical or
+        // missing, most recently scanned/uploaded one). Exclude older duplicates from matrix & totals.
+
+        $normalizeFs = function ($rawFs) {
+            $raw = trim((string)$rawFs);
+            // Remove FS prefix if present, e.g. "FS:", "FS-", "FS ", "FS#", "FS"
+            $stripped = preg_replace('/^FS[:\s_#-]*\s*/i', '', $raw);
+            // Remove dashes, slashes, spaces, and any non-alphanumeric characters, ignore case
+            $alphanumeric = strtoupper(preg_replace('/[^0-9A-Z]/i', '', $stripped));
+            // Remove leading zeros
+            $normalized = ltrim($alphanumeric, '0');
+            if ($normalized === '' && $alphanumeric !== '') {
+                $normalized = '0';
+            }
+            return $normalized;
+        };
+
+        $normalizeTin = function ($rawTin) {
+            $raw = trim((string)$rawTin);
+            // Remove dashes, spaces, and special characters, ignore case
+            return strtoupper(preg_replace('/[^0-9A-Z]/i', '', $raw));
+        };
+
+        $isFsMissingOrUnreadable = function ($rawFs, $normFs) {
+            if ($normFs === '' || $normFs === '0') {
+                return true;
+            }
+            $rawUpper = strtoupper(trim((string)$rawFs));
+            return in_array($rawUpper, ['', '-', '--', 'N/A', 'NA', 'NULL', 'NONE', 'UNKNOWN', '?', '0']);
+        };
+
+        $isTinMissingOrUnreadable = function ($rawTin, $normTin) {
+            if ($normTin === '') {
+                return true;
+            }
+            $rawUpper = strtoupper(trim((string)$rawTin));
+            if (in_array($rawUpper, ['', '-', '--', 'N/A', 'NA', 'NULL', 'NONE', 'UNKNOWN', '?'])) {
+                return true;
+            }
+            // In Ethiopia TIN is 10 digits; if less than 5 characters or fragmented, flag for manual review
+            return strlen($normTin) < 5;
+        };
+
+        $groupedByMatch = [];
+        $flaggedReviewList = [];
+        $uniqueCleanedList = [];
+
+        foreach ($formattedAllOcrItems as $ocr) {
+            $rawFs = $ocr['fs_no'] ?? '';
+            $rawTin = $ocr['seller_tin'] ?: ($ocr['vendor_tin'] ?? '');
+
+            $normFs = $normalizeFs($rawFs);
+            $normTin = $normalizeTin($rawTin);
+
+            $fsMissing = $isFsMissingOrUnreadable($rawFs, $normFs);
+            $tinMissing = $isTinMissingOrUnreadable($rawTin, $normTin);
+
+            if ($fsMissing || $tinMissing) {
+                // Flag, don't guess! Keep in matrix, do NOT treat as duplicate
+                $reasons = [];
+                if ($fsMissing) $reasons[] = 'Missing or unreadable FS No.';
+                if ($tinMissing) $reasons[] = 'Missing or unreadable Seller TIN';
+                $ocr['needs_manual_review'] = true;
+                $ocr['review_reason'] = implode(' & ', $reasons);
+                $ocr['norm_fs'] = $normFs;
+                $ocr['norm_tin'] = $normTin;
+
+                $flaggedReviewList[] = $ocr;
+                $uniqueCleanedList[] = $ocr;
+            } else {
+                $ocr['needs_manual_review'] = false;
+                $ocr['review_reason'] = null;
+                $ocr['norm_fs'] = $normFs;
+                $ocr['norm_tin'] = $normTin;
+
+                $matchKey = $normTin . '___' . $normFs;
+                $groupedByMatch[$matchKey][] = $ocr;
+            }
+        }
+
+        $duplicatesRemoved = [];
+
+        foreach ($groupedByMatch as $matchKey => $group) {
+            if (count($group) === 1) {
+                $uniqueCleanedList[] = $group[0];
+                continue;
+            }
+
+            // Duplicate group found: Keep only the LATEST one
+            usort($group, function ($a, $b) {
+                // 1. Receipt date and time (most recent first)
+                $dateA = (int)($a['receipt_timestamp'] ?? 0);
+                $dateB = (int)($b['receipt_timestamp'] ?? 0);
+                if ($dateA !== $dateB) {
+                    return $dateB <=> $dateA;
+                }
+                // 2. Scan / upload timestamp (most recent first)
+                $uploadA = (int)($a['created_timestamp'] ?? 0);
+                $uploadB = (int)($b['created_timestamp'] ?? 0);
+                if ($uploadA !== $uploadB) {
+                    return $uploadB <=> $uploadA;
+                }
+                // 3. ID / fallback
+                return strcmp((string)($b['id'] ?? ''), (string)($a['id'] ?? ''));
+            });
+
+            $kept = $group[0];
+            $uniqueCleanedList[] = $kept;
+
+            $removed = array_slice($group, 1);
+
+            $keptDateStr = (!empty($kept['receipt_date_ec']) && $kept['receipt_date_ec'] !== '-') ? $kept['receipt_date_ec'] : ($kept['date_gc'] ?? 'No Date');
+            $keptRefStr  = $kept['receipt_number'] ?: ('ID #' . $kept['id']);
+            $keptAmtStr  = number_format((float)($kept['total_value'] ?? 0), 2);
+
+            $removedReceiptsSummary = array_map(function ($r) {
+                $dateStr = (!empty($r['receipt_date_ec']) && $r['receipt_date_ec'] !== '-') ? $r['receipt_date_ec'] : ($r['date_gc'] ?? 'No Date');
+                $refStr  = $r['receipt_number'] ?: ('ID #' . $r['id']);
+                $amtStr  = number_format((float)($r['total_value'] ?? 0), 2);
+                return [
+                    'id'             => $r['id'],
+                    'receipt_id'     => $r['receipt_id'] ?? null,
+                    'receipt_number' => $r['receipt_number'] ?? '',
+                    'date'           => $dateStr,
+                    'amount'         => (float)($r['total_value'] ?? 0),
+                    'ref'            => $refStr,
+                    'label'          => "{$refStr} ({$dateStr}) — ETB {$amtStr}",
+                ];
+            }, $removed);
+
+            $duplicatesRemoved[] = [
+                'fs_no'            => $kept['fs_no'],
+                'norm_fs'          => $kept['norm_fs'],
+                'seller_tin'       => $kept['seller_tin'] ?: ($kept['vendor_tin'] ?? ''),
+                'norm_tin'         => $kept['norm_tin'],
+                'vendor_name'      => $kept['vendor_name'] ?? 'Vendor',
+                'kept_receipt'     => [
+                    'id'             => $kept['id'],
+                    'receipt_id'     => $kept['receipt_id'] ?? null,
+                    'receipt_number' => $kept['receipt_number'] ?? '',
+                    'date'           => $keptDateStr,
+                    'amount'         => (float)($kept['total_value'] ?? 0),
+                    'ref'            => $keptRefStr,
+                    'label'          => "{$keptRefStr} ({$keptDateStr}) — ETB {$keptAmtStr}",
+                ],
+                'removed_receipts' => $removedReceiptsSummary,
+                'removed_count'    => count($removed),
+                'reason'           => 'Identical FS No. (' . $kept['fs_no'] . ') & Seller TIN (' . ($kept['seller_tin'] ?: $kept['vendor_tin']) . '); kept latest receipt from ' . $keptDateStr . ' (' . $keptRefStr . ')',
+            ];
+        }
+
+        // Maintain original chronological/id order in unique cleaned list
+        $uniqueCleanedCollection = collect($uniqueCleanedList)->sortByDesc(function ($item) {
+            return (int)($item['created_timestamp'] ?: $item['receipt_timestamp'] ?: 0);
+        })->values();
+
+        $ocrDuplicatesRemovedCount = (int)collect($duplicatesRemoved)->sum('removed_count');
+        $ocrNeedsReviewCount = count($flaggedReviewList);
+
+        // Replace $formattedAllOcrItems with the cleaned collection (one row per unique receipt)
+        $formattedAllOcrItems = $uniqueCleanedCollection;
 
         $formattedVatOcrItems = $formattedAllOcrItems->filter(fn($it) => $it['is_vat_receipt'])->values();
         $formattedTasOcrItems = $formattedAllOcrItems->filter(fn($it) => !$it['is_vat_receipt'])->values();
@@ -2739,6 +2922,10 @@ class FinanceTaxReportController extends Controller
                 'ocr_vat_count'          => $formattedVatOcrItems->count(),
                 'ocr_tas_count'          => $formattedTasOcrItems->count(),
                 'ocr_all_count'          => $formattedAllOcrItems->count(),
+                'ocr_total_scanned'      => $ocrTotalScannedCount,
+                'ocr_duplicates_removed' => $ocrDuplicatesRemovedCount,
+                'ocr_unique_used'        => $formattedAllOcrItems->count(),
+                'ocr_needs_review_count' => $ocrNeedsReviewCount,
                 'missing_receipt_count'  => $unverifiedExpensesCollection->where('has_receipt', false)->count(),
                 'verified_no_receipt_count' => $verifiedNoReceiptCollection->count(),
                 'total_count'            => $formattedIncomes->count() + $unverifiedExpensesCollection->count() + $formattedOcrItems->count(),
@@ -2760,6 +2947,11 @@ class FinanceTaxReportController extends Controller
             'vat_ocr_items' => $formattedVatOcrItems->values(),
             'tas_ocr_items' => $formattedTasOcrItems->values(),
             'all_ocr_items' => $formattedAllOcrItems->values(),
+            'duplicates_removed' => $duplicatesRemoved,
+            'duplicates_removed_count' => $ocrDuplicatesRemovedCount,
+            'ocr_needs_manual_review' => collect($flaggedReviewList)->values(),
+            'ocr_total_scanned' => $ocrTotalScannedCount,
+            'ocr_unique_used'   => $formattedAllOcrItems->count(),
         ];
     }
 

@@ -1406,6 +1406,48 @@
                         </div>
                     </div>
                 </div>
+
+                {{-- Deduplication Summary Bar --}}
+                @php
+                    $allOcrList = $movementsData['all_ocr_items'] ?? ($movementsData['ocr_items'] ?? []);
+                    $totalScanned = (int)($movementsData['summary']['ocr_total_scanned'] ?? count($allOcrList));
+                    $dupsRemoved = (int)($movementsData['summary']['ocr_duplicates_removed'] ?? count($movementsData['duplicates_removed'] ?? []));
+                    $uniqueUsed = (int)($movementsData['summary']['ocr_unique_used'] ?? count($allOcrList));
+                    $needsReviewCount = (int)($movementsData['summary']['ocr_needs_review_count'] ?? 0);
+                @endphp
+                <div class="px-3 py-2 bg-light bg-opacity-75 border-bottom d-flex align-items-center justify-content-between flex-wrap gap-2">
+                    <div class="d-flex align-items-center gap-3 flex-wrap">
+                        <div class="d-flex align-items-center gap-1.5 small">
+                            <span class="text-muted fw-semibold"><i class="fa-solid fa-file-invoice me-1 text-secondary"></i>Total Receipts Scanned:</span>
+                            <span class="badge bg-secondary text-white rounded-pill font-monospace fw-bold px-2 py-0.5">{{ $totalScanned }}</span>
+                        </div>
+                        <div class="d-flex align-items-center gap-1.5 small">
+                            <span class="text-muted fw-semibold"><i class="fa-solid fa-clone me-1 text-danger"></i>Duplicates Removed:</span>
+                            @if($dupsRemoved > 0)
+                                <span class="badge bg-danger text-white rounded-pill font-monospace fw-bold px-2 py-0.5">{{ $dupsRemoved }}</span>
+                            @else
+                                <span class="badge bg-light text-muted border rounded-pill font-monospace px-2 py-0.5">0</span>
+                            @endif
+                        </div>
+                        <div class="d-flex align-items-center gap-1.5 small">
+                            <span class="text-muted fw-semibold"><i class="fa-solid fa-check-double me-1 text-success"></i>Unique Receipts Used:</span>
+                            <span class="badge bg-success text-white rounded-pill font-monospace fw-bold px-2 py-0.5">{{ $uniqueUsed }}</span>
+                        </div>
+                        @if($needsReviewCount > 0)
+                            <div class="d-flex align-items-center gap-1.5 small">
+                                <span class="badge bg-warning text-dark border border-warning rounded-pill fw-semibold px-2.5 py-1 d-inline-flex align-items-center gap-1 shadow-xs" title="Missing or unreadable FS No. or Seller TIN — kept in matrix, manual review needed">
+                                    <i class="fa-solid fa-triangle-exclamation"></i>
+                                    <span>{{ $needsReviewCount }} Needs manual review</span>
+                                </span>
+                            </div>
+                        @endif
+                    </div>
+                    <div class="small text-muted d-flex align-items-center gap-1">
+                        <i class="fa-solid fa-circle-info text-primary"></i>
+                        <span>Deduplicated by <strong>FS No.</strong> &amp; <strong>Seller TIN</strong> (keeps latest receipt).</span>
+                    </div>
+                </div>
+
                 <div class="table-responsive">
                     <table class="table table-hover align-middle mb-0" id="pageOcrTable">
                         <thead class="table-light text-muted text-uppercase fw-bold" style="font-size: 0.7rem;">
@@ -1427,7 +1469,6 @@
                                 $ocrSumBase = 0;
                                 $ocrSumVat = 0;
                                 $ocrSumAfter = 0;
-                                $allOcrList = $movementsData['all_ocr_items'] ?? ($movementsData['ocr_items'] ?? []);
                             @endphp
                             @forelse($allOcrList as $idx => $ocr)
                                 @php
@@ -1440,6 +1481,7 @@
                                     $hasSlip = !empty($ocr['file_url']);
                                     $isPdf = !empty($ocr['is_pdf']);
                                     $isVatReceipt = !empty($ocr['is_vat_receipt']) || $v > 0;
+                                    $needsReview = !empty($ocr['needs_manual_review']);
                                 @endphp
                                 <tr id="page-ocr-row-{{ $ocr['id'] }}"
                                     data-idx="{{ $idx }}"
@@ -1454,7 +1496,14 @@
                                         <small class="text-muted cell-date-gc" style="font-size:0.75rem;">{{ $ocr['date_gc'] ?? '-' }}</small>
                                     </td>
                                     <td>
-                                        <span class="badge bg-light text-primary border font-monospace cell-fs">{{ $ocr['fs_no'] ?? '-' }}</span>
+                                        <div class="d-flex align-items-center gap-1.5 flex-wrap">
+                                            <span class="badge bg-light text-primary border font-monospace cell-fs">{{ $ocr['fs_no'] ?? '-' }}</span>
+                                            @if($needsReview)
+                                                <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-pill small fw-semibold px-2 py-0.5 d-inline-flex align-items-center gap-1" title="{{ $ocr['review_reason'] ?? 'Needs manual review' }}">
+                                                    <i class="fa-solid fa-triangle-exclamation"></i>Needs manual review
+                                                </span>
+                                            @endif
+                                        </div>
                                         <small class="text-muted d-block cell-receipt-no" style="font-size:0.75rem;">{{ $ocr['receipt_number'] ?? '' }}</small>
                                         @if(!empty($ocr['mrc_no']) && $ocr['mrc_no'] !== '-')
                                             <small class="text-muted font-monospace d-block cell-mrc" style="font-size:0.7rem;">MRC: {{ $ocr['mrc_no'] }}</small>
@@ -1509,6 +1558,92 @@
                                 <td class="pe-3 d-print-none"></td>
                             </tr>
                         </tfoot>
+                    </table>
+                </div>
+            </div>
+
+            {{-- ── DUPLICATES REMOVED TABLE ──────────────────────────────────── --}}
+            <div class="card border-0 shadow-sm rounded-4 overflow-hidden bg-white mt-4">
+                <div class="card-header bg-white border-bottom py-3 px-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="badge bg-danger-subtle text-danger p-2 rounded-3"><i class="fa-solid fa-clone fs-6"></i></span>
+                        <div>
+                            <div class="d-flex align-items-center gap-2">
+                                <h6 class="fw-bold mb-0 text-dark">Duplicates Removed</h6>
+                                @php $dupList = $movementsData['duplicates_removed'] ?? []; @endphp
+                                @if(count($dupList) > 0)
+                                    <span class="badge bg-danger text-white rounded-pill small fw-semibold px-2.5 py-0.5">
+                                        {{ $dupsRemoved }} Duplicates Excluded
+                                    </span>
+                                @else
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill small fw-semibold px-2.5 py-0.5">
+                                        <i class="fa-solid fa-check me-1"></i>0 Duplicates
+                                    </span>
+                                @endif
+                            </div>
+                            <small class="text-muted">Receipts with identical FS No. &amp; Seller TIN — only the latest receipt was kept; older duplicates excluded from matrix and totals</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0" id="pageOcrDuplicatesTable">
+                        <thead class="table-light text-muted text-uppercase fw-bold" style="font-size: 0.7rem;">
+                            <tr>
+                                <th class="ps-3 py-2.5">FS No.</th>
+                                <th class="py-2.5">Seller TIN</th>
+                                <th class="py-2.5">Kept Receipt (date/ref)</th>
+                                <th class="py-2.5">Removed Receipt(s) (date/ref)</th>
+                                <th class="py-2.5 pe-3">Reason</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y">
+                            @forelse($dupList as $dup)
+                                <tr>
+                                    <td class="ps-3">
+                                        <span class="badge bg-light text-primary border font-monospace fs-6">{{ $dup['fs_no'] ?? '-' }}</span>
+                                    </td>
+                                    <td>
+                                        <span class="fw-semibold text-dark d-block">{{ $dup['vendor_name'] ?? 'Vendor' }}</span>
+                                        <small class="text-muted font-monospace" style="font-size: 0.75rem;">TIN: {{ $dup['seller_tin'] ?? '-' }}</small>
+                                    </td>
+                                    <td>
+                                        <div class="d-inline-flex align-items-center gap-2 p-2 rounded-3 bg-success-subtle bg-opacity-50 border border-success-subtle">
+                                            <span class="badge bg-success text-white rounded-pill px-2 py-0.5 small fw-semibold">
+                                                <i class="fa-solid fa-check me-1"></i>Kept
+                                            </span>
+                                            <div>
+                                                <span class="fw-bold font-monospace text-dark d-block" style="font-size: 0.8rem;">{{ $dup['kept_receipt']['ref'] ?? '' }}</span>
+                                                <small class="text-muted" style="font-size: 0.75rem;">{{ $dup['kept_receipt']['date'] ?? '-' }} &bull; ETB {{ number_format($dup['kept_receipt']['amount'] ?? 0, 2) }}</small>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div class="d-flex flex-column gap-1.5">
+                                            @foreach($dup['removed_receipts'] ?? [] as $rem)
+                                                <div class="d-inline-flex align-items-center gap-2 p-1.5 rounded-3 bg-danger-subtle bg-opacity-35 border border-danger-subtle">
+                                                    <span class="badge bg-danger text-white rounded-pill px-2 py-0.5 small fw-semibold">
+                                                        <i class="fa-solid fa-trash-can me-1"></i>Removed
+                                                    </span>
+                                                    <div>
+                                                        <span class="font-monospace text-muted d-block text-decoration-line-through" style="font-size: 0.8rem;">{{ $rem['ref'] ?? '' }}</span>
+                                                        <small class="text-muted" style="font-size: 0.75rem;">{{ $rem['date'] ?? '-' }} &bull; ETB {{ number_format($rem['amount'] ?? 0, 2) }}</small>
+                                                    </div>
+                                                </div>
+                                            @endforeach
+                                        </div>
+                                    </td>
+                                    <td class="pe-3">
+                                        <span class="small text-muted">{{ $dup['reason'] ?? 'Identical FS No. and Seller TIN' }}</span>
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="5" class="text-center py-4 text-muted">
+                                        <i class="fa-solid fa-shield-check text-success me-2 fs-5"></i>No duplicate OCR receipts found for this period. Every receipt has a unique FS No. and Seller TIN.
+                                    </td>
+                                </tr>
+                            @endforelse
+                        </tbody>
                     </table>
                 </div>
             </div>

@@ -1,121 +1,26 @@
-# STEP 2: Build SMS notifications for the full Procurement Lifecycle (MR + PR)
+In the section "Scanned OCR Receipts (ERCA Cash Register Invoices)", add a duplicate check before building the matrix.
 
-You already completed the Step 1 audit. I confirm it. Now build the solution.
-Do NOT redesign the audit. Implement it, following the rules and the flow below.
+DUPLICATE RULE
+A receipt is a duplicate of another if BOTH of these are identical:
+1. FS No. (fiscal receipt number)
+2. Seller TIN
 
-## 0. Core rule
-Every time an MR or PR changes status, or is handed to a new owner,
-the NEW action owner must receive an SMS IMMEDIATELY (within seconds).
-Rejections, returns and cancellations must also notify the right people.
-No status change may be silent.
+If only one of the two matches, it is NOT a duplicate. Keep both receipts.
 
-## 1. Fix the global blocks first
-- Remove or neutralize the global block from commit 075df0c.
-  Set PROCUREMENT_SMS_ENABLED=true in .env and .env.example.
-- ProcurementSmsService::send() must no longer abort when
-  config('procurement_handoffs.enabled') is false for status-change SMS.
-  Keep the flag only as an admin master switch, default ON.
-- Restore the controller triggers stripped in 075df0c
-  (mr_submitted, planning_forwarded, planning_rejected, coordinator_forwarded),
-  but do it through the central hook below, not by copy-pasting into controllers.
+HOW TO COMPARE
+- Normalize before comparing: trim spaces, remove dashes and special characters, ignore case, and remove leading zeros from the FS No. (OCR often adds or drops these).
+- Compare every receipt against all other receipts in this section only.
 
-## 2. Architecture (as proposed in the audit)
-1. Central Transition Hook: ONE dispatcher (e.g. ProcurementTransitionNotifier)
-   called from model observers / DB::afterCommit, so every status change
-   triggers it automatically, from controllers and from ProcurementLifecycleService.
-2. Central Status-to-Owner Map (config file or dedicated class) covering
-   every MR and PR status and transition, including side paths.
-3. Recipient Priority Resolution:
-   1. Direct person (assigned_finance_staff_id, driver_employee_id,
-      requested_by, assigned coordinator)
-   2. Project / store staff (store manager of the target store,
-      coordinator assigned to the project)
-   3. Role match (planning, coordinator, store_manager, purchase_manager,
-      purchase, general_service, gm, finance_head, store_keeper)
-   4. Global admin fallback, only if nobody is found. Log a warning.
-4. Deduplication guard: key = model + id + status + recipient_phone, 60s TTL.
-5. Non-blocking: send after commit, 5s timeout, try/catch.
-   A gateway failure must NEVER roll back or crash the user's action.
-6. Logging: every attempt (sent / failed / skipped, with the reason)
-   goes to procurement_sms_logs.
-7. Skip and log (do not crash) if a recipient has no phone number.
+WHICH ONE TO KEEP
+- When a duplicate group is found (same FS No. + same Seller TIN), keep only ONE receipt, the LATEST one.
+- "Latest" = the most recent receipt date and time. If the date and time are identical or missing, use the most recently scanned/uploaded one.
+- Exclude the older duplicates from the matrix and from all totals so nothing is double-counted.
 
-## 3. Message format
-"{MR/PR} #{number} ({site/project}): {what happened} by {actor name}.
-Action needed: {action}. Open: {link}"
-- Emergency requests: prefix "[URGENT-EMERGENCY] ".
-- FYI messages say "FYI:" instead of "Action needed:".
-- Rejection messages must include the rejection reason (truncated to ~80 chars).
-- Keep under 160 characters where possible. Otherwise shorten the reason first.
+OUTPUT
+1. The cleaned matrix, with one row per unique receipt.
+2. A "Duplicates Removed" table with these columns:
+   FS No. | Seller TIN | Kept Receipt (date/ref) | Removed Receipt(s) (date/ref) | Reason
+3. A summary: total receipts scanned, duplicates removed, unique receipts used.
 
-## 4. Required flow (MR = Material Request)
-
-| # | Event | Who acts | SMS goes to | Message meaning |
-|---|-------|----------|-------------|-----------------|
-| 1 | Site Engineer creates MR (normal or EMERGENCY) | Site Engineer | Planning Manager (role: planning) | New MR waiting for planning approval. Emergency = [URGENT-EMERGENCY] and sent immediately |
-| 2 | Planning APPROVES | Planning Manager | The Coordinator assigned to this project (role: coordinator) | MR approved, forward to store |
-| 3 | Planning REJECTS | Planning Manager | Site Engineer (requester) | MR rejected + reason |
-| 4 | Planning says "Buy with petty cash from site" | Planning Manager | Site Engineer (requester) | Approved for site petty-cash purchase, go buy it |
-| 5 | Coordinator SENDS TO STORE MANAGER | Coordinator | Store Manager of the target store | MR waiting for stock check |
-| 6 | Store Manager REJECTS | Store Manager | Planning Manager (+ FYI to Site Engineer) | MR rejected by store + reason |
-| 7 | Store Manager says "Send to Purchase" (out of stock) | Store Manager | Procurement Manager (purchase_manager) | MR converted to PR, needs procurement decision |
-| 8 | Store Manager says "Create Transfer" (SIV issued) | Store Manager | General Service (general_service) to assign a driver, plus FYI to Site Engineer and Coordinator | Transfer needs a driver |
-| 9 | Procurement Manager chooses an option (Buy via Proforma / Direct Buy) and sends to PR Team | Procurement Manager | Procurement Team (role: purchase) | PR assigned, start proforma / direct buy |
-| 10 | Procurement Manager SENDS BACK to Store Manager | Procurement Manager | Store Manager | PR returned, with reason |
-| 11 | MR deleted / cancelled | Requester or admin | Current owner (FYI) | MR cancelled |
-
-## 5. Required flow (PR = Purchase Request), continue the same logic
-Use rows 8-35 of your audit table as the source of truth.
-For EVERY row, wire the SMS to the "Current Owner After Change" column. Specifically:
-- PR submitted -> Planning
-- Planning approves -> Coordinator
-- Coordinator approves -> Store Manager
-- Store sends to procurement -> Procurement Manager
-- Procurement Manager sends to team -> Procurement Team
-- Direct Buy / Proforma submitted -> Procurement Manager
-- Variance / proformas sent to GM -> GM
-- GM approves cash -> Finance Head. GM approves credit -> Finance Head.
-- GM counters -> Procurement Manager. GM rejects -> Requester + Procurement Manager.
-- Finance Head assigns payment -> the DIRECTLY assigned finance staff
-  (assigned_finance_staff_id), NOT a general pool.
-- Payment done -> Purchaser (receipt upload needed)
-- Receipt uploaded -> General Service / Fleet Manager. Receipt rejected -> Purchaser.
-- Driver booked -> the DIRECTLY assigned driver (driver_employee_id) + Store Keeper.
-- Driver delivered -> Site Store Keeper
-- GRN / intake complete -> Finance Head
-- 3-way match closed (completed) -> Requester + Procurement Manager (FYI)
-- Emergency direct to finance -> Finance Head, marked URGENT
-- Selective transfer -> Store Keeper + Requester
-- Cancelled -> Requester + current owner (FYI)
-- Reactivated from rejected -> Procurement Manager
-- Finance returns to GM -> GM. PM returns to Store -> Store Manager.
-
-## 6. Admin visibility
-Settings page that shows:
-- Each status, its owner role, and a toggle to enable/disable SMS for that status.
-- A Failed SMS log table (time, record, recipient, error) with a "Retry" button.
-- A "Test SMS" button.
-
-## 7. Acceptance tests (write them, make them pass)
-1. Site Engineer creates an emergency MR -> Planning Manager gets an SMS
-   with [URGENT-EMERGENCY] within seconds.
-2. Planning approves -> only the project's Coordinator gets an SMS.
-3. Planning rejects -> only the Site Engineer gets an SMS with the reason.
-4. Planning "petty cash" -> Site Engineer gets an SMS.
-5. Coordinator sends to store -> only that target store's Store Manager gets an SMS.
-6. Store Manager rejects -> Planning Manager gets an SMS.
-7. Store Manager "send to purchase" -> Procurement Manager gets an SMS.
-8. Store Manager "create transfer" -> General Service gets an SMS.
-9. Procurement Manager sends to team -> Procurement Team gets an SMS.
-10. Procurement Manager sends back -> Store Manager gets an SMS.
-11. Calling the same transition twice within 60s sends only ONE SMS per recipient.
-12. If the SMS gateway is down, the user action still succeeds and the failure is logged.
-13. If an assigned person has no phone, it is logged as "skipped" and the action still succeeds.
-14. Every status in the audit table (rows 1-35) has a mapped owner. Add a test
-    that fails if any status has no mapping.
-
-## 8. Deliverables
-- Code, config, migration (if the logs table needs changes), and tests.
-- Then give me a final table: Status | Who gets SMS | Message text | Test passed.
-- List any status where the recipient could not be determined, and what fallback was used.
-- Do not touch unrelated features. Keep the change reviewable (small commits).
+FLAG, DON'T GUESS
+If an FS No. or Seller TIN is unreadable or missing from the OCR, do not treat the receipt as a duplicate. Keep it and flag it as "Needs manual review".
