@@ -2270,6 +2270,116 @@ class FinanceTaxReportController extends Controller
         $totalCreditableInput = $isCleared ? 0.0 : round($dispInputVat + $dispOpeningCredit, 2);
         $summaryNet['total_creditable_input'] = $totalCreditableInput;
 
+        // 6. Build TAS / e-Tax Purchases Collection
+        // Requirement: Seller TIN is added, receipt is added/verified, covers BOTH all VAT purchases and non-VAT (0% TAS / Fuel)
+        $existingTasVouchers = [];
+        $existingTasReceipts = [];
+        $tasPurchasesCollection = collect();
+
+        foreach ($formattedExpenses as $exp) {
+            $rawTin = (string)($exp['seller_tin'] ?? '');
+            $cleanTin = preg_replace('/\D/', '', $rawTin);
+            // Requirement 1: Seller TIN is added (10 digits ERCA TIN or valid digits not '-')
+            $hasSellerTin = (strlen($cleanTin) === 10) || (!empty($cleanTin) && $rawTin !== '-' && strlen($cleanTin) >= 9);
+
+            // Requirement 2: Receipt is added
+            $hasReceipt = (!empty($exp['fs_no']) && $exp['fs_no'] !== '-')
+                || !empty($exp['receipt_slip_url'])
+                || !empty($exp['attachment_url'])
+                || !empty($exp['receipt_id'])
+                || (!empty($exp['payment_reference']) && $exp['payment_reference'] !== '-' && preg_match('/(rec|fs|rcp)/i', (string)$exp['payment_reference']));
+
+            if ($hasSellerTin && $hasReceipt) {
+                $tasPurchasesCollection->push($exp);
+                if (!empty($exp['request_number'])) $existingTasVouchers[] = $exp['request_number'];
+                if (!empty($exp['receipt_id'])) $existingTasReceipts[] = $exp['receipt_id'];
+            }
+        }
+
+        // Also merge any OCR scanned receipts from $formattedAllOcrItems that have a Seller TIN and are not duplicates
+        foreach ($formattedAllOcrItems as $ocr) {
+            $rawTin = (string)($ocr['seller_tin'] ?? '');
+            $cleanTin = preg_replace('/\D/', '', $rawTin);
+            $hasSellerTin = (strlen($cleanTin) === 10) || (!empty($cleanTin) && $rawTin !== '-' && strlen($cleanTin) >= 9);
+            if (!$hasSellerTin) {
+                continue;
+            }
+
+            $ocrReceiptId = $ocr['receipt_id'] ?? $ocr['id'];
+            $ocrReqNo = $ocr['request_number'] ?? '';
+            if (in_array($ocrReceiptId, $existingTasReceipts) || ($ocrReqNo && in_array($ocrReqNo, $existingTasVouchers))) {
+                continue;
+            }
+
+            $baseVal = (float)($ocr['base_value'] ?? 0);
+            $vatVal = (float)($ocr['vat_amount'] ?? 0);
+            $whtVal = (float)($ocr['withholding_amount'] ?? 0);
+            $totalVal = (float)($ocr['total_value'] ?? ($baseVal + $vatVal));
+            $netVal = (float)($ocr['net_disbursed'] ?? max(0, $totalVal - $whtVal));
+
+            $tasPurchasesCollection->push([
+                'id'                         => 'OCR-' . $ocr['id'],
+                'request_number'             => $ocr['request_number'] ?: ('REC-' . $ocr['id']),
+                'payment_reference'          => (!empty($ocr['fs_no']) && $ocr['fs_no'] !== '-') ? ('FS: ' . $ocr['fs_no']) : '-',
+                'date_ec'                    => $ocr['date_ec'] ?: '-',
+                'date_gc'                    => $ocr['date_gc'] ?: '-',
+                'raw_date'                   => $ocr['receipt_date_ymd'] ?: '',
+                'payee'                      => $ocr['vendor_name'] ?: 'Vendor',
+                'project_name'               => $ocr['project_name'] ?: 'General',
+                'category'                   => $ocr['category'] ?: 'materials',
+                'account_name'               => 'OCR Cash Receipt',
+                'base_amount'                => $baseVal,
+                'vat_type'                   => ($vatVal > 0) ? 'inclusive' : 'none',
+                'vat_rate'                   => ($vatVal > 0) ? 15.0 : 0.0,
+                'vat_amount'                 => $vatVal,
+                'has_withholding'            => !empty($ocr['has_withholding']) || $whtVal > 0,
+                'withholding_rate'           => (float)($ocr['withholding_rate'] ?? 0),
+                'withholding_amount'         => $whtVal,
+                'withholding_receipt_number' => $ocr['withholding_receipt_number'] ?? '-',
+                'withholding_receipt_url'    => $ocr['withholding_receipt_url'] ?? null,
+                'withholding_settled'        => false,
+                'net_disbursed'              => $netVal,
+                'description'                => $ocr['item_description'] ?: 'Purchased Goods/Services',
+                'attachment_url'             => $ocr['file_url'],
+                'status'                     => 'verified',
+                'is_settled'                 => false,
+                'source_type'                => 'ocr_receipt',
+                'source_label'               => 'OCR Receipt',
+                'is_vat_purchase'            => (bool)$ocr['is_vat_receipt'],
+                'is_tas_purchase'            => !(bool)$ocr['is_vat_receipt'],
+                'purchase_category'          => $ocr['is_vat_receipt'] ? 'vat_purchase' : 'tas_purchase',
+                'purchase_category_label'    => $ocr['is_vat_receipt'] ? 'VAT Purchase (15%)' : 'TAS Purchase (0% VAT)',
+                'purchase_category_badge'    => $ocr['is_vat_receipt'] ? 'bg-success-subtle text-success border border-success-subtle' : 'bg-primary-subtle text-primary border border-primary-subtle',
+                'fs_no'                      => $ocr['fs_no'] ?: '-',
+                'mrc_no'                     => $ocr['mrc_no'] ?: '-',
+                'seller_tin'                 => $ocr['seller_tin'] ?: '-',
+                'purchaser_tin'              => $ocr['purchaser_tin'] ?: $defaultPurchaserDigits,
+                'purc_type'                  => $ocr['purc_type'] ?: 'PUR_GD',
+                'encoded_by'                 => $ocr['encoded_by'] ?: 'wechacha',
+                'receipt_date_ec'            => $ocr['receipt_date_ec'] ?: '-',
+                'encoding_date_ec'           => $ocr['encoding_date_ec'] ?: '-',
+                'receipt_id'                 => $ocr['receipt_id'] ?: $ocr['id'],
+                'receipt_slip_url'           => $ocr['file_url'],
+                'is_fuel'                    => (str_contains(strtolower($ocr['category'] ?? ''), 'fuel')),
+            ]);
+
+            $existingTasReceipts[] = $ocrReceiptId;
+            if ($ocrReqNo) $existingTasVouchers[] = $ocrReqNo;
+        }
+
+        // If no records have seller TIN added yet in this month, fallback to 0% VAT purchases
+        if ($tasPurchasesCollection->isEmpty()) {
+            $tasPurchasesCollection = $formattedExpenses->where('is_tas_purchase', true)->values();
+        } else {
+            $tasPurchasesCollection = $tasPurchasesCollection->sortBy(function ($item) {
+                return $item['raw_date'] ?? $item['date_gc'] ?? '';
+            })->values();
+        }
+
+        $tasTotalAmount = (float)$tasPurchasesCollection->sum(function ($it) {
+            return (float)($it['total_amount'] ?? ($it['gross_amount'] ?? (($it['base_amount'] ?? 0) + ($it['vat_amount'] ?? 0))));
+        });
+
         return [
             'success' => true,
             'month' => [
@@ -2318,12 +2428,12 @@ class FinanceTaxReportController extends Controller
                 'vat_purchases_vat'      => (float)$formattedExpenses->where('is_vat_purchase', true)->sum('vat_amount'),
                 'vat_purchases_wht'      => (float)$formattedExpenses->where('is_vat_purchase', true)->sum('withholding_amount'),
                 'vat_purchases_net'      => (float)$formattedExpenses->where('is_vat_purchase', true)->sum('net_disbursed'),
-                'tas_purchases_count'    => $formattedExpenses->where('is_tas_purchase', true)->count(),
-                'tas_purchases_base'     => (float)$formattedExpenses->where('is_tas_purchase', true)->sum('base_amount'),
-                'tas_purchases_vat'      => 0.0,
-                'tas_purchases_wht'      => (float)$formattedExpenses->where('is_tas_purchase', true)->sum('withholding_amount'),
-                'tas_purchases_wht_count'=> $formattedExpenses->where('is_tas_purchase', true)->where('withholding_amount', '>', 0)->count(),
-                'tas_purchases_net'      => (float)$formattedExpenses->where('is_tas_purchase', true)->sum('net_disbursed'),
+                'tas_purchases_count'    => $tasPurchasesCollection->count(),
+                'tas_purchases_base'     => (float)$tasPurchasesCollection->sum('base_amount'),
+                'tas_purchases_vat'      => (float)$tasPurchasesCollection->sum('vat_amount'),
+                'tas_purchases_wht'      => (float)$tasPurchasesCollection->sum('withholding_amount'),
+                'tas_purchases_wht_count'=> $tasPurchasesCollection->where('withholding_amount', '>', 0)->count(),
+                'tas_purchases_net'      => (float)$tasPurchasesCollection->sum('net_disbursed'),
                 'ocr_count'              => $formattedOcrItems->count(),
                 'ocr_vat_count'          => $formattedVatOcrItems->count(),
                 'ocr_tas_count'          => $formattedTasOcrItems->count(),
@@ -2334,12 +2444,12 @@ class FinanceTaxReportController extends Controller
             'incomes'       => $formattedIncomes->values(),
             'expenses'      => $formattedExpenses->values(),
             'vat_purchases' => $formattedExpenses->where('is_vat_purchase', true)->values(),
-            'tas_purchases' => $formattedExpenses->where('is_tas_purchase', true)->values(),
-            'tas_purchases_count' => $formattedExpenses->where('is_tas_purchase', true)->count(),
-            'tas_purchases_total_amount' => (float)$formattedExpenses->where('is_tas_purchase', true)->sum('base_amount'),
-            'tas_purchases_wht' => (float)$formattedExpenses->where('is_tas_purchase', true)->sum('withholding_amount'),
-            'tas_purchases_wht_count' => $formattedExpenses->where('is_tas_purchase', true)->where('withholding_amount', '>', 0)->count(),
-            'tas_purchases_net_total' => (float)$formattedExpenses->where('is_tas_purchase', true)->sum('net_disbursed'),
+            'tas_purchases' => $tasPurchasesCollection->values(),
+            'tas_purchases_count' => $tasPurchasesCollection->count(),
+            'tas_purchases_total_amount' => $tasTotalAmount,
+            'tas_purchases_wht' => (float)$tasPurchasesCollection->sum('withholding_amount'),
+            'tas_purchases_wht_count' => $tasPurchasesCollection->where('withholding_amount', '>', 0)->count(),
+            'tas_purchases_net_total' => (float)$tasPurchasesCollection->sum('net_disbursed'),
             'ocr_items'     => $formattedOcrItems->values(),
             'vat_ocr_items' => $formattedVatOcrItems->values(),
             'tas_ocr_items' => $formattedTasOcrItems->values(),
@@ -3416,6 +3526,67 @@ class FinanceTaxReportController extends Controller
         if (!$defaultPurchaserDigits) $defaultPurchaserDigits = 38480010;
 
         $rows = [];
+
+        // If specific Ethiopian month is requested, export exact qualified e-Tax purchases matching movements screen
+        if ($month && $month >= 1 && $month <= 13) {
+            $movements = $this->calculateMonthMovementsData($year, $month, false);
+            $tasPurchases = collect($movements['tas_purchases'] ?? []);
+            if ($isTasFiltered) {
+                $tasPurchases = $tasPurchases->filter(fn($it) => empty($it['is_vat_purchase']) || !empty($it['is_tas_purchase']));
+            } elseif ($isVatFiltered) {
+                $tasPurchases = $tasPurchases->filter(fn($it) => !empty($it['is_vat_purchase']));
+            }
+
+            foreach ($tasPurchases as $item) {
+                $rawPurchaser = (string)($item['purchaser_tin'] ?? $defaultPurchaserDigits);
+                $pDigits = preg_replace('/^0+/', '', preg_replace('/[^0-9]/', '', $rawPurchaser));
+                $purchaserTinVal = ($pDigits !== '') ? (int)$pDigits : $defaultPurchaserDigits;
+
+                $rawSeller = (string)($item['seller_tin'] ?? '');
+                $sDigits = preg_replace('/^0+/', '', preg_replace('/[^0-9]/', '', $rawSeller));
+                $sellerTinVal = ($sDigits !== '') ? (int)$sDigits : (trim($rawSeller) ?: '');
+
+                $amountVal = round((float)($item['total_amount'] ?? ($item['gross_amount'] ?? (($item['base_amount'] ?? 0) + ($item['vat_amount'] ?? 0)))), 2);
+
+                $receiptNo = '';
+                if (!empty($item['fs_no']) && $item['fs_no'] !== '-') {
+                    $cleanFs = trim($item['fs_no']);
+                    if (preg_match('/^fs/i', $cleanFs)) {
+                        $receiptNo = strtoupper($cleanFs);
+                    } elseif (preg_match('/^\d+$/', $cleanFs)) {
+                        $receiptNo = 'FS' . str_pad($cleanFs, 8, '0', STR_PAD_LEFT);
+                    } else {
+                        $receiptNo = $cleanFs;
+                    }
+                } elseif (!empty($item['payment_reference']) && $item['payment_reference'] !== '-') {
+                    $receiptNo = trim($item['payment_reference']);
+                } else {
+                    $receiptNo = trim($item['request_number'] ?? '');
+                }
+
+                $receiptDate = !empty($item['receipt_date_ec']) && $item['receipt_date_ec'] !== '-' ? $item['receipt_date_ec'] : EthiopianDate::formatDateEc(now(), 'd-m-Y');
+                $encodingDate = !empty($item['encoding_date_ec']) && $item['encoding_date_ec'] !== '-' ? $item['encoding_date_ec'] : EthiopianDate::formatDateEc(now(), 'd-m-Y');
+                $mrc = (!empty($item['mrc_no']) && $item['mrc_no'] !== '-') ? trim($item['mrc_no']) : '';
+                $purcType = !empty($item['purc_type']) ? $item['purc_type'] : 'PUR_GD';
+                $encodedBy = !empty($item['encoded_by']) ? $item['encoded_by'] : 'wechacha';
+
+                $rows[] = [
+                    $purchaserTinVal,
+                    $sellerTinVal,
+                    $amountVal,
+                    $receiptNo,
+                    $receiptDate,
+                    $encodingDate,
+                    $mrc,
+                    $purcType,
+                    $encodedBy,
+                ];
+            }
+
+            if (!empty($rows)) {
+                return $this->writeExcelFile($headers, $rows, $tempPath, $filename);
+            }
+        }
         foreach ($ocrItems as $item) {
             $r = $item->receipt;
             $buyerTin = $r ? ($r->buyer_tin ?: $defaultPurchaserTin) : $defaultPurchaserTin;

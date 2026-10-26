@@ -276,7 +276,7 @@
             <button class="nav-link {{ $activeTab === 'tas' ? 'active' : '' }} rounded-pill fw-semibold small d-inline-flex align-items-center gap-1.5" 
                     id="page-tas-tab" data-bs-toggle="pill" data-bs-target="#page-tas" type="button" role="tab">
                 <i class="fa-solid fa-file-invoice text-primary"></i>
-                <span>TAS Purchases (0% VAT)</span>
+                <span>TAS Purchases (0% VAT / Fuel Receipts — e-Tax Format)</span>
                 <span class="badge bg-primary-subtle text-primary rounded-pill ms-1">{{ $movementsData['tas_purchases_count'] ?? count($movementsData['tas_purchases'] ?? []) }}</span>
             </button>
         </li>
@@ -902,28 +902,45 @@
             </div>
         </div>
 
-        {{-- ── TAB 3: TAS PURCHASES (0% VAT / e-Tax Declaration pro.doc) ──────── --}}
+        {{-- ── TAB 3: TAS PURCHASES (e-Tax Declaration pro.doc - Both VAT & 0% with Seller TIN) ──────── --}}
         @php
             $rawTasPurchases = $movementsData['tas_purchases'] ?? [];
             $tasTotalCount = count($rawTasPurchases);
             $tasWithTinCount = 0;
             $tasMissingTinCount = 0;
+            $tasVatCount = 0;
+            $tasZeroVatCount = 0;
             $tasWithWhtCount = 0;
+            $tasTotalBase = 0;
+            $tasTotalVat = 0;
             $tasTotalWht = 0;
+            $tasTotalGross = 0;
             $tasTotalNet = 0;
             foreach ($rawTasPurchases as $tpItem) {
                 $cTin = preg_replace('/\D/', '', (string)($tpItem['seller_tin'] ?? ''));
-                if (strlen($cTin) === 10) {
+                if (strlen($cTin) === 10 || (strlen($cTin) >= 9 && ($tpItem['seller_tin'] ?? '') !== '-')) {
                     $tasWithTinCount++;
                 } else {
                     $tasMissingTinCount++;
                 }
+                $isVatItem = !empty($tpItem['is_vat_purchase']) || (float)($tpItem['vat_amount'] ?? 0) > 0;
+                if ($isVatItem) {
+                    $tasVatCount++;
+                } else {
+                    $tasZeroVatCount++;
+                }
+                $bAmt = (float)($tpItem['base_amount'] ?? ($tpItem['amount'] ?? 0));
+                $vAmt = (float)($tpItem['vat_amount'] ?? 0);
+                $gAmt = (float)($tpItem['total_amount'] ?? ($tpItem['gross_amount'] ?? ($bAmt + $vAmt)));
                 $itemWht = (float)($tpItem['withholding_amount'] ?? 0);
                 if ($itemWht > 0 || !empty($tpItem['has_withholding'])) {
                     $tasWithWhtCount++;
                     $tasTotalWht += $itemWht;
                 }
-                $tasTotalNet += (float)($tpItem['net_disbursed'] ?? (($tpItem['amount'] ?? ($tpItem['base_amount'] ?? 0)) - $itemWht));
+                $tasTotalBase += $bAmt;
+                $tasTotalVat += $vAmt;
+                $tasTotalGross += $gAmt;
+                $tasTotalNet += (float)($tpItem['net_disbursed'] ?? ($gAmt - $itemWht));
             }
             $tasTinCompliancePercent = $tasTotalCount > 0 ? round(($tasWithTinCount / $tasTotalCount) * 100) : 0;
         @endphp
@@ -936,43 +953,52 @@
                             <div class="d-flex align-items-center gap-2 flex-wrap">
                                 <h6 class="fw-bold mb-0 text-dark">TAS Purchases (0% VAT / Fuel Receipts — e-Tax Format)</h6>
                                 <span class="badge bg-primary text-white rounded-pill small fw-semibold px-2.5 py-0.5">
-                                    <i class="fa-solid fa-receipt me-1"></i>0% VAT e-Tax Declaration
+                                    <i class="fa-solid fa-receipt me-1"></i>e-Tax Purchase Declaration (All Qualified Purchases)
                                 </span>
                             </div>
-                            <small class="text-muted">Purchases with 0% VAT (Fuel vouchers, exempt receipts, cash register slips) declared under Ethiopian e-Tax (pro.doc 9-column standard)</small>
+                            <small class="text-muted">Purchases and expenses with registered Seller TIN &amp; receipt added (Both 15% VAT and 0% TAS / Fuel) declared under Ethiopian e-Tax (pro.doc 9-column standard)</small>
                         </div>
                     </div>
                     <div class="d-flex align-items-center gap-2 d-print-none flex-wrap">
-                        {{-- Quick Filters: All, With TIN, Missing TIN, With WHT --}}
+                        {{-- Quick Filters: All e-Tax, VAT (15%), 0% VAT / Fuel, With WHT --}}
                         <div class="btn-group btn-group-sm shadow-xs rounded-pill p-0.5 bg-light border me-1" role="group">
                             <button type="button" 
                                     class="btn btn-sm rounded-pill px-2.5 py-1 fw-semibold btn-primary text-white shadow-xs" 
                                     id="btnTasFilterAll" 
                                     onclick="filterTasByTin('all')" 
-                                    title="Show All TAS Purchases">
-                                <i class="fa-solid fa-list me-1"></i>All TAS (<span id="tasCountAll">{{ $tasTotalCount }}</span>)
+                                    title="Show All e-Tax Purchases with Seller TIN & Receipt">
+                                <i class="fa-solid fa-list me-1"></i>All e-Tax (<span id="tasCountAll">{{ $tasTotalCount }}</span>)
                             </button>
                             <button type="button" 
                                     class="btn btn-sm rounded-pill px-2.5 py-1 fw-semibold text-muted" 
-                                    id="btnTasFilterWithTin" 
-                                    onclick="filterTasByTin('with_tin')" 
-                                    title="Show Records With 10-Digit Seller TIN">
-                                <i class="fa-solid fa-circle-check text-success me-1"></i>With Seller TIN (<span id="tasCountWithTin">{{ $tasWithTinCount }}</span>)
+                                    id="btnTasFilterVat" 
+                                    onclick="filterTasByTin('vat')" 
+                                    title="Show 15% VAT Purchases with Seller TIN Added">
+                                <i class="fa-solid fa-percent text-success me-1"></i>VAT (15%) (<span id="tasCountVat">{{ $tasVatCount }}</span>)
                             </button>
                             <button type="button" 
                                     class="btn btn-sm rounded-pill px-2.5 py-1 fw-semibold text-muted" 
-                                    id="btnTasFilterMissingTin" 
-                                    onclick="filterTasByTin('missing_tin')" 
-                                    title="Show Records Missing Seller TIN">
-                                <i class="fa-solid fa-circle-exclamation text-danger me-1"></i>Missing TIN (<span id="tasCountMissingTin">{{ $tasMissingTinCount }}</span>)
+                                    id="btnTasFilterTas" 
+                                    onclick="filterTasByTin('tas')" 
+                                    title="Show 0% VAT / Fuel Receipts with Seller TIN Added">
+                                <i class="fa-solid fa-gas-pump text-primary me-1"></i>0% VAT / Fuel (<span id="tasCountTas">{{ $tasZeroVatCount }}</span>)
                             </button>
                             <button type="button" 
                                     class="btn btn-sm rounded-pill px-2.5 py-1 fw-semibold text-muted" 
                                     id="btnTasFilterWithWht" 
                                     onclick="filterTasByTin('with_wht')" 
-                                    title="Show TAS Purchases with Withholding Tax (WHT)">
+                                    title="Show Purchases with Withholding Tax (WHT)">
                                 <i class="fa-solid fa-hand-holding-dollar text-danger me-1"></i>With WHT (<span id="tasCountWithWht">{{ $tasWithWhtCount }}</span>)
                             </button>
+                            @if($tasMissingTinCount > 0)
+                                <button type="button" 
+                                        class="btn btn-sm rounded-pill px-2.5 py-1 fw-semibold text-muted" 
+                                        id="btnTasFilterMissingTin" 
+                                        onclick="filterTasByTin('missing_tin')" 
+                                        title="Show Records Missing Seller TIN">
+                                    <i class="fa-solid fa-circle-exclamation text-danger me-1"></i>Missing TIN (<span id="tasCountMissingTin">{{ $tasMissingTinCount }}</span>)
+                                </button>
+                            @endif
                         </div>
 
                         <a href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_tas', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}" 
@@ -990,51 +1016,60 @@
                 <div class="row g-2 px-3 pt-3 pb-2 bg-light bg-opacity-50 border-bottom">
                     <div class="col-sm-6 col-md-3">
                         <div class="card border border-primary-subtle bg-primary-subtle bg-opacity-25 rounded-3 p-2.5 h-100">
-                            <small class="text-muted d-block text-uppercase fw-bold" style="font-size:0.65rem;">Total TAS Purchases</small>
+                            <small class="text-muted d-block text-uppercase fw-bold" style="font-size:0.65rem;">1. Total e-Tax Declarations</small>
                             <span class="fw-bold font-monospace text-primary fs-6">{{ $tasTotalCount }} Receipts / Vouchers</span>
-                            <small class="text-muted" style="font-size:0.7rem;">0% VAT e-Tax Declaration</small>
+                            <small class="text-success fw-semibold" style="font-size:0.7rem;"><i class="fa-solid fa-check-double me-1"></i>Receipt &amp; Seller TIN Added</small>
                         </div>
                     </div>
                     <div class="col-sm-6 col-md-3">
-                        <div class="card border {{ $tasMissingTinCount === 0 ? 'border-success-subtle bg-success-subtle bg-opacity-20' : 'border-warning-subtle bg-warning-subtle bg-opacity-25' }} rounded-3 p-2.5 h-100">
+                        <div class="card border border-success-subtle bg-success-subtle bg-opacity-20 rounded-3 p-2.5 h-100">
                             <div class="d-flex align-items-center justify-content-between">
-                                <small class="text-muted d-block text-uppercase fw-bold" style="font-size:0.65rem;">2. Seller TIN Status</small>
-                                <span class="badge {{ $tasMissingTinCount === 0 ? 'bg-success' : 'bg-warning text-dark' }} rounded-pill" style="font-size:0.62rem;" id="summaryTasTinBadge">
-                                    {{ $tasMissingTinCount === 0 ? '100% Filled' : $tasMissingTinCount . ' Need TIN' }}
+                                <small class="text-muted d-block text-uppercase fw-bold" style="font-size:0.65rem;">2. Purchase Tax Types</small>
+                                <span class="badge bg-success rounded-pill" style="font-size:0.62rem;" id="summaryTasTinBadge">
+                                    {{ $tasWithTinCount }} / {{ $tasTotalCount }} TIN Valid
                                 </span>
                             </div>
                             <div class="d-flex align-items-baseline gap-1 mt-0.5">
-                                <span class="fw-bold font-monospace text-success fs-6" id="summaryTasWithTinCount">{{ $tasWithTinCount }}</span>
-                                <span class="text-muted small">/ {{ $tasTotalCount }} filled</span>
-                                <span class="text-muted small ms-auto font-monospace" id="summaryTasTinPercent">({{ $tasTinCompliancePercent }}%)</span>
+                                <span class="fw-bold font-monospace text-success fs-6">{{ $tasVatCount }} VAT (15%)</span>
+                                <span class="text-muted small">|</span>
+                                <span class="fw-bold font-monospace text-primary fs-6">{{ $tasZeroVatCount }} 0% / Fuel</span>
                             </div>
-                            <small class="text-muted" style="font-size:0.7rem;">ERCA 10-Digit Seller TIN</small>
+                            <small class="text-muted" style="font-size:0.7rem;">ERCA 10-Digit Seller TIN Added</small>
                         </div>
                     </div>
                     <div class="col-sm-6 col-md-3">
                         <div class="card border border-primary-subtle bg-primary-subtle bg-opacity-25 rounded-3 p-2.5 h-100">
                             <div class="d-flex align-items-center justify-content-between">
-                                <small class="text-muted d-block text-uppercase fw-bold" style="font-size:0.65rem;">3. Taxable Base &amp; WHT</small>
+                                <small class="text-muted d-block text-uppercase fw-bold" style="font-size:0.65rem;">3. Base, VAT &amp; WHT</small>
                                 <span class="badge {{ $tasWithWhtCount > 0 ? 'bg-danger text-white' : 'bg-secondary-subtle text-muted' }} rounded-pill font-monospace" style="font-size:0.62rem;">
                                     {{ $tasWithWhtCount > 0 ? $tasWithWhtCount . ' With WHT' : '0 WHT' }}
                                 </span>
                             </div>
-                            <span class="fw-bold font-monospace text-dark fs-6 mt-0.5 d-block">ETB {{ number_format($movementsData['tas_purchases_total_amount'] ?? ($movementsData['summary']['tas_purchases_base'] ?? 0), 2) }}</span>
-                            <small class="text-danger fw-semibold d-block font-monospace" style="font-size:0.7rem;">
-                                <i class="fa-solid fa-hand-holding-dollar me-0.5"></i>WHT Deducted: - ETB {{ number_format($tasTotalWht, 2) }}
-                            </small>
+                            <span class="fw-bold font-monospace text-dark fs-6 mt-0.5 d-block">Base: ETB {{ number_format($tasTotalBase, 2) }}</span>
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                @if($tasTotalVat > 0)
+                                    <small class="text-success fw-semibold font-monospace" style="font-size:0.7rem;">
+                                        <i class="fa-solid fa-percent me-0.5"></i>VAT: +ETB {{ number_format($tasTotalVat, 2) }}
+                                    </small>
+                                @endif
+                                @if($tasTotalWht > 0)
+                                    <small class="text-danger fw-semibold font-monospace" style="font-size:0.7rem;">
+                                        <i class="fa-solid fa-hand-holding-dollar me-0.5"></i>WHT: -ETB {{ number_format($tasTotalWht, 2) }}
+                                    </small>
+                                @endif
+                            </div>
                         </div>
                     </div>
                     <div class="col-sm-6 col-md-3">
                         <div class="card border border-secondary-subtle bg-white rounded-3 p-2.5 h-100">
                             <div class="d-flex align-items-center justify-content-between">
-                                <small class="text-muted d-block text-uppercase fw-bold" style="font-size:0.65rem;">4. Net Disbursed</small>
+                                <small class="text-muted d-block text-uppercase fw-bold" style="font-size:0.65rem;">4. Gross &amp; Net Disbursed</small>
                                 <span class="badge bg-secondary-subtle text-dark rounded-pill fw-bold" style="font-size:0.62rem;">
                                     <i class="fa-solid fa-file-lines me-0.5"></i>9 Cols
                                 </span>
                             </div>
-                            <span class="fw-bold font-monospace text-success fs-6 mt-0.5 d-block">ETB {{ number_format($tasTotalNet, 2) }}</span>
-                            <small class="text-muted d-block" style="font-size:0.7rem;">Paid to Vendor (Net of WHT)</small>
+                            <span class="fw-bold font-monospace text-dark fs-6 mt-0.5 d-block">Gross: ETB {{ number_format($tasTotalGross, 2) }}</span>
+                            <small class="text-success fw-bold d-block font-monospace" style="font-size:0.7rem;">Net Disbursed: ETB {{ number_format($tasTotalNet, 2) }}</small>
                         </div>
                     </div>
                 </div>
@@ -1046,7 +1081,7 @@
                             <tr>
                                 <th class="ps-3 py-2.5">#</th>
                                 <th class="py-2.5">1. Purchaser TIN</th>
-                                <th class="py-2.5">2. Seller TIN</th>
+                                <th class="py-2.5">2. Seller TIN &amp; Tax Type</th>
                                 <th class="py-2.5 text-end">3. Amount (ETB)</th>
                                 <th class="py-2.5">4. Receipt / FS #</th>
                                 <th class="py-2.5">5. Receipt Date</th>
@@ -1058,27 +1093,29 @@
                             </tr>
                         </thead>
                         <tbody class="divide-y">
-                            @php
-                                $tasTotalAmount = 0;
-                            @endphp
                             @forelse($rawTasPurchases as $idx => $tas)
                                 @php
-                                    $tAmt = (float)($tas['amount'] ?? ($tas['base_amount'] ?? 0));
+                                    $bAmt = (float)($tas['base_amount'] ?? ($tas['amount'] ?? 0));
+                                    $vAmt = (float)($tas['vat_amount'] ?? 0);
+                                    $gAmt = (float)($tas['total_amount'] ?? ($tas['gross_amount'] ?? ($bAmt + $vAmt)));
                                     $tWht = (float)($tas['withholding_amount'] ?? 0);
-                                    $tNet = (float)($tas['net_disbursed'] ?? ($tAmt - $tWht));
+                                    $tNet = (float)($tas['net_disbursed'] ?? ($gAmt - $tWht));
                                     $hasWht = !empty($tas['has_withholding']) || $tWht > 0;
-                                    $tasTotalAmount += $tAmt;
+                                    $isVat = !empty($tas['is_vat_purchase']) || $vAmt > 0;
                                     $slipUrl = $tas['receipt_slip_url'] ?? ($tas['attachment_url'] ?? null);
                                     $whtSlipUrl = $tas['withholding_receipt_url'] ?? null;
                                     $isFuel = !empty($tas['is_fuel']);
                                     $isPdf = $slipUrl && str_contains(strtolower($slipUrl), '.pdf');
                                     $cleanSellerTin = preg_replace('/\D/', '', (string)($tas['seller_tin'] ?? ''));
-                                    $hasValidSellerTin = strlen($cleanSellerTin) === 10;
-                                    $hasPartialSellerTin = !empty($cleanSellerTin) && strlen($cleanSellerTin) !== 10;
+                                    $hasValidSellerTin = strlen($cleanSellerTin) === 10 || (strlen($cleanSellerTin) >= 9 && ($tas['seller_tin'] ?? '') !== '-');
+                                    $hasPartialSellerTin = !empty($cleanSellerTin) && strlen($cleanSellerTin) < 9;
                                 @endphp
                                 <tr data-has-tin="{{ $hasValidSellerTin ? '1' : '0' }}"
+                                    data-has-vat="{{ $isVat ? '1' : '0' }}"
                                     data-has-wht="{{ $hasWht ? '1' : '0' }}"
-                                    data-base="{{ $tAmt }}"
+                                    data-base="{{ $bAmt }}"
+                                    data-vat="{{ $vAmt }}"
+                                    data-gross="{{ $gAmt }}"
                                     data-wht="{{ $tWht }}"
                                     data-net="{{ $tNet }}"
                                     data-receipt-id="{{ $tas['receipt_id'] ?? ($tas['id'] ?? '') }}"
@@ -1093,11 +1130,11 @@
                                     <td>
                                         <div class="d-flex align-items-center gap-1.5 flex-wrap">
                                             @if($hasValidSellerTin)
-                                                <span class="badge bg-success-subtle text-success border border-success-subtle font-monospace px-2 py-0.5 rounded-2 cell-tas-tin fw-bold" title="ERCA Valid 10-Digit Seller TIN">
-                                                    <i class="fa-solid fa-circle-check text-success me-1"></i>{{ $cleanSellerTin }}
+                                                <span class="badge bg-success-subtle text-success border border-success-subtle font-monospace px-2 py-0.5 rounded-2 cell-tas-tin fw-bold" title="ERCA Valid Seller TIN">
+                                                    <i class="fa-solid fa-circle-check text-success me-1"></i>{{ $cleanSellerTin ?: $tas['seller_tin'] }}
                                                 </span>
                                             @elseif($hasPartialSellerTin)
-                                                <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle font-monospace px-2 py-0.5 rounded-2 cell-tas-tin fw-bold" title="{{ strlen($cleanSellerTin) }}/10 Digits - Incomplete ERCA TIN">
+                                                <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle font-monospace px-2 py-0.5 rounded-2 cell-tas-tin fw-bold" title="{{ strlen($cleanSellerTin) }} Digits Seller TIN">
                                                     <i class="fa-solid fa-triangle-exclamation text-warning me-1"></i>{{ $tas['seller_tin'] }}
                                                 </span>
                                             @else
@@ -1106,8 +1143,18 @@
                                                 </span>
                                             @endif
 
-                                            @if($isFuel)
-                                                <span class="badge bg-warning text-dark border border-warning-subtle rounded-pill font-monospace" style="font-size:0.62rem;"><i class="fa-solid fa-gas-pump me-0.5"></i>Fuel</span>
+                                            @if($isVat)
+                                                <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill font-monospace" style="font-size:0.62rem;" title="15% VAT Purchase">
+                                                    <i class="fa-solid fa-percent me-0.5"></i>15% VAT
+                                                </span>
+                                            @elseif($isFuel)
+                                                <span class="badge bg-warning text-dark border border-warning-subtle rounded-pill font-monospace" style="font-size:0.62rem;" title="Fuel Receipt (0% VAT)">
+                                                    <i class="fa-solid fa-gas-pump me-0.5"></i>Fuel (0% VAT)
+                                                </span>
+                                            @else
+                                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill font-monospace" style="font-size:0.62rem;" title="0% VAT TAS Receipt">
+                                                    <i class="fa-solid fa-tag me-0.5"></i>0% VAT
+                                                </span>
                                             @endif
 
                                             @if($hasWht)
@@ -1129,7 +1176,12 @@
                                         <small class="text-muted d-block text-truncate cell-tas-vendor" style="max-width: 175px;">{{ $tas['payee'] ?? ($tas['seller_name'] ?? 'Vendor') }}</small>
                                     </td>
                                     <td class="text-end font-monospace text-dark cell-tas-amount">
-                                        <div class="fw-bold">ETB {{ number_format($tAmt, 2) }}</div>
+                                        <div class="fw-bold">ETB {{ number_format($gAmt, 2) }}</div>
+                                        @if($isVat)
+                                            <small class="text-muted d-block font-monospace" style="font-size:0.68rem;" title="Base + VAT (15%) Breakdown">
+                                                Base: {{ number_format($bAmt, 2) }} <span class="text-success">+ VAT: {{ number_format($vAmt, 2) }}</span>
+                                            </small>
+                                        @endif
                                         @if($hasWht)
                                             <small class="text-danger d-block font-monospace" style="font-size:0.68rem;" title="Withholding Tax (WHT) Deducted">
                                                 <i class="fa-solid fa-hand-holding-dollar me-0.5"></i>-ETB {{ number_format($tWht, 2) }}
@@ -1217,10 +1269,13 @@
                         <tfoot class="table-light fw-bold border-top">
                             <tr>
                                 <td colspan="3" class="ps-3 py-2 text-uppercase small text-muted">
-                                    Total TAS Purchases (<span id="pageTasFootCount">{{ $tasTotalCount }}</span> items)
+                                    Total e-Tax Purchases (<span id="pageTasFootCount">{{ $tasTotalCount }}</span> items)
                                 </td>
                                 <td class="text-end py-2 font-monospace text-dark" id="pageTasFootAmount">
-                                    <div>ETB {{ number_format($tasTotalAmount, 2) }}</div>
+                                    <div>ETB {{ number_format($tasTotalGross, 2) }}</div>
+                                    @if($tasTotalVat > 0)
+                                        <small class="text-success d-block font-monospace" style="font-size:0.68rem;" id="pageTasFootVat">VAT (15%): + ETB {{ number_format($tasTotalVat, 2) }}</small>
+                                    @endif
                                     @if($tasTotalWht > 0)
                                         <small class="text-danger d-block font-monospace" style="font-size:0.68rem;" id="pageTasFootWht">WHT: - ETB {{ number_format($tasTotalWht, 2) }}</small>
                                         <small class="text-success d-block font-monospace" style="font-size:0.68rem;" id="pageTasFootNet">Net: ETB {{ number_format($tasTotalNet, 2) }}</small>
@@ -2229,34 +2284,45 @@
     window._pageTasPurchases = @json($movementsData['tas_purchases'] ?? []);
     window._pageExpenses = @json($movementsData['expenses'] ?? []);
 
-    // Toggle TAS Purchases by Seller TIN / WHT status: 'all', 'with_tin', 'missing_tin', 'with_wht'
+    // Toggle TAS / e-Tax Purchases by filter: 'all', 'vat', 'tas', 'with_wht', 'with_tin', 'missing_tin'
     let _activeTasTinFilter = 'all';
 
     function filterTasByTin(filter) {
         _activeTasTinFilter = filter;
 
         const btnAll = document.getElementById('btnTasFilterAll');
+        const btnVat = document.getElementById('btnTasFilterVat');
+        const btnTas = document.getElementById('btnTasFilterTas');
         const btnWith = document.getElementById('btnTasFilterWithTin');
         const btnMissing = document.getElementById('btnTasFilterMissingTin');
         const btnWht = document.getElementById('btnTasFilterWithWht');
 
         if (btnAll) btnAll.className = 'btn btn-sm rounded-pill px-2.5 py-1 fw-semibold ' + (filter === 'all' ? 'btn-primary text-white shadow-xs' : 'text-muted');
+        if (btnVat) btnVat.className = 'btn btn-sm rounded-pill px-2.5 py-1 fw-semibold ' + (filter === 'vat' ? 'btn-success text-white shadow-xs' : 'text-muted');
+        if (btnTas) btnTas.className = 'btn btn-sm rounded-pill px-2.5 py-1 fw-semibold ' + (filter === 'tas' ? 'btn-primary text-white shadow-xs' : 'text-muted');
         if (btnWith) btnWith.className = 'btn btn-sm rounded-pill px-2.5 py-1 fw-semibold ' + (filter === 'with_tin' ? 'btn-success text-white shadow-xs' : 'text-muted');
         if (btnMissing) btnMissing.className = 'btn btn-sm rounded-pill px-2.5 py-1 fw-semibold ' + (filter === 'missing_tin' ? 'btn-danger text-white shadow-xs' : 'text-muted');
         if (btnWht) btnWht.className = 'btn btn-sm rounded-pill px-2.5 py-1 fw-semibold ' + (filter === 'with_wht' ? 'btn-danger text-white shadow-xs' : 'text-muted');
 
         const rows = document.querySelectorAll('#pageTasTable tbody tr.tas-row');
         let visibleCount = 0;
-        let totalVisibleAmt = 0;
+        let totalVisibleGross = 0;
+        let totalVisibleBase = 0;
+        let totalVisibleVat = 0;
         let totalVisibleWht = 0;
         let totalVisibleNet = 0;
 
         rows.forEach(tr => {
             const hasTin = tr.getAttribute('data-has-tin') === '1';
+            const hasVat = tr.getAttribute('data-has-vat') === '1';
             const hasWht = tr.getAttribute('data-has-wht') === '1';
             let matches = false;
             if (filter === 'all') {
                 matches = true;
+            } else if (filter === 'vat') {
+                matches = hasVat;
+            } else if (filter === 'tas') {
+                matches = !hasVat;
             } else if (filter === 'with_tin') {
                 matches = hasTin;
             } else if (filter === 'missing_tin') {
@@ -2268,12 +2334,16 @@
             if (matches) {
                 tr.style.display = '';
                 visibleCount++;
-                const amtVal = parseFloat(tr.getAttribute('data-base') || 0) || (parseFloat((tr.querySelector('.cell-tas-amount')?.textContent || '0').replace(/[^0-9.-]/g, '')) || 0);
-                const whtVal = parseFloat(tr.getAttribute('data-wht') || 0) || 0;
-                const netVal = parseFloat(tr.getAttribute('data-net') || (amtVal - whtVal)) || 0;
-                totalVisibleAmt += amtVal;
-                totalVisibleWht += whtVal;
-                totalVisibleNet += netVal;
+                const grossVal = parseFloat(tr.getAttribute('data-gross') || tr.getAttribute('data-base') || 0) || 0;
+                const baseVal  = parseFloat(tr.getAttribute('data-base') || 0) || 0;
+                const vatVal   = parseFloat(tr.getAttribute('data-vat') || 0) || 0;
+                const whtVal   = parseFloat(tr.getAttribute('data-wht') || 0) || 0;
+                const netVal   = parseFloat(tr.getAttribute('data-net') || (grossVal - whtVal)) || 0;
+                totalVisibleGross += grossVal;
+                totalVisibleBase  += baseVal;
+                totalVisibleVat   += vatVal;
+                totalVisibleWht   += whtVal;
+                totalVisibleNet   += netVal;
             } else {
                 tr.style.display = 'none';
             }
@@ -2292,13 +2362,15 @@
         if (footCount) footCount.textContent = visibleCount;
         const footAmt = document.getElementById('pageTasFootAmount');
         if (footAmt) {
-            if (totalVisibleWht > 0) {
-                footAmt.innerHTML = `<div>ETB ${totalVisibleAmt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>` +
-                    `<small class="text-danger d-block font-monospace" style="font-size:0.68rem;" id="pageTasFootWht">WHT: - ETB ${totalVisibleWht.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</small>` +
-                    `<small class="text-success d-block font-monospace" style="font-size:0.68rem;" id="pageTasFootNet">Net: ETB ${totalVisibleNet.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</small>`;
-            } else {
-                footAmt.innerHTML = `<div>ETB ${totalVisibleAmt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>`;
+            let footHtml = `<div>ETB ${totalVisibleGross.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>`;
+            if (totalVisibleVat > 0) {
+                footHtml += `<small class="text-success d-block font-monospace" style="font-size:0.68rem;" id="pageTasFootVat">VAT (15%): + ETB ${totalVisibleVat.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</small>`;
             }
+            if (totalVisibleWht > 0) {
+                footHtml += `<small class="text-danger d-block font-monospace" style="font-size:0.68rem;" id="pageTasFootWht">WHT: - ETB ${totalVisibleWht.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</small>` +
+                    `<small class="text-success d-block font-monospace" style="font-size:0.68rem;" id="pageTasFootNet">Net: ETB ${totalVisibleNet.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</small>`;
+            }
+            footAmt.innerHTML = footHtml;
         }
     }
 
@@ -2322,7 +2394,16 @@
             if (tableId === 'pageTasTable') {
                 if (tr.id === 'pageTasEmptyFilterRow') return;
                 const hasTin = tr.getAttribute('data-has-tin') === '1';
+                const hasVat = tr.getAttribute('data-has-vat') === '1';
                 const hasWht = tr.getAttribute('data-has-wht') === '1';
+                if (_activeTasTinFilter === 'vat' && !hasVat) {
+                    tr.style.display = 'none';
+                    return;
+                }
+                if (_activeTasTinFilter === 'tas' && hasVat) {
+                    tr.style.display = 'none';
+                    return;
+                }
                 if (_activeTasTinFilter === 'with_tin' && !hasTin) {
                     tr.style.display = 'none';
                     return;
@@ -2965,11 +3046,14 @@
         const badgeId = document.getElementById('movement_edit_ocr_badge_id');
         if (badgeId) badgeId.textContent = tas.request_number || ('TAS #' + (idx + 1));
 
+        const isVatItem = !!(tas.is_vat_purchase || cleanNum(tas.vat_amount) > 0);
+
         const fsDisplay = document.getElementById('movementModalFsNoDisplay');
         if (fsDisplay) {
+            const taxLabel = isVatItem ? 'VAT 15% Purchase' : (tas.is_fuel ? 'Fuel 0% VAT' : 'TAS 0% VAT');
             fsDisplay.textContent = tas.fs_no && tas.fs_no !== '-' 
-                ? ('FS #' + tas.fs_no + ' (TAS 0% VAT)') 
-                : (tas.request_number ? (tas.request_number + ' (TAS 0% VAT)') : 'TAS Receipt Inspector');
+                ? ('FS #' + tas.fs_no + ' (' + taxLabel + ')') 
+                : (tas.request_number ? (tas.request_number + ' (' + taxLabel + ')') : 'Purchase Inspector');
         }
 
         const sellerName = document.getElementById('movement_edit_seller_name');
@@ -3021,22 +3105,25 @@
         const catSelect = document.getElementById('movement_edit_category');
         if (catSelect) catSelect.value = tas.is_fuel ? 'fuel' : 'materials';
 
-        // TAS Purchases are 0% VAT
+        // VAT Category: 'G' for 15% VAT, 'E' for 0% exempt / fuel
         const vatCatSelect = document.getElementById('movement_edit_vat_category');
-        if (vatCatSelect) vatCatSelect.value = 'E';
+        if (vatCatSelect) vatCatSelect.value = isVatItem ? 'G' : 'E';
 
         const purcTypeSelect = document.getElementById('movement_edit_purchase_type');
         if (purcTypeSelect) purcTypeSelect.value = tas.purc_type || 'PUR_GD';
 
-        const amt = cleanNum(tas.amount || tas.base_amount);
+        const baseVal = cleanNum(tas.base_amount || tas.amount);
+        const vatVal = cleanNum(tas.vat_amount);
+        const grossVal = cleanNum(tas.total_amount || tas.gross_amount || (baseVal + vatVal));
+
         const baseInput = document.getElementById('movement_edit_total_value');
-        if (baseInput) baseInput.value = amt.toFixed(2);
+        if (baseInput) baseInput.value = baseVal.toFixed(2);
 
         const vatInput = document.getElementById('movement_edit_vat_amount');
-        if (vatInput) vatInput.value = '0.00';
+        if (vatInput) vatInput.value = vatVal.toFixed(2);
 
         const totalInput = document.getElementById('movement_edit_value_after_vat');
-        if (totalInput) totalInput.value = amt.toFixed(2);
+        if (totalInput) totalInput.value = grossVal.toFixed(2);
 
         // Populate Withholding fields in modal for TAS item
         const hasTasWht = !!(tas.has_withholding || (cleanNum(tas.withholding_amount) > 0));
