@@ -275,6 +275,21 @@ Route::get('/run-migrations', function () {
             });
         }
 
+        // Direct guarantee for procurement_sms_logs support for MR and skipped status
+        if (\Illuminate\Support\Facades\Schema::hasTable('procurement_sms_logs')) {
+            \Illuminate\Support\Facades\Schema::table('procurement_sms_logs', function (\Illuminate\Database\Schema\Blueprint $table) {
+                if (!\Illuminate\Support\Facades\Schema::hasColumn('procurement_sms_logs', 'material_request_id')) {
+                    $table->unsignedBigInteger('material_request_id')->nullable()->after('purchase_request_id');
+                }
+            });
+            try {
+                \Illuminate\Support\Facades\DB::statement("ALTER TABLE `procurement_sms_logs` MODIFY `purchase_request_id` BIGINT UNSIGNED NULL;");
+            } catch (\Throwable $e) {}
+            try {
+                \Illuminate\Support\Facades\DB::statement("ALTER TABLE `procurement_sms_logs` MODIFY `status` VARCHAR(32) NOT NULL DEFAULT 'sent';");
+            } catch (\Throwable $e) {}
+        }
+
         // Check current columns in employees & payrolls & procurement_receipts table
         $columns = \Illuminate\Support\Facades\Schema::getColumnListing('employees');
         $gmCols = array_filter($columns, fn($c) => str_contains($c, 'gm_'));
@@ -2704,6 +2719,7 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/',          [App\Http\Controllers\Admin\ProcurementSmsSettingsController::class, 'index'])->name('index');
         Route::post('/',         [App\Http\Controllers\Admin\ProcurementSmsSettingsController::class, 'update'])->name('update');
         Route::post('/test-sms', [App\Http\Controllers\Admin\ProcurementSmsSettingsController::class, 'testSms'])->name('test-sms');
+        Route::post('/retry/{id}', [App\Http\Controllers\Admin\ProcurementSmsSettingsController::class, 'retry'])->name('retry');
     });
 
     // ─── Global Admin: Announcements & Bulk SMS (Restricted strictly to Global Admin) ─────────
