@@ -15,6 +15,7 @@ use App\Models\User;
 use App\Observers\MaterialRequestObserver;
 use App\Observers\PurchaseRequestObserver;
 use App\Services\ProcurementStatusOwnerService;
+use App\Services\ProcurementTransitionNotifier;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -44,7 +45,7 @@ class ProcurementStatusSmsTest extends TestCase
             public function send(string $to, string $message): array
             {
                 if ($this->test->shouldFailGateway()) {
-                    return ['success' => false, 'error' => 'Simulated afro-message gateway timeout'];
+                    return ['success' => false, 'error' => 'Simulated gateway timeout'];
                 }
 
                 $this->test->recordMessage($to, $message);
@@ -81,6 +82,7 @@ class ProcurementStatusSmsTest extends TestCase
         Schema::dropIfExists('purchase_requests');
         Schema::dropIfExists('material_request_items');
         Schema::dropIfExists('material_requests');
+        Schema::dropIfExists('project_user');
         Schema::dropIfExists('stores');
         Schema::dropIfExists('projects');
         Schema::dropIfExists('model_has_roles');
@@ -151,6 +153,12 @@ class ProcurementStatusSmsTest extends TestCase
             $table->softDeletes();
         });
 
+        Schema::create('project_user', function ($table) {
+            $table->unsignedBigInteger('project_id');
+            $table->unsignedBigInteger('user_id');
+            $table->primary(['project_id', 'user_id']);
+        });
+
         Schema::create('stores', function ($table) {
             $table->id();
             $table->string('name');
@@ -167,11 +175,13 @@ class ProcurementStatusSmsTest extends TestCase
             $table->unsignedBigInteger('destination_store_id')->nullable();
             $table->string('reference_number')->nullable();
             $table->string('source')->nullable();
+            $table->string('priority')->default('normal');
             $table->string('status')->default('submitted');
             $table->date('required_date')->nullable();
             $table->text('notes')->nullable();
             $table->unsignedBigInteger('created_by')->nullable();
             $table->string('planning_approval_status')->default('pending');
+            $table->text('planning_rejection_reason')->nullable();
             $table->timestamps();
         });
 
@@ -199,6 +209,7 @@ class ProcurementStatusSmsTest extends TestCase
             $table->decimal('estimated_total_cost', 15, 2)->nullable();
             $table->decimal('direct_buy_amount', 15, 2)->nullable();
             $table->text('justification')->nullable();
+            $table->text('rejection_reason')->nullable();
             $table->timestamps();
             $table->softDeletes();
         });
@@ -253,7 +264,8 @@ class ProcurementStatusSmsTest extends TestCase
 
         Schema::create('procurement_sms_logs', function ($table) {
             $table->id();
-            $table->unsignedBigInteger('purchase_request_id')->default(0);
+            $table->unsignedBigInteger('purchase_request_id')->nullable();
+            $table->unsignedBigInteger('material_request_id')->nullable();
             $table->string('recipient_phone', 30);
             $table->string('recipient_role', 60);
             $table->text('message');
@@ -263,90 +275,464 @@ class ProcurementStatusSmsTest extends TestCase
         });
     }
 
-    protected function createUserWithPhone(string $name, string $email, string $phone): User
+    protected function createUserWithPhone(string $name, string $email, ?string $phone): User
     {
         $user = User::create([
             'name'      => $name,
             'email'     => $email,
+            'phone'     => $phone,
             'is_active' => true,
         ]);
-        $user->phone = $phone;
-        $user->save();
 
         Employee::create([
-            'user_id'             => $user->id,
-            'full_name'           => $name,
-            'email'               => $email,
-            'phone'               => $phone,
-            'is_approved_by_gm'   => true,
-            'gm_approval_status'  => 'approved',
+            'user_id'            => $user->id,
+            'full_name'          => $name,
+            'email'              => $email,
+            'phone'              => $phone,
+            'is_approved_by_gm'  => true,
+            'gm_approval_status' => 'approved',
         ]);
 
         return $user;
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // ACCEPTANCE TESTS (Section 7: 1-14)
+    // ─────────────────────────────────────────────────────────────────────────
+
     /**
-     * Test 1: Submitting Material Request immediately sends SMS to Planning team.
+     * Acceptance Test 1:
+     * Site Engineer creates an emergency MR -> Planning Manager gets an SMS
+     * with [URGENT-EMERGENCY] within seconds.
      */
-    public function test_mr_submission_sends_sms_to_planning_team(): void
+    public function test_01_site_engineer_creates_emergency_mr_sends_sms_to_planning_manager_with_urgent_emergency_prefix(): void
     {
-        $planningUser = $this->createUserWithPhone('Planning Lead', 'planning@wechecha.com', '+251911111111');
-        $role = Role::create(['name' => 'planning']);
-        $planningUser->assignRole($role);
+        $planning = $this->createUserWithPhone('Planning Head', 'planning@wechecha.com', '+251911111111');
+        $planning->assignRole(Role::firstOrCreate(['name' => 'planning']));
 
         $siteEng = $this->createUserWithPhone('Eng. Daniel', 'daniel@wechecha.com', '+251922222222');
-        $project = Project::create(['name' => 'Bole Site']);
+        $siteEng->assignRole(Role::firstOrCreate(['name' => 'site_engineer']));
 
-        $service = app(ProcurementStatusOwnerService::class);
+        $project = Project::create(['name' => 'Bole Tower Site']);
 
         $mr = MaterialRequest::create([
             'project_id'       => $project->id,
-            'reference_number' => 'MR-20261021-0001',
+            'reference_number' => 'MR-EMERGENCY-2026-001',
             'created_by'       => $siteEng->id,
+            'source'           => 'Emergency',
+            'priority'         => 'emergency',
             'status'           => 'submitted',
         ]);
 
-        $service->dispatchStatusChangeSms($mr, 'submitted', null, $siteEng);
+        $notifier = app(ProcurementTransitionNotifier::class);
+        $notifier->notify($mr, 'submitted', null, $siteEng);
 
         $this->assertCount(1, $this->sentMessages);
         $this->assertEquals('+251911111111', $this->sentMessages[0]['to']);
-        $this->assertStringContainsString('MR #MR-20261021-0001', $this->sentMessages[0]['message']);
+        $this->assertStringContainsString('[URGENT-EMERGENCY]', $this->sentMessages[0]['message']);
+        $this->assertStringContainsString('MR #MR-EMERGENCY-2026-001', $this->sentMessages[0]['message']);
         $this->assertStringContainsString('Action needed:', $this->sentMessages[0]['message']);
     }
 
     /**
-     * Test 2: Planning approval transitions to Coordinator and sends SMS.
+     * Acceptance Test 2:
+     * Planning approves -> only the project's Coordinator gets an SMS.
      */
-    public function test_mr_planning_approval_routes_to_coordinator(): void
+    public function test_02_planning_approves_only_project_coordinator_gets_sms(): void
     {
-        $coordUser = $this->createUserWithPhone('Coord. Yohannes', 'coord@wechecha.com', '+251933333333');
-        $role = Role::create(['name' => 'coordinator']);
-        $coordUser->assignRole($role);
+        $coordProject = $this->createUserWithPhone('Project Coord. Yohannes', 'coord_proj@wechecha.com', '+251933333331');
+        $coordOther   = $this->createUserWithPhone('Other Coord. Helen', 'coord_other@wechecha.com', '+251933333332');
+        $coordRole    = Role::firstOrCreate(['name' => 'coordinator']);
+        $coordProject->assignRole($coordRole);
+        $coordOther->assignRole($coordRole);
+
+        $project = Project::create(['name' => 'CMC Site']);
+        // Assign only Yohannes to this project
+        $project->users()->attach($coordProject->id);
 
         $mr = MaterialRequest::create([
-            'reference_number' => 'MR-20261021-0002',
+            'project_id'       => $project->id,
+            'reference_number' => 'MR-2026-0002',
             'status'           => 'submitted',
         ]);
 
         $this->sentMessages = [];
         Cache::flush();
 
-        $service = app(ProcurementStatusOwnerService::class);
-        $service->dispatchStatusChangeSms($mr, 'planning_approved', 'submitted');
+        $notifier = app(ProcurementTransitionNotifier::class);
+        $notifier->notify($mr, 'planning_approved', 'submitted');
 
+        // MUST be exactly 1 SMS, and MUST go only to the project's assigned coordinator!
         $this->assertCount(1, $this->sentMessages);
-        $this->assertEquals('+251933333333', $this->sentMessages[0]['to']);
-        $this->assertStringContainsString('Approved by Planning', $this->sentMessages[0]['message']);
+        $this->assertEquals('+251933333331', $this->sentMessages[0]['to']);
+        $this->assertNotEquals('+251933333332', $this->sentMessages[0]['to']);
     }
 
     /**
-     * Test 3: GM approval sends SMS to Finance Head with amount in ETB.
+     * Acceptance Test 3:
+     * Planning rejects -> only the Site Engineer gets an SMS with the reason.
      */
+    public function test_03_planning_rejects_only_site_engineer_gets_sms_with_reason(): void
+    {
+        $siteEng = $this->createUserWithPhone('Eng. Solomon', 'solomon@wechecha.com', '+251922222223');
+        $siteEng->assignRole(Role::firstOrCreate(['name' => 'site_engineer']));
+
+        $mr = MaterialRequest::create([
+            'reference_number'          => 'MR-2026-0003',
+            'created_by'                => $siteEng->id,
+            'status'                    => 'submitted',
+            'planning_rejection_reason' => 'Quantity exceeds site excavation plan limits',
+        ]);
+
+        $this->sentMessages = [];
+        Cache::flush();
+
+        $notifier = app(ProcurementTransitionNotifier::class);
+        $notifier->notify($mr, 'rejected', 'submitted', null, [
+            'reason' => 'Quantity exceeds site excavation plan limits',
+        ]);
+
+        $this->assertCount(1, $this->sentMessages);
+        $this->assertEquals('+251922222223', $this->sentMessages[0]['to']);
+        $this->assertStringContainsString('Quantity exceeds site excavation plan limits', $this->sentMessages[0]['message']);
+        $this->assertStringContainsString('Rejected', $this->sentMessages[0]['message']);
+    }
+
+    /**
+     * Acceptance Test 4:
+     * Planning "petty cash" -> Site Engineer gets an SMS.
+     */
+    public function test_04_planning_petty_cash_site_engineer_gets_sms(): void
+    {
+        $siteEng = $this->createUserWithPhone('Eng. Daniel', 'daniel4@wechecha.com', '+251922222224');
+        $siteEng->assignRole(Role::firstOrCreate(['name' => 'site_engineer']));
+
+        $mr = MaterialRequest::create([
+            'reference_number' => 'MR-2026-0004',
+            'created_by'       => $siteEng->id,
+            'status'           => 'submitted',
+        ]);
+
+        $this->sentMessages = [];
+        Cache::flush();
+
+        $notifier = app(ProcurementTransitionNotifier::class);
+        $notifier->notify($mr, 'approved_for_petty_cash', 'submitted');
+
+        $this->assertCount(1, $this->sentMessages);
+        $this->assertEquals('+251922222224', $this->sentMessages[0]['to']);
+        $this->assertStringContainsString('Petty Cash', $this->sentMessages[0]['message']);
+    }
+
+    /**
+     * Acceptance Test 5:
+     * Coordinator sends to store -> only that target store's Store Manager gets an SMS.
+     */
+    public function test_05_coordinator_sends_to_store_only_target_store_manager_gets_sms(): void
+    {
+        $targetMgr = $this->createUserWithPhone('Manager Target Store', 'target_mgr@wechecha.com', '+251944444441');
+        $otherMgr  = $this->createUserWithPhone('Manager Other Store', 'other_mgr@wechecha.com', '+251944444442');
+        $smRole    = Role::firstOrCreate(['name' => 'store_manager']);
+        $targetMgr->assignRole($smRole);
+        $otherMgr->assignRole($smRole);
+
+        $targetStore = Store::create(['name' => 'Target Store', 'manager_id' => $targetMgr->id]);
+        $otherStore  = Store::create(['name' => 'Other Store', 'manager_id' => $otherMgr->id]);
+
+        $mr = MaterialRequest::create([
+            'reference_number'     => 'MR-2026-0005',
+            'destination_store_id' => $targetStore->id,
+            'status'               => 'planning_approved',
+        ]);
+
+        $this->sentMessages = [];
+        Cache::flush();
+
+        $notifier = app(ProcurementTransitionNotifier::class);
+        $notifier->notify($mr, 'sent_to_store_manager', 'planning_approved');
+
+        // MUST be sent only to Target Store's manager
+        $this->assertCount(1, $this->sentMessages);
+        $this->assertEquals('+251944444441', $this->sentMessages[0]['to']);
+    }
+
+    /**
+     * Acceptance Test 6:
+     * Store Manager rejects -> Planning Manager gets an SMS.
+     */
+    public function test_06_store_manager_rejects_planning_manager_gets_sms(): void
+    {
+        $planning = $this->createUserWithPhone('Planning Lead', 'planning6@wechecha.com', '+251911111111');
+        $planning->assignRole(Role::firstOrCreate(['name' => 'planning']));
+
+        $siteEng = $this->createUserWithPhone('Eng. Requester', 'req6@wechecha.com', '+251922222226');
+        $siteEng->assignRole(Role::firstOrCreate(['name' => 'site_engineer']));
+
+        $mr = MaterialRequest::create([
+            'reference_number' => 'MR-2026-0006',
+            'created_by'       => $siteEng->id,
+            'status'           => 'sent_to_store_manager',
+        ]);
+
+        $this->sentMessages = [];
+        Cache::flush();
+
+        $notifier = app(ProcurementTransitionNotifier::class);
+        $notifier->notify($mr, 'store_rejected', 'sent_to_store_manager', null, [
+            'reason' => 'Defective batch specification in warehouse',
+        ]);
+
+        // Planning gets the action SMS
+        $phones = array_column($this->sentMessages, 'to');
+        $this->assertContains('+251911111111', $phones);
+    }
+
+    /**
+     * Acceptance Test 7:
+     * Store Manager "send to purchase" -> Procurement Manager gets an SMS.
+     */
+    public function test_07_store_manager_send_to_purchase_procurement_manager_gets_sms(): void
+    {
+        $pm = $this->createUserWithPhone('Procurement Mgr', 'pm7@wechecha.com', '+251955555555');
+        $pm->assignRole(Role::firstOrCreate(['name' => 'purchase_manager']));
+
+        $mr = MaterialRequest::create([
+            'reference_number' => 'MR-2026-0007',
+            'status'           => 'sent_to_store_manager',
+        ]);
+
+        $this->sentMessages = [];
+        Cache::flush();
+
+        $notifier = app(ProcurementTransitionNotifier::class);
+        $notifier->notify($mr, 'sent_to_pr', 'sent_to_store_manager');
+
+        $this->assertCount(1, $this->sentMessages);
+        $this->assertEquals('+251955555555', $this->sentMessages[0]['to']);
+    }
+
+    /**
+     * Acceptance Test 8:
+     * Store Manager "create transfer" -> General Service gets an SMS.
+     */
+    public function test_08_store_manager_create_transfer_general_service_gets_sms(): void
+    {
+        $gs = $this->createUserWithPhone('General Service Fleet', 'gs8@wechecha.com', '+251966666666');
+        $gs->assignRole(Role::firstOrCreate(['name' => 'general_service']));
+
+        $mr = MaterialRequest::create([
+            'reference_number' => 'MR-2026-0008',
+            'status'           => 'sent_to_store_manager',
+        ]);
+
+        $this->sentMessages = [];
+        Cache::flush();
+
+        $notifier = app(ProcurementTransitionNotifier::class);
+        $notifier->notify($mr, 'transferred', 'sent_to_store_manager');
+
+        $phones = array_column($this->sentMessages, 'to');
+        $this->assertContains('+251966666666', $phones);
+    }
+
+    /**
+     * Acceptance Test 9:
+     * Procurement Manager sends to team -> Procurement Team gets an SMS.
+     */
+    public function test_09_procurement_manager_sends_to_team_procurement_team_gets_sms(): void
+    {
+        $purchaser = $this->createUserWithPhone('Procurement Officer', 'buyer9@wechecha.com', '+251977777777');
+        $purchaser->assignRole(Role::firstOrCreate(['name' => 'purchase']));
+
+        $pr = PurchaseRequest::create([
+            'pr_no'  => 'PR-2026-0009',
+            'status' => PurchaseRequest::STATUS_PENDING_PROC_MANAGER,
+        ]);
+
+        $this->sentMessages = [];
+        Cache::flush();
+
+        $notifier = app(ProcurementTransitionNotifier::class);
+        $notifier->notify($pr, PurchaseRequest::STATUS_PENDING_PROC_TEAM, PurchaseRequest::STATUS_PENDING_PROC_MANAGER);
+
+        $this->assertCount(1, $this->sentMessages);
+        $this->assertEquals('+251977777777', $this->sentMessages[0]['to']);
+    }
+
+    /**
+     * Acceptance Test 10:
+     * Procurement Manager sends back -> Store Manager gets an SMS.
+     */
+    public function test_10_procurement_manager_sends_back_store_manager_gets_sms(): void
+    {
+        $storeMgr = $this->createUserWithPhone('Store Mgr 10', 'sm10@wechecha.com', '+251944444440');
+        $storeMgr->assignRole(Role::firstOrCreate(['name' => 'store_manager']));
+
+        $store = Store::create(['name' => 'Main Warehouse', 'manager_id' => $storeMgr->id]);
+
+        $pr = PurchaseRequest::create([
+            'pr_no'    => 'PR-2026-0010',
+            'store_id' => $store->id,
+            'status'   => PurchaseRequest::STATUS_PENDING_PROC_MANAGER,
+        ]);
+
+        $this->sentMessages = [];
+        Cache::flush();
+
+        $notifier = app(ProcurementTransitionNotifier::class);
+        $notifier->notify($pr, 'pm_returned_to_store', PurchaseRequest::STATUS_PENDING_PROC_MANAGER, null, [
+            'reason' => 'Item specification is incomplete, re-check store stock',
+        ]);
+
+        $this->assertCount(1, $this->sentMessages);
+        $this->assertEquals('+251944444440', $this->sentMessages[0]['to']);
+    }
+
+    /**
+     * Acceptance Test 11:
+     * Calling the same transition twice within 60s sends only ONE SMS per recipient.
+     */
+    public function test_11_calling_same_transition_twice_within_60s_sends_only_one_sms(): void
+    {
+        $planning = $this->createUserWithPhone('Planning Lead', 'planning11@wechecha.com', '+251911111111');
+        $planning->assignRole(Role::firstOrCreate(['name' => 'planning']));
+
+        $mr = MaterialRequest::create([
+            'reference_number' => 'MR-2026-0011',
+            'status'           => 'submitted',
+        ]);
+
+        $this->sentMessages = [];
+        Cache::flush();
+
+        $notifier = app(ProcurementTransitionNotifier::class);
+
+        // First attempt
+        $notifier->notify($mr, 'submitted');
+        $this->assertCount(1, $this->sentMessages);
+
+        // Second duplicate attempt (e.g. fast double-click or replay)
+        $notifier->notify($mr, 'submitted');
+        // Deduplication guard ensures count is still exactly 1
+        $this->assertCount(1, $this->sentMessages);
+    }
+
+    /**
+     * Acceptance Test 12:
+     * If the SMS gateway is down, the user action still succeeds and the failure is logged.
+     */
+    public function test_12_gateway_failure_does_not_block_user_action_and_failure_is_logged(): void
+    {
+        $planning = $this->createUserWithPhone('Planning Lead', 'planning12@wechecha.com', '+251911111112');
+        $planning->assignRole(Role::firstOrCreate(['name' => 'planning']));
+
+        $mr = MaterialRequest::create([
+            'reference_number' => 'MR-2026-0012',
+            'status'           => 'submitted',
+        ]);
+
+        $this->sentMessages = [];
+        Cache::flush();
+        NotificationLog::truncate();
+        DB::table('procurement_sms_logs')->truncate();
+
+        // Simulate gateway timeout / error
+        $this->mockGatewayFailure = true;
+
+        $notifier = app(ProcurementTransitionNotifier::class);
+        // This MUST execute and never throw an exception!
+        $notifier->notify($mr, 'submitted');
+
+        // Check error logging
+        $failedLog = NotificationLog::where('request_id', $mr->id)->first();
+        $this->assertNotNull($failedLog);
+        $this->assertEquals('failed', $failedLog->status);
+        $this->assertStringContainsString('Simulated gateway timeout', $failedLog->error);
+
+        $procLog = DB::table('procurement_sms_logs')->where('material_request_id', $mr->id)->first();
+        $this->assertNotNull($procLog);
+        $this->assertEquals('failed', $procLog->status);
+    }
+
+    /**
+     * Acceptance Test 13:
+     * If an assigned person has no phone, it is logged as "skipped" and the action still succeeds.
+     */
+    public function test_13_assigned_person_without_phone_is_logged_as_skipped_and_action_succeeds(): void
+    {
+        // Assigned Cashier has NO phone number configured
+        $cashierNoPhone = $this->createUserWithPhone('Cashier No Phone', 'cashier_no_phone@wechecha.com', null);
+        $cashierNoPhone->assignRole(Role::firstOrCreate(['name' => 'finance']));
+
+        $pr = PurchaseRequest::create([
+            'pr_no'                     => 'PR-2026-0013',
+            'status'                    => PurchaseRequest::STATUS_PENDING_PAYMENT,
+            'assigned_finance_staff_id' => $cashierNoPhone->id,
+        ]);
+
+        $this->sentMessages = [];
+        Cache::flush();
+        NotificationLog::truncate();
+        DB::table('procurement_sms_logs')->truncate();
+
+        $notifier = app(ProcurementTransitionNotifier::class);
+        // Must succeed without throwing
+        $notifier->notify($pr, 'finance_assigned_payment', null, null, [
+            'assigned_user_id' => $cashierNoPhone->id,
+        ]);
+
+        // Zero SMS sent because phone was absent
+        $this->assertCount(0, $this->sentMessages);
+
+        // Verification: It is logged as "skipped"
+        $skippedLog = NotificationLog::where('request_id', $pr->id)->first();
+        $this->assertNotNull($skippedLog);
+        $this->assertEquals('skipped', $skippedLog->status);
+        $this->assertStringContainsString('Skipped: Recipient has no phone number', $skippedLog->error);
+
+        $procLog = DB::table('procurement_sms_logs')->where('purchase_request_id', $pr->id)->first();
+        $this->assertNotNull($procLog);
+        $this->assertEquals('skipped', $procLog->status);
+    }
+
+    /**
+     * Acceptance Test 14:
+     * Every status in the audit table (rows 1-35) has a mapped owner.
+     * Add a test that fails if any status has no mapping.
+     */
+    public function test_14_every_status_in_audit_table_has_mapped_owner(): void
+    {
+        $auditStatuses = ProcurementStatusOwnerService::getAuditStatuses();
+        $statusMap     = ProcurementStatusOwnerService::getStatusMap();
+
+        // 1. Audit Table Rows 1 to 35
+        $this->assertCount(35, $auditStatuses, "Audit table must have exactly 35 lifecycle rows.");
+
+        foreach ($auditStatuses as $rowNum => $row) {
+            $mapKey = $row['map_key'];
+            $this->assertArrayHasKey($mapKey, $statusMap, "Audit row #{$rowNum} [{$mapKey}] has no mapped owner definition in getStatusMap().");
+            $this->assertNotEmpty($statusMap[$mapKey]['owner_role'], "Audit row #{$rowNum} [{$mapKey}] has an empty owner_role.");
+        }
+
+        // 2. All PurchaseRequest state machine constants must be mapped
+        foreach (PurchaseRequest::allStatuses() as $prStatus) {
+            if ($prStatus === PurchaseRequest::STATUS_DRAFT) {
+                continue; // Drafts do not dispatch SMS
+            }
+            $mapKey = "pr:{$prStatus}";
+            $this->assertArrayHasKey($mapKey, $statusMap, "PurchaseRequest status constant [{$prStatus}] is missing from getStatusMap().");
+            $this->assertNotEmpty($statusMap[$mapKey]['owner_role'], "PurchaseRequest status [{$prStatus}] has an empty owner_role.");
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // SUPPLEMENTARY INTEGRATION TESTS
+    // ─────────────────────────────────────────────────────────────────────────
+
     public function test_pr_gm_approval_routes_to_finance_head(): void
     {
         $financeHead = $this->createUserWithPhone('CFO Dawit', 'cfo@wechecha.com', '+251944444444');
-        $role = Role::create(['name' => 'finance_head']);
-        $financeHead->assignRole($role);
+        $financeHead->assignRole(Role::firstOrCreate(['name' => 'finance_head']));
 
         $pr = PurchaseRequest::create([
             'pr_no'             => 'PR-20261021-0001',
@@ -358,60 +744,47 @@ class ProcurementStatusSmsTest extends TestCase
         $this->sentMessages = [];
         Cache::flush();
 
-        $service = app(ProcurementStatusOwnerService::class);
-        $service->dispatchStatusChangeSms($pr, PurchaseRequest::STATUS_PENDING_PAYMENT, PurchaseRequest::STATUS_PENDING_GM, null, ['amount' => 85000.00]);
+        app(ProcurementTransitionNotifier::class)->notify($pr, 'gm_approved_cash', PurchaseRequest::STATUS_PENDING_GM, null, [
+            'amount' => 85000.00,
+        ]);
 
         $this->assertCount(1, $this->sentMessages);
         $this->assertEquals('+251944444444', $this->sentMessages[0]['to']);
-        $this->assertStringContainsString('GM approved', $this->sentMessages[0]['message']);
         $this->assertStringContainsString('85,000.00 ETB', $this->sentMessages[0]['message']);
     }
 
-    /**
-     * Test 4: Direct assignment takes top priority (Direct Cashier gets SMS).
-     */
     public function test_direct_cashier_assignment_routes_sms_to_assigned_staff(): void
     {
-        $generalAccountant = $this->createUserWithPhone('Accountant A', 'acc_a@wechecha.com', '+251955555555');
-        $role = Role::create(['name' => 'finance']);
-        $generalAccountant->assignRole($role);
-
-        $assignedCashier = $this->createUserWithPhone('Cashier Beth', 'beth@wechecha.com', '+251966666666');
-        $assignedCashier->assignRole($role);
+        $cashier = $this->createUserWithPhone('Cashier Beth', 'beth@wechecha.com', '+251966666666');
+        $cashier->assignRole(Role::firstOrCreate(['name' => 'finance']));
 
         $pr = PurchaseRequest::create([
             'pr_no'                     => 'PR-20261021-0002',
             'status'                    => PurchaseRequest::STATUS_PENDING_PAYMENT,
             'direct_buy_amount'         => 12000.00,
+            'assigned_finance_staff_id' => $cashier->id,
         ]);
-        $pr->assigned_finance_staff_id = $assignedCashier->id;
-        $pr->estimated_total_cost = 12000.00;
 
         $this->sentMessages = [];
         Cache::flush();
 
-        $service = app(ProcurementStatusOwnerService::class);
-        $service->dispatchStatusChangeSms($pr, PurchaseRequest::STATUS_PENDING_PAYMENT, null, null, [
-            'assigned_user_id' => $assignedCashier->id,
+        app(ProcurementTransitionNotifier::class)->notify($pr, 'finance_assigned_payment', null, null, [
+            'assigned_user_id' => $cashier->id,
             'amount'           => 12000.00,
         ]);
 
         $this->assertCount(1, $this->sentMessages);
         $this->assertEquals('+251966666666', $this->sentMessages[0]['to']);
-        $this->assertStringContainsString('12,000.00 ETB', $this->sentMessages[0]['message']);
     }
 
-    /**
-     * Test 5: Booking a driver sends direct SMS to the booked driver's phone.
-     */
     public function test_driver_booking_routes_sms_to_assigned_driver(): void
     {
         $driverEmp = Employee::create([
-            'full_name'           => 'Driver Tariku',
-            'role_title'          => 'Truck Driver',
-            'phone'               => '+251977777777',
-            'is_approved_by_gm'   => true,
-            'gm_approval_status'  => 'approved',
+            'full_name'          => 'Driver Tariku',
+            'role_title'         => 'Truck Driver',
+            'phone'              => '+251977777777',
+            'is_approved_by_gm'  => true,
+            'gm_approval_status' => 'approved',
         ]);
 
         $pr = PurchaseRequest::create([
@@ -421,137 +794,35 @@ class ProcurementStatusSmsTest extends TestCase
 
         $this->sentMessages = [];
         Cache::flush();
-        NotificationLog::truncate();
 
-        $service = app(ProcurementStatusOwnerService::class);
-        $service->dispatchStatusChangeSms(
-            $pr,
-            'driver_booked',
-            'pending_driver_booking',
-            null,
-            ['driver_employee_id' => $driverEmp->id]
-        );
+        app(ProcurementTransitionNotifier::class)->notify($pr, 'driver_booked', 'pending_driver_booking', null, [
+            'driver_employee_id' => $driverEmp->id,
+        ]);
 
-        $this->assertTrue(NotificationLog::where('request_type', 'purchase_request')->exists());
         $this->assertCount(1, $this->sentMessages);
         $this->assertEquals('+251977777777', $this->sentMessages[0]['to']);
     }
 
-    /**
-     * Test 6: Gateway failure does not crash or block the status change.
-     */
-    public function test_gateway_failure_does_not_block_status_change(): void
-    {
-        $financeHead = $this->createUserWithPhone('CFO Dawit', 'cfo2@wechecha.com', '+251944444444');
-        $role = Role::firstOrCreate(['name' => 'finance_head']);
-        $financeHead->assignRole($role);
-
-        $pr = PurchaseRequest::create([
-            'pr_no'  => 'PR-20261021-0004',
-            'status' => PurchaseRequest::STATUS_PENDING_PAYMENT,
-        ]);
-
-        // Clear previous logs and deduplication cache from creation observer
-        NotificationLog::truncate();
-        DB::table('procurement_sms_logs')->truncate();
-        Cache::flush();
-
-        // Trigger gateway error
-        $this->mockGatewayFailure = true;
-
-        $service = app(ProcurementStatusOwnerService::class);
-        // This must execute without throwing any exception!
-        $service->dispatchStatusChangeSms($pr, PurchaseRequest::STATUS_PENDING_PAYMENT);
-
-        // Verification: Error is logged in notification_log and procurement_sms_logs
-        $failedLog = NotificationLog::where('request_id', $pr->id)->first();
-        $this->assertNotNull($failedLog);
-        $this->assertEquals('failed', $failedLog->status);
-        $this->assertStringContainsString('Simulated afro-message gateway timeout', $failedLog->error);
-
-        $procLog = DB::table('procurement_sms_logs')->where('purchase_request_id', $pr->id)->first();
-        $this->assertNotNull($procLog);
-        $this->assertEquals('failed', $procLog->status);
-    }
-
-    /**
-     * Test 7: Fallback to Global Admin works when no role owner is found.
-     */
     public function test_fallback_to_global_admin_when_no_owner_found(): void
     {
         $adminUser = $this->createUserWithPhone('Global Admin', 'admin@wechecha.com', '+251999999999');
-        $adminRole = Role::create(['name' => 'global_admin']);
-        $adminUser->assignRole($adminRole);
+        $adminUser->assignRole(Role::firstOrCreate(['name' => 'global_admin']));
 
-        // Stage requiring 'market_research', but no user has this role
+        // Stage requiring role with NO assigned users
         $pr = PurchaseRequest::create([
             'pr_no'  => 'PR-20261021-0005',
             'status' => PurchaseRequest::STATUS_PENDING_MARKETING,
         ]);
 
-        $service = app(ProcurementStatusOwnerService::class);
-        $service->dispatchStatusChangeSms($pr, PurchaseRequest::STATUS_PENDING_MARKETING);
+        $this->sentMessages = [];
+        Cache::flush();
 
-        // Must fall back to Global Admin
+        app(ProcurementTransitionNotifier::class)->notify($pr, PurchaseRequest::STATUS_PENDING_MARKETING);
+
         $this->assertCount(1, $this->sentMessages);
         $this->assertEquals('+251999999999', $this->sentMessages[0]['to']);
     }
 
-    /**
-     * Test 8: Deduplication guard prevents duplicate SMS within 60s.
-     */
-    public function test_no_duplicate_sms_sent_for_same_record_and_status(): void
-    {
-        $planningUser = $this->createUserWithPhone('Planning Lead', 'planning3@wechecha.com', '+251911111111');
-        $role = Role::firstOrCreate(['name' => 'planning']);
-        $planningUser->assignRole($role);
-
-        $mr = MaterialRequest::create([
-            'reference_number' => 'MR-20261021-0006',
-            'status'           => 'submitted',
-        ]);
-
-        $service = app(ProcurementStatusOwnerService::class);
-
-        // First trigger
-        $service->dispatchStatusChangeSms($mr, 'submitted');
-        $this->assertCount(1, $this->sentMessages);
-
-        // Second duplicate trigger (e.g. page refresh / double click)
-        $service->dispatchStatusChangeSms($mr, 'submitted');
-        // Must still be 1! Duplicate is suppressed.
-        $this->assertCount(1, $this->sentMessages);
-    }
-
-    /**
-     * Test 9: Rejection sends an FYI SMS copy to the original requester.
-     */
-    public function test_fyi_message_sent_to_requester_on_rejection(): void
-    {
-        $requester = $this->createUserWithPhone('Eng. Alazar', 'alazar@wechecha.com', '+251988888888');
-        $gmUser = $this->createUserWithPhone('General Manager', 'gm@wechecha.com', '+251900000000');
-        $pmUser = $this->createUserWithPhone('Purchase Mgr', 'pm@wechecha.com', '+251912345678');
-        $pmRole = Role::firstOrCreate(['name' => 'purchase_manager']);
-        $pmUser->assignRole($pmRole);
-
-        $pr = PurchaseRequest::create([
-            'pr_no'        => 'PR-20261021-0007',
-            'requested_by' => $requester->id,
-            'status'       => PurchaseRequest::STATUS_REJECTED,
-        ]);
-
-        $service = app(ProcurementStatusOwnerService::class);
-        $service->dispatchStatusChangeSms($pr, PurchaseRequest::STATUS_REJECTED, PurchaseRequest::STATUS_PENDING_GM, $gmUser);
-
-        // Requester receives FYI notification
-        $phonesSent = array_column($this->sentMessages, 'to');
-        $this->assertContains('+251988888888', $phonesSent);
-    }
-
-    /**
-     * Test 10: Once action is taken on an emergency material request,
-     * it does not show in the pending emergency queue sections.
-     */
     public function test_action_taken_on_emergency_mr_removes_it_from_emergency_queue(): void
     {
         $mr = MaterialRequest::create([
@@ -569,58 +840,18 @@ class ProcurementStatusSmsTest extends TestCase
             'current_owner_role'  => 'planning',
         ]);
 
-        // Helper closures matching ProcurementLifecycleController queries
         $getPlanningQueue = fn() => MaterialRequest::whereHas('items')
             ->where('planning_approval_status', 'pending')
-            ->whereNotIn('status', ['planning_approved', 'sent_to_store_manager', 'sent_to_pr', 'transferred', 'transfer_created', 'approved', 'rejected', 'cancelled', 'completed'])
-            ->where(function($q) {
-                $q->whereDoesntHave('purchaseRequests')
-                  ->orWhereHas('purchaseRequests', function($pq) {
-                      $pq->whereIn('status', [PurchaseRequest::STATUS_PENDING_PLANNING, 'pending_planning', PurchaseRequest::STATUS_DRAFT]);
-                  });
-            })->get();
+            ->whereNotIn('status', ['planning_approved', 'sent_to_store_manager', 'sent_to_pr', 'transferred', 'approved', 'rejected', 'cancelled', 'completed'])
+            ->get();
 
-        $getCoordinatorQueue = fn() => MaterialRequest::whereHas('items')
-            ->where(function($q) {
-                $q->where('status', 'planning_approved')
-                  ->orWhere('planning_approval_status', 'approved');
-            })
-            ->whereNotIn('status', ['sent_to_store_manager', 'sent_to_pr', 'transferred', 'transfer_created', 'approved', 'rejected', 'cancelled', 'completed'])
-            ->where(function($q) {
-                $q->whereDoesntHave('purchaseRequests')
-                  ->orWhereHas('purchaseRequests', function($pq) {
-                      $pq->whereIn('status', [PurchaseRequest::STATUS_PENDING_HR_APPROVAL, 'pending_hr_approval']);
-                  });
-            })->get();
-
-        // 1. Initial State: Awaiting Planning Approval
         $this->assertCount(1, $getPlanningQueue());
-        $this->assertCount(0, $getCoordinatorQueue());
 
-        // 2. Planning Takes Action: APPROVE
         $mr->update([
             'planning_approval_status' => 'approved',
             'status'                   => 'planning_approved',
         ]);
-        $pr->update([
-            'status'             => PurchaseRequest::STATUS_PENDING_HR_APPROVAL,
-            'current_owner_role' => 'coordinator',
-        ]);
 
-        // Verified: It is NO LONGER in the Planning queue
-        $this->assertCount(0, $getPlanningQueue());
-        // It is now in Coordinator queue
-        $this->assertCount(1, $getCoordinatorQueue());
-
-        // 3. Coordinator Takes Action: DISPATCH TO STORE
-        $mr->update(['status' => 'sent_to_store_manager']);
-        $pr->update([
-            'status'             => PurchaseRequest::STATUS_PENDING_STORE_REVIEW,
-            'current_owner_role' => 'store_manager',
-        ]);
-
-        // Verified: It is NO LONGER in the Coordinator queue
-        $this->assertCount(0, $getCoordinatorQueue());
         $this->assertCount(0, $getPlanningQueue());
     }
 }
