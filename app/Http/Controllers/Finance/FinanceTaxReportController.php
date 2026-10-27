@@ -207,6 +207,52 @@ class FinanceTaxReportController extends Controller
                 });
             }
 
+            if (Schema::hasTable('receipt_items')) {
+                Schema::table('receipt_items', function (\Illuminate\Database\Schema\Blueprint $table) {
+                    if (!Schema::hasColumn('receipt_items', 'uom')) {
+                        $table->string('uom', 50)->default('7');
+                    }
+                    if (!Schema::hasColumn('receipt_items', 'calendar_type')) {
+                        $table->string('calendar_type', 10)->default('E');
+                    }
+                    if (!Schema::hasColumn('receipt_items', 'purc_type')) {
+                        $table->string('purc_type', 50)->nullable();
+                    }
+                    if (!Schema::hasColumn('receipt_items', 'qty')) {
+                        $table->decimal('qty', 15, 2)->default(1.00);
+                    }
+                    if (!Schema::hasColumn('receipt_items', 'unit_price')) {
+                        $table->decimal('unit_price', 15, 2)->default(0.00);
+                    }
+                });
+            }
+
+            if (Schema::hasTable('expense_hub_vat_decisions')) {
+                Schema::table('expense_hub_vat_decisions', function (\Illuminate\Database\Schema\Blueprint $table) {
+                    if (!Schema::hasColumn('expense_hub_vat_decisions', 'uom')) {
+                        $table->string('uom', 20)->default('7');
+                    }
+                    if (!Schema::hasColumn('expense_hub_vat_decisions', 'calendar_type')) {
+                        $table->string('calendar_type', 5)->default('E');
+                    }
+                    if (!Schema::hasColumn('expense_hub_vat_decisions', 'quantity')) {
+                        $table->decimal('quantity', 12, 2)->default(1.00);
+                    }
+                    if (!Schema::hasColumn('expense_hub_vat_decisions', 'unit_price')) {
+                        $table->decimal('unit_price', 18, 2)->default(0.00);
+                    }
+                    if (!Schema::hasColumn('expense_hub_vat_decisions', 'custom_seller_name')) {
+                        $table->string('custom_seller_name', 255)->nullable();
+                    }
+                    if (!Schema::hasColumn('expense_hub_vat_decisions', 'custom_receipt_date')) {
+                        $table->date('custom_receipt_date')->nullable();
+                    }
+                    if (!Schema::hasColumn('expense_hub_vat_decisions', 'custom_item_description')) {
+                        $table->string('custom_item_description', 255)->nullable();
+                    }
+                });
+            }
+
             // Sync/heal: If any IncomeRecord or ExpenseRequest was created AFTER a TaxSettlement was paid/created,
             // but was inadvertently linked or marked settled, restore it to active/unsettled!
             // When a month is cleared, subsequent new transactions must start adding up fresh from zero.
@@ -255,7 +301,7 @@ class FinanceTaxReportController extends Controller
                 }
             }
 
-            // Sync all ExpenseHubVatDecisions with vat_status = vat_applies or has_withholding = true so they appear in VAT & Withholding Tax Deductions Ledger
+            // Sync ExpenseHubVatDecisions that do not yet have a corresponding Receipt record (avoids overwriting user edits)
             if (Schema::hasTable('expense_hub_vat_decisions') && Schema::hasTable('receipts')) {
                 $decQuery = \App\Models\ExpenseHubVatDecision::query();
                 $decQuery->where(function ($q) {
@@ -266,7 +312,26 @@ class FinanceTaxReportController extends Controller
                 });
                 $decisions = $decQuery->get();
                 foreach ($decisions as $dec) {
-                    \App\Http\Controllers\Finance\ExpenseHubController::syncVatDecisionToLedger($dec);
+                    $pClass = match($dec->source_type) {
+                        'expense_request'       => \App\Models\ExpenseRequest::class,
+                        'procurement_payment'   => \App\Models\ProcurementPayment::class,
+                        'credit_store_payment'  => \App\Models\CreditStorePayment::class,
+                        'petty_cash_purchase'   => \App\Models\PettyCashMaterialPurchase::class,
+                        'vehicle_fuel_request'  => \App\Models\VehicleFuelRequest::class,
+                        default                 => null,
+                    };
+                    $hasReceipt = false;
+                    if ($pClass && Schema::hasColumn('receipts', 'purchasable_type')) {
+                        $hasReceipt = \App\Models\Receipt::where('purchasable_type', $pClass)
+                            ->where('purchasable_id', $dec->source_id)
+                            ->exists();
+                    }
+                    if (!$hasReceipt && !empty($dec->custom_fs_no)) {
+                        $hasReceipt = \App\Models\Receipt::where('fs_no', $dec->custom_fs_no)->exists();
+                    }
+                    if (!$hasReceipt) {
+                        \App\Http\Controllers\Finance\ExpenseHubController::syncVatDecisionToLedger($dec);
+                    }
                 }
             }
 
@@ -1544,6 +1609,23 @@ class FinanceTaxReportController extends Controller
                 $vatRate = 0.0;
             }
 
+            $rItem = null;
+            if ($r && Schema::hasTable('receipt_items')) {
+                $rItem = $r->relationLoaded('items') ? $r->items->first() : $r->items()->first();
+            }
+
+            $itemDesc = $rItem?->item_description
+                ?: ($dec?->custom_item_description
+                ?: (!empty($parsed['item_description']) ? $parsed['item_description']
+                : ($item->description ?: '')));
+
+            $uom = (string)($rItem?->uom ?: ($dec?->uom ?: (!empty($parsed['uom']) ? $parsed['uom'] : '7')));
+            $qty = (float)($rItem?->qty ?: ($dec?->quantity ?: (!empty($parsed['qty']) ? $parsed['qty'] : 1.00)));
+            $unitPrice = (float)($rItem?->unit_price ?: ($dec?->unit_price ?: (!empty($parsed['unit_price']) ? $parsed['unit_price'] : ($qty > 0 ? round($baseAmount / $qty, 2) : $baseAmount))));
+            $vatCategory = (string)($rItem?->vat_category ?: ($dec?->vat_category ?: (!empty($parsed['vat_category']) ? $parsed['vat_category'] : ($vatAmount > 0 ? 'G' : 'E'))));
+            $calendarType = (string)($rItem?->calendar_type ?: ($dec?->calendar_type ?: (!empty($parsed['calendar_type']) ? $parsed['calendar_type'] : 'E')));
+            $purchaseType = $rItem?->purchase_type ?: ($dec?->purchase_type ?: (!empty($parsed['purchase_type']) ? $parsed['purchase_type'] : 3));
+
             return [
                 'id'                 => $item->id,
                 'request_number'     => $item->request_number,
@@ -1566,7 +1648,7 @@ class FinanceTaxReportController extends Controller
                 'withholding_receipt_url'    => $whtSlipUrl,
                 'withholding_settled'        => (bool)($item->withholding_settled ?? false),
                 'net_disbursed'      => $netDisbursed,
-                'description'        => $item->description ?: '-',
+                'description'        => $itemDesc ?: ($item->description ?: '-'),
                 'attachment_url'     => $receiptSlipUrl ?: $item->attachment_url,
                 'status'             => $item->status,
                 'is_settled'         => (bool)$item->vat_settled,
@@ -1590,6 +1672,15 @@ class FinanceTaxReportController extends Controller
                 'is_fuel'                 => $isFuel,
                 'is_verified_without_receipt' => $isVerifiedNoRec,
                 'has_receipt'                 => $hasReceipt,
+                'uom'                         => $uom,
+                'qty'                         => $qty,
+                'unit_price'                  => $unitPrice,
+                'total_value'                 => $baseAmount,
+                'vat_category'                => $vatCategory,
+                'calendar_type'               => $calendarType,
+                'purchase_type'               => $purchaseType,
+                'project_id'                  => $item->project_id ?: ($r?->project_id ?: null),
+                'item_description'            => $itemDesc,
             ];
         });
 
@@ -1657,6 +1748,28 @@ class FinanceTaxReportController extends Controller
                         }
                     }
 
+                    $pcReceipt = null;
+                    if (Schema::hasTable('receipts')) {
+                        $pcReceipt = \App\Models\Receipt::where('purchasable_type', \App\Models\PettyCashMaterialPurchase::class)
+                            ->where('purchasable_id', $p->id)
+                            ->latest('id')->first();
+                    }
+                    $pcDec = null;
+                    if (Schema::hasTable('expense_hub_vat_decisions')) {
+                        $pcDec = \App\Models\ExpenseHubVatDecision::where('source_type', 'petty_cash_purchase')
+                            ->where('source_id', $p->id)
+                            ->latest('id')->first();
+                    }
+                    $pcParsed = is_string($pcReceipt?->parsed_data ?? null) ? (json_decode($pcReceipt->parsed_data, true) ?: []) : (array)($pcReceipt?->parsed_data ?? []);
+                    $pcItem = $pcReceipt?->items?->first();
+                    $pcUom = (string)($pcItem?->uom ?: ($pcDec?->uom ?: (!empty($pcParsed['uom']) ? $pcParsed['uom'] : '7')));
+                    $pcQty = (float)($pcItem?->qty ?: ($pcDec?->quantity ?: (!empty($pcParsed['qty']) ? $pcParsed['qty'] : 1.00)));
+                    $pcUnitPrice = (float)($pcItem?->unit_price ?: ($pcDec?->unit_price ?: (!empty($pcParsed['unit_price']) ? $pcParsed['unit_price'] : ($pcQty > 0 ? round($pGross / $pcQty, 2) : $pGross))));
+                    $pcVatCat = (string)($pcItem?->vat_category ?: ($pcDec?->vat_category ?: (!empty($pcParsed['vat_category']) ? $pcParsed['vat_category'] : 'E')));
+                    $pcCalType = (string)($pcItem?->calendar_type ?: ($pcDec?->calendar_type ?: (!empty($pcParsed['calendar_type']) ? $pcParsed['calendar_type'] : 'E')));
+                    $pcPurchType = $pcItem?->purchase_type ?: ($pcDec?->purchase_type ?: (!empty($pcParsed['purchase_type']) ? $pcParsed['purchase_type'] : 6));
+                    $pcDesc = $pcItem?->item_description ?: ($pcDec?->custom_item_description ?: (!empty($pcParsed['item_description']) ? $pcParsed['item_description'] : $desc));
+
                     $formattedExpenses->push([
                         'id'                 => 'PC-' . $p->id,
                         'request_number'     => $refNo,
@@ -1679,7 +1792,7 @@ class FinanceTaxReportController extends Controller
                         'withholding_receipt_url'    => null,
                         'withholding_settled'        => false,
                         'net_disbursed'      => $pGross,
-                        'description'        => $desc,
+                        'description'        => $pcDesc ?: $desc,
                         'attachment_url'     => $attachmentUrl,
                         'status'             => $p->status ?: 'completed',
                         'is_settled'         => false,
@@ -1698,11 +1811,20 @@ class FinanceTaxReportController extends Controller
                         'encoded_by'              => 'wechacha',
                         'receipt_date_ec'         => $pDate ? EthiopianDate::formatDateEc($pDate, 'd-m-Y') : EthiopianDate::formatDateEc(now(), 'd-m-Y'),
                         'encoding_date_ec'        => EthiopianDate::formatDateEc($p->created_at ?: now(), 'd-m-Y'),
-                        'receipt_id'              => null,
+                        'receipt_id'              => $pcReceipt?->id,
                         'receipt_slip_url'        => $attachmentUrl,
                         'is_fuel'                 => false,
                         'is_verified_without_receipt' => false,
                         'has_receipt'                 => (!empty($attachmentUrl) || !empty($p->receipt_no) || !empty($p->fs_no)),
+                        'uom'                         => $pcUom,
+                        'qty'                         => $pcQty,
+                        'unit_price'                  => $pcUnitPrice,
+                        'total_value'                 => $pGross,
+                        'vat_category'                => $pcVatCat,
+                        'calendar_type'               => $pcCalType,
+                        'purchase_type'               => $pcPurchType,
+                        'project_id'                  => $p->store?->project_id ?: null,
+                        'item_description'            => $pcDesc,
                     ]);
                 }
             } catch (\Throwable $e) {
@@ -1855,6 +1977,15 @@ class FinanceTaxReportController extends Controller
 
                     $purcType = !empty($parsed['purc_type']) ? $parsed['purc_type'] : ($tr->category === 'fuel' ? 'PUR_GD' : 'PUR_GD');
 
+                    $trItem = $tr->relationLoaded('items') ? $tr->items->first() : $tr->items()->first();
+                    $trUom = (string)($trItem?->uom ?: (!empty($parsed['uom']) ? $parsed['uom'] : '7'));
+                    $trQty = (float)($trItem?->qty ?: (!empty($parsed['qty']) ? $parsed['qty'] : 1.00));
+                    $trUnitPrice = (float)($trItem?->unit_price ?: (!empty($parsed['unit_price']) ? $parsed['unit_price'] : ($trQty > 0 ? round($trGross / $trQty, 2) : $trGross)));
+                    $trVatCat = (string)($trItem?->vat_category ?: (!empty($parsed['vat_category']) ? $parsed['vat_category'] : 'E'));
+                    $trCalType = (string)($trItem?->calendar_type ?: (!empty($parsed['calendar_type']) ? $parsed['calendar_type'] : 'E'));
+                    $trPurchType = $trItem?->purchase_type ?: (!empty($parsed['purchase_type']) ? $parsed['purchase_type'] : 6);
+                    $trDesc = $trItem?->item_description ?: (!empty($parsed['item_description']) ? $parsed['item_description'] : ($tr->description ?: 'TAS Purchase Receipt (0% VAT)'));
+
                     $formattedExpenses->push([
                         'id'                      => 'REC-' . $tr->id,
                         'request_number'          => $tr->receipt_number ?: ('RCP-' . $tr->id),
@@ -1877,7 +2008,7 @@ class FinanceTaxReportController extends Controller
                         'withholding_receipt_url'    => null,
                         'withholding_settled'        => false,
                         'net_disbursed'           => $trGross,
-                        'description'             => $tr->description ?: 'TAS Purchase Receipt (0% VAT)',
+                        'description'             => $trDesc,
                         'attachment_url'          => $slipUrl,
                         'status'                  => 'approved',
                         'is_settled'              => false,
@@ -1901,6 +2032,15 @@ class FinanceTaxReportController extends Controller
                         'is_fuel'                 => ($tr->category === 'fuel'),
                         'is_verified_without_receipt' => false,
                         'has_receipt'                 => true,
+                        'uom'                         => $trUom,
+                        'qty'                         => $trQty,
+                        'unit_price'                  => $trUnitPrice,
+                        'total_value'                 => $trGross,
+                        'vat_category'                => $trVatCat,
+                        'calendar_type'               => $trCalType,
+                        'purchase_type'               => $trPurchType,
+                        'project_id'                  => $tr->project_id ?: null,
+                        'item_description'            => $trDesc,
                     ]);
                 }
             } catch (\Throwable $e) {
@@ -1970,12 +2110,44 @@ class FinanceTaxReportController extends Controller
                         }
                     }
 
+                    $ppReceipt = null;
+                    if (Schema::hasTable('receipts')) {
+                        $ppReceipt = \App\Models\Receipt::where(function ($rq) use ($pp) {
+                            $rq->where(function ($sub) use ($pp) {
+                                $sub->whereIn('purchasable_type', [\App\Models\ProcurementPayment::class, 'procurement_payment', 'ProcurementPayment'])
+                                    ->where('purchasable_id', $pp->id);
+                            });
+                        })->latest('id')->first();
+                        if ($ppReceipt) {
+                            if (!empty($ppReceipt->vendor_name)) $supplierName = $ppReceipt->vendor_name;
+                            if (!empty($ppReceipt->vendor_tin))  $supplierTin  = $ppReceipt->vendor_tin;
+                            if (!empty($ppReceipt->file_path)) {
+                                try {
+                                    $ppSlipUrl = $ppReceipt->file_url ?: \App\Services\FileUploadService::url($ppReceipt->file_path);
+                                } catch (\Throwable $e) {
+                                    $ppSlipUrl = asset('storage/' . ltrim($ppReceipt->file_path, '/'));
+                                }
+                            }
+                        }
+                    }
+
                     $ppDec = null;
                     if (Schema::hasTable('expense_hub_vat_decisions')) {
                         $ppDec = \App\Models\ExpenseHubVatDecision::where('source_type', 'procurement_payment')
                             ->where('source_id', $pp->id)
                             ->latest('id')
                             ->first();
+                        if ($ppDec) {
+                            if (!empty($ppDec->custom_seller_name)) $supplierName = $ppDec->custom_seller_name;
+                            if (!empty($ppDec->custom_seller_tin))  $supplierTin  = $ppDec->custom_seller_tin;
+                            if (!empty($ppDec->receipt_path) && empty($ppSlipUrl)) {
+                                try {
+                                    $ppSlipUrl = \App\Services\FileUploadService::url($ppDec->receipt_path);
+                                } catch (\Throwable $e) {
+                                    $ppSlipUrl = asset('storage/' . ltrim($ppDec->receipt_path, '/'));
+                                }
+                            }
+                        }
                     }
                     $isVerifiedNoRec = (bool)($ppDec?->is_verified_without_receipt ?? false);
                     $hasRec = !empty($ppSlipUrl) || !empty($pp->withholding_receipt);
@@ -1984,13 +2156,26 @@ class FinanceTaxReportController extends Controller
                         $ppVat = 0.0;
                     }
 
-                    $desc = $pp->notes;
+                    $desc = $ppReceipt?->description ?: ($ppDec?->custom_item_description ?: $pp->notes);
                     if (empty($desc) && $pr && $pr->items && $pr->items->isNotEmpty()) {
                         $desc = $pr->items->map(fn($it) => ($it->product?->name ?: ($it->specifications ?: 'Item')) . ' (' . (float)$it->quantity . ' ' . ($it->unit ?: 'pcs') . ')')->take(3)->implode(', ');
                     }
                     if (empty($desc)) {
                         $desc = 'Procurement Purchase Settlement';
                     }
+
+                    $ppFsNo  = $ppReceipt?->fs_no ?: ($ppDec?->custom_fs_no ?: '-');
+                    $ppMrcNo = $ppReceipt?->mrc_no ?: ($ppDec?->custom_mrc_no ?: '-');
+
+                    $ppItem = $ppReceipt?->items?->first();
+                    $ppParsed = is_string($ppReceipt?->parsed_data ?? null) ? (json_decode($ppReceipt->parsed_data, true) ?: []) : (array)($ppReceipt?->parsed_data ?? []);
+                    $ppUom = (string)($ppItem?->uom ?: ($ppDec?->uom ?: (!empty($ppParsed['uom']) ? $ppParsed['uom'] : '7')));
+                    $ppQty = (float)($ppItem?->qty ?: ($ppDec?->quantity ?: (!empty($ppParsed['qty']) ? $ppParsed['qty'] : 1.00)));
+                    $ppUnitPrice = (float)($ppItem?->unit_price ?: ($ppDec?->unit_price ?: (!empty($ppParsed['unit_price']) ? $ppParsed['unit_price'] : ($ppQty > 0 ? round($ppBase / $ppQty, 2) : $ppBase))));
+                    $ppVatCat = (string)($ppItem?->vat_category ?: ($ppDec?->vat_category ?: (!empty($ppParsed['vat_category']) ? $ppParsed['vat_category'] : ($ppVat > 0 ? 'G' : 'E'))));
+                    $ppCalType = (string)($ppItem?->calendar_type ?: ($ppDec?->calendar_type ?: (!empty($ppParsed['calendar_type']) ? $ppParsed['calendar_type'] : 'E')));
+                    $ppPurchType = $ppItem?->purchase_type ?: ($ppDec?->purchase_type ?: (!empty($ppParsed['purchase_type']) ? $ppParsed['purchase_type'] : 3));
+                    $ppDesc = $ppItem?->item_description ?: ($ppDec?->custom_item_description ?: (!empty($ppParsed['item_description']) ? $ppParsed['item_description'] : $desc));
 
                     $formattedExpenses->push([
                         'id'                         => 'PROC-' . $pp->id,
@@ -2014,7 +2199,7 @@ class FinanceTaxReportController extends Controller
                         'withholding_receipt_url'    => !empty($pp->withholding_receipt) ? asset('storage/' . ltrim($pp->withholding_receipt, '/')) : null,
                         'withholding_settled'        => false,
                         'net_disbursed'              => $ppNet,
-                        'description'                => $desc,
+                        'description'                => $ppDesc ?: $desc,
                         'attachment_url'             => $ppSlipUrl,
                         'status'                     => $pp->status ?: 'paid',
                         'is_settled'                 => false,
@@ -2025,19 +2210,28 @@ class FinanceTaxReportController extends Controller
                         'purchase_category'          => ($ppVat > 0 ? 'vat_purchase' : 'tas_purchase'),
                         'purchase_category_label'    => ($ppVat > 0 ? 'VAT Purchase (15%)' : 'TAS Purchase (0% VAT)'),
                         'purchase_category_badge'    => ($ppVat > 0 ? 'bg-success-subtle text-success border border-success-subtle' : 'bg-primary-subtle text-primary border border-primary-subtle'),
-                        'fs_no'                      => '-',
-                        'mrc_no'                     => '-',
+                        'fs_no'                      => $ppFsNo,
+                        'mrc_no'                     => $ppMrcNo,
                         'seller_tin'                 => $supplierTin,
                         'purchaser_tin'              => $defaultPurchaserDigits,
                         'purc_type'                  => 'PUR_GD',
                         'encoded_by'                 => 'wechacha',
                         'receipt_date_ec'            => $ppDate ? EthiopianDate::formatDateEc($ppDate, 'd-m-Y') : EthiopianDate::formatDateEc(now(), 'd-m-Y'),
                         'encoding_date_ec'           => EthiopianDate::formatDateEc($pp->created_at ?: now(), 'd-m-Y'),
-                        'receipt_id'                 => null,
+                        'receipt_id'                 => $ppReceipt?->id,
                         'receipt_slip_url'           => $ppSlipUrl,
                         'is_fuel'                    => false,
                         'is_verified_without_receipt'=> $isVerifiedNoRec,
                         'has_receipt'                => $hasRec,
+                        'uom'                        => $ppUom,
+                        'qty'                        => $ppQty,
+                        'unit_price'                 => $ppUnitPrice,
+                        'total_value'                => $ppBase,
+                        'vat_category'               => $ppVatCat,
+                        'calendar_type'              => $ppCalType,
+                        'purchase_type'              => $ppPurchType,
+                        'project_id'                 => $pr?->project_id ?: ($ppReceipt?->project_id ?: null),
+                        'item_description'           => $ppDesc,
                     ]);
                 }
             } catch (\Throwable $e) {
@@ -2107,6 +2301,23 @@ class FinanceTaxReportController extends Controller
                         $cspVat = 0.0;
                     }
 
+                    $cspReceipt = null;
+                    if (Schema::hasTable('receipts')) {
+                        $cspReceipt = \App\Models\Receipt::where(function ($rq) use ($csp) {
+                            $rq->whereIn('purchasable_type', [\App\Models\CreditStorePayment::class, 'credit_store_payment', 'CreditStorePayment'])
+                               ->where('purchasable_id', $csp->id);
+                        })->latest('id')->first();
+                    }
+                    $cspItem = $cspReceipt?->items?->first();
+                    $cspParsed = is_string($cspReceipt?->parsed_data ?? null) ? (json_decode($cspReceipt->parsed_data, true) ?: []) : (array)($cspReceipt?->parsed_data ?? []);
+                    $cspUom = (string)($cspItem?->uom ?: ($cspDec?->uom ?: (!empty($cspParsed['uom']) ? $cspParsed['uom'] : '7')));
+                    $cspQty = (float)($cspItem?->qty ?: ($cspDec?->quantity ?: (!empty($cspParsed['qty']) ? $cspParsed['qty'] : 1.00)));
+                    $cspUnitPrice = (float)($cspItem?->unit_price ?: ($cspDec?->unit_price ?: (!empty($cspParsed['unit_price']) ? $cspParsed['unit_price'] : ($cspQty > 0 ? round($cspBase / $cspQty, 2) : $cspBase))));
+                    $cspVatCat = (string)($cspItem?->vat_category ?: ($cspDec?->vat_category ?: (!empty($cspParsed['vat_category']) ? $cspParsed['vat_category'] : ($cspVat > 0 ? 'G' : 'E'))));
+                    $cspCalType = (string)($cspItem?->calendar_type ?: ($cspDec?->calendar_type ?: (!empty($cspParsed['calendar_type']) ? $cspParsed['calendar_type'] : 'E')));
+                    $cspPurchType = $cspItem?->purchase_type ?: ($cspDec?->purchase_type ?: (!empty($cspParsed['purchase_type']) ? $cspParsed['purchase_type'] : 3));
+                    $cspDesc = $cspItem?->item_description ?: ($cspDec?->custom_item_description ?: (!empty($cspParsed['item_description']) ? $cspParsed['item_description'] : ('Credit Settlement: ' . ($ledger?->item_description ?: ($ledger?->notes ?: 'Materials')))));
+
                     $formattedExpenses->push([
                         'id'                         => 'CS-' . $csp->id,
                         'request_number'             => $refNo,
@@ -2129,7 +2340,7 @@ class FinanceTaxReportController extends Controller
                         'withholding_receipt_url'    => null,
                         'withholding_settled'        => false,
                         'net_disbursed'              => $cspNet,
-                        'description'                => 'Credit Settlement: ' . ($ledger?->item_description ?: ($ledger?->notes ?: 'Materials')),
+                        'description'                => $cspDesc,
                         'attachment_url'             => $attachmentUrl,
                         'status'                     => 'paid',
                         'is_settled'                 => false,
@@ -2148,11 +2359,20 @@ class FinanceTaxReportController extends Controller
                         'encoded_by'                 => 'wechacha',
                         'receipt_date_ec'            => $cspDate ? EthiopianDate::formatDateEc($cspDate, 'd-m-Y') : EthiopianDate::formatDateEc(now(), 'd-m-Y'),
                         'encoding_date_ec'           => EthiopianDate::formatDateEc($csp->created_at ?: now(), 'd-m-Y'),
-                        'receipt_id'                 => null,
+                        'receipt_id'                 => $cspReceipt?->id,
                         'receipt_slip_url'           => $attachmentUrl,
                         'is_fuel'                    => false,
                         'is_verified_without_receipt'=> $isVerifiedNoRec,
                         'has_receipt'                => $hasRec,
+                        'uom'                        => $cspUom,
+                        'qty'                        => $cspQty,
+                        'unit_price'                 => $cspUnitPrice,
+                        'total_value'                => $cspBase,
+                        'vat_category'               => $cspVatCat,
+                        'calendar_type'              => $cspCalType,
+                        'purchase_type'              => $cspPurchType,
+                        'project_id'                 => $ledger?->project_id ?: ($cspReceipt?->project_id ?: null),
+                        'item_description'           => $cspDesc,
                     ]);
                 }
             } catch (\Throwable $e) {
@@ -5468,9 +5688,11 @@ class FinanceTaxReportController extends Controller
             'fs_no'                      => 'nullable|string|max:100',
             'item_description'           => 'nullable|string|max:500',
             'vat_category'               => 'nullable|string',
+            'calendar_type'              => 'nullable|string|max:10',
             'purchase_type'              => 'nullable',
             'project_id'                 => 'nullable',
             'category'                   => 'nullable|string|max:100',
+            'uom'                        => 'nullable|string|max:20',
             'qty'                        => 'nullable|numeric|min:0',
             'unit_price'                 => 'nullable|numeric|min:0',
             'total_value'                => 'nullable|numeric|min:0',
@@ -5587,22 +5809,44 @@ class FinanceTaxReportController extends Controller
                 }
             }
 
-            // 1. Resolve through ReceiptItem (only for OCR items or when not explicit non-OCR expense/payment)
+            // 1. Resolve parent Receipt if receipt_id is provided
+            if (!$receipt && !empty($rawReceiptId) && Schema::hasTable('receipts')) {
+                $cleanRawRId = preg_replace('/^REC-/i', '', (string)$rawReceiptId);
+                if (is_numeric($cleanRawRId)) {
+                    $receipt = \App\Models\Receipt::with('items')->find($cleanRawRId);
+                    if ($receipt) {
+                        if (!empty($rawId)) {
+                            $cleanRawId = preg_replace('/^OCR-/i', '', (string)$rawId);
+                            if (is_numeric($cleanRawId) && Schema::hasTable('receipt_items')) {
+                                $candItem = \App\Models\ReceiptItem::find($cleanRawId);
+                                if ($candItem && $candItem->receipt_id == $receipt->id) {
+                                    $item = $candItem;
+                                }
+                            }
+                        }
+                        if (!$item) {
+                            $item = $receipt->items()->first();
+                        }
+                    }
+                }
+            }
+
+            // 2. Resolve through ReceiptItem (only for OCR items or when not explicit non-OCR expense/payment)
             if (!$receipt && !$item && !$isExplicitExpReq && !$isExplicitProc && !$isExplicitCs && !$isExplicitPc) {
                 $candItemIds = array_values(array_filter([$rawId, $rawReceiptId]));
                 foreach ($candItemIds as $cid) {
                     $cleanCid = preg_replace('/^OCR-/i', '', (string)$cid);
                     if (is_numeric($cleanCid) && Schema::hasTable('receipt_items')) {
                         $item = \App\Models\ReceiptItem::with('receipt')->find($cleanCid);
-                        if ($item && $item->receipt) {
-                            $receipt = $item->receipt;
-                            break;
+                        if ($item) {
+                            $receipt = $item->receipt ?: \App\Models\Receipt::find($item->receipt_id);
+                            if ($receipt) break;
                         }
                     }
                 }
             }
 
-            // 2. Resolve parent Receipt (numeric, REC-xx, receipt_number, or fs_no)
+            // 3. Resolve parent Receipt (numeric, REC-xx, receipt_number, or fs_no)
             if (!$receipt && Schema::hasTable('receipts')) {
                 $candReceiptIds = array_values(array_filter([$rawReceiptId, $rawId, $rawRequestNumber, $rawFsNo]));
                 foreach ($candReceiptIds as $crid) {
@@ -5611,7 +5855,7 @@ class FinanceTaxReportController extends Controller
                         $receipt = \App\Models\Receipt::find($cleanRId);
                         if ($receipt) break;
                     }
-                    $receipt = \App\Models\Receipt::where('receipt_number', (string)$crid)->first();
+                    $receipt = \App\Models\Receipt::where('receipt_number', (string)$crid)->latest('id')->first();
                     if ($receipt) break;
 
                     // Match by fs_no or fs_no_raw (e.g. fs00016028 or 00016028)
@@ -5620,6 +5864,7 @@ class FinanceTaxReportController extends Controller
                         $receipt = \App\Models\Receipt::where('fs_no', $cleanFs)
                             ->orWhere('fs_no_raw', (string)$crid)
                             ->orWhere('fs_no', (string)$crid)
+                            ->latest('id')
                             ->first();
                         if ($receipt) break;
                     }
@@ -5853,6 +6098,15 @@ class FinanceTaxReportController extends Controller
                 $vatCategory = $item->vat_category ?: ($vat > 0 ? 'G' : 'E');
             }
 
+            $rawUom = $request->input('uom');
+            if ($rawUom !== null && $rawUom !== '') {
+                $item->uom = (string)$rawUom;
+            }
+            $rawCal = strtoupper(trim((string)$request->input('calendar_type', '')));
+            if (in_array($rawCal, ['E', 'G'])) {
+                $item->calendar_type = $rawCal;
+            }
+
             $item->item_description = $request->item_description ?: ($item->item_description ?: 'Purchased Goods/Services');
             $item->vat_category     = $vatCategory;
             $item->purchase_type    = $purchaseTypeInt;
@@ -5965,8 +6219,24 @@ class FinanceTaxReportController extends Controller
             if ($parsedDate) {
                 $parsed['receipt_date'] = EthiopianDate::formatDateEc($parsedDate, 'd-m-Y');
             }
+            if ($rawUom !== null && $rawUom !== '') {
+                $parsed['uom'] = (string)$rawUom;
+            }
+            if (!empty($rawCal)) {
+                $parsed['calendar_type'] = $rawCal;
+            }
+            if ($request->has('qty')) {
+                $parsed['qty'] = $qty;
+            }
+            if ($request->has('unit_price')) {
+                $parsed['unit_price'] = $unitPrice;
+            }
+            if ($request->filled('vat_category')) {
+                $parsed['vat_category'] = $vatCategory;
+            }
             if ($request->filled('purchase_type')) {
                 $parsed['purc_type'] = (string)$request->purchase_type;
+                $parsed['purchase_type'] = $purchaseTypeInt;
             }
             if ($request->filled('item_description')) {
                 $parsed['item_description'] = $request->item_description;
@@ -6038,14 +6308,14 @@ class FinanceTaxReportController extends Controller
                 if (!$linkedExp && !empty($receipt->receipt_number)) {
                     $linkedExp = \App\Models\ExpenseRequest::where('request_number', $receipt->receipt_number)->first();
                 }
-                if (!$linkedExp && !empty($oldFsNo)) {
+                if (!$linkedExp && empty($receipt->purchasable_type) && !empty($oldFsNo)) {
                     $linkedExp = \App\Models\ExpenseRequest::where('payment_reference', 'like', '%' . $oldFsNo . '%')->latest('id')->first();
                 }
-                if (!$linkedExp && !empty($receipt->fs_no)) {
+                if (!$linkedExp && empty($receipt->purchasable_type) && !empty($receipt->fs_no)) {
                     $linkedExp = \App\Models\ExpenseRequest::where('payment_reference', 'like', '%' . $receipt->fs_no . '%')->latest('id')->first();
                 }
 
-                if ($linkedExp) {
+                if ($linkedExp && (empty($receipt->purchasable_type) || str_contains($receipt->purchasable_type, 'ExpenseRequest') || $receipt->purchasable_type === 'expense_request')) {
                     $receipt->purchasable_type = \App\Models\ExpenseRequest::class;
                     $receipt->purchasable_id   = $linkedExp->id;
                     $receipt->save();
@@ -6130,10 +6400,33 @@ class FinanceTaxReportController extends Controller
                         if ($receipt->fs_no) $vatDec->custom_fs_no = $receipt->fs_no;
                         if ($receipt->vendor_tin) $vatDec->custom_seller_tin = $receipt->vendor_tin;
                         if ($receipt->mrc_no) $vatDec->custom_mrc_no = $receipt->mrc_no;
+                        if ($request->filled('seller_name') && Schema::hasColumn('expense_hub_vat_decisions', 'custom_seller_name')) {
+                            $vatDec->custom_seller_name = trim((string)$request->seller_name);
+                        }
                         if (!empty($uploadedPath) && Schema::hasColumn('expense_hub_vat_decisions', 'receipt_path')) {
                             $vatDec->receipt_path = $uploadedPath;
                         }
-                        if ($request->filled('purchase_type')) $vatDec->purc_type = (string)$request->purchase_type;
+                        if ($rawUom !== null && $rawUom !== '' && Schema::hasColumn('expense_hub_vat_decisions', 'uom')) {
+                            $vatDec->uom = (string)$rawUom;
+                        }
+                        if (!empty($rawCal) && Schema::hasColumn('expense_hub_vat_decisions', 'calendar_type')) {
+                            $vatDec->calendar_type = $rawCal;
+                        }
+                        if ($request->has('qty') && Schema::hasColumn('expense_hub_vat_decisions', 'quantity')) {
+                            $vatDec->quantity = $qty;
+                        }
+                        if ($request->has('unit_price') && Schema::hasColumn('expense_hub_vat_decisions', 'unit_price')) {
+                            $vatDec->unit_price = $unitPrice;
+                        }
+                        if ($request->filled('vat_category') && Schema::hasColumn('expense_hub_vat_decisions', 'vat_category')) {
+                            $vatDec->vat_category = $vatCategory;
+                        }
+                        if ($request->filled('purchase_type')) {
+                            $vatDec->purc_type = (string)$request->purchase_type;
+                            if (Schema::hasColumn('expense_hub_vat_decisions', 'purchase_type')) {
+                                $vatDec->purchase_type = $purchaseTypeInt;
+                            }
+                        }
                         if ($request->filled('item_description') && Schema::hasColumn('expense_hub_vat_decisions', 'custom_item_description')) {
                             $vatDec->custom_item_description = (string)$request->item_description;
                         }
@@ -6174,6 +6467,8 @@ class FinanceTaxReportController extends Controller
                                 $vatDec->decided_at = now();
                             }
                         }
+                        $vatDec->vat_status = ($vat > 0) ? ExpenseHubVatDecision::STATUS_VAT_APPLIES : ExpenseHubVatDecision::STATUS_NO_VAT;
+                        $vatDec->decision = ($vat > 0) ? 'vat_applicable' : 'no_vat';
                         if ($vat <= 0) {
                             $vatDec->vat_status = 'no_vat';
                         }
@@ -6273,6 +6568,33 @@ class FinanceTaxReportController extends Controller
                         $csTarget->net_amount = max(0, $valAfter - (float)($csTarget->withholding_amount ?? 0));
                     }
                     $csTarget->save();
+
+                    if (Schema::hasTable('expense_hub_vat_decisions')) {
+                        $csDec = \App\Models\ExpenseHubVatDecision::firstOrNew([
+                            'source_type' => 'credit_store_payment',
+                            'source_id'   => $csTarget->id,
+                        ]);
+                        if ($receipt->fs_no) $csDec->custom_fs_no = $receipt->fs_no;
+                        if ($receipt->vendor_tin) $csDec->custom_seller_tin = $receipt->vendor_tin;
+                        if ($receipt->mrc_no) $csDec->custom_mrc_no = $receipt->mrc_no;
+                        if ($request->filled('seller_name') && Schema::hasColumn('expense_hub_vat_decisions', 'custom_seller_name')) {
+                            $csDec->custom_seller_name = trim((string)$request->seller_name);
+                        }
+                        if ($request->filled('item_description') && Schema::hasColumn('expense_hub_vat_decisions', 'custom_item_description')) {
+                            $csDec->custom_item_description = (string)$request->item_description;
+                        }
+                        if ($parsedDate && Schema::hasColumn('expense_hub_vat_decisions', 'custom_receipt_date')) {
+                            $csDec->custom_receipt_date = $parsedDate;
+                        }
+                        if (!empty($uploadedPath) && Schema::hasColumn('expense_hub_vat_decisions', 'receipt_path')) {
+                            $csDec->receipt_path = $uploadedPath;
+                        }
+                        $csDec->vat_amount = $vat;
+                        $csDec->base_amount = $totalVal;
+                        $csDec->total_amount = $valAfter;
+                        $csDec->vat_status = ($vat > 0) ? 'vat_applies' : 'no_vat';
+                        $csDec->save();
+                    }
                 }
             } catch (\Throwable $e) {
                 Log::warning('updateOcrItem credit payment sync error: ' . $e->getMessage());
@@ -6282,9 +6604,59 @@ class FinanceTaxReportController extends Controller
             $procTarget = $procPayment;
             try {
                 if (!$procTarget && $receipt->purchasable_type && str_contains($receipt->purchasable_type, 'ProcurementPayment') && $receipt->purchasable_id) {
-                    $procTarget = \App\Models\ProcurementPayment::find($receipt->purchasable_id);
+                    $procTarget = \App\Models\ProcurementPayment::with('purchaseRequest')->find($receipt->purchasable_id);
                 }
                 if ($procTarget) {
+                    if ($request->filled('seller_name') && $procTarget->purchase_request_id && Schema::hasTable('purchase_requests')) {
+                        \App\Models\PurchaseRequest::where('id', $procTarget->purchase_request_id)
+                            ->update(['vendor_name' => trim((string)$request->seller_name)]);
+                    }
+                    if ($request->filled('item_description') && $procTarget->purchase_request_id && Schema::hasTable('purchase_requests')) {
+                        \App\Models\PurchaseRequest::where('id', $procTarget->purchase_request_id)
+                            ->update(['justification' => trim((string)$request->item_description)]);
+                    }
+                    if (Schema::hasTable('expense_hub_vat_decisions')) {
+                        $procDec = \App\Models\ExpenseHubVatDecision::firstOrNew([
+                            'source_type' => 'procurement_payment',
+                            'source_id'   => $procTarget->id,
+                        ]);
+                        if ($receipt->fs_no) $procDec->custom_fs_no = $receipt->fs_no;
+                        if ($receipt->vendor_tin) $procDec->custom_seller_tin = $receipt->vendor_tin;
+                        if ($receipt->mrc_no) $procDec->custom_mrc_no = $receipt->mrc_no;
+                        if ($request->filled('seller_name') && Schema::hasColumn('expense_hub_vat_decisions', 'custom_seller_name')) {
+                            $procDec->custom_seller_name = trim((string)$request->seller_name);
+                        }
+                        if ($request->filled('item_description') && Schema::hasColumn('expense_hub_vat_decisions', 'custom_item_description')) {
+                            $procDec->custom_item_description = (string)$request->item_description;
+                        }
+                        if ($parsedDate && Schema::hasColumn('expense_hub_vat_decisions', 'custom_receipt_date')) {
+                            $procDec->custom_receipt_date = $parsedDate;
+                        }
+                        if (!empty($uploadedPath) && Schema::hasColumn('expense_hub_vat_decisions', 'receipt_path')) {
+                            $procDec->receipt_path = $uploadedPath;
+                        }
+                        $procDec->vat_amount = $vat;
+                        $procDec->base_amount = $totalVal;
+                        $procDec->total_amount = $valAfter;
+                        $procDec->vat_status = ($vat > 0) ? 'vat_applies' : 'no_vat';
+                        if ($request->has('has_withholding') && Schema::hasColumn('expense_hub_vat_decisions', 'has_withholding')) {
+                            $procDec->has_withholding = $hasWht;
+                        }
+                        if ($whtRate !== null && Schema::hasColumn('expense_hub_vat_decisions', 'withholding_rate')) {
+                            $procDec->withholding_rate = $whtRate;
+                        }
+                        if ($whtAmount !== null && Schema::hasColumn('expense_hub_vat_decisions', 'withholding_amount')) {
+                            $procDec->withholding_amount = $whtAmount;
+                        }
+                        if ($whtReceiptNo !== null && Schema::hasColumn('expense_hub_vat_decisions', 'withholding_receipt_number')) {
+                            $procDec->withholding_receipt_number = $whtReceiptNo;
+                        }
+                        if ($uploadedWhtPath && Schema::hasColumn('expense_hub_vat_decisions', 'withholding_receipt')) {
+                            $procDec->withholding_receipt = $uploadedWhtPath;
+                        }
+                        $procDec->save();
+                    }
+
                     $procTarget->amount = $totalVal;
                     if (Schema::hasColumn('procurement_payments', 'gross_amount')) {
                         $procTarget->gross_amount = $valAfter;
@@ -6413,6 +6785,10 @@ class FinanceTaxReportController extends Controller
                     'date_ec'                    => $receipt->receipt_date ? EthiopianDate::formatDateEc($receipt->receipt_date, 'DD/MM/YYYY EC') : '-',
                     'date_gc'                    => $receipt->receipt_date ? Carbon::parse($receipt->receipt_date)->format('M d, Y') : '-',
                     'item_description'           => $item->item_description,
+                    'uom'                        => (string)($item->uom ?: '7'),
+                    'calendar_type'              => (string)($item->calendar_type ?: 'E'),
+                    'qty'                        => (float)($item->qty ?: 1.00),
+                    'unit_price'                 => (float)($item->unit_price ?: 0.00),
                     'vat_category'               => $item->vat_category ?: 'G',
                     'purchase_type'              => (string)($item->purchase_type ?: 3),
                     'purc_type'                  => (string)($item->purchase_type ?: 3),

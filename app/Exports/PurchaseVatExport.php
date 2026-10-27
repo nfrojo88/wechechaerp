@@ -72,7 +72,7 @@ class PurchaseVatExport
             $tinVal = ($tinDigits !== '') ? (int)$tinDigits : '';
 
             // Seller Name
-            $sellerName = trim((string)($item->custom_seller_name ?: ($item->payee_supplier ?: 'Supplier')));
+            $sellerName = trim((string)(($item->custom_seller_name ?? null) ?: (($item->payee_supplier ?? null) ?: 'Supplier')));
 
             // Purchase Date
             $date = $item->disbursement_date ?: $item->created_at;

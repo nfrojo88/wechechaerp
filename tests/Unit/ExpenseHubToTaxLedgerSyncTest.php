@@ -473,6 +473,7 @@ class ExpenseHubToTaxLedgerSyncTest extends TestCase
                 'withholding_receipt_number' => 'WHT-ERCA-9922',
                 'custom_seller_tin'          => '0098765432',
                 'custom_fs_no'               => '00099112',
+                'custom_mrc_no'              => 'MRC-9922',
                 'custom_item_description'    => 'Structural consultancy fees with 3% WHT',
             ],
             [],
@@ -565,6 +566,7 @@ class ExpenseHubToTaxLedgerSyncTest extends TestCase
             'custom_seller_name' => 'TotalEnergies Marketing Ethiopia',
             'custom_seller_tin'  => '0012345678',
             'custom_fs_no'       => 'FS-998877',
+            'custom_mrc_no'      => 'MRC-5544',
         ]);
 
         $controller->saveDecision($req);

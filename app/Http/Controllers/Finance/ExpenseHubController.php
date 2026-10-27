@@ -557,6 +557,20 @@ class ExpenseHubController extends Controller
             );
         }
 
+        // Handle Withholding Receipt upload
+        $withholdingReceiptPath = $request->input('withholding_receipt') ?: ($existing?->withholding_receipt ?: null);
+        if ($request->hasFile('withholding_receipt_file')) {
+            $withholdingReceiptPath = FileUploadService::upload(
+                $request->file('withholding_receipt_file'),
+                'withholding'
+            );
+        } elseif ($request->hasFile('withholding_receipt')) {
+            $withholdingReceiptPath = FileUploadService::upload(
+                $request->file('withholding_receipt'),
+                'withholding'
+            );
+        }
+
         // Action 2 Compliance Rule: Enforce mandatory 10-digit TIN, FS No, and MRC No when recording as 15% VAT
         if ($vatStatus === ExpenseHubVatDecision::STATUS_VAT_APPLIES) {
             $missing = [];
@@ -1165,10 +1179,10 @@ class ExpenseHubController extends Controller
             $whtReceiptNo = $decision->withholding_receipt_number ?: null;
 
             if ($vatStatus === ExpenseHubVatDecision::STATUS_VAT_APPLIES) {
-                $targetDate  = $customReceiptDate;
+                $targetDate  = $customReceiptDate ?: ($decision->custom_receipt_date ? Carbon::parse($decision->custom_receipt_date)->toDateString() : null);
                 $projectId   = null;
-                $vendorName  = $customSellerName;
-                $itemDesc    = $customDescription ?: $decision->custom_item_description;
+                $vendorName  = $customSellerName ?: ($decision->custom_seller_name ?? null);
+                $itemDesc    = $customDescription ?: ($decision->custom_item_description ?? null);
 
                 // 1. Update underlying source model
                 if ($sourceType === 'expense_request') {
@@ -1363,6 +1377,19 @@ class ExpenseHubController extends Controller
                     }
                     if (!$receipt && !empty($decision->custom_fs_no)) {
                         $receipt = Receipt::where('fs_no', $decision->custom_fs_no)->first();
+                    }
+                    if ($receipt && $receipt->exists) {
+                        $parsed = is_string($receipt->parsed_data) ? (json_decode($receipt->parsed_data, true) ?: []) : (array)($receipt->parsed_data ?? []);
+                        // Never overwrite receipts that were manually inspected and saved by user!
+                        if (!empty($parsed['manually_edited'])) {
+                            return;
+                        }
+                        if (!empty($receipt->vendor_name) && empty($customSellerName) && empty($decision->custom_seller_name)) {
+                            $vendorName = $receipt->vendor_name;
+                        }
+                        if (!empty($receipt->description) && empty($customDescription) && empty($decision->custom_item_description)) {
+                            $itemDesc = $receipt->description;
+                        }
                     }
                     if (!$receipt) {
                         $receipt = new Receipt();

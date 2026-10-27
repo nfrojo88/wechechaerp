@@ -51,7 +51,10 @@ class UpdateOcrInspectorTest extends TestCase
         Schema::dropIfExists('receipt_items');
         Schema::dropIfExists('receipts');
         Schema::dropIfExists('expense_requests');
+        Schema::dropIfExists('procurement_payments');
+        Schema::dropIfExists('purchase_requests');
         Schema::dropIfExists('projects');
+        Schema::dropIfExists('employees');
         Schema::dropIfExists('users');
         Schema::dropIfExists('system_settings');
 
@@ -87,6 +90,17 @@ class UpdateOcrInspectorTest extends TestCase
             $table->softDeletes();
         });
 
+        Schema::create('employees', function ($table) {
+            $table->id();
+            $table->unsignedBigInteger('user_id')->nullable();
+            $table->string('full_name')->nullable();
+            $table->string('department')->nullable();
+            $table->string('status')->default('active');
+            $table->boolean('is_dead_file')->default(false);
+            $table->timestamps();
+            $table->softDeletes();
+        });
+
         Schema::create('projects', function ($table) {
             $table->id();
             $table->string('name');
@@ -95,12 +109,45 @@ class UpdateOcrInspectorTest extends TestCase
             $table->softDeletes();
         });
 
+        Schema::create('purchase_requests', function ($table) {
+            $table->id();
+            $table->string('pr_no')->nullable();
+            $table->string('vendor_name')->nullable();
+            $table->foreignId('project_id')->nullable();
+            $table->text('justification')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+        });
+
+        Schema::create('procurement_payments', function ($table) {
+            $table->id();
+            $table->unsignedBigInteger('purchase_request_id')->nullable();
+            $table->decimal('amount', 18, 2)->default(0);
+            $table->decimal('gross_amount', 18, 2)->nullable();
+            $table->string('vat_type')->nullable();
+            $table->decimal('vat_rate', 5, 2)->default(15.00);
+            $table->decimal('vat_amount', 18, 2)->default(0);
+            $table->boolean('has_withholding')->default(false);
+            $table->decimal('withholding_rate', 5, 2)->default(3.00);
+            $table->decimal('withholding_amount', 18, 2)->default(0);
+            $table->string('withholding_receipt')->nullable();
+            $table->string('withholding_receipt_number')->nullable();
+            $table->decimal('net_amount', 18, 2)->nullable();
+            $table->string('status')->default('paid');
+            $table->dateTime('paid_at')->nullable();
+            $table->text('notes')->nullable();
+            $table->timestamps();
+        });
+
         Schema::create('expense_requests', function ($table) {
             $table->id();
             $table->string('request_number')->nullable();
             $table->foreignId('project_id')->nullable();
             $table->foreignId('user_id')->nullable();
+            $table->unsignedBigInteger('purchase_request_id')->nullable();
+            $table->unsignedBigInteger('credit_store_ledger_id')->nullable();
             $table->string('category')->nullable();
+            $table->string('other_reason')->nullable();
             $table->string('payee')->nullable();
             $table->string('account_name')->nullable();
             $table->string('vat_type')->nullable();
@@ -110,7 +157,11 @@ class UpdateOcrInspectorTest extends TestCase
             $table->decimal('gross_amount', 18, 2)->nullable();
             $table->decimal('net_amount', 18, 2)->nullable();
             $table->decimal('vat_amount', 18, 2)->default(0);
+            $table->boolean('has_withholding')->default(false);
+            $table->decimal('withholding_rate', 5, 2)->default(3.00);
             $table->decimal('withholding_amount', 18, 2)->default(0);
+            $table->string('withholding_receipt')->nullable();
+            $table->string('withholding_receipt_number')->nullable();
             $table->string('payment_reference')->nullable();
             $table->string('attachment')->nullable();
             $table->string('status')->default('paid');
@@ -182,9 +233,14 @@ class UpdateOcrInspectorTest extends TestCase
             $table->string('no_vat_reason_code', 50)->nullable();
             $table->string('vat_category', 5)->default('G');
             $table->string('purc_type', 20)->default('PUR_GD');
+            $table->string('custom_seller_name')->nullable();
             $table->string('custom_seller_tin', 30)->nullable();
             $table->string('custom_fs_no', 50)->nullable();
             $table->string('custom_mrc_no', 50)->nullable();
+            $table->string('custom_item_description')->nullable();
+            $table->date('custom_receipt_date')->nullable();
+            $table->string('receipt_path')->nullable();
+            $table->boolean('is_verified_without_receipt')->default(false);
             $table->timestamps();
             $table->unique(['source_type', 'source_id']);
         });
@@ -1313,5 +1369,254 @@ class UpdateOcrInspectorTest extends TestCase
         $this->assertEquals(400.00, (float)$matches[0]['base_value']);
         $this->assertEquals(60.00, (float)$matches[0]['vat_amount']);
         $this->assertEquals(460.00, (float)$matches[0]['value_after_vat']);
+    }
+
+    public function test_procurement_payment_receipt_46_edited_persists_on_reload()
+    {
+        $project = Project::create([
+            'name'   => 'Sendafa Site',
+            'status' => 'active',
+        ]);
+
+        $pr = \App\Models\PurchaseRequest::create([
+            'id'            => 46,
+            'pr_no'         => 'PR-2026-0046',
+            'vendor_name'   => 'Procurement Vendor',
+            'project_id'    => $project->id,
+            'justification' => 'Purchased Goods',
+        ]);
+
+        $procPayment = \App\Models\ProcurementPayment::create([
+            'id'                  => 46,
+            'purchase_request_id' => $pr->id,
+            'amount'              => 149263.06,
+            'gross_amount'        => 171652.52,
+            'vat_amount'          => 22389.46,
+            'vat_type'            => 'exclusive',
+            'vat_rate'            => 15.00,
+            'status'              => 'paid',
+            'paid_at'             => '2026-10-22 10:00:00',
+        ]);
+
+        $decision = \App\Models\ExpenseHubVatDecision::create([
+            'source_type'             => 'procurement_payment',
+            'source_id'               => $procPayment->id,
+            'vat_status'              => 'vat_applies',
+            'base_amount'             => 149263.06,
+            'vat_amount'              => 22389.46,
+            'total_amount'            => 171652.52,
+            'custom_seller_tin'       => '0022632567',
+            'custom_fs_no'            => '00004944',
+            'custom_mrc_no'           => 'MFG0000862',
+            'custom_item_description' => 'Purchased Goods',
+            'custom_receipt_date'     => '2026-10-22',
+        ]);
+
+        $receipt = Receipt::create([
+            'id'               => 46,
+            'receipt_number'   => 'RCP-HUB-20261022-0046',
+            'purchasable_type' => \App\Models\ProcurementPayment::class,
+            'purchasable_id'   => $procPayment->id,
+            'project_id'       => $project->id,
+            'vendor_name'      => 'Procurement Vendor',
+            'vendor_tin'       => '0022632567',
+            'tin_valid'        => true,
+            'fs_no'            => '00004944',
+            'fs_no_raw'        => '00004944',
+            'fs_no_valid'      => true,
+            'mrc_no'           => 'MFG0000862',
+            'receipt_date'     => '2026-10-22',
+            'subtotal'         => 149263.06,
+            'vat_amount'       => 22389.46,
+            'total_amount'     => 171652.52,
+            'category'         => 'materials',
+            'description'      => 'Purchased Goods',
+            'file_path'        => '1793007336_aoM60x0JCu.jpeg',
+            'parsed_data'      => [
+                'seller_name'  => 'Procurement Vendor',
+                'seller_tin'   => '0022632567',
+                'receipt_no'   => '00004944',
+                'mrc'          => 'MFG0000862',
+                'receipt_date' => '12-02-2019',
+            ],
+        ]);
+
+        $item = ReceiptItem::create([
+            'id'               => 46,
+            'receipt_id'       => $receipt->id,
+            'item_description' => 'Purchased Goods',
+            'vat_category'     => 'G',
+            'purchase_type'    => 3,
+            'qty'              => 1,
+            'unit_price'       => 149263.06,
+            'total_value'      => 149263.06,
+            'vat_amount'       => 22389.46,
+            'value_after_vat'  => 171652.52,
+        ]);
+
+        // 1. User updates Invoice #46 in the Inspector Modal
+        $response = $this->postJson(route('finance.tax-deductions.update-ocr-item'), [
+            'id'               => 46,
+            'receipt_id'       => 46,
+            'seller_name'      => 'Wechecha Construction Tiles',
+            'supplier_tin'     => '0022632567',
+            'fs_no'            => '00004944',
+            'mrc_no'           => 'MFG0000862',
+            'receipt_date_ec'  => '12-02-2019',
+            'receipt_date'     => '2026-10-22',
+            'item_description' => 'Ceramic 60x60 Floor Tiles',
+            'total_value'      => 149263.06,
+            'vat_amount'       => 22389.46,
+            'value_after_vat'  => 171652.52,
+            'category'         => 'materials',
+            'project_id'       => $project->id,
+            'vat_category'     => 'G',
+            'purchase_type'    => 3,
+        ]);
+        $response->assertStatus(200);
+
+        // 2. User reloads page / movements data (which executes ensureSchema and calculateMonthMovementsData)
+        $controller = new \App\Http\Controllers\Finance\FinanceTaxReportController();
+        $refMethod = new \ReflectionMethod($controller, 'ensureSchema');
+        $refMethod->setAccessible(true);
+        $refMethod->invoke($controller);
+
+        $movementsData = $controller->calculateMonthMovementsData(2019, 2);
+
+        $allOcr = collect($movementsData['all_ocr_items'] ?? []);
+        $matches = $allOcr->filter(function ($it) {
+            return ($it['fs_no'] ?? '') === '00004944';
+        })->values();
+
+        $this->assertNotEmpty($matches, 'Scanned OCR receipts should contain FS #00004944');
+        $this->assertEquals('Wechecha Construction Tiles', $matches[0]['vendor_name'], 'Vendor name must remain updated and NOT revert to Procurement Vendor');
+        $this->assertEquals('Ceramic 60x60 Floor Tiles', $matches[0]['item_description'], 'Item description must remain updated and NOT revert to Purchased Goods');
+    }
+
+    public function test_purchases_and_expense_vouchers_all_receipt_information_editable_and_exported_to_excel(): void
+    {
+        $project = Project::create(['name' => 'Bole Tower Project']);
+
+        $exp = ExpenseRequest::create([
+            'request_number' => 'EXP-2019-099',
+            'project_id'     => $project->id,
+            'title'          => 'Purchase of Bulk Cement',
+            'description'    => 'Initial cement request',
+            'amount'         => 50000.00,
+            'vat_amount'     => 7500.00,
+            'total_amount'   => 57500.00,
+            'paid_at'        => '2026-10-25 10:00:00',
+            'created_at'     => '2026-10-25 10:00:00',
+            'status'         => ExpenseRequest::STATUS_PAID,
+        ]);
+
+        // 1. User fills & edits all receipt information from the Purchases & Expense Vouchers section
+        $response = $this->postJson(route('finance.tax-deductions.update-ocr-item'), [
+            'expense_request_id'         => $exp->id,
+            'request_number'             => $exp->request_number,
+            'seller_name'                => 'Dangote Cement PLC',
+            'supplier_tin'               => '0098765432',
+            'fs_no'                      => '00054321',
+            'mrc_no'                     => 'MRC-CEMENT-01',
+            'receipt_date_ec'            => '15/02/2019',
+            'receipt_date'               => '2026-10-25',
+            'item_description'           => 'OPC 42.5N Bulk Cement Bags',
+            'uom'                        => '6', // Metric Ton
+            'calendar_type'              => 'E', // Ethiopian
+            'qty'                        => 50.00,
+            'unit_price'                 => 1000.00,
+            'vat_category'               => 'G', // Goods
+            'purchase_type'              => 3,   // Local Inputs (Line 100)
+            'total_value'                => 50000.00,
+            'vat_amount'                 => 7500.00,
+            'value_after_vat'            => 57500.00,
+            'has_withholding'            => '1',
+            'withholding_rate'           => '2', // 2% for Goods supply
+            'withholding_amount'         => 1000.00,
+            'withholding_receipt_number' => 'WHT-2019-999',
+            'category'                   => 'materials',
+            'project_id'                 => $project->id,
+        ]);
+
+        $response->assertStatus(200);
+        $data = $response->json();
+        $this->assertTrue($data['success']);
+        $this->assertEquals('6', $data['item']['uom']);
+        $this->assertEquals(50.00, $data['item']['qty']);
+        $this->assertEquals(1000.00, $data['item']['unit_price']);
+        $this->assertEquals('OPC 42.5N Bulk Cement Bags', $data['item']['item_description']);
+        $this->assertEquals('0098765432', $data['item']['seller_tin']);
+        $this->assertEquals('Dangote Cement PLC', $data['item']['vendor_name']);
+
+        // 2. Reload page data via calculateMonthMovementsData
+        $controller = new \App\Http\Controllers\Finance\FinanceTaxReportController();
+        $refMethod = new \ReflectionMethod($controller, 'ensureSchema');
+        $refMethod->setAccessible(true);
+        $refMethod->invoke($controller);
+
+        $movementsData = $controller->calculateMonthMovementsData(2019, 2);
+
+        $expenses = collect($movementsData['expenses'] ?? []);
+        $found = $expenses->firstWhere('request_number', 'EXP-2019-099');
+
+        $this->assertNotNull($found, 'Expense row must be present in expenses table');
+        $this->assertEquals('Dangote Cement PLC', $found['payee']);
+        $this->assertEquals('0098765432', $found['seller_tin']);
+        $this->assertEquals('00054321', $found['fs_no']);
+        $this->assertEquals('MRC-CEMENT-01', $found['mrc_no']);
+        $this->assertEquals('OPC 42.5N Bulk Cement Bags', $found['item_description']);
+        $this->assertEquals('6', $found['uom']);
+        $this->assertEquals(50.00, $found['qty']);
+        $this->assertEquals(1000.00, $found['unit_price']);
+        $this->assertEquals(50000.00, $found['base_amount']);
+        $this->assertEquals(7500.00, $found['vat_amount']);
+        $this->assertTrue($found['has_withholding']);
+        $this->assertEquals(1000.00, $found['withholding_amount']);
+        $this->assertEquals('WHT-2019-999', $found['withholding_receipt_number']);
+
+        // 3. Verify Excel export mapping through PurchaseVatExport
+        $vatDec = ExpenseHubVatDecision::where('source_type', 'expense_request')
+            ->where('source_id', $exp->id)
+            ->first();
+
+        $this->assertNotNull($vatDec, 'VAT Decision must be created and linked');
+        
+        $queryService = new \App\Services\ExpenseHubQueryService();
+        $hubExpenses = $queryService->getExpenses(['vat_status' => ExpenseHubVatDecision::STATUS_VAT_APPLIES]);
+        $rows = \App\Exports\PurchaseVatExport::buildRows($hubExpenses);
+
+        $this->assertCount(1, $rows);
+        $row = $rows[0];
+
+        // ERA Official 15-Column Export format:
+        // [0] vat_category => 'G'
+        // [1] calendar_type => 'E'
+        // [2] purchase_type => 3
+        // [3] tinVal => 98765432
+        // [4] sellerName => 'Dangote Cement PLC'
+        // [5] dateFormatted => Ethiopian date string
+        // [6] mrcVal => 'MRC-CEMENT-01'
+        // [7] fsNo => '00054321'
+        // [8] desc => 'OPC 42.5N Bulk Cement Bags'
+        // [9] uomId => 6 (MT)
+        // [10] qty => 50.0
+        // [11] unitVal => 1000.0
+        // [12] baseVal => 50000.0
+        // [13] vatVal => 7500.0
+        // [14] totVal => 57500.0
+        $this->assertEquals('G', $row[0]);
+        $this->assertEquals('E', $row[1]);
+        $this->assertEquals(3, $row[2]);
+        $this->assertEquals(98765432, $row[3]);
+        $this->assertEquals('Dangote Cement PLC', $row[4]);
+        $this->assertEquals('MRC-CEMENT-01', $row[6]);
+        $this->assertEquals('00054321', $row[7]);
+        $this->assertEquals('OPC 42.5N Bulk Cement Bags', $row[8]);
+        $this->assertEquals(6, $row[9]);
+        $this->assertEquals(50.0, $row[10]);
+        $this->assertEquals(1000.0, $row[11]);
+        $this->assertEquals(50000.0, $row[12]);
+        $this->assertEquals(7500.0, $row[13]);
+        $this->assertEquals(57500.0, $row[14]);
     }
 }

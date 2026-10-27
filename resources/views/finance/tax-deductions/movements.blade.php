@@ -654,6 +654,7 @@
                                             </button>
                                         </div>
                                         <span class="fw-semibold text-dark d-block text-truncate cell-exp-payee" style="max-width: 175px;">{{ $exp['payee'] ?? 'Vendor' }}</span>
+                                        <small class="text-muted d-block text-truncate cell-exp-desc" style="max-width: 180px;" title="{{ $exp['item_description'] ?? ($exp['description'] ?? '') }}">{{ $exp['item_description'] ?? ($exp['description'] ?? 'General') }}</small>
                                     </td>
                                     <td>
                                         <span class="badge bg-info-subtle text-info border border-info-subtle rounded-pill small">{{ $exp['category'] ?? 'General' }}</span>
@@ -776,9 +777,9 @@
 
                                                     <div class="row g-3">
                                                         {{-- ── SECTION 1: FISCAL RECEIPT DETAILS ── --}}
-                                                        <div class="col-12 col-lg-5 border-end-lg pe-lg-3">
+                                                        <div class="col-12 col-xl-3 col-lg-6 border-end-xl pe-xl-3">
                                                             <div class="d-flex align-items-center justify-content-between mb-2 pb-1 border-bottom">
-                                                                <span class="fw-bold small text-dark"><i class="fa-solid fa-receipt text-primary me-1"></i>1. Fiscal Cash Receipt Details</span>
+                                                                <span class="fw-bold small text-dark"><i class="fa-solid fa-receipt text-primary me-1"></i>1. Fiscal Cash Receipt</span>
                                                                 <span class="badge bg-light text-muted border font-monospace" style="font-size:0.65rem;">ERCA Fiscal</span>
                                                             </div>
 
@@ -809,13 +810,18 @@
                                                                 </div>
                                                             </div>
 
+                                                            <div class="mb-2">
+                                                                <label class="form-label small fw-semibold text-muted mb-0.5" style="font-size:0.72rem;">Machine MRC #</label>
+                                                                <input type="text" name="mrc_no" class="form-control form-control-sm font-monospace" value="{{ ($exp['mrc_no'] ?? '') !== '-' ? ($exp['mrc_no'] ?? '') : '' }}" placeholder="e.g. MTR12345678">
+                                                            </div>
+
                                                             <div class="row g-2 mb-2">
                                                                 <div class="col-6">
-                                                                    <label class="form-label small fw-semibold text-muted mb-0.5" style="font-size:0.72rem;">Machine MRC #</label>
-                                                                    <input type="text" name="mrc_no" class="form-control form-control-sm font-monospace" value="{{ ($exp['mrc_no'] ?? '') !== '-' ? ($exp['mrc_no'] ?? '') : '' }}" placeholder="e.g. MTR12345678">
+                                                                    <label class="form-label small fw-semibold text-muted mb-0.5" style="font-size:0.72rem;">Receipt Date (EC)</label>
+                                                                    <input type="text" name="receipt_date_ec" class="form-control form-control-sm font-monospace text-primary fw-bold" value="{{ ($exp['receipt_date_ec'] ?? '') !== '-' ? str_replace(' EC', '', $exp['receipt_date_ec'] ?? '') : (str_replace(' EC', '', $exp['date_ec'] ?? '')) }}" placeholder="DD/MM/YYYY EC">
                                                                 </div>
                                                                 <div class="col-6">
-                                                                    <label class="form-label small fw-semibold text-muted mb-0.5" style="font-size:0.72rem;">Receipt Date</label>
+                                                                    <label class="form-label small fw-semibold text-muted mb-0.5" style="font-size:0.72rem;">Receipt Date (GC)</label>
                                                                     <input type="date" name="receipt_date" class="form-control form-control-sm font-monospace" value="{{ !empty($exp['raw_date']) ? \Carbon\Carbon::parse($exp['raw_date'])->format('Y-m-d') : '' }}">
                                                                 </div>
                                                             </div>
@@ -833,10 +839,106 @@
                                                             </div>
                                                         </div>
 
-                                                        {{-- ── SECTION 2: WITHHOLDING TAX (WHT) ── --}}
-                                                        <div class="col-12 col-lg-4 border-end-lg pe-lg-3">
+                                                        {{-- ── SECTION 2: COMMODITY & ERA EXCEL DECLARATION ── --}}
+                                                        <div class="col-12 col-xl-3 col-lg-6 border-end-xl px-xl-3">
                                                             <div class="d-flex align-items-center justify-content-between mb-2 pb-1 border-bottom">
-                                                                <span class="fw-bold small text-dark"><i class="fa-solid fa-hand-holding-dollar text-warning me-1"></i>2. Withholding Tax (WHT)</span>
+                                                                <span class="fw-bold small text-dark"><i class="fa-solid fa-file-excel text-success me-1"></i>2. Excel Declaration</span>
+                                                                <span class="badge bg-success-subtle text-success border border-success-subtle font-monospace" style="font-size:0.65rem;">ERA Template</span>
+                                                            </div>
+
+                                                            <div class="mb-2">
+                                                                <label class="form-label small fw-semibold text-muted mb-0.5" style="font-size:0.72rem;">Item Description / Particulars <span class="text-danger">*</span></label>
+                                                                <input type="text" name="item_description" class="form-control form-control-sm rounded-2 font-monospace" value="{{ $exp['item_description'] ?? ($exp['description'] ?: ($exp['category'] ?? 'General Purchase')) }}" required placeholder="e.g. Fuel, Cement, Office Stationery">
+                                                            </div>
+
+                                                            <div class="row g-2 mb-2">
+                                                                <div class="col-6">
+                                                                    <label class="form-label small fw-semibold text-muted mb-0.5" style="font-size:0.72rem;">Unit of Measure (UOM)</label>
+                                                                    <select name="uom" class="form-select form-select-sm font-monospace">
+                                                                        @php $curUom = (string)($exp['uom'] ?? '7'); @endphp
+                                                                        <option value="7" {{ $curUom === '7' ? 'selected' : '' }}>7 - PCS (Pieces)</option>
+                                                                        <option value="2" {{ $curUom === '2' ? 'selected' : '' }}>2 - KG (Kilogram)</option>
+                                                                        <option value="5" {{ $curUom === '5' ? 'selected' : '' }}>5 - LIT (Liter)</option>
+                                                                        <option value="6" {{ $curUom === '6' ? 'selected' : '' }}>6 - MT (Metric Ton)</option>
+                                                                        <option value="8" {{ $curUom === '8' ? 'selected' : '' }}>8 - CT (Carton)</option>
+                                                                        <option value="10" {{ $curUom === '10' ? 'selected' : '' }}>10 - PC (Piece)</option>
+                                                                        <option value="3" {{ $curUom === '3' ? 'selected' : '' }}>3 - ML (Milliliter)</option>
+                                                                        <option value="4" {{ $curUom === '4' ? 'selected' : '' }}>4 - GM (Gram)</option>
+                                                                        <option value="9" {{ $curUom === '9' ? 'selected' : '' }}>9 - OTHER</option>
+                                                                    </select>
+                                                                </div>
+                                                                <div class="col-6">
+                                                                    <label class="form-label small fw-semibold text-muted mb-0.5" style="font-size:0.72rem;">Calendar Type</label>
+                                                                    <select name="calendar_type" class="form-select form-select-sm font-monospace">
+                                                                        @php $curCal = (string)($exp['calendar_type'] ?? 'E'); @endphp
+                                                                        <option value="E" {{ $curCal === 'E' ? 'selected' : '' }}>E - Ethiopian</option>
+                                                                        <option value="G" {{ $curCal === 'G' ? 'selected' : '' }}>G - Gregorian</option>
+                                                                    </select>
+                                                                </div>
+                                                            </div>
+
+                                                            <div class="row g-2 mb-2">
+                                                                <div class="col-6">
+                                                                    <label class="form-label small fw-semibold text-muted mb-0.5" style="font-size:0.72rem;">Quantity</label>
+                                                                    <input type="number" step="0.01" min="0.01" name="qty" id="quickQty-{{ $exp['id'] ?? $idx }}" class="form-control form-control-sm font-monospace" value="{{ number_format((float)($exp['qty'] ?? 1), 2, '.', '') }}" oninput="calcQuickQtyPrice({{ $idx }}, 'qty')">
+                                                                </div>
+                                                                <div class="col-6">
+                                                                    <label class="form-label small fw-semibold text-muted mb-0.5" style="font-size:0.72rem;">Unit Price (ETB)</label>
+                                                                    <input type="number" step="0.01" min="0" name="unit_price" id="quickUnitPrice-{{ $exp['id'] ?? $idx }}" class="form-control form-control-sm font-monospace" value="{{ number_format((float)($exp['unit_price'] ?? ($expBase / max(1, (float)($exp['qty'] ?? 1)))), 2, '.', '') }}" oninput="calcQuickQtyPrice({{ $idx }}, 'price')">
+                                                                </div>
+                                                            </div>
+
+                                                            <div class="row g-2 mb-2">
+                                                                <div class="col-6">
+                                                                    <label class="form-label small fw-semibold text-muted mb-0.5" style="font-size:0.72rem;">VAT Category</label>
+                                                                    <select name="vat_category" class="form-select form-select-sm font-monospace">
+                                                                        @php $curVatCat = (string)($exp['vat_category'] ?? ($expVat > 0 ? 'G' : 'E')); @endphp
+                                                                        <option value="G" {{ $curVatCat === 'G' ? 'selected' : '' }}>Goods (G)</option>
+                                                                        <option value="S" {{ $curVatCat === 'S' ? 'selected' : '' }}>Services (S)</option>
+                                                                        <option value="E" {{ $curVatCat === 'E' ? 'selected' : '' }}>Exempt / 0% (E)</option>
+                                                                    </select>
+                                                                </div>
+                                                                <div class="col-6">
+                                                                    <label class="form-label small fw-semibold text-muted mb-0.5" style="font-size:0.72rem;">ERCA Purchase Type</label>
+                                                                    <select name="purchase_type" class="form-select form-select-sm font-monospace">
+                                                                        @php $curPurchType = (string)($exp['purchase_type'] ?? ($exp['purc_type'] ?? '3')); @endphp
+                                                                        <option value="1" {{ $curPurchType === '1' ? 'selected' : '' }}>1 - Capital Local (Ln 65)</option>
+                                                                        <option value="2" {{ $curPurchType === '2' ? 'selected' : '' }}>2 - Capital Imp (Ln 75)</option>
+                                                                        <option value="3" {{ ($curPurchType === '3' || $curPurchType === 'PUR_GD') ? 'selected' : '' }}>3 - Local Inputs (Ln 100)</option>
+                                                                        <option value="4" {{ $curPurchType === '4' ? 'selected' : '' }}>4 - Imp Inputs (Ln 110)</option>
+                                                                        <option value="5" {{ ($curPurchType === '5' || $curPurchType === 'PUR_SVC') ? 'selected' : '' }}>5 - General Exp (Ln 120)</option>
+                                                                        <option value="6" {{ $curPurchType === '6' ? 'selected' : '' }}>6 - Exempt (Ln 85/130)</option>
+                                                                        <option value="PUR_GD" {{ $curPurchType === 'PUR_GD' ? 'selected' : '' }}>PUR_GD - TAS Goods</option>
+                                                                        <option value="PUR_SVC" {{ $curPurchType === 'PUR_SVC' ? 'selected' : '' }}>PUR_SVC - TAS Services</option>
+                                                                    </select>
+                                                                </div>
+                                                            </div>
+
+                                                            <div class="row g-2">
+                                                                <div class="col-6">
+                                                                    <label class="form-label small fw-semibold text-muted mb-0.5" style="font-size:0.72rem;">Project Attribution</label>
+                                                                    <select name="project_id" class="form-select form-select-sm font-monospace">
+                                                                        <option value="">-- General / HQ --</option>
+                                                                        @foreach($ocrProjects ?? [] as $proj)
+                                                                            <option value="{{ $proj->id }}" {{ ($exp['project_id'] ?? null) == $proj->id ? 'selected' : '' }}>{{ $proj->name }}</option>
+                                                                        @endforeach
+                                                                    </select>
+                                                                </div>
+                                                                <div class="col-6">
+                                                                    <label class="form-label small fw-semibold text-muted mb-0.5" style="font-size:0.72rem;">Category</label>
+                                                                    <select name="category" class="form-select form-select-sm font-monospace">
+                                                                        @foreach($ocrCategories ?? [] as $catKey => $catLabel)
+                                                                            <option value="{{ $catKey }}" {{ (strtolower($exp['category'] ?? '') === strtolower($catKey) || strtolower($exp['category'] ?? '') === strtolower($catLabel)) ? 'selected' : '' }}>{{ $catLabel }}</option>
+                                                                        @endforeach
+                                                                    </select>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        {{-- ── SECTION 3: WITHHOLDING TAX (WHT) ── --}}
+                                                        <div class="col-12 col-xl-3 col-lg-6 border-end-xl px-xl-3">
+                                                            <div class="d-flex align-items-center justify-content-between mb-2 pb-1 border-bottom">
+                                                                <span class="fw-bold small text-dark"><i class="fa-solid fa-hand-holding-dollar text-warning me-1"></i>3. Withholding Tax (WHT)</span>
                                                                 <div class="form-check form-switch mb-0">
                                                                     <input class="form-check-input" type="checkbox" name="has_withholding" value="1" id="quickWhtToggle-{{ $exp['id'] ?? $idx }}" {{ (!empty($exp['has_withholding']) || $expWht > 0) ? 'checked' : '' }} onchange="toggleQuickWhtSection({{ $idx }}, this.checked)">
                                                                     <label class="form-check-label small fw-semibold text-dark" for="quickWhtToggle-{{ $exp['id'] ?? $idx }}">Apply WHT</label>
@@ -883,11 +985,11 @@
                                                             </div>
                                                         </div>
 
-                                                        {{-- ── SECTION 3: RECONCILIATION & ACTION ── --}}
-                                                        <div class="col-12 col-lg-3 d-flex flex-column justify-content-between">
+                                                        {{-- ── SECTION 4: RECONCILIATION & ACTION ── --}}
+                                                        <div class="col-12 col-xl-3 col-lg-6 ps-xl-3 d-flex flex-column justify-content-between">
                                                             <div>
                                                                 <div class="d-flex align-items-center justify-content-between mb-2 pb-1 border-bottom">
-                                                                    <span class="fw-bold small text-dark"><i class="fa-solid fa-calculator text-success me-1"></i>3. Financial Adjustment</span>
+                                                                    <span class="fw-bold small text-dark"><i class="fa-solid fa-calculator text-success me-1"></i>4. Financial Reconciliation</span>
                                                                     <span class="badge bg-primary text-white rounded-pill px-2 py-0.5" style="font-size:0.65rem;">
                                                                         <i class="fa-solid fa-lock-open me-1"></i>Unlocked (Admin)
                                                                     </span>
@@ -936,16 +1038,12 @@
                                                                         <span class="text-dark quick-net-display" id="quickNetDisplay-{{ $exp['id'] ?? $idx }}">ETB {{ number_format($expNet, 2) }}</span>
                                                                     </div>
                                                                 </div>
-
-                                                                <input type="hidden" name="item_description" value="{{ $exp['description'] ?: ($exp['category'] ?? 'General Purchase') }}">
-                                                                <input type="hidden" name="category" value="{{ $exp['category'] ?? 'materials' }}">
-                                                                <input type="hidden" name="purchase_type" value="{{ $exp['purc_type'] ?? 'PUR_GD' }}">
                                                             </div>
 
                                                             <div class="pt-2">
                                                                 <button type="submit" class="btn btn-primary btn-sm w-100 rounded-pill py-2 fw-semibold shadow-xs d-inline-flex align-items-center justify-content-center gap-1.5" id="btnQuickSave-{{ $exp['id'] ?? $idx }}">
                                                                     <i class="fa-solid fa-circle-check"></i>
-                                                                    <span>Save Receipt &amp; Withholding</span>
+                                                                    <span>Save Receipt &amp; Excel Info</span>
                                                                 </button>
                                                             </div>
                                                         </div>
@@ -2304,6 +2402,47 @@
                                                 <option value="PUR_GD">PUR_GD - e-Tax Goods (TAS Standard)</option>
                                                 <option value="PUR_SVC">PUR_SVC - e-Tax Services (TAS Standard)</option>
                                             </select>
+                                        </div>
+                                    </div>
+
+                                    {{-- Calendar Type, UOM, Qty, Unit Price --}}
+                                    <div class="row g-2 mb-2.5">
+                                        <div class="col-6 col-md-3">
+                                            <label class="form-label small fw-bold text-dark mb-1">
+                                                <i class="fa-solid fa-calendar-days text-muted me-1"></i>Calendar
+                                            </label>
+                                            <select class="form-select form-select-sm font-monospace" id="movement_edit_calendar_type" name="calendar_type">
+                                                <option value="E">E - Ethiopian</option>
+                                                <option value="G">G - Gregorian</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-6 col-md-3">
+                                            <label class="form-label small fw-bold text-dark mb-1">
+                                                <i class="fa-solid fa-box-open text-muted me-1"></i>UOM (ERA)
+                                            </label>
+                                            <select class="form-select form-select-sm font-monospace" id="movement_edit_uom" name="uom">
+                                                <option value="7">7 - PCS (Pieces)</option>
+                                                <option value="2">2 - KG (Kilogram)</option>
+                                                <option value="5">5 - LIT (Liter)</option>
+                                                <option value="6">6 - MT (Metric Ton)</option>
+                                                <option value="8">8 - CT (Carton)</option>
+                                                <option value="10">10 - PC (Piece)</option>
+                                                <option value="3">3 - ML (Milliliter)</option>
+                                                <option value="4">4 - GM (Gram)</option>
+                                                <option value="9">9 - OTHER</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-6 col-md-3">
+                                            <label class="form-label small fw-bold text-dark mb-1">
+                                                <i class="fa-solid fa-calculator text-muted me-1"></i>Quantity
+                                            </label>
+                                            <input type="number" step="0.01" min="0.01" class="form-control form-control-sm font-monospace" id="movement_edit_qty" name="qty" value="1.00" oninput="recalcMovementUnitPrice()">
+                                        </div>
+                                        <div class="col-6 col-md-3">
+                                            <label class="form-label small fw-bold text-dark mb-1">
+                                                <i class="fa-solid fa-coins text-muted me-1"></i>Unit Price
+                                            </label>
+                                            <input type="number" step="0.01" min="0" class="form-control form-control-sm font-monospace" id="movement_edit_unit_price" name="unit_price" value="0.00" oninput="recalcMovementBaseFromUnitPrice()">
                                         </div>
                                     </div>
 
@@ -3831,6 +3970,21 @@
         const purcTypeSelect = document.getElementById('movement_edit_purchase_type');
         if (purcTypeSelect) purcTypeSelect.value = ocr.purchase_type || 3;
 
+        const calSelect = document.getElementById('movement_edit_calendar_type');
+        if (calSelect) calSelect.value = ocr.calendar_type || 'E';
+
+        const uomSelect = document.getElementById('movement_edit_uom');
+        if (uomSelect) uomSelect.value = ocr.uom || '7';
+
+        const qtyInput = document.getElementById('movement_edit_qty');
+        if (qtyInput) qtyInput.value = ocr.qty !== undefined ? parseFloat(ocr.qty).toFixed(2) : '1.00';
+
+        const unitPriceInput = document.getElementById('movement_edit_unit_price');
+        if (unitPriceInput) {
+            const ocrQty = parseFloat(ocr.qty) || 1;
+            unitPriceInput.value = ocr.unit_price !== undefined ? parseFloat(ocr.unit_price).toFixed(2) : (cleanNum(ocr.base_value) / ocrQty).toFixed(2);
+        }
+
         const baseInput = document.getElementById('movement_edit_total_value');
         if (baseInput) baseInput.value = cleanNum(ocr.base_value).toFixed(2);
 
@@ -4044,6 +4198,21 @@
 
         const purcTypeSelect = document.getElementById('movement_edit_purchase_type');
         if (purcTypeSelect) purcTypeSelect.value = tas.purc_type || 'PUR_GD';
+
+        const calSelect = document.getElementById('movement_edit_calendar_type');
+        if (calSelect) calSelect.value = tas.calendar_type || 'E';
+
+        const uomSelect = document.getElementById('movement_edit_uom');
+        if (uomSelect) uomSelect.value = tas.uom || '7';
+
+        const qtyInput = document.getElementById('movement_edit_qty');
+        if (qtyInput) qtyInput.value = tas.qty !== undefined ? parseFloat(tas.qty).toFixed(2) : '1.00';
+
+        const unitPriceInput = document.getElementById('movement_edit_unit_price');
+        if (unitPriceInput) {
+            const tasQty = parseFloat(tas.qty) || 1;
+            unitPriceInput.value = tas.unit_price !== undefined ? parseFloat(tas.unit_price).toFixed(2) : (baseVal / tasQty).toFixed(2);
+        }
 
         const baseVal = cleanNum(tas.base_amount || tas.amount);
         const vatVal = cleanNum(tas.vat_amount);
@@ -4514,7 +4683,7 @@
         if (dateEcPreview) dateEcPreview.textContent = rawEcExp ? (rawEcExp.includes('EC') ? rawEcExp : (rawEcExp + ' EC')) : '';
 
         const descInput = document.getElementById('movement_edit_item_description');
-        if (descInput) descInput.value = exp.description && exp.description !== '-' ? exp.description : (exp.category || 'Expense Voucher');
+        if (descInput) descInput.value = exp.item_description || (exp.description && exp.description !== '-' ? exp.description : (exp.category || 'Expense Voucher'));
 
         const projSelect = document.getElementById('movement_edit_project_id');
         if (projSelect) projSelect.value = exp.project_id || '';
@@ -4527,7 +4696,22 @@
         if (vatCatSelect) vatCatSelect.value = isVat ? 'G' : 'E';
 
         const purcTypeSelect = document.getElementById('movement_edit_purchase_type');
-        if (purcTypeSelect) purcTypeSelect.value = exp.purc_type || 'PUR_GD';
+        if (purcTypeSelect) purcTypeSelect.value = exp.purchase_type || exp.purc_type || 'PUR_GD';
+
+        const calSelect = document.getElementById('movement_edit_calendar_type');
+        if (calSelect) calSelect.value = exp.calendar_type || 'E';
+
+        const uomSelect = document.getElementById('movement_edit_uom');
+        if (uomSelect) uomSelect.value = exp.uom || '7';
+
+        const qtyInput = document.getElementById('movement_edit_qty');
+        if (qtyInput) qtyInput.value = exp.qty !== undefined ? parseFloat(exp.qty).toFixed(2) : '1.00';
+
+        const unitPriceInput = document.getElementById('movement_edit_unit_price');
+        if (unitPriceInput) {
+            const expQty = parseFloat(exp.qty) || 1;
+            unitPriceInput.value = exp.unit_price !== undefined ? parseFloat(exp.unit_price).toFixed(2) : (baseVal / expQty).toFixed(2);
+        }
 
         const baseVal = cleanNum(exp.base_amount || exp.amount);
         const vatVal  = cleanNum(exp.vat_amount);
@@ -5045,6 +5229,38 @@
         }
     }
 
+    function calcQuickQtyPrice(idx, source) {
+        const exp = (window._pageExpenses && window._pageExpenses[idx]) || {};
+        const rowId = exp.id ?? idx;
+        const form = document.getElementById('quickRowForm-' + rowId);
+        if (!form) return;
+
+        const qtyInput = form.elements['qty'];
+        const unitPriceInput = form.elements['unit_price'];
+        const baseInput = form.elements['total_value'];
+
+        const qty = parseFloat(qtyInput ? qtyInput.value : 1) || 1;
+        let unitPrice = parseFloat(unitPriceInput ? unitPriceInput.value : 0) || 0;
+        let base = parseFloat(baseInput ? baseInput.value : 0) || 0;
+
+        if (source === 'price') {
+            if (qty > 0 && unitPrice > 0) {
+                base = Math.round(qty * unitPrice * 100) / 100;
+                if (baseInput) baseInput.value = base.toFixed(2);
+                calcQuickAmounts(idx, 'base');
+            }
+        } else if (source === 'qty') {
+            if (qty > 0 && unitPrice > 0) {
+                base = Math.round(qty * unitPrice * 100) / 100;
+                if (baseInput) baseInput.value = base.toFixed(2);
+                calcQuickAmounts(idx, 'base');
+            } else if (qty > 0 && base > 0) {
+                unitPrice = Math.round((base / qty) * 100) / 100;
+                if (unitPriceInput) unitPriceInput.value = unitPrice.toFixed(2);
+            }
+        }
+    }
+
     function calcQuickAmounts(idx, source) {
         const exp = (window._pageExpenses && window._pageExpenses[idx]) || {};
         const rowId = exp.id ?? idx;
@@ -5054,10 +5270,13 @@
         const baseInput  = form.elements['total_value'];
         const vatInput   = form.elements['vat_amount'];
         const grossInput = form.elements['value_after_vat'];
+        const qtyInput   = form.elements['qty'];
+        const unitPriceInput = form.elements['unit_price'];
 
         let base  = parseFloat(baseInput ? baseInput.value : 0) || 0;
         let vat   = parseFloat(vatInput ? vatInput.value : 0) || 0;
         let gross = parseFloat(grossInput ? grossInput.value : 0) || 0;
+        let qty   = parseFloat(qtyInput ? qtyInput.value : 1) || 1;
 
         if (source === 'base') {
             if (vat > 0) {
@@ -5066,6 +5285,9 @@
             }
             gross = Math.round((base + vat) * 100) / 100;
             if (grossInput) grossInput.value = gross.toFixed(2);
+            if (unitPriceInput && qty > 0) {
+                unitPriceInput.value = (Math.round((base / qty) * 100) / 100).toFixed(2);
+            }
         } else if (source === 'vat') {
             gross = Math.round((base + vat) * 100) / 100;
             if (grossInput) grossInput.value = gross.toFixed(2);
@@ -5079,6 +5301,9 @@
                 base = gross;
                 if (baseInput) baseInput.value = base.toFixed(2);
                 if (vatInput)  vatInput.value  = '0.00';
+            }
+            if (unitPriceInput && qty > 0) {
+                unitPriceInput.value = (Math.round((base / qty) * 100) / 100).toFixed(2);
             }
         }
 
@@ -5283,6 +5508,22 @@
                         seller_tin: itm.vendor_tin || form.elements['supplier_tin']?.value,
                         fs_no: itm.fs_no || form.elements['fs_no']?.value,
                         mrc_no: itm.mrc_no || form.elements['mrc_no']?.value,
+                        date_ec: itm.date_ec || itm.receipt_date_ec || form.elements['receipt_date_ec']?.value || window._pageExpenses[idx].date_ec,
+                        receipt_date_ec: itm.receipt_date_ec || itm.date_ec || form.elements['receipt_date_ec']?.value || window._pageExpenses[idx].receipt_date_ec,
+                        date_gc: itm.date_gc || itm.receipt_date_ymd || form.elements['receipt_date']?.value || window._pageExpenses[idx].date_gc,
+                        item_description: itm.item_description || form.elements['item_description']?.value,
+                        description: itm.item_description || form.elements['item_description']?.value,
+                        uom: itm.uom || form.elements['uom']?.value || window._pageExpenses[idx].uom,
+                        calendar_type: itm.calendar_type || form.elements['calendar_type']?.value || window._pageExpenses[idx].calendar_type,
+                        qty: itm.qty !== undefined ? itm.qty : (parseFloat(form.elements['qty']?.value) || 1),
+                        unit_price: itm.unit_price !== undefined ? itm.unit_price : (parseFloat(form.elements['unit_price']?.value) || 0),
+                        vat_category: itm.vat_category || form.elements['vat_category']?.value || window._pageExpenses[idx].vat_category,
+                        purchase_type: itm.purchase_type || form.elements['purchase_type']?.value || window._pageExpenses[idx].purchase_type,
+                        purc_type: itm.purc_type || form.elements['purchase_type']?.value || window._pageExpenses[idx].purc_type,
+                        project_id: itm.project_id || form.elements['project_id']?.value,
+                        category: itm.category || form.elements['category']?.value,
+                        base_amount: itm.base_value !== undefined ? itm.base_value : (parseFloat(form.elements['total_value']?.value) || window._pageExpenses[idx].base_amount),
+                        vat_amount: itm.vat_amount !== undefined ? itm.vat_amount : (parseFloat(form.elements['vat_amount']?.value) || window._pageExpenses[idx].vat_amount),
                         has_withholding: !!itm.has_withholding,
                         withholding_rate: itm.withholding_rate,
                         withholding_amount: itm.withholding_amount,
@@ -5349,10 +5590,16 @@
         tr.setAttribute('data-wht', whtVal);
         tr.setAttribute('data-net', netVal);
 
-        // Update Payee
+        // Update Payee & Description
         const payeeEl = tr.querySelector('.cell-exp-payee');
         if (payeeEl && (itm.vendor_name || exp.payee)) {
             payeeEl.textContent = itm.vendor_name || exp.payee;
+        }
+        const descEl = tr.querySelector('.cell-exp-desc');
+        const descText = itm.item_description || exp.item_description || exp.description;
+        if (descEl && descText) {
+            descEl.textContent = descText;
+            descEl.title = descText;
         }
 
         // Update Date (EC & GC)
@@ -5975,7 +6222,27 @@
         }
     }
 
+    function recalcMovementUnitPrice() {
+        const base = parseFloat(document.getElementById('movement_edit_total_value')?.value || 0) || 0;
+        const qty = parseFloat(document.getElementById('movement_edit_qty')?.value || 1) || 1;
+        const upInput = document.getElementById('movement_edit_unit_price');
+        if (upInput && qty > 0) {
+            upInput.value = (Math.round((base / qty) * 100) / 100).toFixed(2);
+        }
+    }
+
+    function recalcMovementBaseFromUnitPrice() {
+        const up = parseFloat(document.getElementById('movement_edit_unit_price')?.value || 0) || 0;
+        const qty = parseFloat(document.getElementById('movement_edit_qty')?.value || 1) || 1;
+        const baseInput = document.getElementById('movement_edit_total_value');
+        if (baseInput && qty > 0 && up > 0) {
+            baseInput.value = (Math.round(up * qty * 100) / 100).toFixed(2);
+            recalcMovementFromBase(baseInput.value);
+        }
+    }
+
     function recalcMovementFromBase(val) {
+        recalcMovementUnitPrice();
         if (_movementManualEditionMode) {
             recalcMovementWht();
             return;
@@ -6500,8 +6767,19 @@
                                     fs_no: itm.fs_no || exp.fs_no,
                                     mrc_no: itm.mrc_no || exp.mrc_no,
                                     date_ec: itm.date_ec || itm.receipt_date_ec || exp.date_ec,
+                                    receipt_date_ec: itm.receipt_date_ec || itm.date_ec || exp.receipt_date_ec,
                                     date_gc: itm.date_gc || itm.receipt_date_ymd || exp.date_gc,
+                                    item_description: itm.item_description || exp.item_description || exp.description,
                                     description: itm.item_description || exp.description,
+                                    uom: itm.uom || exp.uom,
+                                    calendar_type: itm.calendar_type || exp.calendar_type,
+                                    qty: itm.qty !== undefined ? itm.qty : exp.qty,
+                                    unit_price: itm.unit_price !== undefined ? itm.unit_price : exp.unit_price,
+                                    vat_category: itm.vat_category || exp.vat_category,
+                                    purchase_type: itm.purchase_type || exp.purchase_type,
+                                    purc_type: itm.purc_type || exp.purc_type,
+                                    project_id: itm.project_id || exp.project_id,
+                                    category: itm.category || exp.category,
                                     base_amount: itm.base_value !== undefined ? itm.base_value : exp.base_amount,
                                     vat_amount: itm.vat_amount !== undefined ? itm.vat_amount : exp.vat_amount,
                                     has_withholding: !!itm.has_withholding,
