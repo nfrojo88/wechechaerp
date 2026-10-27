@@ -442,13 +442,26 @@
                                 </div>
                             @endif
                             @php
+                                $initialDirectQtySum = (float)$purchaseRequest->items->sum(function($itm) {
+                                    $pQty = (float)($itm->purchased_quantity ?? 0);
+                                    if ($pQty <= 0) {
+                                        $pQty = method_exists($itm, 'getRemainingQty') && $itm->getRemainingQty() > 0 
+                                            ? (float)$itm->getRemainingQty() 
+                                            : (float)$itm->quantity;
+                                    }
+                                    return ($pQty > 0) ? $pQty : (float)$itm->quantity;
+                                });
+
                                 $initialDirectItemsSum = (float)$purchaseRequest->items->sum(function($itm) {
                                     $u = (float)($itm->estimated_unit_cost ?? 0);
-                                    $q = method_exists($itm, 'getRemainingQty') ? $itm->getRemainingQty() : (float)$itm->quantity;
-                                    if ($q <= 0 && (float)$itm->quantity > 0 && (float)($itm->purchased_quantity ?? 0) == 0) {
-                                        $q = (float)$itm->quantity;
+                                    $pQty = (float)($itm->purchased_quantity ?? 0);
+                                    if ($pQty <= 0) {
+                                        $pQty = method_exists($itm, 'getRemainingQty') && $itm->getRemainingQty() > 0 
+                                            ? (float)$itm->getRemainingQty() 
+                                            : (float)$itm->quantity;
                                     }
-                                    return $q * $u;
+                                    $eff = ($pQty > 0) ? $pQty : (float)$itm->quantity;
+                                    return $eff * $u;
                                 });
                                 $initialDirectTotal = (float)($purchaseRequest->direct_buy_amount ?? 0);
                                 if ($initialDirectTotal <= 0) {
@@ -457,36 +470,66 @@
                             @endphp
                             <form action="{{ route('purchase-requests.submit-direct-buy', $purchaseRequest) }}" method="POST" id="directBuyPricingForm">
                                 @csrf
-                                <div class="bg-light p-2 rounded border mb-3" style="max-height: 280px; overflow-y: auto;">
+                                <div class="bg-light p-2 rounded border mb-3" style="max-height: 320px; overflow-y: auto;">
                                     @foreach($purchaseRequest->items as $itm)
                                     @php
-                                        $effQty = method_exists($itm, 'getRemainingQty') ? $itm->getRemainingQty() : (float)$itm->quantity;
-                                        if ($effQty <= 0 && (float)$itm->quantity > 0 && (float)($itm->purchased_quantity ?? 0) == 0) {
-                                            $effQty = (float)$itm->quantity;
+                                        $pQty = (float)($itm->purchased_quantity ?? 0);
+                                        if ($pQty <= 0) {
+                                            $pQty = method_exists($itm, 'getRemainingQty') && $itm->getRemainingQty() > 0 
+                                                ? (float)$itm->getRemainingQty() 
+                                                : (float)$itm->quantity;
+                                        }
+                                        if ($pQty <= 0) {
+                                            $pQty = (float)$itm->quantity;
                                         }
                                         $uCost = (float)($itm->estimated_unit_cost ?? 0);
-                                        $lineTotal = round($effQty * $uCost, 2);
+                                        $lineTotal = round($pQty * $uCost, 2);
                                         $unitLabel = $itm->unit ?? ($itm->product?->unit ?? 'pcs');
                                     @endphp
                                     <div class="mb-2 pb-2 border-bottom">
                                         <div class="d-flex justify-content-between align-items-center mb-1">
                                             <span class="small fw-bold text-dark">{{ $itm->product?->name ?? 'Item #' . $itm->product_id }}</span>
-                                            <span class="badge bg-secondary">{{ (float)$effQty }} {{ $unitLabel }}</span>
+                                            <span class="badge bg-secondary-subtle text-dark border" title="Requested quantity">
+                                                Req: {{ (float)$itm->quantity }} {{ $unitLabel }}
+                                            </span>
                                         </div>
-                                        <div class="input-group input-group-sm">
-                                            <span class="input-group-text">Unit Price (ETB)</span>
-                                            <input type="number" step="0.01" min="0" 
-                                                   name="item_prices[{{ $itm->id }}]" 
-                                                   id="direct_item_price_{{ $itm->id }}"
-                                                   value="{{ $uCost > 0 ? (float)$uCost : '' }}" 
-                                                   class="form-control form-control-sm direct-item-cost fw-semibold text-dark" 
-                                                   data-item-id="{{ $itm->id }}"
-                                                   data-qty="{{ (float)$effQty }}"
-                                                   oninput="recalculateDirectTotal()"
-                                                   placeholder="0.00" required>
+                                        <div class="row g-2 mb-1">
+                                            <div class="col-6">
+                                                <label class="form-label text-muted mb-0 fw-semibold" style="font-size: 10px;">PURCHASED QTY</label>
+                                                <div class="input-group input-group-sm">
+                                                    <input type="number" step="0.001" min="0" 
+                                                           name="purchased_quantities[{{ $itm->id }}]" 
+                                                           id="direct_item_qty_{{ $itm->id }}"
+                                                           value="{{ $pQty > 0 ? (float)$pQty : (float)$itm->quantity }}" 
+                                                           class="form-control form-control-sm direct-item-qty fw-bold text-dark" 
+                                                           data-item-id="{{ $itm->id }}"
+                                                           data-unit="{{ $unitLabel }}"
+                                                           oninput="recalculateDirectTotal()"
+                                                           placeholder="0.000" required>
+                                                    <span class="input-group-text py-0 px-1 bg-light text-muted" style="font-size: 10px;">{{ $unitLabel }}</span>
+                                                </div>
+                                            </div>
+                                            <div class="col-6">
+                                                <label class="form-label text-muted mb-0 fw-semibold" style="font-size: 10px;">UNIT PRICE (ETB)</label>
+                                                <div class="input-group input-group-sm">
+                                                    <span class="input-group-text py-0 px-1 bg-light text-muted" style="font-size: 10px;">ETB</span>
+                                                    <input type="number" step="0.01" min="0" 
+                                                           name="item_prices[{{ $itm->id }}]" 
+                                                           id="direct_item_price_{{ $itm->id }}"
+                                                           value="{{ $uCost > 0 ? (float)$uCost : '' }}" 
+                                                           class="form-control form-control-sm direct-item-cost fw-semibold text-dark" 
+                                                           data-item-id="{{ $itm->id }}"
+                                                           data-qty="{{ (float)$pQty }}"
+                                                           oninput="recalculateDirectTotal()"
+                                                           placeholder="0.00" required>
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div class="d-flex justify-content-between align-items-center mt-1 px-1">
-                                            <span class="text-muted" style="font-size: 11px;">Line Total:</span>
+                                        <div class="d-flex justify-content-between align-items-center mt-1 px-1 bg-white rounded border py-1">
+                                            <span class="text-muted" style="font-size: 11px;">
+                                                <i class="fas fa-coins text-warning me-1"></i>Line Total:
+                                                <span class="small font-monospace text-secondary" id="directFormula_{{ $itm->id }}">({{ (float)$pQty }} &times; {{ number_format($uCost, 2) }})</span>
+                                            </span>
                                             <span class="fw-bold text-success font-monospace" id="directLineTotal_{{ $itm->id }}" style="font-size: 12px;">
                                                 {{ number_format($lineTotal, 2) }} ETB
                                             </span>
@@ -499,7 +542,17 @@
                                 <div class="card border border-success border-opacity-25 bg-white mb-3 shadow-xs">
                                     <div class="card-body p-2">
                                         <div class="d-flex justify-content-between align-items-center mb-1">
-                                            <span class="small text-muted fw-bold text-uppercase" style="font-size: 11px;">Items Subtotal:</span>
+                                            <span class="small text-muted fw-bold text-uppercase" style="font-size: 11px;">
+                                                <i class="fas fa-boxes-stacked me-1 text-secondary"></i> Total Purchased Materials:
+                                            </span>
+                                            <span class="fw-bold text-dark font-monospace" id="directPurchasedQtyTotalDisplay">
+                                                {{ number_format($initialDirectQtySum, 2) }}
+                                            </span>
+                                        </div>
+                                        <div class="d-flex justify-content-between align-items-center mb-1">
+                                            <span class="small text-muted fw-bold text-uppercase" style="font-size: 11px;">
+                                                <i class="fas fa-calculator me-1 text-primary"></i> Purchased Items Subtotal:
+                                            </span>
                                             <span class="fw-bold text-dark font-monospace" id="directItemsSubtotalDisplay">
                                                 {{ number_format($initialDirectItemsSum, 2) }} ETB
                                             </span>
@@ -513,23 +566,32 @@
                                                     Add 15% VAT
                                                 </label>
                                             </div>
-                                            <span class="small font-monospace text-muted" id="directVatAmountDisplay">+0.00 ETB</span>
+                                            <span class="small font-monospace text-muted fw-semibold" id="directVatAmountDisplay">+0.00 ETB</span>
                                         </div>
 
-                                        <div class="d-flex justify-content-between align-items-center pt-1 mb-1">
-                                            <label class="form-label small fw-bold text-uppercase text-dark mb-0" style="font-size: 11px;">
-                                                Total Direct Purchase Amount (ETB)
-                                            </label>
-                                            <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none text-primary" onclick="syncDirectTotalWithItems()" title="Recalculate exact items total">
-                                                <i class="fas fa-rotate me-1"></i>Sync
-                                            </button>
-                                        </div>
-                                        <div class="input-group input-group-sm">
-                                            <span class="input-group-text fw-bold bg-light">ETB</span>
-                                            <input type="number" step="0.01" min="0" name="amount" id="directTotalAmountInput" 
-                                                   class="form-control form-control-sm fw-bold bg-white text-success fs-6 font-monospace" 
-                                                   required placeholder="0.00" 
-                                                   value="{{ $initialDirectTotal > 0 ? number_format($initialDirectTotal, 2, '.', '') : '0.00' }}">
+                                        {{-- Grand Total Money Box --}}
+                                        <div class="p-2 rounded bg-success bg-opacity-10 border border-success border-opacity-25 mt-2">
+                                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                                <label class="form-label small fw-bold text-uppercase text-success mb-0" style="font-size: 11px;">
+                                                    <i class="fas fa-money-bill-wave me-1"></i> Total Purchased Amount Money (ETB)
+                                                </label>
+                                                <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none text-success fw-bold" onclick="syncDirectTotalWithItems()" title="Recalculate exact items total">
+                                                    <i class="fas fa-rotate me-1"></i>Sync
+                                                </button>
+                                            </div>
+                                            <div class="input-group input-group-sm">
+                                                <span class="input-group-text fw-bold bg-success text-white">ETB</span>
+                                                <input type="number" step="0.01" min="0" name="amount" id="directTotalAmountInput" 
+                                                       class="form-control form-control-sm fw-bold bg-white text-success fs-5 font-monospace" 
+                                                       required placeholder="0.00" 
+                                                       value="{{ $initialDirectTotal > 0 ? number_format($initialDirectTotal, 2, '.', '') : '0.00' }}">
+                                            </div>
+                                            <div class="d-flex justify-content-between align-items-center mt-1">
+                                                <span class="text-muted" style="font-size: 10px;">Total Money to Disburse:</span>
+                                                <span class="fw-bold text-success font-monospace" id="directTotalMoneyFormatted" style="font-size: 13px;">
+                                                    {{ number_format($initialDirectTotal, 2) }} ETB
+                                                </span>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -3643,9 +3705,9 @@
                             <thead class="table-light sticky-top">
                                 <tr>
                                     <th class="ps-2">Material / Product</th>
-                                    <th width="20%">Quantity</th>
-                                    <th width="30%">Unit Price (ETB)</th>
-                                    <th width="25%" class="pe-2 text-end">Line Total</th>
+                                    <th width="24%">Purchased Qty</th>
+                                    <th width="28%">Unit Price (ETB)</th>
+                                    <th width="26%" class="pe-2 text-end">Line Total</th>
                                 </tr>
                             </thead>
                             <tbody id="procTeamDirectBuyItemsContainer">
@@ -3673,17 +3735,24 @@
                                 <span class="small font-monospace text-muted" id="procTeamDirectBuyVatDisplay">+0.00 ETB</span>
                             </div>
 
-                            <div class="d-flex justify-content-between align-items-center pt-1 mb-1">
-                                <label class="form-label small fw-bold text-uppercase text-dark mb-0" style="font-size: 11px;">
-                                    Total Amount for Selected Items (ETB)
-                                </label>
-                                <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none text-primary" onclick="recalculateProcTeamDirectBuyTotal()" title="Recalculate exact total">
-                                    <i class="fas fa-rotate me-1"></i>Sync
-                                </button>
-                            </div>
-                            <div class="input-group input-group-sm">
-                                <span class="input-group-text fw-bold bg-light">ETB</span>
-                                <input type="number" step="0.01" min="0" name="amount" id="procTeamDirectBuyTotalAmount" class="form-control fw-bold bg-white text-success fs-6 font-monospace" required placeholder="0.00">
+                            {{-- Grand Total Money Box --}}
+                            <div class="p-2 rounded bg-success bg-opacity-10 border border-success border-opacity-25 mt-2">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <label class="form-label small fw-bold text-uppercase text-success mb-0" style="font-size: 11px;">
+                                        <i class="fas fa-money-bill-wave me-1"></i> Total Purchased Amount Money (ETB)
+                                    </label>
+                                    <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none text-success fw-bold" onclick="recalculateProcTeamDirectBuyTotal()" title="Recalculate exact total">
+                                        <i class="fas fa-rotate me-1"></i>Sync
+                                    </button>
+                                </div>
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text fw-bold bg-success text-white">ETB</span>
+                                    <input type="number" step="0.01" min="0" name="amount" id="procTeamDirectBuyTotalAmount" class="form-control form-control-sm fw-bold bg-white text-success fs-5 font-monospace" required placeholder="0.00">
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center mt-1">
+                                    <span class="text-muted" style="font-size: 10px;">Total Money to Disburse:</span>
+                                    <span class="fw-bold text-success font-monospace" id="procTeamDirectBuyTotalMoneyDisplay" style="font-size: 13px;">0.00 ETB</span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -4982,22 +5051,35 @@ function openProcTeamSelectiveDirectBuyModal() {
                 <strong class="text-dark">${item.name}</strong>
             </td>
             <td>
-                <span class="badge bg-secondary">${item.quantity} ${item.unit}</span>
+                <div class="input-group input-group-sm">
+                    <input type="number" step="0.001" min="0" 
+                           name="purchased_quantities[${item.id}]" 
+                           id="proc_team_item_qty_${item.id}"
+                           value="${item.quantity}" 
+                           class="form-control form-control-sm proc-team-direct-item-qty fw-bold text-dark" 
+                           data-item-id="${item.id}"
+                           data-unit="${item.unit}"
+                           oninput="recalculateProcTeamDirectBuyTotal()"
+                           placeholder="0.000" required>
+                    <span class="input-group-text py-0 px-1 bg-light text-muted" style="font-size: 11px;">${item.unit}</span>
+                </div>
+                <div class="small text-muted" style="font-size: 10px;">Req: ${item.quantity} ${item.unit}</div>
             </td>
             <td>
                 <div class="input-group input-group-sm">
-                    <span class="input-group-text py-0 px-1" style="font-size: 11px;">ETB</span>
+                    <span class="input-group-text py-0 px-1 bg-light text-muted" style="font-size: 11px;">ETB</span>
                     <input type="number" step="0.01" min="0" 
                            name="item_prices[${item.id}]" 
+                           id="proc_team_item_price_${item.id}"
                            value="${unitCost > 0 ? unitCost : ''}" 
-                           class="form-control form-control-sm proc-team-direct-item-cost fw-semibold" 
-                           data-qty="${item.quantity}"
+                           class="form-control form-control-sm proc-team-direct-item-cost fw-semibold text-dark" 
                            data-item-id="${item.id}"
+                           data-qty="${item.quantity}"
                            oninput="recalculateProcTeamDirectBuyTotal()"
                            placeholder="0.00" required>
                 </div>
             </td>
-            <td class="pe-2 text-end fw-bold text-success" id="procTeamLineTotal_${item.id}">
+            <td class="pe-2 text-end fw-bold text-success font-monospace" id="procTeamLineTotal_${item.id}">
                 ${Number(lineTotal).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})} ETB
             </td>
         `;
@@ -5012,13 +5094,17 @@ function openProcTeamSelectiveDirectBuyModal() {
 
 function recalculateProcTeamDirectBuyTotal() {
     let subtotal = 0;
+    let totalQty = 0;
     document.querySelectorAll('.proc-team-direct-item-cost').forEach(input => {
+        const itemId = input.dataset.itemId;
         const val = parseFloat(input.value) || 0;
-        const qty = parseFloat(input.dataset.qty) || 0;
+        const qtyInput = document.getElementById('proc_team_item_qty_' + itemId);
+        const qty = qtyInput ? (parseFloat(qtyInput.value) || 0) : (parseFloat(input.dataset.qty) || 0);
         const lineTot = Math.round((val * qty) * 100) / 100;
         subtotal += lineTot;
+        totalQty += qty;
 
-        const lineSpan = document.getElementById('procTeamLineTotal_' + input.dataset.itemId);
+        const lineSpan = document.getElementById('procTeamLineTotal_' + itemId);
         if (lineSpan) {
             lineSpan.textContent = Number(lineTot).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' ETB';
         }
@@ -5042,6 +5128,11 @@ function recalculateProcTeamDirectBuyTotal() {
     const totalInput = document.getElementById('procTeamDirectBuyTotalAmount');
     if (totalInput) {
         totalInput.value = grandTotal > 0 ? grandTotal.toFixed(2) : (subtotal > 0 ? subtotal.toFixed(2) : '0.00');
+    }
+
+    const totalMoneyDisplay = document.getElementById('procTeamDirectBuyTotalMoneyDisplay');
+    if (totalMoneyDisplay) {
+        totalMoneyDisplay.textContent = Number(grandTotal > 0 ? grandTotal : subtotal).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' ETB';
     }
 }
 
@@ -5156,22 +5247,34 @@ function toggleSplitRowFields(selectEl, index) {
 
 function recalculateDirectTotal() {
     let subtotal = 0;
+    let totalQty = 0;
     document.querySelectorAll('.direct-item-cost').forEach(input => {
+        const itemId = input.dataset.itemId;
         const val = parseFloat(input.value) || 0;
-        const qty = parseFloat(input.dataset.qty) || 0;
+        const qtyInput = document.getElementById('direct_item_qty_' + itemId);
+        const qty = qtyInput ? (parseFloat(qtyInput.value) || 0) : (parseFloat(input.dataset.qty) || 0);
         const lineTot = Math.round((val * qty) * 100) / 100;
         subtotal += lineTot;
+        totalQty += qty;
 
-        const itemId = input.dataset.itemId;
         if (itemId) {
             const lineSpan = document.getElementById('directLineTotal_' + itemId);
             if (lineSpan) {
                 lineSpan.textContent = Number(lineTot).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' ETB';
             }
+            const formulaSpan = document.getElementById('directFormula_' + itemId);
+            if (formulaSpan) {
+                formulaSpan.textContent = '(' + qty + ' × ' + Number(val).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ')';
+            }
         }
     });
 
     subtotal = Math.round(subtotal * 100) / 100;
+
+    const qtyDisplay = document.getElementById('directPurchasedQtyTotalDisplay');
+    if (qtyDisplay) {
+        qtyDisplay.textContent = Number(totalQty).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 3});
+    }
 
     const subtotalDisplay = document.getElementById('directItemsSubtotalDisplay');
     if (subtotalDisplay) {
@@ -5191,6 +5294,11 @@ function recalculateDirectTotal() {
     const totalInput = document.getElementById('directTotalAmountInput');
     if (totalInput) {
         totalInput.value = grandTotal > 0 ? grandTotal.toFixed(2) : (subtotal > 0 ? subtotal.toFixed(2) : '0.00');
+    }
+
+    const formattedSpan = document.getElementById('directTotalMoneyFormatted');
+    if (formattedSpan) {
+        formattedSpan.textContent = Number(grandTotal > 0 ? grandTotal : subtotal).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' ETB';
     }
 }
 
@@ -5522,11 +5630,12 @@ function submitQuickSupplier() {
 
 // Initialize Direct Buy live calculations on page load and bind responsive input events
 document.addEventListener('DOMContentLoaded', function () {
-    if (document.querySelector('.direct-item-cost')) {
+    if (document.querySelector('.direct-item-cost') || document.querySelector('.direct-item-qty')) {
         recalculateDirectTotal();
-        document.querySelectorAll('.direct-item-cost').forEach(input => {
+        document.querySelectorAll('.direct-item-cost, .direct-item-qty').forEach(input => {
             input.addEventListener('change', recalculateDirectTotal);
             input.addEventListener('keyup', recalculateDirectTotal);
+            input.addEventListener('input', recalculateDirectTotal);
         });
     }
 

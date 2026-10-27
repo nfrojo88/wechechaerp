@@ -234,7 +234,7 @@ class DirectBuyCalculationTest extends TestCase
         $pr->refresh();
         $item->refresh();
 
-        $this->assertEquals(6000.00, (float)$item->estimated_total);
+        $this->assertEquals(15000.00, (float)$item->estimated_total);
         $this->assertEquals(6000.00, (float)$pr->direct_buy_amount);
     }
 
@@ -281,5 +281,79 @@ class DirectBuyCalculationTest extends TestCase
         $this->assertEquals(10000.00, (float)$item->estimated_total);
         $this->assertEquals(500.00, (float)$item->estimated_unit_cost);
         $this->assertEquals(10000.00, (float)$pr->direct_buy_amount, 'Stale amount must be replaced with exact items calculation (10,000 ETB).');
+    }
+
+    public function test_submit_direct_buy_with_purchased_quantities_calculates_total_money_and_updates_items(): void
+    {
+        $role = \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'purchaser', 'guard_name' => 'web']);
+        $user = User::create(['name' => 'Buyer Sara', 'email' => 'buyer_sara@wechecha.com']);
+        $user->assignRole($role);
+        Auth::login($user);
+
+        $prod1 = Product::create(['name' => 'Cement 50kg', 'unit' => 'bag']);
+        $prod2 = Product::create(['name' => 'Sand Coarse', 'unit' => 'm3']);
+
+        $pr = PurchaseRequest::create([
+            'pr_no'           => 'PR-DIR-005',
+            'status'          => PurchaseRequest::STATUS_PENDING_PROC_TEAM,
+            'sourcing_method' => 'direct_buy',
+        ]);
+
+        // Requested 100 bags, but purchaser bought 80 bags
+        $item1 = PurchaseRequestItem::create([
+            'purchase_request_id' => $pr->id,
+            'product_id'          => $prod1->id,
+            'quantity'            => 100,
+            'purchased_quantity'  => null,
+            'unit'                => 'bag',
+        ]);
+
+        // Requested 50 m3, purchaser bought 50 m3
+        $item2 = PurchaseRequestItem::create([
+            'purchase_request_id' => $pr->id,
+            'product_id'          => $prod2->id,
+            'quantity'            => 50,
+            'purchased_quantity'  => null,
+            'unit'                => 'm3',
+        ]);
+
+        $controller = app(PurchaseRequestController::class);
+
+        // 80 bags @ 600 ETB = 48,000 ETB
+        // 50 m3 @ 400 ETB = 20,000 ETB
+        // Subtotal = 68,000 ETB
+        // With 15% VAT = 68,000 * 1.15 = 78,200 ETB
+        $request = Request::create(route('purchase-requests.submit-direct-buy', $pr), 'POST', [
+            'item_prices'          => [
+                $item1->id => 600.00,
+                $item2->id => 400.00,
+            ],
+            'purchased_quantities' => [
+                $item1->id => 80.00,
+                $item2->id => 50.00,
+            ],
+            'amount'               => 0.00,
+            'include_vat'          => '1',
+            'notes'                => 'Procured materials with 15% VAT invoice',
+        ]);
+        app()->instance('request', $request);
+
+        $response = $controller->submitDirectBuy($request, $pr);
+        $this->assertEquals(302, $response->getStatusCode());
+
+        $pr->refresh();
+        $item1->refresh();
+        $item2->refresh();
+
+        // Check that purchased_quantity was saved on the items
+        $this->assertEquals(80.00, (float)$item1->purchased_quantity);
+        $this->assertEquals(600.00, (float)$item1->estimated_unit_cost);
+
+        $this->assertEquals(50.00, (float)$item2->purchased_quantity);
+        $this->assertEquals(400.00, (float)$item2->estimated_unit_cost);
+
+        // Check that direct_buy_amount holds the total money including VAT (78,200 ETB)
+        $this->assertEquals(78200.00, (float)$pr->direct_buy_amount);
+        $this->assertEquals(PurchaseRequest::STATUS_PENDING_MARKETING, $pr->status);
     }
 }

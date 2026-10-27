@@ -1218,26 +1218,29 @@ class PurchaseRequestController extends Controller
         $this->authorizeStageRole($purchaseRequest, ['purchase', 'procurement_team', 'purchaser', 'buyer', 'purchase_manager', 'procurement_manager', 'admin', 'global_admin']);
         
         $request->validate([
-            'item_ids'        => 'required|array|min:1',
-            'item_ids.*'      => 'exists:purchase_request_items,id',
-            'item_prices'     => 'nullable|array',
-            'item_prices.*'   => 'nullable|numeric|min:0',
-            'amount'          => 'nullable|numeric|min:0',
-            'sourcing_method' => 'nullable|in:direct_buy,proforma',
-            'notes'           => 'nullable|string',
+            'item_ids'               => 'required|array|min:1',
+            'item_ids.*'             => 'exists:purchase_request_items,id',
+            'item_prices'            => 'nullable|array',
+            'item_prices.*'          => 'nullable|numeric|min:0',
+            'purchased_quantities'   => 'nullable|array',
+            'purchased_quantities.*' => 'nullable|numeric|min:0',
+            'amount'                 => 'nullable|numeric|min:0',
+            'sourcing_method'        => 'nullable|in:direct_buy,proforma',
+            'notes'                  => 'nullable|string',
         ]);
 
         $itemIds = array_map('intval', $request->input('item_ids', []));
         $allItemsCount = $purchaseRequest->items()->count();
         $method = $request->input('sourcing_method', $purchaseRequest->sourcing_method ?: 'direct_buy');
         $itemPrices = $request->input('item_prices', []);
+        $purchasedQuantities = $request->input('purchased_quantities', []);
         $amount = (float)($request->input('amount', 0));
         $includeVat = $request->boolean('include_vat');
 
         // If all items selected, no split needed: submit directly
         if (count($itemIds) >= $allItemsCount) {
             if ($method === 'direct_buy') {
-                $this->lifecycle->submitDirectBuy($purchaseRequest, $amount, $request->notes, $itemPrices, $includeVat);
+                $this->lifecycle->submitDirectBuy($purchaseRequest, $amount, $request->notes, $itemPrices, $includeVat, $purchasedQuantities);
                 return back()->with('success', 'Direct buy material pricing submitted for all items. Awaiting marketing review.');
             } else {
                 $this->lifecycle->submitProformas($purchaseRequest, $request->notes);
@@ -1246,7 +1249,7 @@ class PurchaseRequestController extends Controller
         }
 
         // Subset selected: Split into new PR and advance the selected items
-        return DB::transaction(function () use ($purchaseRequest, $itemIds, $method, $request, $itemPrices, $amount, $includeVat) {
+        return DB::transaction(function () use ($purchaseRequest, $itemIds, $method, $request, $itemPrices, $amount, $includeVat, $purchasedQuantities) {
             $newPrNo = PurchaseRequest::generatePrNo();
 
             $newPr = PurchaseRequest::create([
@@ -1285,7 +1288,7 @@ class PurchaseRequestController extends Controller
 
             // Submit the new PR forward
             if ($method === 'direct_buy') {
-                $this->lifecycle->submitDirectBuy($newPr, $amount, $request->notes, $itemPrices, $includeVat);
+                $this->lifecycle->submitDirectBuy($newPr, $amount, $request->notes, $itemPrices, $includeVat, $purchasedQuantities);
             } else {
                 $this->lifecycle->submitProformas($newPr, $request->notes);
             }
@@ -1400,18 +1403,21 @@ class PurchaseRequestController extends Controller
     {
         $this->authorizeStageRole($purchaseRequest, ['purchase', 'procurement_team', 'purchaser', 'buyer']);
         $request->validate([
-            'item_prices'   => 'nullable|array',
-            'item_prices.*' => 'nullable|numeric|min:0',
-            'amount'        => 'nullable|numeric|min:0',
-            'include_vat'   => 'nullable|boolean',
-            'notes'         => 'nullable|string',
+            'item_prices'            => 'nullable|array',
+            'item_prices.*'          => 'nullable|numeric|min:0',
+            'purchased_quantities'   => 'nullable|array',
+            'purchased_quantities.*' => 'nullable|numeric|min:0',
+            'amount'                 => 'nullable|numeric|min:0',
+            'include_vat'            => 'nullable|boolean',
+            'notes'                  => 'nullable|string',
         ]);
 
         $itemPrices = $request->input('item_prices', []);
+        $purchasedQuantities = $request->input('purchased_quantities', []);
         $amount = (float)($request->input('amount', 0));
         $includeVat = $request->boolean('include_vat');
 
-        $this->lifecycle->submitDirectBuy($purchaseRequest, $amount, $request->notes, $itemPrices, $includeVat);
+        $this->lifecycle->submitDirectBuy($purchaseRequest, $amount, $request->notes, $itemPrices, $includeVat, $purchasedQuantities);
         return back()->with('success', 'Direct buy material pricing submitted. Awaiting marketing review.');
     }
 

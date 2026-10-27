@@ -26,6 +26,7 @@ use App\Models\Store;
 use App\Models\Product;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * ProcurementLifecycleService
@@ -243,8 +244,14 @@ class ProcurementLifecycleService
     // STAGE 4 — Procurement Team Sourcing
     // ═══════════════════════════════════════════════════════════════════
 
-    public function submitDirectBuy(PurchaseRequest $pr, float $amount, string $notes = null, array $itemPrices = [], bool $includeVat = false): void
-    {
+    public function submitDirectBuy(
+        PurchaseRequest $pr, 
+        float $amount, 
+        string $notes = null, 
+        array $itemPrices = [], 
+        bool $includeVat = false,
+        array $purchasedQuantities = []
+    ): void {
         $from = $pr->status;
 
         // If individual item prices are supplied, update each PR item and calculate total
@@ -254,14 +261,29 @@ class ProcurementLifecycleService
                 $item = $pr->items()->find($itemId);
                 if ($item) {
                     $cost = (float)$unitCost;
-                    $effQty = method_exists($item, 'getRemainingQty') ? $item->getRemainingQty() : (float)$item->quantity;
-                    if ($effQty <= 0 && (float)$item->quantity > 0 && (float)($item->purchased_quantity ?? 0) == 0) {
-                        $effQty = (float)$item->quantity;
+
+                    if (isset($purchasedQuantities[$itemId]) && is_numeric($purchasedQuantities[$itemId])) {
+                        $purchQty = (float)$purchasedQuantities[$itemId];
+                    } elseif (method_exists($item, 'getRemainingQty') && $item->getRemainingQty() > 0) {
+                        $purchQty = (float)$item->getRemainingQty();
+                    } elseif ((float)($item->purchased_quantity ?? 0) > 0) {
+                        $purchQty = (float)$item->purchased_quantity;
+                    } else {
+                        $purchQty = (float)$item->quantity;
                     }
-                    $lineTotal = round($cost * $effQty, 2);
-                    $item->update([
+
+                    if ($purchQty <= 0 && (float)$item->quantity > 0) {
+                        $purchQty = (float)$item->quantity;
+                    }
+
+                    $lineTotal = round($cost * $purchQty, 2);
+                    $updatePayload = [
                         'estimated_unit_cost' => $cost,
-                    ]);
+                    ];
+                    if (Schema::hasColumn('purchase_request_items', 'purchased_quantity')) {
+                        $updatePayload['purchased_quantity'] = $purchQty;
+                    }
+                    $item->update($updatePayload);
                     $totalCalculated += $lineTotal;
                 }
             }
