@@ -539,50 +539,57 @@ class ExpenseRequest extends Model
     }
 
     /**
-     * Get the accurate 3% Withholding Tax deduction.
+     * Get the accurate Withholding Tax deduction.
+     * Respects explicitly saved withholding_amount or withholding_rate (2%, 3%, 30%, etc.).
      */
     public function getCalculatedWithholdingAmountAttribute(): float
     {
-        if (!$this->has_withholding && (float)($this->withholding_amount ?? 0) <= 0) {
+        // If explicitly disabled, return 0.0
+        if ($this->has_withholding === false || $this->has_withholding === 0 || $this->has_withholding === '0') {
+            return 0.0;
+        }
+
+        // If enabled and explicit withholding amount is set
+        if ((float)($this->withholding_amount ?? 0) > 0) {
+            return round((float)$this->withholding_amount, 2);
+        }
+
+        if (!$this->has_withholding) {
             return 0.0;
         }
 
         $gross = (float)($this->gross_amount > 0 ? $this->gross_amount : $this->amount);
         $vatRate = (float)($this->vat_rate ?? 15.00);
         $vatType = $this->vat_type ?? 'none';
+        $whtRate = (float)($this->withholding_rate ?: 3.00);
 
-        // In Ethiopian tax regulations, 3% WHT is calculated on the taxable base before VAT
+        // In Ethiopian tax regulations, WHT is calculated on the taxable base before VAT
         $taxableBase = in_array($vatType, ['inclusive', 'vat_b'])
             ? round($gross / (1 + ($vatRate / 100)), 2)
             : $gross;
 
-        return round($taxableBase * 0.03, 2);
+        return round($taxableBase * ($whtRate / 100), 2);
     }
 
     /**
-     * Get effective payable / net amount with strict 3% WHT and VAT.
+     * Get effective payable / net amount with strict WHT and VAT.
      */
     public function getEffectivePayableAmountAttribute(): float
     {
         $gross = (float)($this->gross_amount > 0 ? $this->gross_amount : $this->amount);
+        $wht = $this->calculated_withholding_amount;
 
-        if ($this->has_withholding || (float)($this->withholding_amount ?? 0) > 0) {
-            $vatRate = (float)($this->vat_rate ?? 15.00);
+        if ($wht > 0) {
             $vatType = $this->vat_type ?? 'none';
             $vatAmount = (float)($this->vat_amount ?? 0);
-            $wht = $this->calculated_withholding_amount;
 
             if ($vatType === 'exclusive') {
-                return round(($gross + $vatAmount) - $wht, 2);
+                return max(0.0, round(($gross + $vatAmount) - $wht, 2));
             }
-            return round($gross - $wht, 2);
+            return max(0.0, round($gross - $wht, 2));
         }
 
-        if ((float)($this->net_amount ?? 0) > 0) {
-            return (float)$this->net_amount;
-        }
-
-        return (float)($this->gross_amount > 0 ? $this->gross_amount : $this->amount);
+        return round($gross, 2);
     }
 
     public function auditReceiptRequestedBy()

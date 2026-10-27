@@ -289,6 +289,14 @@
             </button>
         </li>
         <li class="nav-item" role="presentation">
+            <button class="nav-link {{ $activeTab === 'withholding' ? 'active' : '' }} rounded-pill fw-semibold small d-inline-flex align-items-center gap-1.5" 
+                    id="page-withholding-tab" data-bs-toggle="pill" data-bs-target="#page-withholding" type="button" role="tab" title="Withholding Tax Deductions (2%, 3%, 30%) and Certificates">
+                <i class="fa-solid fa-hand-holding-dollar text-warning"></i>
+                <span>Withholding Tax (WHT Deductions)</span>
+                <span class="badge bg-warning-subtle text-dark border border-warning-subtle rounded-pill ms-1" id="tabBadgeWhtCount">{{ count($movementsData['wht_expenses'] ?? []) }}</span>
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
             <button class="nav-link {{ $activeTab === 'audit' ? 'active' : '' }} rounded-pill fw-semibold small d-inline-flex align-items-center gap-1.5" 
                     id="page-audit-tab" data-bs-toggle="pill" data-bs-target="#page-audit" type="button" role="tab">
                 <i class="fa-solid fa-scale-balanced text-dark"></i>
@@ -435,6 +443,9 @@
                             <button type="button" class="btn btn-sm rounded-pill px-2.5 py-1 fw-semibold text-muted btn-expense-filter" id="btnExpenseFilter-tas" onclick="filterExpensePurchaseType('tas')" title="Purchases with 0% VAT (Declared in TAS)">
                                 <i class="fa-solid fa-receipt me-1"></i>TAS Purchases (0% VAT) (<span id="filterCountTasPurchases">{{ count($movementsData['tas_purchases'] ?? []) }}</span>)
                             </button>
+                            <button type="button" class="btn btn-sm rounded-pill px-2.5 py-1 fw-semibold text-muted btn-expense-filter" id="btnExpenseFilter-wht" onclick="filterExpensePurchaseType('wht')" title="Purchases with Withholding Tax (WHT) Deductions">
+                                <i class="fa-solid fa-hand-holding-dollar me-1 text-warning"></i>Withholding (WHT) (<span id="filterCountWhtPurchases">{{ count($movementsData['wht_expenses'] ?? []) }}</span>)
+                            </button>
                             <button type="button" class="btn btn-sm rounded-pill px-2.5 py-1 fw-semibold text-muted btn-expense-filter" id="btnExpenseFilter-missing_receipt" onclick="filterExpensePurchaseType('missing_receipt')" title="Purchases missing receipts and not verified">
                                 <i class="fa-solid fa-triangle-exclamation me-1 text-danger"></i>Missing Receipt (<span id="filterCountMissingReceipt">{{ $movementsData['summary']['missing_receipt_count'] ?? 0 }}</span>)
                             </button>
@@ -454,6 +465,11 @@
                                class="btn btn-sm btn-outline-danger fw-semibold px-3 text-nowrap d-inline-flex align-items-center gap-1">
                                 <i class="fa-solid fa-file-excel"></i>
                                 <span>Purchase VAT</span>
+                            </a>
+                            <a href="{{ route('finance.tax-deductions.export-excel', ['type' => 'withholding', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}" 
+                               class="btn btn-sm btn-outline-warning text-dark fw-semibold px-3 text-nowrap d-inline-flex align-items-center gap-1" title="Export Withholding Tax Deductions Report">
+                                <i class="fa-solid fa-file-excel text-success"></i>
+                                <span>Export WHT</span>
                             </a>
                         </div>
                         <div style="min-width: 200px;">
@@ -1400,7 +1416,16 @@
                                 <i class="fa-solid fa-file-excel"></i>
                                 <span>Purchase VAT</span>
                             </a>
+                            <a href="{{ route('finance.tax-deductions.export-excel', ['type' => 'withholding', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}" 
+                               class="btn btn-sm btn-outline-warning text-dark fw-semibold px-3 text-nowrap d-inline-flex align-items-center gap-1" title="Export Withholding Tax Deductions Report">
+                                <i class="fa-solid fa-file-excel text-success"></i>
+                                <span>Export WHT</span>
+                            </a>
                         </div>
+                        <button type="button" class="btn btn-sm btn-primary rounded-pill px-3 shadow-xs d-inline-flex align-items-center gap-1.5 fw-semibold" onclick="openNewManualReceiptModal()" title="Add a New Manual ERCA Cash Register Invoice / Fiscal Slip">
+                            <i class="fa-solid fa-circle-plus"></i>
+                            <span>Add Manual Invoice</span>
+                        </button>
                         <div style="min-width: 220px;">
                             <input type="text" class="form-control form-control-sm rounded-pill" placeholder="Search vendor, FS #, item..." onkeyup="filterLocalTable('pageOcrTable', this.value)">
                         </div>
@@ -1796,11 +1821,288 @@
                                         <li><a class="dropdown-item py-1.5 px-3 rounded-2" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'sales', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}"><i class="fa-solid fa-hand-holding-dollar text-success me-2"></i>1. Sales Excel</a></li>
                                         <li><a class="dropdown-item py-1.5 px-3 rounded-2" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_tas', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}"><i class="fa-solid fa-file-invoice text-primary me-2"></i>2. Purchase TAS Excel</a></li>
                                         <li><a class="dropdown-item py-1.5 px-3 rounded-2" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_vat', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}"><i class="fa-solid fa-percent text-danger me-2"></i>3. Purchase VAT Excel</a></li>
+                                        <li><a class="dropdown-item py-1.5 px-3 rounded-2" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'withholding', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}"><i class="fa-solid fa-hand-holding-dollar text-warning me-2"></i>4. Withholding Tax Excel</a></li>
                                     </ul>
                                 </div>
                             </div>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        {{-- ── TAB 6: WITHHOLDING TAX (WHT DEDUCTIONS) ──────────────────────── --}}
+        <div class="tab-pane fade {{ $activeTab === 'withholding' ? 'show active' : '' }}" id="page-withholding" role="tabpanel">
+            <div class="card border-0 shadow-sm rounded-4 overflow-hidden bg-white">
+                <div class="card-header bg-white border-bottom py-3 px-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="badge bg-warning-subtle text-dark p-2 rounded-3 border border-warning-subtle"><i class="fa-solid fa-hand-holding-dollar fs-6 text-warning"></i></span>
+                        <div>
+                            <h6 class="fw-bold mb-0 text-dark">Withholding Tax (WHT Deductions) &mdash; የተቀናሽ ታክስ መዝገብ</h6>
+                            <small class="text-muted">Withholding tax deductions withheld from suppliers &amp; service providers (2% Goods, 3% Services, 30% No TIN) and WHT certificate tracking</small>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center gap-2 d-print-none flex-wrap">
+                        <div class="btn-group btn-group-sm shadow-xs rounded-pill p-0.5 bg-light border me-1" role="group">
+                            <button type="button" class="btn btn-sm rounded-pill px-2.5 py-1 fw-semibold btn-warning text-dark shadow-xs btn-wht-filter" id="btnWhtFilter-all" onclick="filterWhtRateType('all')" title="Show All Withholding Deductions">
+                                <i class="fa-solid fa-list me-1"></i>All WHT (<span id="filterCountWhtAll">{{ count($movementsData['wht_expenses'] ?? []) }}</span>)
+                            </button>
+                            <button type="button" class="btn btn-sm rounded-pill px-2.5 py-1 fw-semibold text-muted btn-wht-filter" id="btnWhtFilter-2" onclick="filterWhtRateType('2')" title="2.0% WHT on Goods Supply">
+                                <i class="fa-solid fa-box me-1 text-primary"></i>2% Goods (<span id="filterCountWht2">{{ $movementsData['wht_summary']['wht_2_count'] ?? 0 }}</span>)
+                            </button>
+                            <button type="button" class="btn btn-sm rounded-pill px-2.5 py-1 fw-semibold text-muted btn-wht-filter" id="btnWhtFilter-3" onclick="filterWhtRateType('3')" title="3.0% WHT on Services Standard">
+                                <i class="fa-solid fa-screwdriver-wrench me-1 text-success"></i>3% Services (<span id="filterCountWht3">{{ $movementsData['wht_summary']['wht_3_count'] ?? 0 }}</span>)
+                            </button>
+                            <button type="button" class="btn btn-sm rounded-pill px-2.5 py-1 fw-semibold text-muted btn-wht-filter" id="btnWhtFilter-30" onclick="filterWhtRateType('30')" title="30.0% WHT on Unregistered / No TIN">
+                                <i class="fa-solid fa-triangle-exclamation me-1 text-danger"></i>30% No TIN (<span id="filterCountWht30">{{ $movementsData['wht_summary']['wht_30_count'] ?? 0 }}</span>)
+                            </button>
+                            <button type="button" class="btn btn-sm rounded-pill px-2.5 py-1 fw-semibold text-muted btn-wht-filter" id="btnWhtFilter-missing_cert" onclick="filterWhtRateType('missing_cert')" title="WHT deductions missing certificate number or slip">
+                                <i class="fa-solid fa-file-circle-xmark me-1 text-danger"></i>Missing Slip
+                            </button>
+                        </div>
+                        <a href="{{ route('finance.tax-deductions.export-excel', ['type' => 'withholding', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}" 
+                           class="btn btn-sm btn-outline-warning text-dark fw-semibold px-3 rounded-pill shadow-xs d-inline-flex align-items-center gap-1.5" title="Export Withholding Tax Report">
+                            <i class="fa-solid fa-file-excel text-success"></i>
+                            <span>Export WHT Excel</span>
+                        </a>
+                        <div style="min-width: 220px;">
+                            <input type="text" class="form-control form-control-sm rounded-pill" placeholder="Search payee, voucher, TIN..." onkeyup="filterLocalTable('pageWithholdingTable', this.value)">
+                        </div>
+                    </div>
+                </div>
+
+                {{-- WHT Statistics Cards --}}
+                <div class="card-body p-3 bg-light bg-opacity-50 border-bottom">
+                    <div class="row g-2.5">
+                        <div class="col-12 col-sm-6 col-lg-3">
+                            <div class="p-2.5 bg-white rounded-3 border shadow-2xs">
+                                <div class="d-flex align-items-center justify-content-between mb-1">
+                                    <span class="text-muted small fw-semibold text-uppercase" style="font-size:0.7rem;">Total WHT Deductions</span>
+                                    <span class="badge bg-danger-subtle text-danger rounded-pill font-monospace" id="whtCardTotalCount" style="font-size:0.65rem;">{{ $movementsData['wht_summary']['wht_count'] ?? 0 }} Vouchers</span>
+                                </div>
+                                <div class="fs-6 fw-bold text-danger font-monospace" id="whtCardTotalAmount">ETB {{ number_format($movementsData['wht_summary']['total_wht_amount'] ?? 0, 2) }}</div>
+                                <small class="text-muted" style="font-size:0.72rem;">Base: <span id="whtCardTotalBase">ETB {{ number_format($movementsData['wht_summary']['total_base_amount'] ?? 0, 2) }}</span></small>
+                            </div>
+                        </div>
+                        <div class="col-12 col-sm-6 col-lg-2">
+                            <div class="p-2.5 bg-white rounded-3 border shadow-2xs">
+                                <div class="d-flex align-items-center justify-content-between mb-1">
+                                    <span class="text-muted small fw-semibold text-uppercase" style="font-size:0.7rem;">2.0% Goods</span>
+                                    <span class="badge bg-primary-subtle text-primary rounded-pill font-monospace" id="whtCard2Count" style="font-size:0.65rem;">{{ $movementsData['wht_summary']['wht_2_count'] ?? 0 }}</span>
+                                </div>
+                                <div class="fs-6 fw-bold text-dark font-monospace" id="whtCard2Amount">ETB {{ number_format($movementsData['wht_summary']['wht_2_amount'] ?? 0, 2) }}</div>
+                                <small class="text-muted" style="font-size:0.72rem;">Goods Supply WHT</small>
+                            </div>
+                        </div>
+                        <div class="col-12 col-sm-6 col-lg-2">
+                            <div class="p-2.5 bg-white rounded-3 border shadow-2xs">
+                                <div class="d-flex align-items-center justify-content-between mb-1">
+                                    <span class="text-muted small fw-semibold text-uppercase" style="font-size:0.7rem;">3.0% Services</span>
+                                    <span class="badge bg-success-subtle text-success rounded-pill font-monospace" id="whtCard3Count" style="font-size:0.65rem;">{{ $movementsData['wht_summary']['wht_3_count'] ?? 0 }}</span>
+                                </div>
+                                <div class="fs-6 fw-bold text-dark font-monospace" id="whtCard3Amount">ETB {{ number_format($movementsData['wht_summary']['wht_3_amount'] ?? 0, 2) }}</div>
+                                <small class="text-muted" style="font-size:0.72rem;">Standard Service WHT</small>
+                            </div>
+                        </div>
+                        <div class="col-12 col-sm-6 col-lg-2">
+                            <div class="p-2.5 bg-white rounded-3 border shadow-2xs">
+                                <div class="d-flex align-items-center justify-content-between mb-1">
+                                    <span class="text-muted small fw-semibold text-uppercase" style="font-size:0.7rem;">30% Non-TIN</span>
+                                    <span class="badge bg-danger-subtle text-danger rounded-pill font-monospace" id="whtCard30Count" style="font-size:0.65rem;">{{ $movementsData['wht_summary']['wht_30_count'] ?? 0 }}</span>
+                                </div>
+                                <div class="fs-6 fw-bold text-danger font-monospace" id="whtCard30Amount">ETB {{ number_format($movementsData['wht_summary']['wht_30_amount'] ?? 0, 2) }}</div>
+                                <small class="text-muted" style="font-size:0.72rem;">Unregistered Penalty</small>
+                            </div>
+                        </div>
+                        <div class="col-12 col-sm-6 col-lg-3">
+                            <div class="p-2.5 bg-white rounded-3 border shadow-2xs">
+                                <div class="d-flex align-items-center justify-content-between mb-1">
+                                    <span class="text-muted small fw-semibold text-uppercase" style="font-size:0.7rem;">Certificate Slips</span>
+                                    <span class="badge bg-warning-subtle text-dark border border-warning-subtle rounded-pill font-monospace" id="whtCardSlips" style="font-size:0.65rem;">
+                                        {{ $movementsData['wht_summary']['with_receipt_count'] ?? 0 }} / {{ $movementsData['wht_summary']['wht_count'] ?? 0 }}
+                                    </span>
+                                </div>
+                                <div class="fs-6 fw-bold text-success font-monospace" id="whtCardTotalNet">
+                                    Net: ETB {{ number_format($movementsData['wht_summary']['total_net_disbursed'] ?? 0, 2) }}
+                                </div>
+                                <small class="text-muted" style="font-size:0.72rem;">Total Net Disbursed</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Withholding Tax Table --}}
+                <div class="table-responsive">
+                    <table class="table table-hover table-striped align-middle mb-0" id="pageWithholdingTable" style="font-size: 0.82rem;">
+                        <thead class="table-light text-muted text-uppercase" style="font-size: 0.72rem;">
+                            <tr>
+                                <th class="ps-3" style="width: 40px;">#</th>
+                                <th style="width: 105px;">Date (EC / GC)</th>
+                                <th style="width: 140px;">Voucher / Ref</th>
+                                <th>Payee / Supplier &amp; TIN</th>
+                                <th>Category &amp; Project</th>
+                                <th class="text-end" style="width: 120px;">Taxable Base</th>
+                                <th class="text-center" style="width: 90px;">WHT Rate</th>
+                                <th class="text-end" style="width: 130px;">WHT Deducted</th>
+                                <th class="text-end" style="width: 130px;">Net Disbursed</th>
+                                <th class="text-center" style="width: 140px;">WHT Certificate #</th>
+                                <th class="text-center pe-3" style="width: 110px;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @forelse($movementsData['wht_expenses'] ?? [] as $wIdx => $wht)
+                                @php
+                                    $wRate = (float)($wht['withholding_rate'] ?? 3);
+                                    $wRateKey = round($wRate, 1) == 2.0 ? '2' : (round($wRate, 1) == 30.0 ? '30' : '3');
+                                    $hasWhtSlip = !empty($wht['withholding_receipt_url']);
+                                    $hasWhtCertNo = !empty($wht['withholding_receipt_number']) && $wht['withholding_receipt_number'] !== '-';
+                                    $wBase = (float)($wht['base_amount'] ?? 0);
+                                    $wAmt  = (float)($wht['withholding_amount'] ?? 0);
+                                    $wNet  = (float)($wht['net_disbursed'] ?? max(0, $wBase - $wAmt));
+                                    $rawTin = (string)($wht['seller_tin'] ?? '');
+                                    $cleanTin = preg_replace('/\D/', '', $rawTin);
+                                    $isTinValid = strlen($cleanTin) === 10;
+                                @endphp
+                                <tr class="wht-row" 
+                                    id="page-wht-row-{{ $wht['id'] ?? $wIdx }}"
+                                    data-idx="{{ $wIdx }}"
+                                    data-rate="{{ $wRateKey }}"
+                                    data-has-slip="{{ $hasWhtSlip ? '1' : '0' }}"
+                                    data-has-cert="{{ $hasWhtCertNo ? '1' : '0' }}"
+                                    data-base="{{ $wBase }}"
+                                    data-wht="{{ $wAmt }}"
+                                    data-net="{{ $wNet }}">
+                                    <td class="ps-3 text-muted font-monospace small">{{ $wIdx + 1 }}</td>
+                                    <td>
+                                        <span class="fw-bold font-monospace text-dark d-block">{{ $wht['date_ec'] ?? '-' }}</span>
+                                        <small class="text-muted font-monospace" style="font-size:0.7rem;">{{ $wht['date_gc'] ?? '-' }}</small>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-light text-dark border font-monospace fw-bold">{{ $wht['request_number'] ?? ('EXP #' . ($wIdx + 1)) }}</span>
+                                        @if(!empty($wht['payment_reference']) && $wht['payment_reference'] !== '-')
+                                            <small class="text-muted d-block font-monospace" style="font-size:0.68rem;" title="{{ $wht['payment_reference'] }}">{{ Str::limit($wht['payment_reference'], 22) }}</small>
+                                        @endif
+                                        @if(!empty($wht['fs_no']) && $wht['fs_no'] !== '-')
+                                            <small class="text-primary d-block font-monospace fw-semibold" style="font-size:0.68rem;"><i class="fa-solid fa-barcode me-0.5"></i>FS: {{ $wht['fs_no'] }}</small>
+                                        @endif
+                                    </td>
+                                    <td>
+                                        <span class="fw-semibold text-dark d-block">{{ $wht['payee'] ?? 'Vendor' }}</span>
+                                        @if($isTinValid)
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle font-monospace px-1.5 py-0.5 rounded-2 fw-bold" style="font-size:0.68rem;" title="Valid ERCA 10-Digit TIN">
+                                                <i class="fa-solid fa-circle-check text-success me-0.5"></i>{{ $cleanTin }}
+                                            </span>
+                                        @elseif(!empty($cleanTin))
+                                            <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle font-monospace px-1.5 py-0.5 rounded-2 fw-semibold" style="font-size:0.68rem;" title="Incomplete TIN">
+                                                <i class="fa-solid fa-triangle-exclamation text-warning me-0.5"></i>{{ $rawTin }}
+                                            </span>
+                                        @else
+                                            <span class="badge bg-danger-subtle text-danger border border-danger-subtle font-monospace px-1.5 py-0.5 rounded-2 fw-semibold" style="font-size:0.68rem;">
+                                                <i class="fa-solid fa-circle-xmark me-0.5"></i>No TIN
+                                            </span>
+                                        @endif
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-info-subtle text-info border border-info-subtle rounded-pill small">{{ $wht['category'] ?? 'Expense' }}</span>
+                                        <small class="text-muted d-block" style="font-size:0.72rem;">{{ $wht['project_name'] ?? 'General' }}</small>
+                                        @if(!empty($wht['description']) && $wht['description'] !== '-')
+                                            <small class="text-muted d-block text-truncate" style="max-width: 200px; font-size:0.68rem;" title="{{ $wht['description'] }}">{{ $wht['description'] }}</small>
+                                        @endif
+                                    </td>
+                                    <td class="text-end font-monospace fw-semibold">
+                                        ETB {{ number_format($wBase, 2) }}
+                                    </td>
+                                    <td class="text-center">
+                                        @if(round($wRate, 1) == 2.0)
+                                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill font-monospace fw-bold px-2 py-0.5" style="font-size:0.7rem;">2.0% (Goods)</span>
+                                        @elseif(round($wRate, 1) == 30.0)
+                                            <span class="badge bg-danger text-white rounded-pill font-monospace fw-bold px-2 py-0.5" style="font-size:0.7rem;">30.0% (No TIN)</span>
+                                        @else
+                                            <span class="badge bg-warning bg-opacity-25 text-dark border border-warning-subtle rounded-pill font-monospace fw-bold px-2 py-0.5" style="font-size:0.7rem;">{{ number_format($wRate, 1) }}% (Service)</span>
+                                        @endif
+                                    </td>
+                                    <td class="text-end font-monospace text-danger fw-bold">
+                                        - ETB {{ number_format($wAmt, 2) }}
+                                    </td>
+                                    <td class="text-end font-monospace text-dark fw-bold">
+                                        ETB {{ number_format($wNet, 2) }}
+                                    </td>
+                                    <td class="text-center">
+                                        @if($hasWhtCertNo)
+                                            <span class="badge bg-light text-dark border font-monospace px-1.5 py-0.5 rounded-2 d-inline-block fw-semibold" style="font-size:0.7rem;">
+                                                <i class="fa-solid fa-stamp me-0.5 text-warning"></i>{{ $wht['withholding_receipt_number'] }}
+                                            </span>
+                                        @else
+                                            <span class="text-muted small font-monospace">-</span>
+                                        @endif
+                                        @if($hasWhtSlip)
+                                            <a href="{{ $wht['withholding_receipt_url'] }}" target="_blank" class="btn btn-xs btn-outline-danger rounded-pill px-2 py-0.2 d-block ms-auto me-auto mt-0.5 shadow-2xs" style="font-size:0.65rem;" title="View Attached WHT Certificate">
+                                                <i class="fa-solid fa-file-invoice-dollar me-0.5"></i>View Slip
+                                            </a>
+                                        @endif
+                                    </td>
+                                    <td class="text-center pe-3 text-nowrap">
+                                        <div class="d-inline-flex align-items-center gap-1">
+                                            @php
+                                                $matchExpenseIdx = -1;
+                                                if (!empty($movementsData['expenses'])) {
+                                                    foreach ($movementsData['expenses'] as $mIdx => $me) {
+                                                        if (($me['id'] ?? '') == ($wht['id'] ?? '') || ($me['request_number'] ?? '') == ($wht['request_number'] ?? '')) {
+                                                            $matchExpenseIdx = $mIdx;
+                                                            break;
+                                                        }
+                                                    }
+                                                }
+                                            @endphp
+                                            @if($matchExpenseIdx !== -1)
+                                                <button type="button" class="btn btn-xs btn-outline-primary rounded-pill px-2 py-1 fw-semibold shadow-2xs" onclick="openExpenseInspector({{ $matchExpenseIdx }})" title="Open Inspector to Edit Withholding Details & Slip">
+                                                    <i class="fa-solid fa-pen-to-square me-0.5"></i>Edit WHT
+                                                </button>
+                                                <button type="button" class="btn btn-xs btn-outline-info rounded-pill px-1.5 py-1 shadow-2xs" onclick="openExpenseDetailModal({{ $matchExpenseIdx }})" title="View Expense Details">
+                                                    <i class="fa-solid fa-circle-info"></i>
+                                                </button>
+                                            @else
+                                                <button type="button" class="btn btn-xs btn-outline-secondary rounded-pill px-2 py-1 fw-semibold shadow-2xs" onclick="openMovementEditSlipModal('{{ $wht['id'] }}', '{{ $wht['receipt_id'] ?? '' }}', '{{ $wht['request_number'] ?? '' }}', '{{ $wht['payee'] ?? '' }}', '{{ $wht['seller_tin'] ?? '' }}', '{{ $wht['fs_no'] ?? '' }}', '{{ $wht['mrc_no'] ?? '' }}', '{{ $wht['raw_date'] ?? '' }}', {{ $wBase }}, {{ $wAmt }}, {{ $wNet }})" title="Inspect WHT Voucher">
+                                                    <i class="fa-solid fa-receipt me-0.5"></i>Inspect
+                                                </button>
+                                            @endif
+                                        </div>
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="11" class="text-center py-5 text-muted">
+                                        <div class="py-3">
+                                            <i class="fa-solid fa-hand-holding-dollar fs-1 text-secondary opacity-50 mb-2"></i>
+                                            <h6 class="fw-semibold text-dark mb-1">No Withholding Tax Deductions Recorded</h6>
+                                            <p class="small text-muted mb-3">No expenses in this Ethiopian month have withholding tax applied yet.</p>
+                                            <button type="button" class="btn btn-sm btn-outline-danger rounded-pill px-3" onclick="document.getElementById('page-expense-tab').click(); filterExpensePurchaseType('all');">
+                                                <i class="fa-solid fa-arrow-up-long me-1"></i>Go to Purchases &amp; Deduct WHT
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                        <tfoot class="table-light font-monospace small border-top fw-bold">
+                            <tr>
+                                <td colspan="5" class="ps-3 text-uppercase" id="pageWhtFootLabel">
+                                    Total Withholding Deductions ({{ count($movementsData['wht_expenses'] ?? []) }} items)
+                                </td>
+                                <td class="text-end" id="pageWhtFootBase">
+                                    ETB {{ number_format($movementsData['wht_summary']['total_base_amount'] ?? 0, 2) }}
+                                </td>
+                                <td></td>
+                                <td class="text-end text-danger" id="pageWhtFootAmount">
+                                    - ETB {{ number_format($movementsData['wht_summary']['total_wht_amount'] ?? 0, 2) }}
+                                </td>
+                                <td class="text-end text-dark" id="pageWhtFootNet">
+                                    ETB {{ number_format($movementsData['wht_summary']['total_net_disbursed'] ?? 0, 2) }}
+                                </td>
+                                <td colspan="2"></td>
+                            </tr>
+                        </tfoot>
+                    </table>
                 </div>
             </div>
         </div>
@@ -1842,7 +2144,12 @@
                     </div>
                 </div>
                 <div class="d-flex align-items-center gap-2">
-                    <span class="badge bg-primary text-white rounded-pill px-2.5 py-1 small font-monospace"><i class="fa-solid fa-lock-open me-1"></i>Amount Adjustment Unlocked (Global Admin)</span>
+                    <div class="form-check form-switch mb-0 d-inline-flex align-items-center gap-1.5 px-3 py-1 bg-white bg-opacity-15 rounded-pill border border-white border-opacity-25 shadow-xs">
+                        <input class="form-check-input my-0" type="checkbox" id="movement_manual_edition_toggle" onchange="toggleMovementManualEdition(this.checked)" checked style="cursor: pointer;">
+                        <label class="form-check-label small font-monospace text-white fw-bold mb-0" for="movement_manual_edition_toggle" id="movementManualEditionToggleLabel" style="font-size: 0.72rem; cursor: pointer;">
+                            <i class="fa-solid fa-lock-open me-1 text-warning"></i>Manual Edition Unlocked
+                        </label>
+                    </div>
                     <span id="movementModalHeaderStatusBadge" class="badge bg-info-subtle text-info border border-info-subtle rounded-pill px-2.5 py-1 small font-monospace">ERCA Invoice</span>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
@@ -2007,7 +2314,12 @@
                                             <span class="small fw-bold text-dark">
                                                 <i class="fa-solid fa-calculator text-primary me-1"></i>Financial Reconciliation
                                             </span>
-                                            <span class="badge bg-secondary-subtle text-secondary" style="font-size:0.68rem;">Live Synced</span>
+                                            <div class="d-flex align-items-center gap-2">
+                                                <span class="badge bg-warning-subtle text-dark border border-warning-subtle rounded-pill font-monospace" id="movementManualBadge" style="font-size:0.68rem;">
+                                                    <i class="fa-solid fa-lock-open me-1 text-warning"></i>Manual Edition Unlocked
+                                                </span>
+                                                <span class="badge bg-secondary-subtle text-secondary" style="font-size:0.68rem;">Live Synced</span>
+                                            </div>
                                         </div>
                                         <div class="row g-2">
                                             <div class="col-4">
@@ -2032,7 +2344,7 @@
                                                 </div>
                                             </div>
                                         </div>
-                                        <div class="d-flex justify-content-between align-items-center mt-2 pt-1 border-top" style="font-size:0.72rem;">
+                                        <div class="d-flex justify-content-between align-items-center mt-2 pt-1 border-top flex-wrap gap-1" style="font-size:0.72rem;">
                                             <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none text-muted" onclick="autoCalcMovementVatFromBase()">
                                                 <i class="fa-solid fa-wand-magic-sparkles me-1 text-primary"></i>Base &rarr; 15% VAT
                                             </button>
@@ -2041,6 +2353,9 @@
                                             </button>
                                             <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none text-muted" onclick="autoExtractMovementBaseFromTotal()">
                                                 <i class="fa-solid fa-wand-magic-sparkles me-1 text-success"></i>Total &rarr; Base (/1.15)
+                                            </button>
+                                            <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none text-dark fw-semibold" onclick="autoSumMovementBaseAndVat()">
+                                                <i class="fa-solid fa-plus me-1 text-secondary"></i>Base + VAT = Total
                                             </button>
                                         </div>
                                     </div>
@@ -2786,6 +3101,8 @@
                 matchesType = (rowType === 'vat');
             } else if (type === 'tas') {
                 matchesType = (rowType === 'tas');
+            } else if (type === 'wht') {
+                matchesType = (parseFloat(tr.getAttribute('data-wht') || 0) > 0);
             } else if (type === 'missing_receipt') {
                 matchesType = (!hasRec && !isVerifiedNoRec);
             } else if (type === 'verified_no_receipt') {
@@ -2805,7 +3122,7 @@
         });
 
         // Update active filter button styles
-        ['all', 'vat', 'tas', 'missing_receipt', 'verified_no_receipt'].forEach(t => {
+        ['all', 'vat', 'tas', 'wht', 'missing_receipt', 'verified_no_receipt'].forEach(t => {
             const btn = document.getElementById('btnExpenseFilter-' + t);
             if (!btn) return;
             if (t === type) {
@@ -2814,6 +3131,8 @@
                     btn.classList.add('btn-success', 'text-white', 'shadow-xs');
                 } else if (t === 'tas') {
                     btn.classList.add('btn-primary', 'text-white', 'shadow-xs');
+                } else if (t === 'wht') {
+                    btn.classList.add('btn-warning', 'text-dark', 'shadow-xs');
                 } else if (t === 'missing_receipt') {
                     btn.classList.add('btn-danger', 'text-white', 'shadow-xs');
                 } else if (t === 'verified_no_receipt') {
@@ -2822,7 +3141,7 @@
                     btn.classList.add('btn-danger', 'text-white', 'shadow-xs');
                 }
             } else {
-                btn.classList.remove('btn-danger', 'btn-success', 'btn-primary', 'btn-info', 'text-white', 'shadow-xs');
+                btn.classList.remove('btn-danger', 'btn-success', 'btn-primary', 'btn-warning', 'btn-info', 'text-white', 'text-dark', 'shadow-xs');
                 btn.classList.add('text-muted');
             }
         });
@@ -2839,6 +3158,8 @@
                 footLabel.textContent = `Total VAT Purchases (${visibleCount} items)`;
             } else if (type === 'tas') {
                 footLabel.textContent = `Total TAS Purchases (${visibleCount} items)`;
+            } else if (type === 'wht') {
+                footLabel.textContent = `Total Withholding Deductions (${visibleCount} items)`;
             } else if (type === 'missing_receipt') {
                 footLabel.textContent = `Total Missing Receipt Purchases (${visibleCount} items)`;
             } else if (type === 'verified_no_receipt') {
@@ -2851,6 +3172,66 @@
         if (footVat)  footVat.textContent  = 'ETB ' + totalVat.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
         if (footWht)  footWht.textContent  = (totalWht > 0 ? '- ETB ' : 'ETB ') + totalWht.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
         if (footNet)  footNet.textContent  = 'ETB ' + totalNet.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    }
+
+    // Filter for Withholding Tax Section (#pageWithholdingTable)
+    let _activeWhtRateFilter = 'all';
+
+    function filterWhtRateType(type) {
+        _activeWhtRateFilter = type;
+        const rows = document.querySelectorAll('#pageWithholdingTable tbody tr.wht-row');
+        let totalBase = 0, totalWht = 0, totalNet = 0, visibleCount = 0;
+
+        rows.forEach(tr => {
+            const rowRate = tr.getAttribute('data-rate');
+            const hasSlip = tr.getAttribute('data-has-slip') === '1';
+            const hasCert = tr.getAttribute('data-has-cert') === '1';
+
+            let matches = false;
+            if (type === 'all') {
+                matches = true;
+            } else if (type === '2') {
+                matches = (rowRate === '2');
+            } else if (type === '3') {
+                matches = (rowRate === '3');
+            } else if (type === '30') {
+                matches = (rowRate === '30');
+            } else if (type === 'missing_cert') {
+                matches = (!hasSlip || !hasCert);
+            }
+
+            if (matches) {
+                tr.style.display = '';
+                visibleCount++;
+                totalBase += parseFloat(tr.getAttribute('data-base') || 0);
+                totalWht  += parseFloat(tr.getAttribute('data-wht') || 0);
+                totalNet  += parseFloat(tr.getAttribute('data-net') || 0);
+            } else {
+                tr.style.display = 'none';
+            }
+        });
+
+        ['all', '2', '3', '30', 'missing_cert'].forEach(t => {
+            const btn = document.getElementById('btnWhtFilter-' + t);
+            if (!btn) return;
+            if (t === type) {
+                btn.classList.remove('text-muted');
+                btn.classList.add('btn-warning', 'text-dark', 'shadow-xs');
+            } else {
+                btn.classList.remove('btn-warning', 'text-dark', 'shadow-xs');
+                btn.classList.add('text-muted');
+            }
+        });
+
+        const footLabel = document.getElementById('pageWhtFootLabel');
+        const footBase  = document.getElementById('pageWhtFootBase');
+        const footAmount = document.getElementById('pageWhtFootAmount');
+        const footNet   = document.getElementById('pageWhtFootNet');
+
+        if (footLabel) footLabel.textContent = `Total Withholding Deductions (${visibleCount} items)`;
+        if (footBase) footBase.textContent = 'ETB ' + totalBase.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        if (footAmount) footAmount.textContent = '- ETB ' + totalWht.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        if (footNet) footNet.textContent = 'ETB ' + totalNet.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
     }
 
     // Toggle between Only VAT Receipts (15%), TAS Receipts (0% VAT), and All Scanned OCR Invoices
@@ -3194,11 +3575,139 @@
         }
     }
 
+    // Open Inspector in Clean Mode for New Manual Invoice / Receipt
+    function openNewManualReceiptModal() {
+        const modalEl = document.getElementById('movementSlipModal');
+        if (!modalEl) return;
+
+        // Reset all IDs
+        const idInput = document.getElementById('movement_edit_ocr_item_id');
+        if (idInput) idInput.value = '';
+        const rcptIdInput = document.getElementById('movement_edit_receipt_id');
+        if (rcptIdInput) rcptIdInput.value = '';
+        const expIdInput = document.getElementById('movement_edit_expense_request_id');
+        if (expIdInput) expIdInput.value = '';
+        const reqNumInput = document.getElementById('movement_edit_request_number');
+        if (reqNumInput) reqNumInput.value = '';
+        const pathInput = document.getElementById('movement_edit_receipt_file_path');
+        if (pathInput) pathInput.value = '';
+
+        const fileInput = document.getElementById('movementSlipFileInput');
+        if (fileInput) fileInput.value = '';
+        const camInput = document.getElementById('movementSlipCameraInput');
+        if (camInput) camInput.value = '';
+
+        const progBox = document.getElementById('movementUploadProgress');
+        if (progBox) progBox.className = 'alert alert-info py-2 px-3 small rounded-3 mb-2 d-none align-items-center justify-content-between flex-shrink-0';
+
+        const badgeId = document.getElementById('movement_edit_ocr_badge_id');
+        if (badgeId) badgeId.textContent = 'Manual Entry';
+
+        const fsDisplay = document.getElementById('movementModalFsNoDisplay');
+        if (fsDisplay) fsDisplay.textContent = 'New Manual Fiscal Invoice';
+
+        const statusBadge = document.getElementById('movementModalHeaderStatusBadge');
+        if (statusBadge) {
+            statusBadge.className = 'badge bg-warning-subtle text-dark border border-warning-subtle rounded-pill px-2.5 py-1 small font-monospace';
+            statusBadge.textContent = 'Manual Invoice';
+        }
+
+        // Reset inputs
+        const sellerName = document.getElementById('movement_edit_seller_name');
+        if (sellerName) sellerName.value = '';
+
+        const tinInput = document.getElementById('movement_edit_supplier_tin');
+        if (tinInput) {
+            tinInput.value = '';
+            validateMovementTin('');
+        }
+
+        const fsInput = document.getElementById('movement_edit_fs_no');
+        if (fsInput) {
+            fsInput.value = '';
+            validateMovementFs('');
+        }
+
+        const mrcInput = document.getElementById('movement_edit_mrc_no');
+        if (mrcInput) mrcInput.value = '';
+
+        const dateInput = document.getElementById('movement_edit_receipt_date');
+        if (dateInput) {
+            const today = new Date().toISOString().split('T')[0];
+            dateInput.value = today;
+            syncMovementDateToEc(today);
+        }
+
+        const descInput = document.getElementById('movement_edit_item_description');
+        if (descInput) descInput.value = '';
+
+        const projSelect = document.getElementById('movement_edit_project_id');
+        if (projSelect) projSelect.value = '';
+
+        const catSelect = document.getElementById('movement_edit_category');
+        if (catSelect) catSelect.value = 'materials';
+
+        const vatCatSelect = document.getElementById('movement_edit_vat_category');
+        if (vatCatSelect) vatCatSelect.value = 'G';
+
+        const purcTypeSelect = document.getElementById('movement_edit_purchase_type');
+        if (purcTypeSelect) purcTypeSelect.value = '3';
+
+        // Amounts
+        const baseInput = document.getElementById('movement_edit_total_value');
+        if (baseInput) baseInput.value = '0.00';
+        const vatInput = document.getElementById('movement_edit_vat_amount');
+        if (vatInput) vatInput.value = '0.00';
+        const totalInput = document.getElementById('movement_edit_value_after_vat');
+        if (totalInput) totalInput.value = '0.00';
+
+        // Unlock manual edition
+        const toggleEl = document.getElementById('movement_manual_edition_toggle');
+        if (toggleEl) toggleEl.checked = true;
+        toggleMovementManualEdition(true);
+
+        // Withholding
+        const whtCheck = document.getElementById('movement_edit_has_withholding');
+        if (whtCheck) {
+            whtCheck.checked = false;
+            toggleMovementWithholding(false);
+        }
+        const whtAmt = document.getElementById('movement_edit_withholding_amount');
+        if (whtAmt) whtAmt.value = '0.00';
+        const whtCert = document.getElementById('movement_edit_withholding_receipt_number');
+        if (whtCert) whtCert.value = '';
+        const whtSlipLink = document.getElementById('movement_edit_current_wht_slip_link');
+        if (whtSlipLink) whtSlipLink.classList.add('d-none');
+        recalcMovementWht();
+
+        // Clear alerts
+        const alertBox = document.getElementById('movementOcrModalAlert');
+        if (alertBox) {
+            alertBox.className = 'alert d-none';
+            alertBox.innerHTML = '';
+        }
+
+        // Preview empty dropzone
+        _setPageSlipPreview(null);
+
+        // Show modal
+        if (window.bootstrap && bootstrap.Modal) {
+            bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        } else if (window.$ && typeof $(modalEl).modal === 'function') {
+            $(modalEl).modal('show');
+        }
+    }
+
     // Open Inspector and populate form with details
     function openPageOcrInspector(idx) {
         const ocr = (window._pageOcrItems && window._pageOcrItems[idx]) || {};
         const modalEl = document.getElementById('movementSlipModal');
         if (!modalEl) return;
+
+        // Ensure manual edition toggle is active
+        const toggleEl = document.getElementById('movement_manual_edition_toggle');
+        if (toggleEl) toggleEl.checked = true;
+        toggleMovementManualEdition(true);
 
         const cleanNum = (v) => {
             const n = parseFloat(String(v ?? '0').replace(/[^0-9.-]/g, ''));
@@ -3361,6 +3870,11 @@
         const tas = (window._pageTasPurchases && window._pageTasPurchases[idx]) || {};
         const modalEl = document.getElementById('movementSlipModal');
         if (!modalEl) return;
+
+        // Ensure manual edition toggle is active
+        const toggleEl = document.getElementById('movement_manual_edition_toggle');
+        if (toggleEl) toggleEl.checked = true;
+        toggleMovementManualEdition(true);
 
         // Check if this TAS item matches an item in window._pageOcrItems
         let matchingOcrIdx = -1;
@@ -3853,6 +4367,11 @@
         const modalEl = document.getElementById('movementSlipModal');
         if (!modalEl) return;
 
+        // Ensure manual edition toggle is active
+        const toggleEl = document.getElementById('movement_manual_edition_toggle');
+        if (toggleEl) toggleEl.checked = true;
+        toggleMovementManualEdition(true);
+
         const cleanNum = (v) => {
             const n = parseFloat(String(v ?? '0').replace(/[^0-9.-]/g, ''));
             return isNaN(n) ? 0 : n;
@@ -4234,6 +4753,7 @@
         let vatCount = 0;
         let tasCount = 0;
         let missingRec = 0;
+        let whtCount = 0;
 
         rows.forEach(tr => {
             const cat = tr.getAttribute('data-purchase-category');
@@ -4245,6 +4765,10 @@
             if (!hasRec && !isVerified) {
                 missingRec++;
             }
+
+            if (parseFloat(tr.getAttribute('data-wht') || 0) > 0) {
+                whtCount++;
+            }
         });
 
         const allEl = document.getElementById('filterCountAllPurchases');
@@ -4255,6 +4779,12 @@
 
         const tasEl = document.getElementById('filterCountTasPurchases');
         if (tasEl) tasEl.textContent = tasCount;
+
+        const whtEl = document.getElementById('filterCountWhtPurchases');
+        if (whtEl) whtEl.textContent = whtCount;
+
+        const tabWhtBadge = document.getElementById('tabBadgeWhtCount');
+        if (tabWhtBadge) tabWhtBadge.textContent = whtCount;
 
         const missingEl = document.getElementById('filterCountMissingReceipt');
         if (missingEl) missingEl.textContent = missingRec;
@@ -4629,6 +5159,7 @@
 
         const formData = new FormData(form);
         formData.set('is_verified_without_receipt', form.elements['is_verified_without_receipt']?.checked ? '1' : '0');
+        formData.set('has_withholding', form.elements['has_withholding']?.checked ? '1' : '0');
 
         fetch('{{ route("finance.tax-deductions.update-ocr-item") }}', {
             method: 'POST',
@@ -4721,6 +5252,7 @@
 
                 // Sync the parent row in the table
                 syncExpenseRowDom(idx, itm);
+                syncWithholdingTableRow(window._pageExpenses[idx], itm);
                 recomputeExpenseTableFooters();
                 updateFilterCounters();
 
@@ -4941,6 +5473,237 @@
         setTimeout(() => { tr.style.backgroundColor = ''; }, 2000);
     }
 
+    function syncWithholdingTableRow(exp, itm) {
+        const table = document.getElementById('pageWithholdingTable');
+        if (!table) return;
+
+        const rowId = exp.id;
+        const reqNo = exp.request_number;
+        let whtTr = document.getElementById('page-wht-row-' + rowId)
+            || (reqNo ? Array.from(table.querySelectorAll('tbody tr.wht-row')).find(tr => tr.innerText.includes(reqNo)) : null);
+
+        const whtAmt = parseFloat(itm.withholding_amount !== undefined ? itm.withholding_amount : (exp.withholding_amount || 0)) || 0;
+        const baseVal = parseFloat(itm.base_value !== undefined ? itm.base_value : (exp.base_amount || 0)) || 0;
+        const whtRate = parseFloat(itm.withholding_rate !== undefined ? itm.withholding_rate : (exp.withholding_rate || 3)) || 3;
+        const netVal = parseFloat(itm.net_disbursed !== undefined ? itm.net_disbursed : (exp.net_disbursed || Math.max(0, baseVal - whtAmt))) || 0;
+        const hasWht = Boolean(itm.has_withholding || whtAmt > 0);
+        const whtCertNo = itm.withholding_receipt_number !== undefined ? itm.withholding_receipt_number : (exp.withholding_receipt_number || '');
+        const whtSlipUrl = itm.withholding_receipt_url || exp.withholding_receipt_url || '';
+        const payeeName = itm.vendor_name || exp.payee || 'Vendor';
+        const rawTin = itm.vendor_tin || exp.seller_tin || '';
+        const cleanTin = rawTin.replace(/\D/g, '');
+        const isTinValid = cleanTin.length === 10;
+        const rateKey = Math.round(whtRate) == 2 ? '2' : (Math.round(whtRate) == 30 ? '30' : '3');
+
+        if (whtTr) {
+            if (!hasWht || whtAmt <= 0) {
+                whtTr.remove();
+            } else {
+                whtTr.setAttribute('data-base', baseVal);
+                whtTr.setAttribute('data-wht', whtAmt);
+                whtTr.setAttribute('data-net', netVal);
+                whtTr.setAttribute('data-rate', rateKey);
+                whtTr.setAttribute('data-has-slip', whtSlipUrl ? '1' : '0');
+                whtTr.setAttribute('data-has-cert', (whtCertNo && whtCertNo !== '-') ? '1' : '0');
+
+                // Update payee
+                const payeeCell = whtTr.querySelector('td:nth-child(4)');
+                if (payeeCell) {
+                    let tinBadge = isTinValid
+                        ? `<span class="badge bg-success-subtle text-success border border-success-subtle font-monospace px-1.5 py-0.5 rounded-2 fw-bold" style="font-size:0.68rem;" title="Valid ERCA 10-Digit TIN"><i class="fa-solid fa-circle-check text-success me-0.5"></i>${cleanTin}</span>`
+                        : (cleanTin.length > 0
+                            ? `<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle font-monospace px-1.5 py-0.5 rounded-2 fw-semibold" style="font-size:0.68rem;" title="Incomplete TIN"><i class="fa-solid fa-triangle-exclamation text-warning me-0.5"></i>${rawTin}</span>`
+                            : `<span class="badge bg-danger-subtle text-danger border border-danger-subtle font-monospace px-1.5 py-0.5 rounded-2 fw-semibold" style="font-size:0.68rem;"><i class="fa-solid fa-circle-xmark me-0.5"></i>No TIN</span>`);
+                    payeeCell.innerHTML = `<span class="fw-semibold text-dark d-block">${payeeName}</span>${tinBadge}`;
+                }
+
+                // Update amounts
+                const baseTd = whtTr.querySelector('td:nth-child(6)');
+                if (baseTd) baseTd.textContent = 'ETB ' + baseVal.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+
+                // Update rate badge
+                const rateTd = whtTr.querySelector('td:nth-child(7)');
+                if (rateTd) {
+                    if (rateKey === '2') {
+                        rateTd.innerHTML = '<span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill font-monospace fw-bold px-2 py-0.5" style="font-size:0.7rem;">2.0% (Goods)</span>';
+                    } else if (rateKey === '30') {
+                        rateTd.innerHTML = '<span class="badge bg-danger text-white rounded-pill font-monospace fw-bold px-2 py-0.5" style="font-size:0.7rem;">30.0% (No TIN)</span>';
+                    } else {
+                        rateTd.innerHTML = '<span class="badge bg-warning bg-opacity-25 text-dark border border-warning-subtle rounded-pill font-monospace fw-bold px-2 py-0.5" style="font-size:0.7rem;">' + whtRate.toFixed(1) + '% (Service)</span>';
+                    }
+                }
+
+                const whtTd = whtTr.querySelector('td:nth-child(8)');
+                if (whtTd) whtTd.textContent = '- ETB ' + whtAmt.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                const netTd = whtTr.querySelector('td:nth-child(9)');
+                if (netTd) netTd.textContent = 'ETB ' + netVal.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+
+                // Update cert / slip
+                const certTd = whtTr.querySelector('td:nth-child(10)');
+                if (certTd) {
+                    let certHtml = (whtCertNo && whtCertNo !== '-')
+                        ? `<span class="badge bg-light text-dark border font-monospace px-1.5 py-0.5 rounded-2 d-inline-block fw-semibold" style="font-size:0.7rem;"><i class="fa-solid fa-stamp me-0.5 text-warning"></i>${whtCertNo}</span>`
+                        : `<span class="text-muted small font-monospace">-</span>`;
+                    if (whtSlipUrl) {
+                        certHtml += `<a href="${whtSlipUrl}" target="_blank" class="btn btn-xs btn-outline-danger rounded-pill px-2 py-0.2 d-block ms-auto me-auto mt-0.5 shadow-2xs" style="font-size:0.65rem;" title="View Attached WHT Certificate"><i class="fa-solid fa-file-invoice-dollar me-0.5"></i>View Slip</a>`;
+                    }
+                    certTd.innerHTML = certHtml;
+                }
+
+                // Flash row green
+                whtTr.style.transition = 'background-color 0.4s ease';
+                whtTr.style.backgroundColor = '#d1e7dd';
+                setTimeout(() => { whtTr.style.backgroundColor = ''; }, 2000);
+            }
+        } else if (hasWht && whtAmt > 0) {
+            const tbody = table.querySelector('tbody');
+            if (tbody) {
+                const emptyRow = tbody.querySelector('td[colspan="11"]');
+                if (emptyRow && emptyRow.parentElement) {
+                    emptyRow.parentElement.remove();
+                }
+
+                const newTr = document.createElement('tr');
+                newTr.className = 'wht-row';
+                newTr.id = 'page-wht-row-' + rowId;
+                newTr.setAttribute('data-idx', 'new-' + rowId);
+                newTr.setAttribute('data-rate', rateKey);
+                newTr.setAttribute('data-has-slip', whtSlipUrl ? '1' : '0');
+                newTr.setAttribute('data-has-cert', (whtCertNo && whtCertNo !== '-') ? '1' : '0');
+                newTr.setAttribute('data-base', baseVal);
+                newTr.setAttribute('data-wht', whtAmt);
+                newTr.setAttribute('data-net', netVal);
+
+                let rateBadgeHtml = rateKey === '2'
+                    ? '<span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill font-monospace fw-bold px-2 py-0.5" style="font-size:0.7rem;">2.0% (Goods)</span>'
+                    : (rateKey === '30'
+                        ? '<span class="badge bg-danger text-white rounded-pill font-monospace fw-bold px-2 py-0.5" style="font-size:0.7rem;">30.0% (No TIN)</span>'
+                        : '<span class="badge bg-warning bg-opacity-25 text-dark border border-warning-subtle rounded-pill font-monospace fw-bold px-2 py-0.5" style="font-size:0.7rem;">' + whtRate.toFixed(1) + '% (Service)</span>');
+
+                let tinBadge = isTinValid
+                    ? `<span class="badge bg-success-subtle text-success border border-success-subtle font-monospace px-1.5 py-0.5 rounded-2 fw-bold" style="font-size:0.68rem;" title="Valid ERCA 10-Digit TIN"><i class="fa-solid fa-circle-check text-success me-0.5"></i>${cleanTin}</span>`
+                    : (cleanTin.length > 0
+                        ? `<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle font-monospace px-1.5 py-0.5 rounded-2 fw-semibold" style="font-size:0.68rem;" title="Incomplete TIN"><i class="fa-solid fa-triangle-exclamation text-warning me-0.5"></i>${rawTin}</span>`
+                        : `<span class="badge bg-danger-subtle text-danger border border-danger-subtle font-monospace px-1.5 py-0.5 rounded-2 fw-semibold" style="font-size:0.68rem;"><i class="fa-solid fa-circle-xmark me-0.5"></i>No TIN</span>`);
+
+                let certHtml = (whtCertNo && whtCertNo !== '-')
+                    ? `<span class="badge bg-light text-dark border font-monospace px-1.5 py-0.5 rounded-2 d-inline-block fw-semibold" style="font-size:0.7rem;"><i class="fa-solid fa-stamp me-0.5 text-warning"></i>${whtCertNo}</span>`
+                    : `<span class="text-muted small font-monospace">-</span>`;
+                if (whtSlipUrl) {
+                    certHtml += `<a href="${whtSlipUrl}" target="_blank" class="btn btn-xs btn-outline-danger rounded-pill px-2 py-0.2 d-block ms-auto me-auto mt-0.5 shadow-2xs" style="font-size:0.65rem;" title="View Attached WHT Certificate"><i class="fa-solid fa-file-invoice-dollar me-0.5"></i>View Slip</a>`;
+                }
+
+                newTr.innerHTML = `
+                    <td class="ps-3 text-muted font-monospace small"><i class="fa-solid fa-circle-plus text-success me-1"></i></td>
+                    <td>
+                        <span class="fw-bold font-monospace text-dark d-block">${exp.date_ec || '-'}</span>
+                        <small class="text-muted font-monospace" style="font-size:0.7rem;">${exp.date_gc || '-'}</small>
+                    </td>
+                    <td>
+                        <span class="badge bg-light text-dark border font-monospace fw-bold">${exp.request_number || ('EXP #' + rowId)}</span>
+                        ${exp.fs_no && exp.fs_no !== '-' ? `<small class="text-primary d-block font-monospace fw-semibold" style="font-size:0.68rem;"><i class="fa-solid fa-barcode me-0.5"></i>FS: ${exp.fs_no}</small>` : ''}
+                    </td>
+                    <td>
+                        <span class="fw-semibold text-dark d-block">${payeeName}</span>
+                        ${tinBadge}
+                    </td>
+                    <td>
+                        <span class="badge bg-info-subtle text-info border border-info-subtle rounded-pill small">${exp.category || 'Expense'}</span>
+                        <small class="text-muted d-block" style="font-size:0.72rem;">${exp.project_name || 'General'}</small>
+                    </td>
+                    <td class="text-end font-monospace fw-semibold">ETB ${baseVal.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                    <td class="text-center">${rateBadgeHtml}</td>
+                    <td class="text-end font-monospace text-danger fw-bold">- ETB ${whtAmt.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                    <td class="text-end font-monospace text-dark fw-bold">ETB ${netVal.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                    <td class="text-center">${certHtml}</td>
+                    <td class="text-center pe-3 text-nowrap">
+                        <button type="button" class="btn btn-xs btn-outline-primary rounded-pill px-2 py-1 fw-semibold shadow-2xs" onclick="reloadMovementsView()">
+                            <i class="fa-solid fa-rotate me-0.5"></i>Refresh
+                        </button>
+                    </td>
+                `;
+                tbody.insertBefore(newTr, tbody.firstChild);
+                newTr.style.transition = 'background-color 0.4s ease';
+                newTr.style.backgroundColor = '#d1e7dd';
+                setTimeout(() => { newTr.style.backgroundColor = ''; }, 2000);
+            }
+        }
+
+        recomputeWithholdingTableFooters();
+    }
+
+    function recomputeWithholdingTableFooters() {
+        const table = document.getElementById('pageWithholdingTable');
+        if (!table) return;
+
+        const rows = table.querySelectorAll('tbody tr.wht-row');
+        let count = 0, sumBase = 0, sumWht = 0, sumNet = 0;
+        let c2 = 0, a2 = 0, c3 = 0, a3 = 0, c30 = 0, a30 = 0, slipCount = 0;
+
+        rows.forEach(r => {
+            count++;
+            const b = parseFloat(r.getAttribute('data-base') || 0);
+            const w = parseFloat(r.getAttribute('data-wht') || 0);
+            const n = parseFloat(r.getAttribute('data-net') || 0);
+            const rate = r.getAttribute('data-rate') || '3';
+            const hasSlip = r.getAttribute('data-has-slip') === '1';
+
+            sumBase += b;
+            sumWht  += w;
+            sumNet  += n;
+            if (hasSlip) slipCount++;
+
+            if (rate === '2') { c2++; a2 += w; }
+            else if (rate === '30') { c30++; a30 += w; }
+            else { c3++; a3 += w; }
+        });
+
+        const fmt = (n) => 'ETB ' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const footLabel = document.getElementById('pageWhtFootLabel');
+        const footBase  = document.getElementById('pageWhtFootBase');
+        const footAmt   = document.getElementById('pageWhtFootAmount');
+        const footNet   = document.getElementById('pageWhtFootNet');
+
+        if (footLabel) footLabel.textContent = `Total Withholding Deductions (${count} items)`;
+        if (footBase)  footBase.textContent  = fmt(sumBase);
+        if (footAmt)   footAmt.textContent   = '- ' + fmt(sumWht);
+        if (footNet)   footNet.textContent   = fmt(sumNet);
+
+        // Update Tab Badges & Pill Counters
+        const tabBadge = document.getElementById('tabBadgeWhtCount');
+        if (tabBadge) tabBadge.textContent = count;
+        const filterPillCount = document.getElementById('filterCountWhtPurchases');
+        if (filterPillCount) filterPillCount.textContent = count;
+
+        // Update WHT KPI Cards
+        const cardTotalCount = document.getElementById('whtCardTotalCount');
+        if (cardTotalCount) cardTotalCount.textContent = count + ' Vouchers';
+        const cardTotalAmount = document.getElementById('whtCardTotalAmount');
+        if (cardTotalAmount) cardTotalAmount.textContent = fmt(sumWht);
+        const cardTotalBase = document.getElementById('whtCardTotalBase');
+        if (cardTotalBase) cardTotalBase.textContent = fmt(sumBase);
+
+        const card2Count = document.getElementById('whtCard2Count');
+        if (card2Count) card2Count.textContent = c2;
+        const card2Amount = document.getElementById('whtCard2Amount');
+        if (card2Amount) card2Amount.textContent = fmt(a2);
+
+        const card3Count = document.getElementById('whtCard3Count');
+        if (card3Count) card3Count.textContent = c3;
+        const card3Amount = document.getElementById('whtCard3Amount');
+        if (card3Amount) card3Amount.textContent = fmt(a3);
+
+        const card30Count = document.getElementById('whtCard30Count');
+        if (card30Count) card30Count.textContent = c30;
+        const card30Amount = document.getElementById('whtCard30Amount');
+        if (card30Amount) card30Amount.textContent = fmt(a30);
+
+        const cardSlips = document.getElementById('whtCardSlips');
+        if (cardSlips) cardSlips.textContent = `${slipCount} / ${count}`;
+        const cardTotalNet = document.getElementById('whtCardTotalNet');
+        if (cardTotalNet) cardTotalNet.textContent = 'Net: ' + fmt(sumNet);
+    }
+
     function recomputeExpenseTableFooters() {
         let sumBase = 0, sumVat = 0, sumWht = 0, sumNet = 0;
         const allRows = document.querySelectorAll('#pageExpenseTable tbody tr.expense-row');
@@ -5068,8 +5831,31 @@
         }
     }
 
-    // Financial live calculations
+    // Financial live calculations (Supports Unlocked Manual Edition Mode)
+    let _movementManualEditionMode = true; // Unlocked by default as requested
+
+    function toggleMovementManualEdition(enabled) {
+        _movementManualEditionMode = Boolean(enabled);
+        const label = document.getElementById('movementManualEditionToggleLabel');
+        const badge = document.getElementById('movementManualBadge');
+        if (label) {
+            label.innerHTML = _movementManualEditionMode 
+                ? '<i class="fa-solid fa-lock-open me-1 text-warning"></i>Manual Edition Unlocked' 
+                : '<i class="fa-solid fa-lock me-1 text-white-50"></i>Auto 15% VAT Mode';
+        }
+        if (badge) {
+            badge.className = 'badge rounded-pill font-monospace ' + (_movementManualEditionMode ? 'bg-warning-subtle text-dark border border-warning-subtle' : 'bg-secondary-subtle text-secondary');
+            badge.innerHTML = _movementManualEditionMode
+                ? '<i class="fa-solid fa-lock-open me-1 text-warning"></i>Manual Edition Unlocked'
+                : '<i class="fa-solid fa-lock me-1 text-muted"></i>Auto Calculate';
+        }
+    }
+
     function recalcMovementFromBase(val) {
+        if (_movementManualEditionMode) {
+            recalcMovementWht();
+            return;
+        }
         const base = parseFloat(val) || 0;
         const vatCat = document.getElementById('movement_edit_vat_category');
         const isZeroVat = vatCat && vatCat.value === 'E';
@@ -5085,6 +5871,10 @@
     }
 
     function recalcMovementFromVat(val) {
+        if (_movementManualEditionMode) {
+            recalcMovementWht();
+            return;
+        }
         const vat = parseFloat(val) || 0;
         const base = Math.round((vat / 0.15) * 100) / 100;
         const total = Math.round((base + vat) * 100) / 100;
@@ -5097,6 +5887,10 @@
     }
 
     function recalcMovementFromTotal(val) {
+        if (_movementManualEditionMode) {
+            recalcMovementWht();
+            return;
+        }
         const total = parseFloat(val) || 0;
         const vatCat = document.getElementById('movement_edit_vat_category');
         const isZeroVat = vatCat && vatCat.value === 'E';
@@ -5116,8 +5910,15 @@
         if (vatCat && vatCat.value === 'E') {
             vatCat.value = 'G';
         }
-        const baseInput = document.getElementById('movement_edit_total_value');
-        if (baseInput) recalcMovementFromBase(baseInput.value);
+        const base = parseFloat(document.getElementById('movement_edit_total_value')?.value || 0) || 0;
+        const vat = Math.round(base * 0.15 * 100) / 100;
+        const total = Math.round((base + vat) * 100) / 100;
+
+        const vatInput = document.getElementById('movement_edit_vat_amount');
+        const totalInput = document.getElementById('movement_edit_value_after_vat');
+        if (vatInput) vatInput.value = vat.toFixed(2);
+        if (totalInput) totalInput.value = total.toFixed(2);
+        recalcMovementWht();
     }
 
     function setMovementZeroVat() {
@@ -5142,8 +5943,28 @@
     }
 
     function autoExtractMovementBaseFromTotal() {
+        const total = parseFloat(document.getElementById('movement_edit_value_after_vat')?.value || 0) || 0;
+        const vatCat = document.getElementById('movement_edit_vat_category');
+        const isZeroVat = vatCat && vatCat.value === 'E';
+
+        const base = isZeroVat ? total : Math.round((total / 1.15) * 100) / 100;
+        const vat = isZeroVat ? 0 : Math.round((total - base) * 100) / 100;
+
+        const baseInput = document.getElementById('movement_edit_total_value');
+        const vatInput = document.getElementById('movement_edit_vat_amount');
+        if (baseInput) baseInput.value = base.toFixed(2);
+        if (vatInput) vatInput.value = vat.toFixed(2);
+        recalcMovementWht();
+    }
+
+    function autoSumMovementBaseAndVat() {
+        const base = parseFloat(document.getElementById('movement_edit_total_value')?.value || 0) || 0;
+        const vat = parseFloat(document.getElementById('movement_edit_vat_amount')?.value || 0) || 0;
         const totalInput = document.getElementById('movement_edit_value_after_vat');
-        if (totalInput) recalcMovementFromTotal(totalInput.value);
+        if (totalInput) {
+            totalInput.value = (Math.round((base + vat) * 100) / 100).toFixed(2);
+        }
+        recalcMovementWht();
     }
 
     // Save edits via AJAX
@@ -5180,6 +6001,7 @@
 
         const formData = new FormData(form);
         formData.set('is_verified_without_receipt', form.elements['is_verified_without_receipt']?.checked ? '1' : '0');
+        formData.set('has_withholding', form.elements['has_withholding']?.checked ? '1' : '0');
 
         fetch('{{ route("finance.tax-deductions.update-ocr-item") }}', {
             method: 'POST',
@@ -5236,6 +6058,9 @@
                 const cacheIdx = (window._pageOcrItems || []).findIndex(it => it.id == itm.id || (itm.receipt_id && it.receipt_id == itm.receipt_id));
                 if (cacheIdx !== -1) {
                     window._pageOcrItems[cacheIdx] = Object.assign(window._pageOcrItems[cacheIdx], itm);
+                } else {
+                    if (!window._pageOcrItems) window._pageOcrItems = [];
+                    window._pageOcrItems.unshift(itm);
                 }
 
                 // If receipt slip was uploaded, update preview in modal
@@ -5249,6 +6074,14 @@
                 // Hide upload progress banner now that changes are reconciled & saved
                 const progBox = document.getElementById('movementUploadProgress');
                 if (progBox) progBox.className = 'alert alert-info py-2 px-3 small rounded-3 mb-2 d-none align-items-center justify-content-between flex-shrink-0';
+
+                // Update form identifiers with saved record
+                const curIdInput = document.getElementById('movement_edit_ocr_item_id');
+                if (curIdInput && itm.id) curIdInput.value = itm.id;
+                const curRcptInput = document.getElementById('movement_edit_receipt_id');
+                if (curRcptInput && itm.receipt_id) curRcptInput.value = itm.receipt_id;
+                const curBadgeId = document.getElementById('movement_edit_ocr_badge_id');
+                if (curBadgeId && itm.id) curBadgeId.textContent = 'Invoice #' + itm.id;
 
                 // Update table row in Scanned OCR Receipts DOM
                 const submittedId = form.elements['id'] ? form.elements['id'].value : null;
@@ -5316,6 +6149,73 @@
                     tr.style.transition = 'background-color 0.4s ease';
                     tr.style.backgroundColor = '#d1e7dd';
                     setTimeout(() => { tr.style.backgroundColor = ''; }, 2000);
+                } else {
+                    const tbody = document.querySelector('#pageOcrTable tbody');
+                    if (tbody) {
+                        const emptyTr = tbody.querySelector('td[colspan="10"]')?.closest('tr');
+                        if (emptyTr) emptyTr.remove();
+
+                        const isVat = parseFloat(itm.vat_amount || 0) > 0;
+                        const bVal = parseFloat(itm.base_value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                        const vVal = parseFloat(itm.vat_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                        const tVal = parseFloat(itm.total_value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+                        const newTr = document.createElement('tr');
+                        newTr.id = 'page-ocr-row-' + itm.id;
+                        newTr.setAttribute('data-id', itm.id);
+                        if (itm.receipt_id) newTr.setAttribute('data-receipt-id', itm.receipt_id);
+                        newTr.setAttribute('data-is-vat', isVat ? '1' : '0');
+                        newTr.setAttribute('data-ocr-category', isVat ? 'vat' : 'tas');
+
+                        newTr.innerHTML = `
+                            <td class="ps-3 text-muted font-monospace small"><span class="badge bg-success-subtle text-success border border-success-subtle px-1.5 py-0.5 rounded-pill">New</span></td>
+                            <td>
+                                <span class="fw-bold font-monospace text-dark d-block cell-date-ec">${itm.receipt_date_ec || '—'}</span>
+                                <small class="text-muted cell-date-gc" style="font-size:0.75rem;">${itm.receipt_date_ymd || '—'}</small>
+                            </td>
+                            <td>
+                                <div class="d-flex align-items-center gap-1.5 flex-wrap">
+                                    <span class="badge bg-light text-primary border font-monospace cell-fs">${itm.fs_no || '—'}</span>
+                                </div>
+                                <small class="text-muted d-block cell-receipt-no" style="font-size:0.75rem;">${itm.receipt_number || ''}</small>
+                                <small class="text-muted font-monospace cell-mrc" style="font-size:0.7rem; ${itm.mrc_no && itm.mrc_no !== '-' ? '' : 'display:none;'}">MRC: ${itm.mrc_no || ''}</small>
+                            </td>
+                            <td>
+                                <span class="fw-semibold text-dark d-block cell-vendor">${itm.vendor_name || '—'}</span>
+                                <small class="text-muted font-monospace cell-tin" style="font-size:0.75rem;">TIN: ${itm.vendor_tin || '—'}</small>
+                            </td>
+                            <td>
+                                <span class="badge bg-secondary-subtle text-secondary rounded-pill small cell-project">${itm.project_name || 'General'}</span>
+                                <small class="text-muted d-block cell-category" style="font-size:0.75rem;">${itm.category || ''}</small>
+                            </td>
+                            <td class="small text-dark text-truncate" style="max-width: 220px;" title="${itm.item_description || ''}">
+                                <span class="cell-desc">${itm.item_description || '—'}</span>
+                            </td>
+                            <td class="text-end font-monospace"><span class="cell-base">ETB ${bVal}</span></td>
+                            <td class="text-end font-monospace">
+                                ${isVat ? `<span class="cell-vat text-success fw-semibold">ETB ${vVal}</span>` : `<span class="badge bg-light text-muted border font-monospace" style="font-size:0.68rem;">0% VAT (TAS)</span>`}
+                            </td>
+                            <td class="text-end font-monospace text-dark fw-bold"><span class="cell-total">ETB ${tVal}</span></td>
+                            <td class="text-center pe-3 d-print-none">
+                                <button type="button" class="btn btn-xs ${itm.file_url ? 'btn-outline-info' : 'btn-outline-primary'} rounded-pill px-2.5 py-1 d-inline-flex align-items-center gap-1.5 shadow-xs" 
+                                        onclick="openPageOcrInspector(${window._pageOcrItems.indexOf(itm)})" title="Inspect Receipt Slip & Edit Declaration">
+                                    <i class="fa-solid ${itm.file_url ? 'fa-receipt text-info' : 'fa-pen-to-square text-primary'}"></i>
+                                    <span>${itm.file_url ? 'See Slip' : 'Inspect'}</span>
+                                    <i class="fa-solid fa-pen-to-square ms-0.5 text-muted" style="font-size: 0.65rem;"></i>
+                                </button>
+                            </td>
+                        `;
+                        newTr.style.transition = 'background-color 0.4s ease';
+                        newTr.style.backgroundColor = '#d1e7dd';
+                        setTimeout(() => { newTr.style.backgroundColor = ''; }, 2000);
+                        tbody.prepend(newTr);
+
+                        const tabBadge = document.querySelector('a[href="#pageTabOcrReceipts"] .badge');
+                        if (tabBadge) {
+                            const curCount = parseInt(tabBadge.textContent.trim(), 10) || 0;
+                            tabBadge.textContent = curCount + 1;
+                        }
+                    }
                 }
 
                 // Update matching rows in TAS Purchases Table (#pageTasTable)
@@ -5440,7 +6340,14 @@
                 // Update matching rows in Expenses Table (#pageExpenseTable)
                 if (window._pageExpenses && window._pageExpenses.length > 0) {
                     window._pageExpenses.forEach((exp, eIdx) => {
-                        const matchExp = exp.id && (submittedReceiptId == ('EXP-' + exp.id) || submittedId == ('EXP-' + exp.id) || (itm.expense_request_id && exp.id == itm.expense_request_id));
+                        const matchExp = exp.id && (
+                            submittedReceiptId == ('EXP-' + exp.id) ||
+                            submittedId == ('EXP-' + exp.id) ||
+                            submittedId == exp.id ||
+                            submittedReceiptId == exp.id ||
+                            (itm.expense_request_id && exp.id == itm.expense_request_id) ||
+                            (itm.request_number && exp.request_number && exp.request_number === itm.request_number)
+                        );
                         const matchRcpt = exp.receipt_id && (exp.receipt_id == itm.receipt_id || exp.receipt_id == itm.id || exp.receipt_id == submittedReceiptId);
                         const matchFs = exp.fs_no && itm.fs_no && exp.fs_no === itm.fs_no;
                         if (matchExp || matchRcpt || matchFs) {
@@ -5479,10 +6386,16 @@
                                     attachment_url: itm.file_url || exp.attachment_url
                                 });
                                 syncExpenseRowDom(eIdx, itm);
+                                if (typeof syncWithholdingTableRow === 'function') {
+                                    syncWithholdingTableRow(exp, itm);
+                                }
                             }
                         }
                     });
                     recomputeExpenseTableFooters();
+                    if (typeof recomputeWithholdingTableFooters === 'function') {
+                        recomputeWithholdingTableFooters();
+                    }
                     updateFilterCounters();
                 } else {
                     const expRows = document.querySelectorAll('#pageExpenseTable tbody tr');

@@ -1374,14 +1374,33 @@ class FinanceTaxReportController extends Controller
             }
 
             $whtAmount = (float)$item->calculated_withholding_amount;
-            if ($whtAmount <= 0 && $item->has_withholding) {
-                $whtRate = (float)($item->withholding_rate ?: 3.00);
+            if ($whtAmount <= 0 && (float)($item->withholding_amount ?? 0) > 0) {
+                $whtAmount = round((float)$item->withholding_amount, 2);
+            }
+            if ($whtAmount <= 0 && $dec && (float)($dec->withholding_amount ?? 0) > 0) {
+                $whtAmount = round((float)$dec->withholding_amount, 2);
+            }
+            if ($whtAmount <= 0 && (!empty($parsed['withholding_amount']) && (float)$parsed['withholding_amount'] > 0)) {
+                $whtAmount = round((float)$parsed['withholding_amount'], 2);
+            }
+            if ($whtAmount <= 0 && ($item->has_withholding || (!empty($dec) && !empty($dec->has_withholding)) || (!empty($parsed['has_withholding'])))) {
+                $whtRate = (float)($item->withholding_rate ?: ($dec?->withholding_rate ?: (!empty($parsed['withholding_rate']) ? $parsed['withholding_rate'] : 3.00)));
                 $whtAmount = round($baseAmount * ($whtRate / 100), 2);
             }
 
+            $hasWht = ($whtAmount > 0) || !empty($item->has_withholding) || (!empty($dec) && !empty($dec->has_withholding)) || (!empty($parsed['has_withholding']));
+            $whtRate = (float)($item->withholding_rate ?: ($dec?->withholding_rate ?: (!empty($parsed['withholding_rate']) ? $parsed['withholding_rate'] : ($whtAmount > 0 && $baseAmount > 0 ? round(($whtAmount / $baseAmount) * 100, 1) : 3.00))));
+            if (!$hasWht && $whtAmount <= 0) {
+                $whtRate = 0.0;
+                $whtAmount = 0.0;
+            }
+
+            $whtReceiptNo = $item->withholding_receipt_number ?: ($dec?->withholding_receipt_number ?: (!empty($parsed['withholding_receipt_number']) ? $parsed['withholding_receipt_number'] : '-'));
+            $whtSlipUrl = $item->withholding_receipt_url ?: (!empty($item->withholding_receipt) ? \App\Services\FileUploadService::url($item->withholding_receipt) : ($dec?->withholding_receipt ? \App\Services\FileUploadService::url($dec->withholding_receipt) : (!empty($parsed['withholding_receipt']) ? \App\Services\FileUploadService::url($parsed['withholding_receipt']) : null)));
+
             $netDisbursed = (float)$item->effective_payable_amount;
-            if ($netDisbursed <= 0) {
-                $netDisbursed = round($baseAmount + $vatAmount - $whtAmount, 2);
+            if ($netDisbursed <= 0 || ($hasWht && $netDisbursed > ($baseAmount + $vatAmount - $whtAmount))) {
+                $netDisbursed = max(0.0, round($baseAmount + $vatAmount - $whtAmount, 2));
             }
 
             $accountName = '-';
@@ -1531,11 +1550,11 @@ class FinanceTaxReportController extends Controller
                 'vat_type'           => $vatType,
                 'vat_rate'           => $vatRate,
                 'vat_amount'         => $vatAmount,
-                'has_withholding'            => (bool)($item->has_withholding || $whtAmount > 0),
-                'withholding_rate'           => (float)($item->withholding_rate ?: ($whtAmount > 0 ? round(($whtAmount / max(1, $baseAmount)) * 100, 1) : 0)),
-                'withholding_amount'         => $whtAmount,
-                'withholding_receipt_number' => $item->withholding_receipt_number ?: '-',
-                'withholding_receipt_url'    => $item->withholding_receipt_url ?: (!empty($item->withholding_receipt) ? \App\Services\FileUploadService::url($item->withholding_receipt) : null),
+                'has_withholding'            => (bool)$hasWht,
+                'withholding_rate'           => (float)$whtRate,
+                'withholding_amount'         => (float)$whtAmount,
+                'withholding_receipt_number' => $whtReceiptNo,
+                'withholding_receipt_url'    => $whtSlipUrl,
                 'withholding_settled'        => (bool)($item->withholding_settled ?? false),
                 'net_disbursed'      => $netDisbursed,
                 'description'        => $item->description ?: '-',
@@ -2864,6 +2883,28 @@ class FinanceTaxReportController extends Controller
         $verifiedNoReceiptCollection = $formattedExpenses->where('is_verified_without_receipt', true)->values();
         $unverifiedExpensesCollection = $formattedExpenses->where('is_verified_without_receipt', false)->values();
 
+        $whtExpensesCollection = $formattedExpenses->filter(function ($it) {
+            return !empty($it['has_withholding']) || (float)($it['withholding_amount'] ?? 0) > 0;
+        })->values();
+
+        $wht2Collection = $whtExpensesCollection->filter(fn($it) => round((float)($it['withholding_rate'] ?? 0), 1) == 2.0)->values();
+        $wht3Collection = $whtExpensesCollection->filter(fn($it) => in_array(round((float)($it['withholding_rate'] ?? 3), 1), [3.0, 0.0]))->values();
+        $wht30Collection = $whtExpensesCollection->filter(fn($it) => round((float)($it['withholding_rate'] ?? 0), 1) == 30.0)->values();
+
+        $whtSummary = [
+            'total_wht_amount'    => round((float)$whtExpensesCollection->sum('withholding_amount'), 2),
+            'wht_count'           => $whtExpensesCollection->count(),
+            'wht_2_amount'        => round((float)$wht2Collection->sum('withholding_amount'), 2),
+            'wht_2_count'         => $wht2Collection->count(),
+            'wht_3_amount'        => round((float)$wht3Collection->sum('withholding_amount'), 2),
+            'wht_3_count'         => $wht3Collection->count(),
+            'wht_30_amount'       => round((float)$wht30Collection->sum('withholding_amount'), 2),
+            'wht_30_count'        => $wht30Collection->count(),
+            'with_receipt_count'  => $whtExpensesCollection->filter(fn($it) => !empty($it['withholding_receipt_url']) || (!empty($it['withholding_receipt_number']) && $it['withholding_receipt_number'] !== '-'))->count(),
+            'total_base_amount'   => round((float)$whtExpensesCollection->sum('base_amount'), 2),
+            'total_net_disbursed' => round((float)$whtExpensesCollection->sum('net_disbursed'), 2),
+        ];
+
         return [
             'success' => true,
             'month' => [
@@ -2928,6 +2969,8 @@ class FinanceTaxReportController extends Controller
                 'ocr_needs_review_count' => $ocrNeedsReviewCount,
                 'missing_receipt_count'  => $unverifiedExpensesCollection->where('has_receipt', false)->count(),
                 'verified_no_receipt_count' => $verifiedNoReceiptCollection->count(),
+                'wht_count'              => $whtSummary['wht_count'],
+                'wht_amount'             => $whtSummary['total_wht_amount'],
                 'total_count'            => $formattedIncomes->count() + $unverifiedExpensesCollection->count() + $formattedOcrItems->count(),
             ],
             'vat_only'      => $vatOnly,
@@ -2937,6 +2980,8 @@ class FinanceTaxReportController extends Controller
             'vat_purchases' => $unverifiedExpensesCollection->where('is_vat_purchase', true)->values(),
             'verified_no_receipt' => $verifiedNoReceiptCollection,
             'missing_receipt'     => $unverifiedExpensesCollection->where('has_receipt', false)->values(),
+            'wht_expenses'  => $whtExpensesCollection,
+            'wht_summary'   => $whtSummary,
             'tas_purchases' => $tasPurchasesCollection->values(),
             'tas_purchases_count' => $tasPurchasesCollection->count(),
             'tas_purchases_total_amount' => $tasTotalAmount,
@@ -3801,9 +3846,65 @@ class FinanceTaxReportController extends Controller
             return $this->exportSalesExcel($request, $startDate, $endDate, $year, $month, $monthSuffix);
         } elseif ($type === 'purchase_tas' || $type === 'purchases_tas' || $type === 'tas') {
             return $this->exportPurchaseTasExcel($request, $startDate, $endDate, $year, $month, $monthSuffix);
+        } elseif ($type === 'withholding' || $type === 'wht') {
+            return $this->exportWithholdingExcel($request, $startDate, $endDate, $year, $month, $monthSuffix);
         } else {
             return $this->exportPurchaseVatExcel($request, $startDate, $endDate, $year, $month, $monthSuffix);
         }
+    }
+
+    /**
+     * Export Withholding Tax (WHT) Deductions Report to Excel / CSV.
+     */
+    protected function exportWithholdingExcel(Request $request, $startDate, $endDate, $year, $month, $monthSuffix)
+    {
+        $filename = "Withholding_Tax_Report_{$year}_{$monthSuffix}.xlsx";
+        $tempPath = storage_path("app/public/{$filename}");
+
+        $headers = [
+            'Voucher / Request #',
+            'Receipt Date (EC)',
+            'Receipt Date (GC)',
+            'Supplier / Payee Name',
+            'Seller TIN',
+            'FS / Receipt #',
+            'Category',
+            'Project',
+            'Taxable Base Amount (ETB)',
+            'WHT Rate (%)',
+            'Withholding Deducted (ETB)',
+            'Net Amount Disbursed (ETB)',
+            'WHT Certificate / Voucher #',
+        ];
+
+        $rows = [];
+        $movements = $this->calculateMonthMovementsData($year, $month, false);
+        $whtList = collect($movements['wht_expenses'] ?? []);
+
+        foreach ($whtList as $item) {
+            $baseVal = round((float)($item['base_amount'] ?? 0), 2);
+            $whtRateVal = round((float)($item['withholding_rate'] ?? 0), 1);
+            $whtAmtVal = round((float)($item['withholding_amount'] ?? 0), 2);
+            $netVal = round((float)($item['net_disbursed'] ?? max(0, $baseVal - $whtAmtVal)), 2);
+
+            $rows[] = [
+                $item['request_number'] ?? '-',
+                $item['date_ec'] ?? '-',
+                $item['date_gc'] ?? '-',
+                $item['payee'] ?? 'Vendor',
+                $item['seller_tin'] ?? '-',
+                $item['fs_no'] ?? '-',
+                $item['category'] ?? 'Expense',
+                $item['project_name'] ?? 'General',
+                $baseVal,
+                $whtRateVal,
+                $whtAmtVal,
+                $netVal,
+                $item['withholding_receipt_number'] ?? '-',
+            ];
+        }
+
+        return $this->writeExcelFile($headers, $rows, $tempPath, $filename);
     }
 
     /**
@@ -5358,6 +5459,11 @@ class FinanceTaxReportController extends Controller
             $whtAmount = $request->filled('withholding_amount') ? (float)$request->input('withholding_amount') : null;
             $whtReceiptNo = $request->filled('withholding_receipt_number') ? trim((string)$request->input('withholding_receipt_number')) : null;
 
+            // Auto-enable withholding if positive withholding amount is submitted
+            if ($whtAmount !== null && $whtAmount > 0) {
+                $hasWht = true;
+            }
+
             $rawId            = $request->input('id');
             $rawReceiptId     = $request->input('receipt_id');
             $rawExpenseReqId  = $request->input('expense_request_id');
@@ -5371,15 +5477,72 @@ class FinanceTaxReportController extends Controller
             $csPayment   = null;
             $pcPurchase  = null;
 
-            // 1. Resolve through ReceiptItem first (numeric id, or OCR-xx prefix)
-            $candItemIds = array_values(array_filter([$rawId, $rawReceiptId, $rawExpenseReqId]));
-            foreach ($candItemIds as $cid) {
-                $cleanCid = preg_replace('/^OCR-/i', '', (string)$cid);
-                if (is_numeric($cleanCid) && Schema::hasTable('receipt_items')) {
-                    $item = \App\Models\ReceiptItem::with('receipt')->find($cleanCid);
-                    if ($item && $item->receipt) {
-                        $receipt = $item->receipt;
-                        break;
+            $isExplicitExpReq = !empty($rawExpenseReqId) 
+                || (is_string($rawReceiptId) && str_starts_with(strtoupper($rawReceiptId), 'EXP-')) 
+                || (is_string($rawId) && str_starts_with(strtoupper($rawId), 'EXP-'));
+            $isExplicitProc = (is_string($rawReceiptId) && str_starts_with(strtoupper($rawReceiptId), 'PROC-')) 
+                || (is_string($rawId) && str_starts_with(strtoupper($rawId), 'PROC-'));
+            $isExplicitCs = (is_string($rawReceiptId) && (str_starts_with(strtoupper($rawReceiptId), 'CS-') || preg_match('/^P\d+$/i', $rawReceiptId))) 
+                || (is_string($rawId) && str_starts_with(strtoupper($rawId), 'CS-'));
+            $isExplicitPc = (is_string($rawReceiptId) && str_starts_with(strtoupper($rawReceiptId), 'PC-')) 
+                || (is_string($rawId) && str_starts_with(strtoupper($rawId), 'PC-'));
+            $isExplicitOcr = (is_string($rawId) && str_starts_with(strtoupper($rawId), 'OCR-')) 
+                || (is_string($rawReceiptId) && str_starts_with(strtoupper($rawReceiptId), 'OCR-'));
+
+            // If explicitly targeting an ExpenseRequest, resolve it FIRST before trying ReceiptItem
+            if ($isExplicitExpReq && Schema::hasTable('expense_requests')) {
+                $candExpIds = array_values(array_filter([$rawExpenseReqId, $rawReceiptId, $rawId, $rawRequestNumber]));
+                foreach ($candExpIds as $ceid) {
+                    if (preg_match('/^EXP-(\d+)$/i', (string)$ceid, $mExp)) {
+                        $expReq = \App\Models\ExpenseRequest::find($mExp[1]);
+                        if ($expReq) break;
+                    } elseif (is_numeric($ceid)) {
+                        $expReq = \App\Models\ExpenseRequest::find($ceid);
+                        if ($expReq) break;
+                    } elseif (str_starts_with(strtoupper((string)$ceid), 'EXP-')) {
+                        $expReq = \App\Models\ExpenseRequest::where('request_number', (string)$ceid)->first()
+                            ?: \App\Models\ExpenseRequest::where('request_number', 'like', '%' . $ceid . '%')->first();
+                        if ($expReq) break;
+                    }
+                }
+                if (!$expReq && !empty($rawRequestNumber)) {
+                    $expReq = \App\Models\ExpenseRequest::where('request_number', (string)$rawRequestNumber)
+                        ->orWhere('payment_reference', 'like', '%' . $rawRequestNumber . '%')
+                        ->first();
+                }
+
+                if ($expReq) {
+                    if (!empty($expReq->receipt_id)) {
+                        $receipt = \App\Models\Receipt::find($expReq->receipt_id);
+                    }
+                    if (!$receipt) {
+                        $receipt = \App\Models\Receipt::where(function ($q) use ($expReq) {
+                            $q->where(function ($sub) use ($expReq) {
+                                $sub->whereIn('purchasable_type', [\App\Models\ExpenseRequest::class, 'expense_request', 'ExpenseRequest'])
+                                    ->where('purchasable_id', $expReq->id);
+                            });
+                            if (!empty($expReq->request_number)) {
+                                $q->orWhere('receipt_number', $expReq->request_number);
+                            }
+                        })->latest('id')->first();
+                    }
+                    if ($receipt) {
+                        $item = $receipt->items()->first();
+                    }
+                }
+            }
+
+            // 1. Resolve through ReceiptItem (only for OCR items or when not explicit non-OCR expense/payment)
+            if (!$receipt && !$item && !$isExplicitExpReq && !$isExplicitProc && !$isExplicitCs && !$isExplicitPc) {
+                $candItemIds = array_values(array_filter([$rawId, $rawReceiptId]));
+                foreach ($candItemIds as $cid) {
+                    $cleanCid = preg_replace('/^OCR-/i', '', (string)$cid);
+                    if (is_numeric($cleanCid) && Schema::hasTable('receipt_items')) {
+                        $item = \App\Models\ReceiptItem::with('receipt')->find($cleanCid);
+                        if ($item && $item->receipt) {
+                            $receipt = $item->receipt;
+                            break;
+                        }
                     }
                 }
             }
@@ -5752,16 +5915,39 @@ class FinanceTaxReportController extends Controller
             if ($vat <= 0) {
                 $parsed['no_vat_reason_code'] = $parsed['no_vat_reason_code'] ?? 'fuel_zero_vat';
             }
-            if ($request->has('has_withholding')) {
+            // Reconcile withholding calculation based on totalVal (base)
+            if ($hasWht) {
+                if ($whtRate === null || $whtRate <= 0) {
+                    $whtRate = 3.00;
+                }
+                if ($whtAmount === null || $whtAmount <= 0) {
+                    $whtAmount = round($totalVal * ($whtRate / 100), 2);
+                }
+            } else {
+                $whtRate = 0.0;
+                $whtAmount = 0.0;
+                $whtReceiptNo = null;
+            }
+
+            if ($request->has('has_withholding') || $request->has('withholding_amount') || $request->has('withholding_rate') || $uploadedWhtPath || $request->has('withholding_receipt_number')) {
                 $parsed['has_withholding'] = $hasWht;
                 $parsed['withholding_rate'] = $whtRate ?: 0;
                 $parsed['withholding_amount'] = $whtAmount ?: 0;
-            }
-            if ($whtReceiptNo !== null) {
                 $parsed['withholding_receipt_number'] = $whtReceiptNo;
-            }
-            if ($uploadedWhtPath) {
-                $parsed['withholding_receipt'] = $uploadedWhtPath;
+                if ($uploadedWhtPath) {
+                    $parsed['withholding_receipt'] = $uploadedWhtPath;
+                } elseif (!$hasWht) {
+                    unset($parsed['withholding_receipt']);
+                }
+                if (Schema::hasColumn('receipts', 'has_withholding')) {
+                    $receiptUpdates['has_withholding'] = $hasWht;
+                }
+                if (Schema::hasColumn('receipts', 'withholding_rate')) {
+                    $receiptUpdates['withholding_rate'] = $whtRate ?: 0;
+                }
+                if (Schema::hasColumn('receipts', 'withholding_amount')) {
+                    $receiptUpdates['withholding_amount'] = $whtAmount ?: 0;
+                }
             }
             $receiptUpdates['parsed_data'] = $parsed;
 

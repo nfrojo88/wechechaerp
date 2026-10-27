@@ -2269,6 +2269,12 @@
                     </div>
                 </div>
                 <div class="d-flex align-items-center gap-2">
+                    <div class="form-check form-switch m-0 d-flex align-items-center gap-1.5 bg-dark-subtle px-2.5 py-1 rounded-pill border border-secondary border-opacity-50">
+                        <input class="form-check-input my-0" type="checkbox" role="switch" id="index_manual_edition_toggle" checked onchange="toggleIndexManualEdition(this.checked)">
+                        <label class="form-check-label text-white small fw-semibold user-select-none" for="index_manual_edition_toggle" style="font-size: 0.75rem;">
+                            <i class="fa-solid fa-lock-open text-warning me-1"></i>Manual Edition Unlocked
+                        </label>
+                    </div>
                     <span id="modalHeaderStatusBadge" class="badge bg-info-subtle text-info border border-info-subtle rounded-pill px-2.5 py-1 small font-monospace">ERCA Line 100</span>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
@@ -2414,7 +2420,7 @@
                                             <span class="small fw-bold text-dark">
                                                 <i class="fa-solid fa-calculator text-primary me-1"></i>Financial Reconciliation
                                             </span>
-                                            <span class="badge bg-secondary-subtle text-secondary" style="font-size:0.68rem;">Live Synced</span>
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle" id="indexManualBadge" style="font-size:0.68rem;">Manual Unlocked</span>
                                         </div>
                                         <div class="row g-2">
                                             <div class="col-4">
@@ -2439,7 +2445,7 @@
                                                 </div>
                                             </div>
                                         </div>
-                                        <div class="d-flex justify-content-between align-items-center mt-2 pt-1 border-top" style="font-size:0.72rem;">
+                                        <div class="d-flex justify-content-between align-items-center mt-2 pt-1 border-top flex-wrap gap-1" style="font-size:0.72rem;">
                                             <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none text-muted" onclick="autoCalcVatFromBase()">
                                                 <i class="fa-solid fa-wand-magic-sparkles me-1 text-primary"></i>Base &rarr; 15% VAT
                                             </button>
@@ -2448,6 +2454,9 @@
                                             </button>
                                             <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none text-muted" onclick="autoExtractBaseFromTotal()">
                                                 <i class="fa-solid fa-wand-magic-sparkles me-1 text-success"></i>Total &rarr; Base (/1.15)
+                                            </button>
+                                            <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none text-info fw-semibold" onclick="autoSumBaseAndVatModal()">
+                                                <i class="fa-solid fa-calculator me-1"></i>Base + VAT = Total
                                             </button>
                                         </div>
                                     </div>
@@ -3042,6 +3051,15 @@
                                     </div>
                                 </a>
                             </li>
+                            <li>
+                                <a class="dropdown-item rounded-3 py-2 px-3 d-flex align-items-center gap-2.5" href="#" onclick="exportMovementsExcel('withholding'); return false;">
+                                    <div class="p-2 rounded-circle bg-warning bg-opacity-10 text-warning"><i class="fa-solid fa-hand-holding-dollar fs-6"></i></div>
+                                    <div>
+                                        <div class="fw-bold text-dark small">4. Withholding Tax (WHT) Excel</div>
+                                        <small class="text-muted d-block" style="font-size: 0.7rem;">Deductions ledger (2% Goods, 3% Service, 30% Non-TIN)</small>
+                                    </div>
+                                </a>
+                            </li>
                         </ul>
                     </div>
                     <a id="mMovementsFullPageBtn" href="{{ route('finance.tax-deductions.movements') }}" class="btn btn-sm btn-primary text-white rounded-pill px-3 fw-semibold shadow-xs">
@@ -3279,6 +3297,9 @@
                                             <button type="button" class="btn btn-sm rounded-pill px-2.5 py-1 fw-semibold text-muted" id="btnModalExpenseTas" onclick="setMovementExpenseFilter('tas')" title="Purchases with 0% VAT (Declared in TAS)">
                                                 <i class="fa-solid fa-receipt me-1"></i>TAS Purchases (0% VAT) (<span id="countModalExpenseTas">0</span>)
                                             </button>
+                                            <button type="button" class="btn btn-sm rounded-pill px-2.5 py-1 fw-semibold text-muted" id="btnModalExpenseWht" onclick="setMovementExpenseFilter('wht')" title="Purchases with Withholding Tax Deducted">
+                                                <i class="fa-solid fa-hand-holding-dollar me-1 text-warning"></i>Withholding (WHT) (<span id="countModalExpenseWht">0</span>)
+                                            </button>
                                         </div>
                                         <div class="btn-group shadow-xs rounded-pill overflow-hidden">
                                             <button type="button" class="btn btn-sm btn-outline-primary fw-semibold px-3 text-nowrap d-inline-flex align-items-center gap-1" onclick="exportMovementsExcel('purchase_tas')">
@@ -3288,6 +3309,10 @@
                                             <button type="button" class="btn btn-sm btn-outline-danger fw-semibold px-3 text-nowrap d-inline-flex align-items-center gap-1" onclick="exportMovementsExcel('purchase_vat')">
                                                 <i class="fa-solid fa-file-excel"></i>
                                                 <span>Purchase VAT</span>
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-outline-warning text-dark fw-semibold px-3 text-nowrap d-inline-flex align-items-center gap-1" onclick="exportMovementsExcel('withholding')">
+                                                <i class="fa-solid fa-file-excel text-success"></i>
+                                                <span>WHT Excel</span>
                                             </button>
                                         </div>
                                         <div style="min-width: 200px;">
@@ -3706,6 +3731,7 @@
                                                         <li><a class="dropdown-item py-1.5 px-3 rounded-2" href="#" onclick="exportMovementsExcel('sales'); return false;"><i class="fa-solid fa-hand-holding-dollar text-success me-2"></i>1. Sales Excel</a></li>
                                                         <li><a class="dropdown-item py-1.5 px-3 rounded-2" href="#" onclick="exportMovementsExcel('purchase_tas'); return false;"><i class="fa-solid fa-file-invoice text-primary me-2"></i>2. Purchase TAS Excel</a></li>
                                                         <li><a class="dropdown-item py-1.5 px-3 rounded-2" href="#" onclick="exportMovementsExcel('purchase_vat'); return false;"><i class="fa-solid fa-percent text-danger me-2"></i>3. Purchase VAT Excel</a></li>
+                                                        <li><a class="dropdown-item py-1.5 px-3 rounded-2" href="#" onclick="exportMovementsExcel('withholding'); return false;"><i class="fa-solid fa-hand-holding-dollar text-warning me-2"></i>4. Withholding (WHT) Excel</a></li>
                                                     </ul>
                                                 </div>
                                             </div>
@@ -4547,7 +4573,23 @@
         preview.textContent = 'GC: ' + ymd;
     }
 
+    let _indexManualEditionMode = true;
+
+    function toggleIndexManualEdition(enabled) {
+        _indexManualEditionMode = !!enabled;
+        const badge = document.getElementById('indexManualBadge');
+        if (badge) {
+            badge.className = _indexManualEditionMode 
+                ? 'badge bg-success-subtle text-success border border-success-subtle' 
+                : 'badge bg-secondary-subtle text-secondary';
+            badge.textContent = _indexManualEditionMode ? 'Manual Unlocked' : 'Auto Math';
+        }
+    }
+
     function recalcFromBase(val) {
+        if (_indexManualEditionMode) {
+            return;
+        }
         const base = parseFloat(val) || 0;
         const vatCat = document.getElementById('edit_vat_category');
         const isZeroVat = vatCat && vatCat.value === 'E';
@@ -4561,6 +4603,9 @@
     }
 
     function recalcFromVat(val) {
+        if (_indexManualEditionMode) {
+            return;
+        }
         const vat = parseFloat(val) || 0;
         const base = parseFloat(document.getElementById('edit_total_value')?.value) || 0;
         const total = Math.round((base + vat) * 100) / 100;
@@ -4569,6 +4614,9 @@
     }
 
     function recalcFromTotal(val) {
+        if (_indexManualEditionMode) {
+            return;
+        }
         const total = parseFloat(val) || 0;
         const vatCat = document.getElementById('edit_vat_category');
         const isZeroVat = vatCat && vatCat.value === 'E';
@@ -4586,8 +4634,13 @@
         if (vatCat && vatCat.value === 'E') {
             vatCat.value = 'G';
         }
-        const baseInput = document.getElementById('edit_total_value');
-        if (baseInput) recalcFromBase(baseInput.value);
+        const base = parseFloat(document.getElementById('edit_total_value')?.value || 0) || 0;
+        const vat = Math.round(base * 0.15 * 100) / 100;
+        const total = Math.round((base + vat) * 100) / 100;
+        const vatEl = document.getElementById('edit_vat_amount');
+        const totalEl = document.getElementById('edit_value_after_vat');
+        if (vatEl) vatEl.value = vat.toFixed(2);
+        if (totalEl) totalEl.value = total.toFixed(2);
     }
 
     function setZeroVatModal() {
@@ -4611,8 +4664,25 @@
     }
 
     function autoExtractBaseFromTotal() {
+        const total = parseFloat(document.getElementById('edit_value_after_vat')?.value || 0) || 0;
+        const vatCat = document.getElementById('edit_vat_category');
+        const isZeroVat = vatCat && vatCat.value === 'E';
+
+        const base = isZeroVat ? total : Math.round((total / 1.15) * 100) / 100;
+        const vat = isZeroVat ? 0 : Math.round((total - base) * 100) / 100;
+        const baseEl = document.getElementById('edit_total_value');
+        const vatEl = document.getElementById('edit_vat_amount');
+        if (baseEl) baseEl.value = base.toFixed(2);
+        if (vatEl) vatEl.value = vat.toFixed(2);
+    }
+
+    function autoSumBaseAndVatModal() {
+        const base = parseFloat(document.getElementById('edit_total_value')?.value || 0) || 0;
+        const vat = parseFloat(document.getElementById('edit_vat_amount')?.value || 0) || 0;
         const totalInput = document.getElementById('edit_value_after_vat');
-        if (totalInput) recalcFromTotal(totalInput.value);
+        if (totalInput) {
+            totalInput.value = (Math.round((base + vat) * 100) / 100).toFixed(2);
+        }
     }
 
     function _setSlipPreview(slipUrl) {
@@ -4679,6 +4749,11 @@
             console.warn('Could not locate OCR row element for inspection.');
             return;
         }
+
+        // Unlock manual edition
+        const toggleEl = document.getElementById('index_manual_edition_toggle');
+        if (toggleEl) toggleEl.checked = true;
+        toggleIndexManualEdition(true);
 
         const cleanNum = (v) => {
             const n = parseFloat(String(v ?? '0').replace(/[^0-9.-]/g, ''));
@@ -4800,6 +4875,11 @@
     }
 
     function openVatSlipModal(imgUrlOrObj, vendor, tin, fs, mrc, date, base, vat, total, studioUrl, id, desc, dateEc, projId, cat, vatCat, purcType) {
+        // Unlock manual edition
+        const toggleEl = document.getElementById('index_manual_edition_toggle');
+        if (toggleEl) toggleEl.checked = true;
+        toggleIndexManualEdition(true);
+
         let ocr = {};
         if (typeof imgUrlOrObj === 'object' && imgUrlOrObj !== null) {
             ocr = imgUrlOrObj;
@@ -6346,6 +6426,12 @@
         if (document.getElementById('countModalExpenseTas')) {
             document.getElementById('countModalExpenseTas').innerText = (data.tas_purchases || []).length;
         }
+        if (document.getElementById('countModalExpenseWht')) {
+            const whtList = (data.wht_expenses && data.wht_expenses.length > 0)
+                ? data.wht_expenses
+                : (data.expenses || []).filter(e => e.has_withholding || parseFloat(e.withholding_amount || 0) > 0);
+            document.getElementById('countModalExpenseWht').innerText = whtList.length;
+        }
 
         // Update dedicated KPI cards
         if (document.getElementById('mKpiVatPurchasesCount')) {
@@ -6517,11 +6603,11 @@
     function setMovementExpenseFilter(type) {
         window._movementExpenseFilter = type;
         
-        ['all', 'vat', 'tas'].forEach(t => {
-            const btn = document.getElementById(t === 'all' ? 'btnModalExpenseAll' : (t === 'vat' ? 'btnModalExpenseVat' : 'btnModalExpenseTas'));
+        ['all', 'vat', 'tas', 'wht'].forEach(t => {
+            const btn = document.getElementById(t === 'all' ? 'btnModalExpenseAll' : (t === 'vat' ? 'btnModalExpenseVat' : (t === 'tas' ? 'btnModalExpenseTas' : 'btnModalExpenseWht')));
             if (!btn) return;
             if (t === type) {
-                btn.className = 'btn btn-sm rounded-pill px-2.5 py-1 fw-semibold ' + (t === 'vat' ? 'btn-success text-white shadow-xs' : (t === 'tas' ? 'btn-primary text-white shadow-xs' : 'btn-danger text-white shadow-xs'));
+                btn.className = 'btn btn-sm rounded-pill px-2.5 py-1 fw-semibold ' + (t === 'vat' ? 'btn-success text-white shadow-xs' : (t === 'tas' ? 'btn-primary text-white shadow-xs' : (t === 'wht' ? 'btn-warning text-dark shadow-xs' : 'btn-danger text-white shadow-xs')));
             } else {
                 btn.className = 'btn btn-sm rounded-pill px-2.5 py-1 fw-semibold text-muted';
             }
@@ -6535,6 +6621,7 @@
         const list = rawList.filter(exp => {
             if (filterType === 'vat') return Boolean(exp.is_vat_purchase || parseFloat(exp.vat_amount || 0) > 0);
             if (filterType === 'tas') return Boolean(exp.is_tas_purchase || (!exp.is_vat_purchase && parseFloat(exp.vat_amount || 0) <= 0));
+            if (filterType === 'wht') return Boolean(exp.has_withholding || parseFloat(exp.withholding_amount || 0) > 0);
             return true;
         });
 
@@ -6603,7 +6690,7 @@
                 expenseTbody.appendChild(tr);
             });
         } else {
-            const typeLabel = filterType === 'vat' ? 'VAT purchases' : (filterType === 'tas' ? 'TAS purchases (0% VAT)' : 'purchases or paid expenses');
+            const typeLabel = filterType === 'vat' ? 'VAT purchases' : (filterType === 'tas' ? 'TAS purchases (0% VAT)' : (filterType === 'wht' ? 'withholding tax purchases' : 'purchases or paid expenses'));
             expenseTbody.innerHTML = `
                 <tr>
                     <td colspan="10" class="text-center py-4 text-muted">
@@ -6617,7 +6704,7 @@
         if (footLabel) {
             footLabel.textContent = filterType === 'vat'
                 ? `Total VAT Purchases (${list.length} items)`
-                : (filterType === 'tas' ? `Total TAS Purchases (${list.length} items)` : `Total Purchases & Deductions (${list.length} items)`);
+                : (filterType === 'tas' ? `Total TAS Purchases (${list.length} items)` : (filterType === 'wht' ? `Total Withholding Deductions (${list.length} items)` : `Total Purchases & Deductions (${list.length} items)`));
         }
         document.getElementById('mExpenseTotalBase').innerText = 'ETB ' + formatMoney(totalBase);
         document.getElementById('mExpenseTotalVat').innerText  = 'ETB ' + formatMoney(totalVat);
