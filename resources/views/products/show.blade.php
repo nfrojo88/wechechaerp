@@ -22,7 +22,12 @@
     <span class="badge bg-{{ $sColor }} fs-6">{{ $product->asset_status }}</span>
     <code class="ms-1">{{ $product->sku }}</code>
 
-    <div class="ms-auto">
+    <div class="ms-auto d-flex gap-2">
+        @if(auth()->user()?->isGlobalAdmin())
+        <button type="button" class="btn btn-danger shadow-sm" onclick="openSkuDeleteModal('{{ $product->sku }}', '{{ addslashes($product->name) }}')">
+            <i class="fas fa-trash-can me-1"></i> Complete Delete (SKU)
+        </button>
+        @endif
         @can('products.edit')
         <a href="{{ route('products.edit', $product) }}" class="btn btn-primary">
             <i class="fas fa-pen me-1"></i> Edit Product
@@ -138,4 +143,7 @@
         </div>
     </div>
 </div>
+
+@include('products.partials.admin_sku_delete_modal')
+
 @endsection

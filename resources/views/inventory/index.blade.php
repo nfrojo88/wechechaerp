@@ -15,6 +15,11 @@
         @endif
     </div>
     <div class="d-flex gap-2">
+        @if(auth()->user()?->isGlobalAdmin())
+        <button type="button" class="btn btn-danger fw-semibold shadow-sm px-3" style="border-radius:10px;" data-bs-toggle="modal" data-bs-target="#adminSkuDeleteModal">
+            <i class="fa-solid fa-trash-can me-1"></i> Delete Material by SKU
+        </button>
+        @endif
         <a href="{{ route('inventory.all-movements') }}" class="btn btn-outline-info fw-semibold shadow-sm px-3" style="border-radius:10px;">
             <i class="fa-solid fa-arrow-right-arrow-left me-1"></i> Stock Movements
         </a>
@@ -164,15 +169,21 @@
                             @endif
                         </td>
                         <td class="text-end">
-                            <a href="{{ route('inventory.show', $item) }}" class="btn btn-sm btn-outline-secondary">
+                            <a href="{{ route('inventory.show', $item) }}" class="btn btn-sm btn-outline-secondary" title="View Details">
                                 <i class="fa-solid fa-eye"></i>
                             </a>
                             @can('inventory.edit')
                             <button class="btn btn-sm btn-outline-primary"
-                                    data-bs-toggle="modal" data-bs-target="#adjustModal{{ $item->id }}">
+                                    data-bs-toggle="modal" data-bs-target="#adjustModal{{ $item->id }}" title="Stock Adjustment">
                                 <i class="fa-solid fa-sliders"></i>
                             </button>
                             @endcan
+                            @if(auth()->user()?->isGlobalAdmin() && $item->product)
+                            <button type="button" class="btn btn-sm btn-outline-danger" title="Global Admin: Complete Delete Material by SKU"
+                                    onclick="openSkuDeleteModal('{{ $item->product->sku }}', '{{ addslashes($item->product->name) }}')">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                            @endif
                         </td>
                     </tr>
 
@@ -238,4 +249,7 @@
     </div>
     @endif
 </div>
+
+@include('products.partials.admin_sku_delete_modal')
+
 @endsection

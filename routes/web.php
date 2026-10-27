@@ -1771,7 +1771,10 @@ Route::middleware(['auth'])->group(function () {
     Route::put('asset-returns/{id}/approve', [App\Http\Controllers\AssetReturnController::class, 'approve'])->name('asset-returns.approve');
     Route::put('asset-returns/{id}/reject', [App\Http\Controllers\AssetReturnController::class, 'reject'])->name('asset-returns.reject');
 
-    // Products
+    // Products — Global Admin Complete Purge & Lookup routes (Must precede resource route)
+    Route::get('products/lookup-by-sku', [App\Http\Controllers\ProductController::class, 'lookupBySku'])->name('products.lookup-by-sku');
+    Route::post('products/complete-delete-by-sku', [App\Http\Controllers\ProductController::class, 'completeDeleteBySku'])->name('products.complete-delete-by-sku');
+    Route::delete('products/{product}/force-delete', [App\Http\Controllers\ProductController::class, 'forceDeleteProduct'])->name('products.force-delete');
     Route::resource('products', ProductController::class);
 
     // Units of Measurement
