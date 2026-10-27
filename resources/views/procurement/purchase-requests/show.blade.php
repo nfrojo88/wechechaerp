@@ -111,11 +111,11 @@
                 break;
 
             case \App\Models\PurchaseRequest::STATUS_PENDING_RECEIPT_UPLOAD:
-                $canActOnCurrentStage = $isGlobalAdmin || in_array('purchase', $rawUserRoles) || in_array('procurement_team', $rawUserRoles) || in_array('purchaser', $rawUserRoles) || in_array('buyer', $rawUserRoles);
+                $canActOnCurrentStage = $isGlobalAdmin || in_array('purchase', $rawUserRoles) || in_array('procurement_team', $rawUserRoles) || in_array('purchaser', $rawUserRoles) || in_array('buyer', $rawUserRoles) || in_array('purchase_manager', $rawUserRoles) || in_array('finance_head', $rawUserRoles) || in_array('finance', $rawUserRoles) || in_array('store_keeper', $rawUserRoles) || in_array('store_manager', $rawUserRoles);
                 break;
 
             case \App\Models\PurchaseRequest::STATUS_PENDING_RECEIPT_VERIFY:
-                $canActOnCurrentStage = $isGlobalAdmin || in_array('finance_head', $rawUserRoles) || in_array('finance_manager', $rawUserRoles) || in_array('finance', $rawUserRoles);
+                $canActOnCurrentStage = $isGlobalAdmin || in_array('finance_head', $rawUserRoles) || in_array('finance_manager', $rawUserRoles) || in_array('finance', $rawUserRoles) || in_array('purchase', $rawUserRoles) || in_array('store_keeper', $rawUserRoles);
                 break;
 
             case \App\Models\PurchaseRequest::STATUS_PENDING_DRIVER:
@@ -1537,20 +1537,40 @@
 
                     <!-- STAGE 8: Upload Receipt (Procurement Team) -->
                     @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_RECEIPT_UPLOAD)
-                        <div class="mb-3">
-                            <h6 class="fw-bold text-primary mb-1">
-                                <i class="fas fa-file-invoice me-1"></i> Upload Purchase Receipt
-                            </h6>
-                            <p class="small text-muted mb-0">
-                                Payment of <strong>{{ number_format($purchaseRequest->payment?->amount ?? $purchaseRequest->direct_buy_amount, 2) }} ETB</strong> disbursed. Upload vendor receipt and send directly to Store Keeper for material intake.
-                            </p>
-                        </div>
-                        <form action="{{ route('purchase-requests.upload-receipt', $purchaseRequest) }}" method="POST" enctype="multipart/form-data" id="prReceiptUploadForm">
-                            @csrf
-                            <div class="mb-2">
-                                <label class="form-label small fw-bold text-uppercase text-muted">Official Vendor Receipt (PDF / Image) <span class="text-danger">*</span></label>
-                                <input type="file" name="receipt_file" id="prReceiptFileInput" class="form-control form-control-sm" accept=".pdf,.jpg,.jpeg,.png,.webp" required>
+                        <div class="alert alert-success border-2 border-success bg-white shadow-sm p-3 rounded-3 mb-3">
+                            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                <div>
+                                    <h6 class="fw-bold text-success mb-1">
+                                        <i class="fas fa-forward me-1"></i> Jump Directly to Next Stage (Store Material Intake)
+                                    </h6>
+                                    <p class="small text-muted mb-0">
+                                        Payment of <strong>{{ number_format($purchaseRequest->payment?->amount ?? $purchaseRequest->direct_buy_amount, 2) }} ETB</strong> disbursed. Skip receipt upload and move directly to <strong>Store Keeper Material Intake</strong>.
+                                    </p>
+                                </div>
+                                <form action="{{ route('purchase-requests.skip-receipt-to-store', $purchaseRequest) }}" method="POST" class="d-inline">
+                                    @csrf
+                                    <button type="submit" class="btn btn-success fw-bold px-3 py-2 shadow-sm text-nowrap" onclick="return confirm('Skip receipt upload and advance directly to Store Keeper Material Intake?');">
+                                        <i class="fas fa-boxes-packing me-1"></i> Skip &amp; Jump to Store Intake &rarr;
+                                    </button>
+                                </form>
                             </div>
+                        </div>
+
+                        <div class="card border rounded-3 mb-3">
+                            <div class="card-header bg-light py-2 d-flex justify-content-between align-items-center" role="button" data-bs-toggle="collapse" data-bs-target="#optionalReceiptUploadCollapse" aria-expanded="true" style="cursor: pointer;">
+                                <span class="small fw-bold text-secondary">
+                                    <i class="fas fa-file-invoice me-1"></i> Optional: Upload Vendor Receipt (If Available)
+                                </span>
+                                <span class="badge bg-secondary bg-opacity-25 text-secondary small"><i class="fas fa-chevron-down me-1"></i>Toggle Form</span>
+                            </div>
+                            <div class="collapse show" id="optionalReceiptUploadCollapse">
+                                <div class="card-body p-3">
+                                    <form action="{{ route('purchase-requests.upload-receipt', $purchaseRequest) }}" method="POST" enctype="multipart/form-data" id="prReceiptUploadForm">
+                                        @csrf
+                                        <div class="mb-2">
+                                            <label class="form-label small fw-bold text-uppercase text-muted">Official Vendor Receipt (PDF / Image) <span class="text-danger">*</span></label>
+                                            <input type="file" name="receipt_file" id="prReceiptFileInput" class="form-control form-control-sm" accept=".pdf,.jpg,.jpeg,.png,.webp" required>
+                                        </div>
 
                             {{-- Dynamic OCR Feedback & Duplicate Alert Area --}}
                             <div id="prOcrFeedbackArea"></div>
@@ -1663,10 +1683,21 @@
                                 <label class="form-label small fw-bold text-uppercase text-muted">Receipt Notes / Reference</label>
                                 <textarea name="notes" id="prReceiptNotes" class="form-control form-control-sm" rows="2" placeholder="Cash sales invoice #, receipt date, or purchase notes..."></textarea>
                             </div>
-                            <button type="submit" id="prUploadSubmitBtn" class="btn btn-primary btn-sm w-100 fw-bold py-2 shadow-sm">
-                                <i class="fas fa-paper-plane me-1"></i> Upload Receipt & Send to Store Manager
-                            </button>
+                            <div class="d-flex gap-2">
+                                <button type="submit" id="prUploadSubmitBtn" class="btn btn-primary btn-sm flex-grow-1 fw-bold py-2 shadow-sm">
+                                    <i class="fas fa-paper-plane me-1"></i> Upload Receipt &amp; Send to Store Keeper
+                                </button>
+                                <button type="button" class="btn btn-outline-success btn-sm fw-bold px-3 py-2 shadow-sm" onclick="if(confirm('Skip receipt upload and advance directly to Store Keeper Material Intake?')) { document.getElementById('skipReceiptDirectForm').submit(); }">
+                                    <i class="fas fa-forward me-1"></i> Skip
+                                </button>
+                            </div>
                         </form>
+                        <form id="skipReceiptDirectForm" action="{{ route('purchase-requests.skip-receipt-to-store', $purchaseRequest) }}" method="POST" class="d-none">
+                            @csrf
+                        </form>
+                                </div>
+                            </div>
+                        </div>
 
                         <script src="{{ asset('js/receipt-ocr-scanner.js') }}"></script>
                         <script>
@@ -1730,6 +1761,24 @@
 
                     <!-- STAGE 8: Verify Receipt -->
                     @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_RECEIPT_VERIFY)
+                        <div class="alert alert-success border-2 border-success bg-white shadow-sm p-3 rounded-3 mb-3">
+                            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                <div>
+                                    <h6 class="fw-bold text-success mb-1">
+                                        <i class="fas fa-forward me-1"></i> Jump Directly to Next Stage (Store Material Intake)
+                                    </h6>
+                                    <p class="small text-muted mb-0">
+                                        Skip waiting for receipt verification and advance directly to <strong>Store Keeper Material Intake</strong>.
+                                    </p>
+                                </div>
+                                <form action="{{ route('purchase-requests.skip-receipt-to-store', $purchaseRequest) }}" method="POST" class="d-inline">
+                                    @csrf
+                                    <button type="submit" class="btn btn-success fw-bold px-3 py-2 shadow-sm text-nowrap" onclick="return confirm('Skip receipt verification and advance directly to Store Keeper Material Intake?');">
+                                        <i class="fas fa-boxes-packing me-1"></i> Skip &amp; Jump to Store Intake &rarr;
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
                         <form action="{{ route('purchase-requests.verify-receipt', $purchaseRequest) }}" method="POST">
                             @csrf
                             <div class="mb-2">
@@ -1743,7 +1792,7 @@
                                 <label class="form-label small">Notes</label>
                                 <textarea name="verification_notes" class="form-control form-control-sm" rows="2"></textarea>
                             </div>
-                            <button class="btn btn-success btn-sm w-100">Submit Verification</button>
+                            <button class="btn btn-primary btn-sm w-100">Submit Verification</button>
                         </form>
 
                     <!-- STAGE 9: Book Driver (General Service) -->

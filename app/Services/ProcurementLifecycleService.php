@@ -1007,23 +1007,56 @@ class ProcurementLifecycleService
             }
         } catch (\Throwable $e) {}
 
-        $targetRole = $this->resolveOwnerRole('purchase', $pr);
+        // Advance directly to Store Keeper for material intake (bypassing blocking receipt upload)
+        $targetRole = $this->resolveOwnerRole('store_keeper', $pr);
         $pr->update([
-            'status'             => PurchaseRequest::STATUS_PENDING_RECEIPT_UPLOAD,
+            'status'             => PurchaseRequest::STATUS_PENDING_STORE_REVIEW,
             'current_owner_role' => $targetRole,
         ]);
-        $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_RECEIPT_UPLOAD, 'finance_staff_paid', 'finance', $notes);
-        $this->notifyNextOwner($pr, PurchaseRequest::STATUS_PENDING_RECEIPT_UPLOAD, 'Payment Disbursed (' . number_format($disbursedAmount, 2) . ' ETB) — Upload Vendor Receipt');
+        $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_STORE_REVIEW, 'finance_staff_paid_direct_to_store', 'finance', $notes);
+        $this->notifyNextOwner($pr, PurchaseRequest::STATUS_PENDING_STORE_REVIEW, 'Payment Disbursed (' . number_format($disbursedAmount, 2) . ' ETB) — Perform Store Material Intake');
 
-        // Instant SMS Handoff: Cashier / Finance Staff -> Procurement Officer / Purchaser
+        // Instant SMS Handoff: Cashier / Finance Staff -> Store Keeper & Store Manager
         try {
             $this->handoffSms->triggerHandoff('cashier_disbursed_cash', $pr, [
                 'sender_user'  => Auth::user(),
                 'sender_role'  => 'finance',
-                'target_roles' => ['purchase'],
+                'target_roles' => ['store_keeper', 'store_manager'],
             ]);
         } catch (\Throwable $e) {
             Log::error("Cashier Disbursed SMS trigger failed: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Jump / Skip receipt upload stage and advance directly to Store Keeper Material Intake
+     */
+    public function skipReceiptToStore(PurchaseRequest $pr, ?string $notes = null): void
+    {
+        $from = $pr->status;
+        $targetRole = $this->resolveOwnerRole('store_keeper', $pr);
+        $pr->update([
+            'status'             => PurchaseRequest::STATUS_PENDING_STORE_REVIEW,
+            'current_owner_role' => $targetRole,
+        ]);
+        $this->log(
+            $pr,
+            $from,
+            PurchaseRequest::STATUS_PENDING_STORE_REVIEW,
+            'skip_receipt_jump_to_store',
+            'purchase',
+            $notes ?? 'Bypassed receipt upload section; moved directly to store material intake.'
+        );
+        $this->notifyNextOwner($pr, PurchaseRequest::STATUS_PENDING_STORE_REVIEW, 'Receipt Stage Bypassed — Perform Store Material Intake');
+
+        try {
+            $this->handoffSms->triggerHandoff('receipt_skipped_jump_to_store', $pr, [
+                'sender_user'  => Auth::user(),
+                'sender_role'  => 'purchase',
+                'target_roles' => ['store_keeper', 'store_manager'],
+            ]);
+        } catch (\Throwable $e) {
+            Log::error("Receipt Skipped SMS trigger failed: " . $e->getMessage());
         }
     }
 

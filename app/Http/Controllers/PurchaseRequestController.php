@@ -622,6 +622,10 @@ class PurchaseRequestController extends Controller
                 'gm_approve_credit_direct_store',
                 'finance_credit_approved',
                 'finance_credit_approved_direct_intake',
+                'finance_staff_paid_direct_to_store',
+                'finance_staff_paid',
+                'skip_receipt_jump_to_store',
+                'receipt_uploaded_sent_to_store',
                 'driver_booked',
                 'receipt_verified',
                 'partial_store_intake'
@@ -2135,6 +2139,33 @@ class PurchaseRequestController extends Controller
         }
 
         return back()->with('success', 'Vendor purchase receipt uploaded and synced to central fiscal receipts. Request routed directly to Store Manager for material intake.');
+    }
+
+    /**
+     * Skip / Jump receipt upload stage and advance directly to Store Keeper Intake
+     */
+    public function skipReceiptToStore(Request $request, PurchaseRequest $purchaseRequest)
+    {
+        $user = Auth::user();
+        $userRoles = $user ? $user->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray() : [];
+        $isGlobalAdmin = in_array('global_admin', $userRoles) || in_array('admin', $userRoles);
+        $allowedRoles = [
+            'purchase', 'procurement_team', 'purchaser', 'buyer',
+            'purchase_manager', 'procurement_manager',
+            'finance', 'finance_head', 'finance_manager',
+            'store_keeper', 'storekeeper', 'store_clerk', 'store_manager',
+            'global_admin', 'admin'
+        ];
+        $hasAllowedRole = $isGlobalAdmin || !empty(array_intersect($allowedRoles, $userRoles));
+
+        if (!$hasAllowedRole) {
+            abort(403, 'Unauthorized: You do not have permission to advance this stage.');
+        }
+
+        $this->lifecycle->skipReceiptToStore($purchaseRequest, $request->input('notes'));
+
+        return redirect()->route('purchase-requests.show', $purchaseRequest)
+            ->with('success', 'Bypassed receipt upload section. Successfully moved to Store Material Intake stage!');
     }
 
     public function uploadWithholdingReceipt(Request $request, PurchaseRequest $purchaseRequest)
