@@ -1310,23 +1310,31 @@ class FinanceTaxReportController extends Controller
         }
 
         $formattedExpenses = $expenses->map(function ($item) use ($defaultPurchaserDigits) {
-            // Extract linked Receipt and ExpenseHubVatDecision for TAS / e-Tax details
-            $r = $item->relationLoaded('receipt') ? $item->receipt : null;
+            // Extract linked Receipt and ExpenseHubVatDecision for TAS / e-Tax details (prioritizing the most recently updated receipt)
+            $r = null;
+            if (!empty($item->receipt_id) && Schema::hasTable('receipts')) {
+                $r = Receipt::find($item->receipt_id);
+            }
             if (!$r && Schema::hasTable('receipts')) {
                 $r = Receipt::where(function ($rq) use ($item) {
                         $rq->whereIn('purchasable_type', [ExpenseRequest::class, 'App\\Models\\ExpenseRequest', 'expense_request', 'expense'])
                            ->where('purchasable_id', $item->id);
                     })
                     ->orWhere('receipt_number', $item->request_number)
-                    ->latest('id')
+                    ->orderBy('updated_at', 'desc')
+                    ->orderBy('id', 'desc')
                     ->first();
             }
-            if (!$r && !empty($item->receipt_id) && Schema::hasTable('receipts')) {
-                $r = Receipt::find($item->receipt_id);
+            if (!$r && $item->relationLoaded('receipt') && $item->receipt) {
+                $r = $item->receipt;
             }
             if (!$r && !empty($item->payment_reference) && Schema::hasTable('receipts')) {
                 if (preg_match('/FS[:\s]+([0-9a-zA-Z_-]+)/i', $item->payment_reference, $mFs)) {
-                    $r = Receipt::where('fs_no', $mFs[1])->orWhere('fs_no_raw', $mFs[1])->latest('id')->first();
+                    $r = Receipt::where('fs_no', $mFs[1])
+                        ->orWhere('fs_no_raw', $mFs[1])
+                        ->orderBy('updated_at', 'desc')
+                        ->orderBy('id', 'desc')
+                        ->first();
                 }
             }
             $dec = $item->relationLoaded('expenseHubVatDecision') ? $item->expenseHubVatDecision : null;
@@ -1337,6 +1345,7 @@ class FinanceTaxReportController extends Controller
                     })->latest('id')->first();
             }
             $parsed = is_string($r?->parsed_data ?? null) ? (json_decode($r->parsed_data, true) ?: []) : (array)($r?->parsed_data ?? []);
+            $manuallyEditedAt = (int)($parsed['manually_edited_at'] ?? ($parsed['last_updated_at'] ?? 0));
 
             $payee = $r?->vendor_name
                 ?: (!empty($parsed['seller_name']) ? $parsed['seller_name'] : null)
@@ -2256,6 +2265,8 @@ class FinanceTaxReportController extends Controller
                         'value_after_vat'  => $total,
                     ]);
                     $virtualItem->id = $sr->id;
+                    $virtualItem->created_at = $sr->created_at;
+                    $virtualItem->updated_at = $sr->updated_at ?: $sr->created_at;
                     $virtualItem->setRelation('receipt', $sr);
                     $ocrItems->push($virtualItem);
                 }
@@ -2280,9 +2291,11 @@ class FinanceTaxReportController extends Controller
                     ->get();
 
                 $existingFiles = $ocrItems->map(fn($it) => $it->receipt?->file_path)->filter()->all();
+                $existingCsIds = $ocrItems->map(fn($it) => ($it->receipt?->purchasable_type && str_contains($it->receipt->purchasable_type, 'CreditStorePayment')) ? $it->receipt->purchasable_id : null)->filter()->all();
+                $existingReceiptNumbers = $ocrItems->map(fn($it) => $it->receipt?->receipt_number)->filter()->all();
 
                 foreach ($paymentSlips as $p) {
-                    if (in_array($p->receipt_path, $existingFiles)) {
+                    if (in_array($p->receipt_path, $existingFiles) || in_array($p->id, $existingCsIds) || in_array('REC-PAY-' . $p->id, $existingReceiptNumbers) || in_array($p->reference_no, $existingReceiptNumbers)) {
                         continue;
                     }
 
@@ -2338,6 +2351,8 @@ class FinanceTaxReportController extends Controller
                         'value_after_vat'  => $receiptTotal,
                     ]);
                     $vItem->id = 'P' . $p->id;
+                    $vItem->created_at = $p->created_at;
+                    $vItem->updated_at = $p->updated_at ?: $p->created_at;
                     $vItem->setRelation('receipt', $vReceipt);
 
                     $ocrItems->push($vItem);
@@ -2385,6 +2400,7 @@ class FinanceTaxReportController extends Controller
                 || ($r?->category === 'fuel' && $vatVal <= 0);
 
             $parsed = is_string($r?->parsed_data ?? null) ? (json_decode($r->parsed_data, true) ?: []) : (array)($r?->parsed_data ?? []);
+            $manuallyEditedAt = (int)($parsed['manually_edited_at'] ?? ($parsed['last_updated_at'] ?? 0));
 
             $fsNo = $r?->fs_no ?: ($r?->fs_no_raw ?: (!empty($parsed['receipt_no']) ? $parsed['receipt_no'] : '-'));
             $mrcNo = $r?->mrc_no ?: (!empty($parsed['mrc']) ? $parsed['mrc'] : '-');
@@ -2440,6 +2456,11 @@ class FinanceTaxReportController extends Controller
                 'is_no_vat'          => $isNoVat,
                 'receipt_timestamp'  => $r?->receipt_date ? Carbon::parse($r->receipt_date)->timestamp : ($date ? Carbon::parse($date)->timestamp : 0),
                 'created_timestamp'  => $ocr->created_at ? Carbon::parse($ocr->created_at)->timestamp : ($r?->created_at ? Carbon::parse($r->created_at)->timestamp : 0),
+                'updated_timestamp'  => max(
+                    $ocr->updated_at ? Carbon::parse($ocr->updated_at)->timestamp : 0,
+                    $r?->updated_at ? Carbon::parse($r->updated_at)->timestamp : 0
+                ),
+                'manually_edited_at' => $manuallyEditedAt,
             ];
         });
 
@@ -2550,21 +2571,33 @@ class FinanceTaxReportController extends Controller
                 continue;
             }
 
-            // Duplicate group found: Keep only the LATEST one
+            // Duplicate group found: Keep only the LATEST one (prioritizing manual edits and latest updates)
             usort($group, function ($a, $b) {
-                // 1. Receipt date and time (most recent first)
+                // 1. Manually inspected/edited records take highest priority
+                $editA = (int)($a['manually_edited_at'] ?? 0);
+                $editB = (int)($b['manually_edited_at'] ?? 0);
+                if ($editA !== $editB) {
+                    return $editB <=> $editA;
+                }
+                // 2. Most recently updated/saved timestamp first (so edited records are never discarded for unedited ones)
+                $updA = (int)($a['updated_timestamp'] ?? 0);
+                $updB = (int)($b['updated_timestamp'] ?? 0);
+                if (abs($updA - $updB) > 1) {
+                    return $updB <=> $updA;
+                }
+                // 3. Receipt date and time (most recent first)
                 $dateA = (int)($a['receipt_timestamp'] ?? 0);
                 $dateB = (int)($b['receipt_timestamp'] ?? 0);
                 if ($dateA !== $dateB) {
                     return $dateB <=> $dateA;
                 }
-                // 2. Scan / upload timestamp (most recent first)
+                // 4. Scan / upload timestamp (most recent first)
                 $uploadA = (int)($a['created_timestamp'] ?? 0);
                 $uploadB = (int)($b['created_timestamp'] ?? 0);
                 if ($uploadA !== $uploadB) {
                     return $uploadB <=> $uploadA;
                 }
-                // 3. ID / fallback
+                // 5. ID / fallback
                 return strcmp((string)($b['id'] ?? ''), (string)($a['id'] ?? ''));
             });
 
@@ -2613,9 +2646,9 @@ class FinanceTaxReportController extends Controller
             ];
         }
 
-        // Maintain original chronological/id order in unique cleaned list
+        // Maintain original chronological/id order in unique cleaned list, prioritizing latest updated items
         $uniqueCleanedCollection = collect($uniqueCleanedList)->sortByDesc(function ($item) {
-            return (int)($item['created_timestamp'] ?: $item['receipt_timestamp'] ?: 0);
+            return (int)($item['manually_edited_at'] ?: ($item['updated_timestamp'] ?: ($item['created_timestamp'] ?: ($item['receipt_timestamp'] ?: 0))));
         })->values();
 
         $ocrDuplicatesRemovedCount = (int)collect($duplicatesRemoved)->sum('removed_count');
@@ -2805,17 +2838,37 @@ class FinanceTaxReportController extends Controller
                 continue;
             }
 
-            $ocrReceiptId = $ocr['receipt_id'] ?? $ocr['id'];
-            $ocrReqNo = $ocr['request_number'] ?? '';
-            if (in_array($ocrReceiptId, $existingTasReceipts) || ($ocrReqNo && in_array($ocrReqNo, $existingTasVouchers))) {
-                continue;
-            }
-
             $baseVal = (float)($ocr['base_value'] ?? 0);
             $vatVal = (float)($ocr['vat_amount'] ?? 0);
             $whtVal = (float)($ocr['withholding_amount'] ?? 0);
             $totalVal = (float)($ocr['total_value'] ?? ($baseVal + $vatVal));
             $netVal = (float)($ocr['net_disbursed'] ?? max(0, $totalVal - $whtVal));
+
+            $ocrReceiptId = $ocr['receipt_id'] ?? $ocr['id'];
+            $ocrReqNo = $ocr['request_number'] ?? '';
+            if (in_array($ocrReceiptId, $existingTasReceipts) || ($ocrReqNo && in_array($ocrReqNo, $existingTasVouchers))) {
+                // Ensure existing entry in tasPurchasesCollection is synchronized with the latest updated OCR values
+                $tasPurchasesCollection->transform(function ($tasItem) use ($ocr, $ocrReceiptId, $ocrReqNo, $baseVal, $vatVal, $netVal) {
+                    $matchId = (!empty($tasItem['receipt_id']) && $tasItem['receipt_id'] == $ocrReceiptId)
+                        || ($ocrReqNo && !empty($tasItem['request_number']) && $tasItem['request_number'] == $ocrReqNo);
+                    if ($matchId) {
+                        if (!empty($ocr['vendor_name'])) $tasItem['payee'] = $ocr['vendor_name'];
+                        if (!empty($ocr['seller_tin']) && $ocr['seller_tin'] !== '-') $tasItem['seller_tin'] = $ocr['seller_tin'];
+                        if (!empty($ocr['fs_no']) && $ocr['fs_no'] !== '-') $tasItem['fs_no'] = $ocr['fs_no'];
+                        if (!empty($ocr['mrc_no']) && $ocr['mrc_no'] !== '-') $tasItem['mrc_no'] = $ocr['mrc_no'];
+                        if (!empty($ocr['date_ec']) && $ocr['date_ec'] !== '-') $tasItem['date_ec'] = $ocr['date_ec'];
+                        if (!empty($ocr['date_gc']) && $ocr['date_gc'] !== '-') $tasItem['date_gc'] = $ocr['date_gc'];
+                        if (!empty($ocr['receipt_date_ec']) && $ocr['receipt_date_ec'] !== '-') $tasItem['receipt_date_ec'] = $ocr['receipt_date_ec'];
+                        if (!empty($ocr['item_description'])) $tasItem['description'] = $ocr['item_description'];
+                        if ($baseVal > 0) $tasItem['base_amount'] = $baseVal;
+                        $tasItem['vat_amount'] = $vatVal;
+                        $tasItem['net_disbursed'] = $netVal;
+                        if (!empty($ocr['file_url'])) $tasItem['receipt_slip_url'] = $ocr['file_url'];
+                    }
+                    return $tasItem;
+                });
+                continue;
+            }
 
             $tasPurchasesCollection->push([
                 'id'                         => 'OCR-' . $ocr['id'],
@@ -4193,6 +4246,7 @@ class FinanceTaxReportController extends Controller
             $purchaserTinVal = ($buyerDigits !== '') ? (int)$buyerDigits : $defaultPurchaserDigits;
 
             $parsed = is_string($r?->parsed_data ?? null) ? (json_decode($r->parsed_data, true) ?: []) : (array)($r?->parsed_data ?? []);
+            $manuallyEditedAt = (int)($parsed['manually_edited_at'] ?? ($parsed['last_updated_at'] ?? 0));
             $rawTin = (string)($r?->vendor_tin ?: (!empty($parsed['seller_tin']) ? $parsed['seller_tin'] : ''));
             $sellerDigits = preg_replace('/^0+/', '', preg_replace('/[^0-9]/', '', $rawTin));
             $sellerTinVal = ($sellerDigits !== '') ? (int)$sellerDigits : (trim($rawTin) ?: '');
@@ -5409,6 +5463,7 @@ class FinanceTaxReportController extends Controller
             'seller_name'                => 'nullable|string|max:255',
             'supplier_tin'               => 'nullable|string|max:50',
             'receipt_date'               => 'nullable|string',
+            'receipt_date_ec'            => 'nullable|string|max:100',
             'mrc_no'                     => 'nullable|string|max:100',
             'fs_no'                      => 'nullable|string|max:100',
             'item_description'           => 'nullable|string|max:500',
@@ -5830,15 +5885,17 @@ class FinanceTaxReportController extends Controller
                 $receiptUpdates['fs_no_raw']   = trim((string)$request->fs_no);
                 $receiptUpdates['fs_no_valid'] = (strlen($cleanFs) === 8);
             }
-            $rawDate = trim((string)$request->input('receipt_date'));
+            $rawEcDate  = trim((string)$request->input('receipt_date_ec'));
+            $rawGcDate  = trim((string)$request->input('receipt_date'));
+            $rawDate    = !empty($rawEcDate) ? $rawEcDate : $rawGcDate;
             $parsedDate = null;
             if (!empty($rawDate)) {
-                // 1. Check if DD/MM/YYYY or DD-MM-YYYY (Ethiopian format like 12/02/2019)
-                if (preg_match('/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/', $rawDate, $mDmy)) {
+                // 1. Check if DD/MM/YYYY or DD-MM-YYYY (Ethiopian format like 11/02/2019)
+                if (preg_match('/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/', $rawDate, $mDmy)) {
                     $parsedDate = EthiopianDate::parseEcToGregorian($rawDate);
                 }
                 // 2. Check if YYYY-MM-DD
-                elseif (preg_match('/^(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})$/', $rawDate, $mYmd)) {
+                elseif (preg_match('/^(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})/', $rawDate, $mYmd)) {
                     $yr = (int)$mYmd[1];
                     $mo = (int)$mYmd[2];
                     $da = (int)$mYmd[3];
@@ -5884,6 +5941,9 @@ class FinanceTaxReportController extends Controller
 
             // Merge with parsed_data JSON so that e-Tax exports and movements views immediately reflect the latest edits
             $parsed = is_string($receipt->parsed_data) ? (json_decode($receipt->parsed_data, true) ?: []) : (array)($receipt->parsed_data ?? []);
+            $parsed['manually_edited'] = true;
+            $parsed['manually_edited_at'] = (int)now()->timestamp;
+            $parsed['last_updated_at'] = (int)now()->timestamp;
 
             if ($request->filled('seller_name')) {
                 $parsed['seller_name'] = trim((string)$request->seller_name);
@@ -5958,20 +6018,16 @@ class FinanceTaxReportController extends Controller
                 $receiptUpdates['no_vat_reason_code'] = 'fuel_zero_vat';
             }
 
-            if ($receipt->items()->count() <= 1) {
-                $receiptUpdates['subtotal']     = $totalVal;
-                $receiptUpdates['vat_amount']   = $vat;
-                $receiptUpdates['total_amount'] = $valAfter;
+            if ($receipt->items()->count() > 1) {
+                $receipt->items()->where('id', '!=', $item->id)->delete();
             }
+
+            $receiptUpdates['subtotal']     = $totalVal;
+            $receiptUpdates['vat_amount']   = $vat;
+            $receiptUpdates['total_amount'] = $valAfter;
 
             $receipt->update($receiptUpdates);
-
-            if ($receipt->items()->count() > 1) {
-                $receipt->subtotal     = round($receipt->items()->sum('total_value'), 2);
-                $receipt->vat_amount   = round($receipt->items()->sum('vat_amount'), 2);
-                $receipt->total_amount = round($receipt->items()->sum('value_after_vat'), 2);
-                $receipt->save();
-            }
+            $receipt->touch();
 
             // Sync linked ExpenseRequest and ExpenseHubVatDecision
             try {
@@ -5990,12 +6046,11 @@ class FinanceTaxReportController extends Controller
                 }
 
                 if ($linkedExp) {
-                    if (!$receipt->purchasable_id || !$receipt->purchasable_type) {
-                        $receipt->purchasable_type = \App\Models\ExpenseRequest::class;
-                        $receipt->purchasable_id   = $linkedExp->id;
-                        $receipt->save();
-                    }
-                    if (Schema::hasColumn('expense_requests', 'receipt_id') && empty($linkedExp->receipt_id)) {
+                    $receipt->purchasable_type = \App\Models\ExpenseRequest::class;
+                    $receipt->purchasable_id   = $linkedExp->id;
+                    $receipt->save();
+
+                    if (Schema::hasColumn('expense_requests', 'receipt_id')) {
                         $linkedExp->receipt_id = $receipt->id;
                     }
 

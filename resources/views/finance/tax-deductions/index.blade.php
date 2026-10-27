@@ -2305,8 +2305,9 @@
 
                                     {{-- Supplier Name --}}
                                     <div class="mb-2.5">
-                                        <label class="form-label small fw-bold text-dark mb-1">
-                                            <i class="fa-solid fa-store text-muted me-1"></i>Supplier / Merchant Name (Col E) <span class="text-danger">*</span>
+                                        <label class="form-label small fw-bold text-dark mb-1 d-flex justify-content-between align-items-center">
+                                            <span><i class="fa-solid fa-store text-muted me-1"></i>Supplier / Merchant Name (Col E) <span class="text-danger">*</span></span>
+                                            <span class="badge bg-light text-muted border font-monospace" style="font-size:0.65rem;">Manual Unlocked</span>
                                         </label>
                                         <input type="text" class="form-control form-control-sm rounded-2" id="edit_seller_name" name="seller_name" required placeholder="e.g. TotalEnergies Marketing Ethiopia">
                                     </div>
@@ -2314,48 +2315,62 @@
                                     {{-- Row: Supplier TIN & FS # --}}
                                     <div class="row g-2 mb-2.5">
                                         <div class="col-6">
-                                            <label class="form-label small fw-bold text-dark mb-1">
-                                                <i class="fa-solid fa-id-card text-muted me-1"></i>Supplier TIN (Col D) <span class="text-danger">*</span>
+                                            <label class="form-label small fw-bold text-dark mb-1 d-flex justify-content-between align-items-center">
+                                                <span><i class="fa-solid fa-id-card text-muted me-1"></i>Supplier TIN (Col D) <span class="text-danger">*</span></span>
+                                                <span class="badge bg-light text-muted border font-monospace" style="font-size:0.65rem;">10 Digits</span>
                                             </label>
                                             <div class="input-group input-group-sm">
-                                                <input type="text" class="form-control font-monospace fw-bold" id="edit_supplier_tin" name="supplier_tin" maxlength="12" placeholder="10 Digits" oninput="validateOcrTin(this.value)">
+                                                <input type="text" class="form-control font-monospace fw-bold" id="edit_supplier_tin" name="supplier_tin" maxlength="20" placeholder="10 Digits" oninput="validateOcrTin(this.value)">
                                                 <span class="input-group-text p-1 px-2" id="edit_tin_badge" title="TIN Status"><i class="fa-solid fa-minus text-muted"></i></span>
                                             </div>
                                             <div class="form-text text-muted" style="font-size:0.68rem;" id="edit_tin_hint">ERCA requires 10 digits</div>
                                         </div>
                                         <div class="col-6">
-                                            <label class="form-label small fw-bold text-dark mb-1">
-                                                <i class="fa-solid fa-receipt text-muted me-1"></i>FS / Receipt # (Col H) <span class="text-danger">*</span>
+                                            <label class="form-label small fw-bold text-dark mb-1 d-flex justify-content-between align-items-center">
+                                                <span><i class="fa-solid fa-receipt text-muted me-1"></i>FS / Receipt # (Col H) <span class="text-danger">*</span></span>
+                                                <span class="badge bg-light text-muted border font-monospace" style="font-size:0.65rem;">Fiscal Slip</span>
                                             </label>
                                             <div class="input-group input-group-sm">
-                                                <input type="text" class="form-control font-monospace fw-bold text-primary" id="edit_fs_no" name="fs_no" maxlength="12" placeholder="8 Digits" oninput="validateOcrFs(this.value)">
+                                                <input type="text" class="form-control font-monospace fw-bold text-primary" id="edit_fs_no" name="fs_no" maxlength="50" placeholder="8 Digits" oninput="validateOcrFs(this.value)">
                                                 <span class="input-group-text p-1 px-2" id="edit_fs_badge" title="FS # Status"><i class="fa-solid fa-minus text-muted"></i></span>
                                             </div>
                                             <div class="form-text text-muted" style="font-size:0.68rem;" id="edit_fs_hint">Standard 8-digit fiscal slip</div>
                                         </div>
                                     </div>
 
-                                    {{-- Row: MRC # & Receipt Date --}}
+                                    {{-- Row: MRC # & Receipt Dates (EC & GC) --}}
                                     <div class="row g-2 mb-2.5">
-                                        <div class="col-6">
-                                            <label class="form-label small fw-bold text-dark mb-1">
-                                                <i class="fa-solid fa-microchip text-muted me-1"></i>MRC # (Col G)
+                                        <div class="col-12 col-md-4">
+                                            <label class="form-label small fw-bold text-dark mb-1 d-flex justify-content-between align-items-center">
+                                                <span><i class="fa-solid fa-microchip text-muted me-1"></i>MRC # (Col G)</span>
+                                                <span class="badge bg-light text-muted border font-monospace" style="font-size:0.65rem;">Machine Reg</span>
                                             </label>
                                             <input type="text" class="form-control form-control-sm font-monospace" id="edit_mrc_no" name="mrc_no" placeholder="e.g. MTR12345678">
+                                            <div class="form-text text-muted" style="font-size:0.68rem;">Cash register MRC</div>
                                         </div>
-                                        <div class="col-6">
-                                            <label class="form-label small fw-bold text-dark mb-1">
-                                                <i class="fa-regular fa-calendar text-muted me-1"></i>Receipt Date (Col F)
+                                        <div class="col-6 col-md-4">
+                                            <label class="form-label small fw-bold text-dark mb-1 d-flex justify-content-between align-items-center">
+                                                <span><i class="fa-regular fa-calendar text-primary me-1"></i>Date (EC) <span class="text-danger">*</span></span>
+                                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle font-monospace" style="font-size:0.65rem;">Ethiopian</span>
+                                            </label>
+                                            <input type="text" class="form-control form-control-sm font-monospace fw-bold text-primary" id="edit_receipt_date_ec" name="receipt_date_ec" placeholder="DD/MM/YYYY EC e.g. 11/02/2019" oninput="syncDateFromEc(this.value)">
+                                            <div class="form-text text-primary font-monospace fw-semibold" style="font-size:0.68rem;" id="edit_date_ec_preview">11/02/2019 EC</div>
+                                        </div>
+                                        <div class="col-6 col-md-4">
+                                            <label class="form-label small fw-bold text-dark mb-1 d-flex justify-content-between align-items-center">
+                                                <span><i class="fa-regular fa-calendar text-muted me-1"></i>Date (GC - Col F)</span>
+                                                <span class="badge bg-light text-muted border font-monospace" style="font-size:0.65rem;">Gregorian</span>
                                             </label>
                                             <input type="date" class="form-control form-control-sm font-monospace" id="edit_receipt_date" name="receipt_date" onchange="syncDateToEc(this.value)">
-                                            <div class="form-text text-primary font-monospace fw-semibold" style="font-size:0.68rem;" id="edit_date_ec_preview"></div>
+                                            <div class="form-text text-muted font-monospace" style="font-size:0.68rem;">System GC Date</div>
                                         </div>
                                     </div>
 
                                     {{-- Item Description --}}
                                     <div class="mb-2.5">
-                                        <label class="form-label small fw-bold text-dark mb-1">
-                                            <i class="fa-solid fa-tag text-muted me-1"></i>Item Description / Particulars (Col I) <span class="text-danger">*</span>
+                                        <label class="form-label small fw-bold text-dark mb-1 d-flex justify-content-between align-items-center">
+                                            <span><i class="fa-solid fa-tag text-muted me-1"></i>Item Description / Particulars (Col I) <span class="text-danger">*</span></span>
+                                            <span class="badge bg-light text-muted border font-monospace" style="font-size:0.65rem;">Manual Unlocked</span>
                                         </label>
                                         <input type="text" class="form-control form-control-sm rounded-2" id="edit_item_description" name="item_description" required placeholder="e.g. Fuel, Cement, Office stationery">
                                     </div>
@@ -4563,14 +4578,99 @@
         }
     }
 
+    function ethiopianToGregorian(ethYear, ethMonth, ethDay) {
+        const ep = 1723856;
+        const jdn = ep + 365 * ethYear + Math.floor(ethYear / 4) + 30 * (ethMonth - 1) + ethDay - 1;
+
+        const a = jdn + 32044;
+        const b = Math.floor((4 * a + 3) / 146097);
+        const c = a - Math.floor(146097 * b / 4);
+        const d = Math.floor((4 * c + 3) / 1461);
+        const e = c - Math.floor(1461 * d / 4);
+        const m = Math.floor((5 * e + 2) / 153);
+        const day = e - Math.floor((153 * m + 2) / 5) + 1;
+        const month = m + 3 - 12 * Math.floor(m / 10);
+        const year = 100 * b + d - 4800 + Math.floor(m / 10);
+
+        const dPad = String(day).padStart(2, '0');
+        const mPad = String(month).padStart(2, '0');
+        return `${year}-${mPad}-${dPad}`;
+    }
+
+    function gregorianToEthiopian(year, month, day) {
+        const a = Math.floor((14 - month) / 12);
+        const y = year + 4800 - a;
+        const m = month + 12 * a - 3;
+        const jdn = day + Math.floor((153 * m + 2) / 5) + 365 * y + Math.floor(y / 4) - Math.floor(y / 100) + Math.floor(y / 400) - 32045;
+
+        const ethiopianEpoch = 1723856;
+        const r = (jdn - ethiopianEpoch) % 1461;
+        const n = (r % 365) + 365 * Math.floor(r / 1460);
+
+        const ethYear = 4 * Math.floor((jdn - ethiopianEpoch) / 1461) + Math.floor(r / 365) - Math.floor(r / 1460);
+        const ethMonth = Math.floor(n / 30) + 1;
+        const ethDay = (n % 30) + 1;
+
+        const dPad = String(ethDay).padStart(2, '0');
+        const mPad = String(ethMonth).padStart(2, '0');
+        return `${dPad}/${mPad}/${ethYear}`;
+    }
+
     function syncDateToEc(ymd) {
         const preview = document.getElementById('edit_date_ec_preview');
-        if (!preview) return;
+        const ecInput = document.getElementById('edit_receipt_date_ec');
         if (!ymd) {
-            preview.textContent = '';
+            if (preview) preview.textContent = '';
             return;
         }
-        preview.textContent = 'GC: ' + ymd;
+
+        try {
+            const parts = ymd.split('-');
+            const year = parseInt(parts[0], 10);
+            const month = parseInt(parts[1], 10);
+            const day = parseInt(parts[2], 10);
+
+            const ecFormatted = gregorianToEthiopian(year, month, day);
+            if (ecInput && !ecInput.matches(':focus')) {
+                ecInput.value = ecFormatted;
+            }
+            if (preview) preview.textContent = `${ecFormatted} EC`;
+        } catch (e) {
+            if (preview) preview.textContent = 'GC: ' + ymd;
+        }
+    }
+
+    function syncDateFromEc(val) {
+        const preview = document.getElementById('edit_date_ec_preview');
+        const gcInput = document.getElementById('edit_receipt_date');
+        if (!val || !val.trim()) {
+            if (preview) preview.textContent = '';
+            return;
+        }
+
+        const clean = val.replace(/\s*EC\s*$/i, '').trim();
+        const parts = clean.split(/[\/\-\.]/);
+        if (parts.length === 3) {
+            let day = parseInt(parts[0], 10);
+            let month = parseInt(parts[1], 10);
+            let year = parseInt(parts[2], 10);
+            if (parts[0].length === 4) {
+                year = parseInt(parts[0], 10);
+                month = parseInt(parts[1], 10);
+                day = parseInt(parts[2], 10);
+            }
+            if (!isNaN(year) && !isNaN(month) && !isNaN(day) && month >= 1 && month <= 13 && day >= 1 && day <= 30) {
+                try {
+                    const ymd = ethiopianToGregorian(year, month, day);
+                    if (gcInput) gcInput.value = ymd;
+                    if (preview) {
+                        const dPad = String(day).padStart(2, '0');
+                        const mPad = String(month).padStart(2, '0');
+                        preview.textContent = `${dPad}/${mPad}/${year} EC (${ymd} GC)`;
+                    }
+                } catch (e) {}
+            }
+        }
     }
 
     let _indexManualEditionMode = true;
@@ -4818,6 +4918,9 @@
         const dateInput = document.getElementById('edit_receipt_date');
         if (dateInput) dateInput.value = date;
 
+        const dateEcInput = document.getElementById('edit_receipt_date_ec');
+        if (dateEcInput) dateEcInput.value = (dateEc || '').replace(/\s*EC\s*$/i, '').trim();
+
         const dateEcPreview = document.getElementById('edit_date_ec_preview');
         if (dateEcPreview) dateEcPreview.textContent = dateEc ? ('EC: ' + dateEc) : '';
 
@@ -4958,6 +5061,12 @@
                 } catch (e) {}
             }
             dateInput.value = ymd;
+        }
+
+        const dateEcInput = document.getElementById('edit_receipt_date_ec');
+        if (dateEcInput) {
+            const rawEc = ocr.date_ec || ocr.receipt_date_ec || '';
+            dateEcInput.value = rawEc.replace(/\s*EC\s*$/i, '').trim();
         }
 
         const dateEcPreview = document.getElementById('edit_date_ec_preview');

@@ -586,8 +586,8 @@
                                     data-net="{{ $expNet }}">
                                     <td class="ps-3 text-muted font-monospace small">{{ $idx + 1 }}</td>
                                     <td>
-                                        <span class="fw-bold font-monospace text-dark d-block">{{ $exp['date_ec'] ?? '-' }}</span>
-                                        <small class="text-muted" style="font-size:0.75rem;">{{ $exp['date_gc'] ?? '-' }}</small>
+                                        <span class="fw-bold font-monospace text-dark d-block cell-exp-date-ec">{{ $exp['date_ec'] ?? '-' }}</span>
+                                        <small class="text-muted cell-exp-date-gc" style="font-size:0.75rem;">{{ $exp['date_gc'] ?? '-' }}</small>
                                     </td>
                                     <td>
                                         <div class="d-flex align-items-center gap-1 flex-wrap">
@@ -2183,8 +2183,9 @@
 
                                     {{-- Supplier Name --}}
                                     <div class="mb-2.5">
-                                        <label class="form-label small fw-bold text-dark mb-1">
-                                            <i class="fa-solid fa-store text-muted me-1"></i>Supplier / Merchant Name <span class="text-danger">*</span>
+                                        <label class="form-label small fw-bold text-dark mb-1 d-flex justify-content-between align-items-center">
+                                            <span><i class="fa-solid fa-store text-muted me-1"></i>Supplier / Merchant Name <span class="text-danger">*</span></span>
+                                            <span class="badge bg-light text-muted border font-monospace" style="font-size:0.65rem;">Manual Unlocked</span>
                                         </label>
                                         <input type="text" class="form-control form-control-sm rounded-2" id="movement_edit_seller_name" name="seller_name" required placeholder="e.g. TotalEnergies Marketing Ethiopia">
                                     </div>
@@ -2192,48 +2193,62 @@
                                     {{-- Row: Supplier TIN & FS # --}}
                                     <div class="row g-2 mb-2.5">
                                         <div class="col-6">
-                                            <label class="form-label small fw-bold text-dark mb-1">
-                                                <i class="fa-solid fa-id-card text-muted me-1"></i>Supplier TIN <span class="text-danger">*</span>
+                                            <label class="form-label small fw-bold text-dark mb-1 d-flex justify-content-between align-items-center">
+                                                <span><i class="fa-solid fa-id-card text-muted me-1"></i>Supplier TIN <span class="text-danger">*</span></span>
+                                                <span class="badge bg-light text-muted border font-monospace" style="font-size:0.65rem;">10 Digits</span>
                                             </label>
                                             <div class="input-group input-group-sm">
-                                                <input type="text" class="form-control font-monospace fw-bold" id="movement_edit_supplier_tin" name="supplier_tin" maxlength="12" placeholder="10 Digits" oninput="validateMovementTin(this.value)">
+                                                <input type="text" class="form-control font-monospace fw-bold" id="movement_edit_supplier_tin" name="supplier_tin" maxlength="20" placeholder="10 Digits" oninput="validateMovementTin(this.value)">
                                                 <span class="input-group-text p-1 px-2" id="movement_edit_tin_badge" title="TIN Status"><i class="fa-solid fa-minus text-muted"></i></span>
                                             </div>
                                             <div class="form-text text-muted" style="font-size:0.68rem;" id="movement_edit_tin_hint">ERCA requires 10 digits</div>
                                         </div>
                                         <div class="col-6">
-                                            <label class="form-label small fw-bold text-dark mb-1">
-                                                <i class="fa-solid fa-receipt text-muted me-1"></i>FS / Receipt # <span class="text-danger">*</span>
+                                            <label class="form-label small fw-bold text-dark mb-1 d-flex justify-content-between align-items-center">
+                                                <span><i class="fa-solid fa-receipt text-muted me-1"></i>FS / Receipt # <span class="text-danger">*</span></span>
+                                                <span class="badge bg-light text-muted border font-monospace" style="font-size:0.65rem;">Fiscal Slip</span>
                                             </label>
                                             <div class="input-group input-group-sm">
-                                                <input type="text" class="form-control font-monospace fw-bold text-primary" id="movement_edit_fs_no" name="fs_no" maxlength="15" placeholder="e.g. 00012345" oninput="validateMovementFs(this.value)">
+                                                <input type="text" class="form-control font-monospace fw-bold text-primary" id="movement_edit_fs_no" name="fs_no" maxlength="50" placeholder="e.g. 00012345" oninput="validateMovementFs(this.value)">
                                                 <span class="input-group-text p-1 px-2" id="movement_edit_fs_badge" title="FS # Status"><i class="fa-solid fa-minus text-muted"></i></span>
                                             </div>
                                             <div class="form-text text-muted" style="font-size:0.68rem;" id="movement_edit_fs_hint">Standard 8-digit fiscal slip</div>
                                         </div>
                                     </div>
 
-                                    {{-- Row: MRC # & Receipt Date --}}
+                                    {{-- Row: MRC # & Receipt Dates (EC & GC) --}}
                                     <div class="row g-2 mb-2.5">
-                                        <div class="col-6">
-                                            <label class="form-label small fw-bold text-dark mb-1">
-                                                <i class="fa-solid fa-microchip text-muted me-1"></i>MRC # (Machine Registration)
+                                        <div class="col-12 col-md-4">
+                                            <label class="form-label small fw-bold text-dark mb-1 d-flex justify-content-between align-items-center">
+                                                <span><i class="fa-solid fa-microchip text-muted me-1"></i>MRC #</span>
+                                                <span class="badge bg-light text-muted border font-monospace" style="font-size:0.65rem;">Machine Reg</span>
                                             </label>
                                             <input type="text" class="form-control form-control-sm font-monospace" id="movement_edit_mrc_no" name="mrc_no" placeholder="e.g. MTR12345678">
+                                            <div class="form-text text-muted" style="font-size:0.68rem;">Cash register MRC</div>
                                         </div>
-                                        <div class="col-6">
-                                            <label class="form-label small fw-bold text-dark mb-1">
-                                                <i class="fa-regular fa-calendar text-muted me-1"></i>Receipt Date
+                                        <div class="col-6 col-md-4">
+                                            <label class="form-label small fw-bold text-dark mb-1 d-flex justify-content-between align-items-center">
+                                                <span><i class="fa-regular fa-calendar text-primary me-1"></i>Date (EC) <span class="text-danger">*</span></span>
+                                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle font-monospace" style="font-size:0.65rem;">Ethiopian</span>
+                                            </label>
+                                            <input type="text" class="form-control form-control-sm font-monospace fw-bold text-primary" id="movement_edit_receipt_date_ec" name="receipt_date_ec" placeholder="DD/MM/YYYY EC e.g. 11/02/2019" oninput="syncMovementDateFromEc(this.value)">
+                                            <div class="form-text text-primary font-monospace fw-semibold" style="font-size:0.68rem;" id="movement_edit_date_ec_preview">11/02/2019 EC</div>
+                                        </div>
+                                        <div class="col-6 col-md-4">
+                                            <label class="form-label small fw-bold text-dark mb-1 d-flex justify-content-between align-items-center">
+                                                <span><i class="fa-regular fa-calendar text-muted me-1"></i>Date (GC)</span>
+                                                <span class="badge bg-light text-muted border font-monospace" style="font-size:0.65rem;">Gregorian</span>
                                             </label>
                                             <input type="date" class="form-control form-control-sm font-monospace" id="movement_edit_receipt_date" name="receipt_date" onchange="syncMovementDateToEc(this.value)">
-                                            <div class="form-text text-primary font-monospace fw-semibold" style="font-size:0.68rem;" id="movement_edit_date_ec_preview"></div>
+                                            <div class="form-text text-muted font-monospace" style="font-size:0.68rem;">System GC Date</div>
                                         </div>
                                     </div>
 
                                     {{-- Item Description --}}
                                     <div class="mb-2.5">
-                                        <label class="form-label small fw-bold text-dark mb-1">
-                                            <i class="fa-solid fa-tag text-muted me-1"></i>Item Description / Particulars <span class="text-danger">*</span>
+                                        <label class="form-label small fw-bold text-dark mb-1 d-flex justify-content-between align-items-center">
+                                            <span><i class="fa-solid fa-tag text-muted me-1"></i>Item Description / Particulars <span class="text-danger">*</span></span>
+                                            <span class="badge bg-light text-muted border font-monospace" style="font-size:0.65rem;">Manual Unlocked</span>
                                         </label>
                                         <input type="text" class="form-control form-control-sm rounded-2" id="movement_edit_item_description" name="item_description" required placeholder="e.g. Fuel, Cement, Office stationery">
                                     </div>
@@ -3632,9 +3647,14 @@
         if (mrcInput) mrcInput.value = '';
 
         const dateInput = document.getElementById('movement_edit_receipt_date');
+        const dateEcInput = document.getElementById('movement_edit_receipt_date_ec');
         if (dateInput) {
             const today = new Date().toISOString().split('T')[0];
             dateInput.value = today;
+            if (dateEcInput) {
+                const p = today.split('-');
+                dateEcInput.value = gregorianToEthiopian(parseInt(p[0], 10), parseInt(p[1], 10), parseInt(p[2], 10));
+            }
             syncMovementDateToEc(today);
         }
 
@@ -3700,7 +3720,14 @@
 
     // Open Inspector and populate form with details
     function openPageOcrInspector(idx) {
-        const ocr = (window._pageOcrItems && window._pageOcrItems[idx]) || {};
+        let ocr = null;
+        if (typeof idx === 'number' && window._pageOcrItems && window._pageOcrItems[idx]) {
+            ocr = window._pageOcrItems[idx];
+        } else if (window._pageOcrItems && window._pageOcrItems.length > 0) {
+            ocr = window._pageOcrItems.find(it => it.id == idx || it.receipt_id == idx) || window._pageOcrItems[0];
+        } else {
+            ocr = {};
+        }
         const modalEl = document.getElementById('movementSlipModal');
         if (!modalEl) return;
 
@@ -3780,8 +3807,14 @@
             dateInput.value = ymd;
         }
 
+        const dateEcInput = document.getElementById('movement_edit_receipt_date_ec');
+        if (dateEcInput) {
+            const rawEc = ocr.receipt_date_ec || ocr.date_ec || '';
+            dateEcInput.value = rawEc.replace(/\s*EC\s*$/i, '').trim();
+        }
+
         const dateEcPreview = document.getElementById('movement_edit_date_ec_preview');
-        if (dateEcPreview) dateEcPreview.textContent = ocr.date_ec ? ('EC: ' + ocr.date_ec) : '';
+        if (dateEcPreview) dateEcPreview.textContent = ocr.date_ec ? (ocr.date_ec.includes('EC') ? ocr.date_ec : (ocr.date_ec + ' EC')) : '';
 
         const descInput = document.getElementById('movement_edit_item_description');
         if (descInput) descInput.value = ocr.item_description || '';
@@ -3986,8 +4019,15 @@
             dateInput.value = ymd;
         }
 
+        const dateEcInput = document.getElementById('movement_edit_receipt_date_ec');
+        if (dateEcInput) {
+            const rawEc = tas.receipt_date_ec || tas.date_ec || '';
+            dateEcInput.value = rawEc.replace(/\s*EC\s*$/i, '').trim();
+        }
+
         const dateEcPreview = document.getElementById('movement_edit_date_ec_preview');
-        if (dateEcPreview) dateEcPreview.textContent = tas.receipt_date_ec ? ('EC: ' + tas.receipt_date_ec) : (tas.date_ec ? ('EC: ' + tas.date_ec) : '');
+        const rawEcDisplay = tas.receipt_date_ec || tas.date_ec || '';
+        if (dateEcPreview) dateEcPreview.textContent = rawEcDisplay ? (rawEcDisplay.includes('EC') ? rawEcDisplay : (rawEcDisplay + ' EC')) : '';
 
         const descInput = document.getElementById('movement_edit_item_description');
         if (descInput) descInput.value = tas.description && tas.description !== '-' ? tas.description : (tas.category || 'TAS Purchase');
@@ -4363,7 +4403,14 @@
 
     // Open Side-by-Side ERCA Inspector for an Expense in #pageExpenseTable
     function openExpenseInspector(idx) {
-        const exp = (window._pageExpenses && window._pageExpenses[idx]) || {};
+        let exp = null;
+        if (typeof idx === 'number' && window._pageExpenses && window._pageExpenses[idx]) {
+            exp = window._pageExpenses[idx];
+        } else if (window._pageExpenses && window._pageExpenses.length > 0) {
+            exp = window._pageExpenses.find(it => it.id == idx || it.request_number == idx) || window._pageExpenses[0];
+        } else {
+            exp = {};
+        }
         const modalEl = document.getElementById('movementSlipModal');
         if (!modalEl) return;
 
@@ -4456,8 +4503,15 @@
             dateInput.value = ymd;
         }
 
+        const dateEcInput = document.getElementById('movement_edit_receipt_date_ec');
+        if (dateEcInput) {
+            const rawEc = exp.date_ec || exp.receipt_date_ec || '';
+            dateEcInput.value = rawEc.replace(/\s*EC\s*$/i, '').trim();
+        }
+
         const dateEcPreview = document.getElementById('movement_edit_date_ec_preview');
-        if (dateEcPreview) dateEcPreview.textContent = exp.date_ec ? ('EC: ' + exp.date_ec) : '';
+        const rawEcExp = exp.date_ec || exp.receipt_date_ec || '';
+        if (dateEcPreview) dateEcPreview.textContent = rawEcExp ? (rawEcExp.includes('EC') ? rawEcExp : (rawEcExp + ' EC')) : '';
 
         const descInput = document.getElementById('movement_edit_item_description');
         if (descInput) descInput.value = exp.description && exp.description !== '-' ? exp.description : (exp.category || 'Expense Voucher');
@@ -5301,6 +5355,16 @@
             payeeEl.textContent = itm.vendor_name || exp.payee;
         }
 
+        // Update Date (EC & GC)
+        const dateEcSpan = tr.querySelector('.cell-exp-date-ec');
+        if (dateEcSpan && (itm.date_ec || itm.receipt_date_ec)) {
+            dateEcSpan.textContent = itm.date_ec || itm.receipt_date_ec;
+        }
+        const dateGcSmall = tr.querySelector('.cell-exp-date-gc');
+        if (dateGcSmall && (itm.date_gc || itm.receipt_date_ymd)) {
+            dateGcSmall.textContent = itm.date_gc || itm.receipt_date_ymd;
+        }
+
         // Update Seller TIN Badge
         const rawTin = itm.vendor_tin || exp.seller_tin || '';
         const cleanTin = rawTin.replace(/\D/g, '');
@@ -5795,12 +5859,50 @@
         }
     }
 
-    // Simple Ethiopian Date conversion for date input preview
+    // Accurate bidirectional Ethiopian & Gregorian Date conversion
+    function ethiopianToGregorian(ethYear, ethMonth, ethDay) {
+        const ep = 1723856;
+        const jdn = ep + 365 * ethYear + Math.floor(ethYear / 4) + 30 * (ethMonth - 1) + ethDay - 1;
+
+        const a = jdn + 32044;
+        const b = Math.floor((4 * a + 3) / 146097);
+        const c = a - Math.floor(146097 * b / 4);
+        const d = Math.floor((4 * c + 3) / 1461);
+        const e = c - Math.floor(1461 * d / 4);
+        const m = Math.floor((5 * e + 2) / 153);
+        const day = e - Math.floor((153 * m + 2) / 5) + 1;
+        const month = m + 3 - 12 * Math.floor(m / 10);
+        const year = 100 * b + d - 4800 + Math.floor(m / 10);
+
+        const dPad = String(day).padStart(2, '0');
+        const mPad = String(month).padStart(2, '0');
+        return `${year}-${mPad}-${dPad}`;
+    }
+
+    function gregorianToEthiopian(year, month, day) {
+        const a = Math.floor((14 - month) / 12);
+        const y = year + 4800 - a;
+        const m = month + 12 * a - 3;
+        const jdn = day + Math.floor((153 * m + 2) / 5) + 365 * y + Math.floor(y / 4) - Math.floor(y / 100) + Math.floor(y / 400) - 32045;
+
+        const ethiopianEpoch = 1723856;
+        const r = (jdn - ethiopianEpoch) % 1461;
+        const n = (r % 365) + 365 * Math.floor(r / 1460);
+
+        const ethYear = 4 * Math.floor((jdn - ethiopianEpoch) / 1461) + Math.floor(r / 365) - Math.floor(r / 1460);
+        const ethMonth = Math.floor(n / 30) + 1;
+        const ethDay = (n % 30) + 1;
+
+        const dPad = String(ethDay).padStart(2, '0');
+        const mPad = String(ethMonth).padStart(2, '0');
+        return `${dPad}/${mPad}/${ethYear}`;
+    }
+
     function syncMovementDateToEc(ymd) {
         const preview = document.getElementById('movement_edit_date_ec_preview');
-        if (!preview) return;
+        const ecInput = document.getElementById('movement_edit_receipt_date_ec');
         if (!ymd) {
-            preview.textContent = '';
+            if (preview) preview.textContent = '';
             return;
         }
 
@@ -5810,24 +5912,46 @@
             const month = parseInt(parts[1], 10);
             const day = parseInt(parts[2], 10);
 
-            const a = Math.floor((14 - month) / 12);
-            const y = year + 4800 - a;
-            const m = month + 12 * a - 3;
-            const jdn = day + Math.floor((153 * m + 2) / 5) + 365 * y + Math.floor(y / 4) - Math.floor(y / 100) + Math.floor(y / 400) - 32045;
-
-            const ethiopianEpoch = 1723856;
-            const r = (jdn - ethiopianEpoch) % 1461;
-            const n = (r % 365) + 365 * Math.floor(r / 1460);
-
-            const ethYear = 4 * Math.floor((jdn - ethiopianEpoch) / 1461) + Math.floor(r / 365) - Math.floor(r / 1460);
-            const ethMonth = Math.floor(n / 30) + 1;
-            const ethDay = (n % 30) + 1;
-
-            const dPad = String(ethDay).padStart(2, '0');
-            const mPad = String(ethMonth).padStart(2, '0');
-            preview.textContent = `EC: ${dPad}/${mPad}/${ethYear} EC`;
+            const ecFormatted = gregorianToEthiopian(year, month, day);
+            if (ecInput && !ecInput.matches(':focus')) {
+                ecInput.value = ecFormatted;
+            }
+            if (preview) preview.textContent = `${ecFormatted} EC`;
         } catch (e) {
-            preview.textContent = '';
+            if (preview) preview.textContent = '';
+        }
+    }
+
+    function syncMovementDateFromEc(val) {
+        const preview = document.getElementById('movement_edit_date_ec_preview');
+        const gcInput = document.getElementById('movement_edit_receipt_date');
+        if (!val || !val.trim()) {
+            if (preview) preview.textContent = '';
+            return;
+        }
+
+        const clean = val.replace(/\s*EC\s*$/i, '').trim();
+        const parts = clean.split(/[\/\-\.]/);
+        if (parts.length === 3) {
+            let day = parseInt(parts[0], 10);
+            let month = parseInt(parts[1], 10);
+            let year = parseInt(parts[2], 10);
+            if (parts[0].length === 4) {
+                year = parseInt(parts[0], 10);
+                month = parseInt(parts[1], 10);
+                day = parseInt(parts[2], 10);
+            }
+            if (!isNaN(year) && !isNaN(month) && !isNaN(day) && month >= 1 && month <= 13 && day >= 1 && day <= 30) {
+                try {
+                    const ymd = ethiopianToGregorian(year, month, day);
+                    if (gcInput) gcInput.value = ymd;
+                    if (preview) {
+                        const dPad = String(day).padStart(2, '0');
+                        const mPad = String(month).padStart(2, '0');
+                        preview.textContent = `${dPad}/${mPad}/${year} EC (${ymd} GC)`;
+                    }
+                } catch (e) {}
+            }
         }
     }
 
@@ -6375,6 +6499,9 @@
                                     seller_tin: itm.vendor_tin || exp.seller_tin,
                                     fs_no: itm.fs_no || exp.fs_no,
                                     mrc_no: itm.mrc_no || exp.mrc_no,
+                                    date_ec: itm.date_ec || itm.receipt_date_ec || exp.date_ec,
+                                    date_gc: itm.date_gc || itm.receipt_date_ymd || exp.date_gc,
+                                    description: itm.item_description || exp.description,
                                     base_amount: itm.base_value !== undefined ? itm.base_value : exp.base_amount,
                                     vat_amount: itm.vat_amount !== undefined ? itm.vat_amount : exp.vat_amount,
                                     has_withholding: !!itm.has_withholding,
@@ -6413,6 +6540,10 @@
                             const vatCell = expTr.querySelector('td:nth-child(8)');
                             const netCell = expTr.querySelector('td:nth-child(10)');
 
+                            const dateEcSpan = expTr.querySelector('.cell-exp-date-ec') || expTr.querySelector('td:nth-child(2) .fw-bold');
+                            const dateGcSmall = expTr.querySelector('.cell-exp-date-gc') || expTr.querySelector('td:nth-child(2) small');
+                            if (dateEcSpan && (itm.date_ec || itm.receipt_date_ec)) dateEcSpan.textContent = itm.date_ec || itm.receipt_date_ec;
+                            if (dateGcSmall && (itm.date_gc || itm.receipt_date_ymd)) dateGcSmall.textContent = itm.date_gc || itm.receipt_date_ymd;
                             if (payeeSpan && itm.vendor_name) payeeSpan.textContent = itm.vendor_name;
                             if (tinSmall && itm.vendor_tin) tinSmall.textContent = 'TIN: ' + itm.vendor_tin;
                             if (fsSmall && itm.fs_no && itm.fs_no !== '-') fsSmall.innerHTML = '<i class="fa-solid fa-barcode me-0.5"></i>FS #: ' + itm.fs_no;

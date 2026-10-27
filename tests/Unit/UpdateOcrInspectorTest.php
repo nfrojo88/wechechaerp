@@ -1094,4 +1094,224 @@ class UpdateOcrInspectorTest extends TestCase
         // It must NOT be saved as 2019-02-12 Gregorian (February 2019, 7 years ago), but 2026-10-22 Gregorian!
         $this->assertEquals('2026-10-22', \Carbon\Carbon::parse($receipt->receipt_date)->format('Y-m-d'));
     }
+
+    public function test_manual_edition_unlock_all_fields_including_ethiopian_date_ec()
+    {
+        $receipt = Receipt::create([
+            'receipt_number' => 'RCP-TEST-MANUAL-UNLOCK',
+            'subtotal'       => 200.00,
+            'vat_amount'     => 30.00,
+            'total_amount'   => 230.00,
+        ]);
+
+        $item = ReceiptItem::create([
+            'receipt_id'       => $receipt->id,
+            'item_description' => 'Original Description',
+            'vat_category'     => 'G',
+            'purchase_type'    => 3,
+            'qty'              => 1,
+            'unit_price'       => 200.00,
+            'total_value'      => 200.00,
+            'vat_amount'       => 30.00,
+            'value_after_vat'  => 230.00,
+        ]);
+
+        // User edits all 6 fields:
+        // Supplier Name, Supplier TIN, FS #, MRC #, 11/02/2019 EC, Item Description
+        $response = $this->postJson(route('finance.tax-deductions.update-ocr-item'), [
+            'id'               => $item->id,
+            'receipt_id'       => $receipt->id,
+            'seller_name'      => 'Acme Trading PLC',
+            'supplier_tin'     => '0012345678',
+            'fs_no'            => '00088991',
+            'mrc_no'           => 'MTR99887766',
+            'receipt_date_ec'  => '11/02/2019 EC',
+            'item_description' => 'Heavy Duty Cement 50kg Bags',
+            'total_value'      => 500.00,
+            'vat_amount'       => 75.00,
+            'value_after_vat'  => 575.00,
+        ]);
+
+        $response->assertStatus(200);
+        $data = $response->json();
+        $this->assertTrue($data['success']);
+        $this->assertEquals('Acme Trading PLC', $data['item']['vendor_name']);
+        $this->assertEquals('0012345678', $data['item']['vendor_tin']);
+        $this->assertEquals('00088991', $data['item']['fs_no']);
+        $this->assertEquals('MTR99887766', $data['item']['mrc_no']);
+        $this->assertEquals('Heavy Duty Cement 50kg Bags', $data['item']['item_description']);
+        $this->assertStringContainsString('11/02/2019', $data['item']['receipt_date_ec']);
+
+        $receipt->refresh();
+        $this->assertEquals('Acme Trading PLC', $receipt->vendor_name);
+        $this->assertEquals('0012345678', $receipt->vendor_tin);
+        $this->assertEquals('00088991', $receipt->fs_no);
+        $this->assertEquals('MTR99887766', $receipt->mrc_no);
+        $this->assertEquals('2026-10-21', \Carbon\Carbon::parse($receipt->receipt_date)->format('Y-m-d'));
+
+        $item->refresh();
+        $this->assertEquals('Heavy Duty Cement 50kg Bags', $item->item_description);
+    }
+
+    public function test_duplicate_receipt_edited_keeps_latest_update_on_reload()
+    {
+        // 1. Receipt 1 created earlier (the "first one")
+        $receipt1 = Receipt::create([
+            'receipt_number' => 'OCR-DUP-001',
+            'vendor_name'    => 'Initial Merchant One',
+            'vendor_tin'     => '0012345678',
+            'fs_no'          => '00016028',
+            'mrc_no'         => 'MRC-OLD-1',
+            'receipt_date'   => '2026-10-15',
+            'subtotal'       => 1000.00,
+            'vat_amount'     => 150.00,
+            'total_amount'   => 1150.00,
+            'created_at'     => '2026-10-15 08:00:00',
+            'updated_at'     => '2026-10-15 08:00:00',
+        ]);
+        $item1 = ReceiptItem::create([
+            'receipt_id'       => $receipt1->id,
+            'item_description' => 'Initial Item One',
+            'vat_category'     => 'G',
+            'purchase_type'    => 3,
+            'qty'              => 1,
+            'unit_price'       => 1000.00,
+            'total_value'      => 1000.00,
+            'vat_amount'       => 150.00,
+            'value_after_vat'  => 1150.00,
+            'created_at'       => '2026-10-15 08:00:00',
+            'updated_at'       => '2026-10-15 08:00:00',
+        ]);
+
+        // 2. Receipt 2 created later with the same FS No & TIN (duplicate uploaded later with higher ID and newer created_at)
+        $receipt2 = Receipt::create([
+            'receipt_number' => 'OCR-DUP-002',
+            'vendor_name'    => 'Initial Merchant Two (Duplicate)',
+            'vendor_tin'     => '0012345678',
+            'fs_no'          => '00016028',
+            'mrc_no'         => 'MRC-OLD-2',
+            'receipt_date'   => '2026-10-15',
+            'subtotal'       => 1000.00,
+            'vat_amount'     => 150.00,
+            'total_amount'   => 1150.00,
+            'created_at'     => '2026-10-16 12:00:00',
+            'updated_at'     => '2026-10-16 12:00:00',
+        ]);
+        $item2 = ReceiptItem::create([
+            'receipt_id'       => $receipt2->id,
+            'item_description' => 'Initial Item Two (Duplicate)',
+            'vat_category'     => 'G',
+            'purchase_type'    => 3,
+            'qty'              => 1,
+            'unit_price'       => 1000.00,
+            'total_value'      => 1000.00,
+            'vat_amount'       => 150.00,
+            'value_after_vat'  => 1150.00,
+            'created_at'       => '2026-10-16 12:00:00',
+            'updated_at'       => '2026-10-16 12:00:00',
+        ]);
+
+        // User edits Receipt 1 (the older record), updates it to latest values
+        $response = $this->postJson(route('finance.tax-deductions.update-ocr-item'), [
+            'id'               => $item1->id,
+            'receipt_id'       => $receipt1->id,
+            'seller_name'      => 'Latest Updated Merchant PLC',
+            'supplier_tin'     => '0012345678',
+            'fs_no'            => '00016028',
+            'mrc_no'           => 'MRC-LATEST-99',
+            'receipt_date'     => '2026-10-15',
+            'item_description' => 'Latest Updated Goods and Particulars',
+            'total_value'      => 3000.00,
+            'vat_amount'       => 450.00,
+            'value_after_vat'  => 3450.00,
+        ]);
+        $response->assertStatus(200);
+
+        // Simulate reload: calculate movements for Month 2, 2019
+        $controller = new \App\Http\Controllers\Finance\FinanceTaxReportController();
+        $movementsData = $controller->calculateMonthMovementsData(2019, 2);
+
+        $allOcr = collect($movementsData['all_ocr_items'] ?? []);
+        // Assert exactly one record is kept (deduplicated)
+        $matches = $allOcr->filter(function ($it) {
+            return ($it['fs_no'] ?? '') === '00016028';
+        })->values();
+
+        $this->assertCount(1, $matches, 'Duplicate receipt must be deduplicated to 1 entry');
+        // MUST keep the LATEST updated record (Receipt 1 with 'Latest Updated Merchant PLC'), NOT the unedited Receipt 2
+        $this->assertEquals('Latest Updated Merchant PLC', $matches[0]['vendor_name'], 'Must preserve the latest updated merchant name upon reload');
+        $this->assertEquals('Latest Updated Goods and Particulars', $matches[0]['item_description'], 'Must preserve the latest updated description upon reload');
+        $this->assertEquals(3000.00, (float)$matches[0]['base_value'], 'Must preserve latest base value');
+        $this->assertEquals(450.00, (float)$matches[0]['vat_amount'], 'Must preserve latest VAT amount');
+        $this->assertEquals(3450.00, (float)$matches[0]['value_after_vat'], 'Must preserve latest total value');
+    }
+
+    public function test_receipt_with_multiple_items_preserves_latest_update_on_reload()
+    {
+        $receipt = Receipt::create([
+            'receipt_number' => 'OCR-MULTI-001',
+            'vendor_name'    => 'Multi Item Merchant',
+            'vendor_tin'     => '0099887766',
+            'fs_no'          => '00055443',
+            'receipt_date'   => '2026-10-18',
+            'subtotal'       => 500.00,
+            'vat_amount'     => 75.00,
+            'total_amount'   => 575.00,
+        ]);
+
+        $item1 = ReceiptItem::create([
+            'receipt_id'       => $receipt->id,
+            'item_description' => 'Item Line 1',
+            'vat_category'     => 'G',
+            'purchase_type'    => 3,
+            'qty'              => 1,
+            'unit_price'       => 200.00,
+            'total_value'      => 200.00,
+            'vat_amount'       => 30.00,
+            'value_after_vat'  => 230.00,
+        ]);
+
+        $item2 = ReceiptItem::create([
+            'receipt_id'       => $receipt->id,
+            'item_description' => 'Item Line 2',
+            'vat_category'     => 'G',
+            'purchase_type'    => 3,
+            'qty'              => 1,
+            'unit_price'       => 300.00,
+            'total_value'      => 300.00,
+            'vat_amount'       => 45.00,
+            'value_after_vat'  => 345.00,
+        ]);
+
+        // User edits the invoice in inspector modal: sets single consolidated amount 400 Base + 60 VAT = 460 Total
+        $response = $this->postJson(route('finance.tax-deductions.update-ocr-item'), [
+            'id'               => $item1->id,
+            'receipt_id'       => $receipt->id,
+            'seller_name'      => 'Multi Item Merchant Updated',
+            'supplier_tin'     => '0099887766',
+            'fs_no'            => '00055443',
+            'receipt_date'     => '2026-10-18',
+            'item_description' => 'Consolidated Machinery Parts',
+            'total_value'      => 400.00,
+            'vat_amount'       => 60.00,
+            'value_after_vat'  => 460.00,
+        ]);
+        $response->assertStatus(200);
+
+        // Reload movements
+        $controller = new \App\Http\Controllers\Finance\FinanceTaxReportController();
+        $movementsData = $controller->calculateMonthMovementsData(2019, 2);
+
+        $allOcr = collect($movementsData['all_ocr_items'] ?? []);
+        $matches = $allOcr->filter(function ($it) {
+            return ($it['fs_no'] ?? '') === '00055443';
+        })->values();
+
+        $this->assertCount(1, $matches);
+        $this->assertEquals('Multi Item Merchant Updated', $matches[0]['vendor_name']);
+        $this->assertEquals('Consolidated Machinery Parts', $matches[0]['item_description']);
+        $this->assertEquals(400.00, (float)$matches[0]['base_value']);
+        $this->assertEquals(60.00, (float)$matches[0]['vat_amount']);
+        $this->assertEquals(460.00, (float)$matches[0]['value_after_vat']);
+    }
 }
