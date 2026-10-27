@@ -23,6 +23,9 @@ class ProductCompleteDeleteBySkuTest extends TestCase
 
         Schema::dropIfExists('model_has_roles');
         Schema::dropIfExists('roles');
+        Schema::dropIfExists('fixed_asset_assignments');
+        Schema::dropIfExists('fixed_asset_units');
+        Schema::dropIfExists('fixed_assets');
         Schema::dropIfExists('inventory_movements');
         Schema::dropIfExists('inventory');
         Schema::dropIfExists('material_prices');
@@ -105,6 +108,30 @@ class ProductCompleteDeleteBySkuTest extends TestCase
             $table->id();
             $table->unsignedBigInteger('product_id');
             $table->integer('diameter');
+            $table->timestamps();
+        });
+
+        Schema::create('fixed_assets', function ($table) {
+            $table->id();
+            $table->string('name');
+            $table->string('category')->default('Equipment');
+            $table->string('code_prefix')->nullable();
+            $table->text('description')->nullable();
+            $table->softDeletes();
+            $table->timestamps();
+        });
+
+        Schema::create('fixed_asset_units', function ($table) {
+            $table->id();
+            $table->unsignedBigInteger('fixed_asset_id');
+            $table->string('unit_code')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('fixed_asset_assignments', function ($table) {
+            $table->id();
+            $table->unsignedBigInteger('fixed_asset_unit_id'); // Note: Only fixed_asset_unit_id, NO fixed_asset_id!
+            $table->string('action')->default('assigned');
             $table->timestamps();
         });
 
@@ -321,5 +348,53 @@ class ProductCompleteDeleteBySkuTest extends TestCase
 
         $this->assertNull(Product::withTrashed()->where('sku', 'BULK-SKU-1')->first());
         $this->assertNull(Product::withTrashed()->where('sku', 'BULK-SKU-2')->first());
+    }
+
+    public function test_global_admin_can_completely_delete_fixed_asset_by_sku_without_column_errors()
+    {
+        $admin = $this->createGlobalAdminUser();
+        Auth::login($admin);
+
+        // Scenario matching user error: Fixed asset SKU 'FA-117B' with linked fixed_assets, units, and assignments
+        $product = Product::create([
+            'name'     => 'Excavator Model 117B',
+            'sku'      => 'FA-117B',
+            'category' => 'Fixed Asset',
+            'unit'     => 'pcs',
+        ]);
+
+        $faId = DB::table('fixed_assets')->insertGetId([
+            'name'        => 'Excavator Model 117B',
+            'category'    => 'Heavy Machinery',
+            'code_prefix' => '117B',
+            'description' => 'Auto-synced from Store Inventory (Product SKU: FA-117B)',
+        ]);
+
+        $unitId = DB::table('fixed_asset_units')->insertGetId([
+            'fixed_asset_id' => $faId,
+            'unit_code'      => '117B-1',
+        ]);
+
+        // fixed_asset_assignments table only has fixed_asset_unit_id, NOT fixed_asset_id
+        DB::table('fixed_asset_assignments')->insert([
+            'fixed_asset_unit_id' => $unitId,
+            'action'              => 'assigned',
+        ]);
+
+        $request = Request::create(route('products.complete-delete-by-sku'), 'POST', [
+            'sku'         => 'FA-117B',
+            'confirm_sku' => 'DELETE',
+        ]);
+
+        $response = $this->controller->completeDeleteBySku($request);
+
+        $this->assertEquals(302, $response->getStatusCode());
+        $this->assertNull(session('error'));
+
+        // Assert all related records are permanently deleted without any SQL column errors
+        $this->assertNull(Product::withTrashed()->where('sku', 'FA-117B')->first());
+        $this->assertEquals(0, DB::table('fixed_assets')->where('id', $faId)->count());
+        $this->assertEquals(0, DB::table('fixed_asset_units')->where('id', $unitId)->count());
+        $this->assertEquals(0, DB::table('fixed_asset_assignments')->where('fixed_asset_unit_id', $unitId)->count());
     }
 }

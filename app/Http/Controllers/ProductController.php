@@ -364,156 +364,152 @@ class ProductController extends Controller
         }
 
         DB::transaction(function () use ($productIds, $faIds, $sku, $skuUpper, $skuLower) {
-            // 1. Delete Fixed Assets and units
+            $safeDeleteByColumn = function(string $table, string $column, array $ids) {
+                if (empty($ids)) return;
+                try {
+                    if (Schema::hasTable($table) && Schema::hasColumn($table, $column)) {
+                        DB::table($table)->whereIn($column, $ids)->delete();
+                    }
+                } catch (\Throwable $e) {
+                    Log::warning("Could not delete from {$table}.{$column}: " . $e->getMessage());
+                }
+            };
+
+            $safeNullifyByColumn = function(string $table, string $column, array $ids) {
+                if (empty($ids)) return;
+                try {
+                    if (Schema::hasTable($table) && Schema::hasColumn($table, $column)) {
+                        DB::table($table)->whereIn($column, $ids)->update([$column => null]);
+                    }
+                } catch (\Throwable $e) {
+                    Log::warning("Could not nullify {$table}.{$column}: " . $e->getMessage());
+                }
+            };
+
+            // 1. Delete Fixed Assets, units, and assignments
             if (!empty($faIds)) {
-                if (Schema::hasTable('fixed_asset_units')) {
-                    DB::table('fixed_asset_units')->whereIn('fixed_asset_id', $faIds)->delete();
+                $unitIds = [];
+                if (Schema::hasTable('fixed_asset_units') && Schema::hasColumn('fixed_asset_units', 'fixed_asset_id')) {
+                    $unitIds = DB::table('fixed_asset_units')->whereIn('fixed_asset_id', $faIds)->pluck('id')->toArray();
                 }
-                if (Schema::hasTable('fixed_asset_assignments')) {
-                    DB::table('fixed_asset_assignments')->whereIn('fixed_asset_id', $faIds)->delete();
+                if (!empty($productIds) && Schema::hasTable('fixed_asset_units') && Schema::hasColumn('fixed_asset_units', 'product_id')) {
+                    $prodUnitIds = DB::table('fixed_asset_units')->whereIn('product_id', $productIds)->pluck('id')->toArray();
+                    $unitIds = array_unique(array_merge($unitIds, $prodUnitIds));
                 }
-                if (Schema::hasTable('fixed_asset_maintenance_logs')) {
-                    DB::table('fixed_asset_maintenance_logs')->whereIn('fixed_asset_id', $faIds)->delete();
-                }
-                DB::table('fixed_assets')->whereIn('id', $faIds)->delete();
+
+                // Delete assignments referencing these units or assets safely
+                $safeDeleteByColumn('fixed_asset_assignments', 'fixed_asset_unit_id', $unitIds);
+                $safeDeleteByColumn('fixed_asset_assignments', 'fixed_asset_id', $faIds);
+
+                // Delete vehicle reminders
+                $safeDeleteByColumn('vehicle_reminders', 'fixed_asset_unit_id', $unitIds);
+                $safeDeleteByColumn('vehicle_reminders', 'fixed_asset_id', $faIds);
+
+                // Delete maintenance logs if table exists
+                $safeDeleteByColumn('fixed_asset_maintenance_logs', 'fixed_asset_unit_id', $unitIds);
+                $safeDeleteByColumn('fixed_asset_maintenance_logs', 'fixed_asset_id', $faIds);
+
+                // Delete units
+                $safeDeleteByColumn('fixed_asset_units', 'id', $unitIds);
+                $safeDeleteByColumn('fixed_asset_units', 'fixed_asset_id', $faIds);
+
+                // Delete parent fixed assets
+                $safeDeleteByColumn('fixed_assets', 'id', $faIds);
             }
 
             if (!empty($productIds)) {
                 if (Schema::hasTable('fixed_asset_units') && Schema::hasColumn('fixed_asset_units', 'product_id')) {
-                    DB::table('fixed_asset_units')->whereIn('product_id', $productIds)->delete();
+                    $prodUnitIds = DB::table('fixed_asset_units')->whereIn('product_id', $productIds)->pluck('id')->toArray();
+                    if (!empty($prodUnitIds)) {
+                        $safeDeleteByColumn('fixed_asset_assignments', 'fixed_asset_unit_id', $prodUnitIds);
+                        $safeDeleteByColumn('vehicle_reminders', 'fixed_asset_unit_id', $prodUnitIds);
+                        $safeDeleteByColumn('fixed_asset_units', 'id', $prodUnitIds);
+                    }
                 }
 
                 // 2. Inventory movements & Inventory records
-                if (Schema::hasTable('inventory')) {
-                    $invIds = DB::table('inventory')->whereIn('product_id', $productIds)->pluck('id')->toArray();
-                    if (!empty($invIds) && Schema::hasTable('inventory_movements')) {
-                        DB::table('inventory_movements')->whereIn('inventory_id', $invIds)->delete();
-                    }
-                    DB::table('inventory')->whereIn('product_id', $productIds)->delete();
+                $invIds = [];
+                if (Schema::hasTable('inventory') && Schema::hasColumn('inventory', 'product_id')) {
+                    $invIds = array_merge($invIds, DB::table('inventory')->whereIn('product_id', $productIds)->pluck('id')->toArray());
                 }
-                if (Schema::hasTable('inventories')) {
-                    $invsIds = DB::table('inventories')->whereIn('product_id', $productIds)->pluck('id')->toArray();
-                    if (!empty($invsIds) && Schema::hasTable('inventory_movements')) {
-                        DB::table('inventory_movements')->whereIn('inventory_id', $invsIds)->delete();
-                    }
-                    DB::table('inventories')->whereIn('product_id', $productIds)->delete();
+                if (Schema::hasTable('inventories') && Schema::hasColumn('inventories', 'product_id')) {
+                    $invIds = array_merge($invIds, DB::table('inventories')->whereIn('product_id', $productIds)->pluck('id')->toArray());
                 }
+                $invIds = array_unique($invIds);
+
+                $safeDeleteByColumn('inventory_movements', 'inventory_id', $invIds);
+                $safeDeleteByColumn('inventory', 'product_id', $productIds);
+                $safeDeleteByColumn('inventories', 'product_id', $productIds);
 
                 // 3. Rebar dia products
-                if (Schema::hasTable('rebar_dia_products')) {
-                    DB::table('rebar_dia_products')->whereIn('product_id', $productIds)->delete();
-                }
+                $safeDeleteByColumn('rebar_dia_products', 'product_id', $productIds);
 
                 // 4. Material prices
-                if (Schema::hasTable('material_prices')) {
-                    DB::table('material_prices')->whereIn('product_id', $productIds)->delete();
-                }
+                $safeDeleteByColumn('material_prices', 'product_id', $productIds);
 
                 // 5. Material damage reports
-                if (Schema::hasTable('material_damage_reports')) {
-                    DB::table('material_damage_reports')->whereIn('product_id', $productIds)->delete();
-                }
+                $safeDeleteByColumn('material_damage_reports', 'product_id', $productIds);
 
                 // 6. Employee assets
-                if (Schema::hasTable('employee_assets')) {
-                    DB::table('employee_assets')->whereIn('product_id', $productIds)->delete();
-                }
+                $safeDeleteByColumn('employee_assets', 'product_id', $productIds);
 
                 // 7. Petty cash material purchases & items
-                if (Schema::hasTable('petty_cash_material_purchase_items')) {
-                    DB::table('petty_cash_material_purchase_items')->whereIn('product_id', $productIds)->delete();
-                }
-                if (Schema::hasTable('petty_cash_material_purchases')) {
-                    DB::table('petty_cash_material_purchases')->whereIn('product_id', $productIds)->delete();
-                }
+                $safeDeleteByColumn('petty_cash_material_purchase_items', 'product_id', $productIds);
+                $safeDeleteByColumn('petty_cash_material_purchases', 'product_id', $productIds);
 
                 // 8. Delivery receipts & items
-                if (Schema::hasTable('delivery_receipt_items')) {
-                    DB::table('delivery_receipt_items')->whereIn('product_id', $productIds)->delete();
-                }
-                if (Schema::hasTable('delivery_receipts')) {
-                    DB::table('delivery_receipts')->whereIn('product_id', $productIds)->delete();
-                }
+                $safeDeleteByColumn('delivery_receipt_items', 'product_id', $productIds);
+                $safeDeleteByColumn('delivery_receipts', 'product_id', $productIds);
 
                 // 9. Transfer items & transfers
-                if (Schema::hasTable('transfer_items')) {
-                    DB::table('transfer_items')->whereIn('product_id', $productIds)->delete();
-                }
-                if (Schema::hasTable('transfers')) {
-                    DB::table('transfers')->whereIn('product_id', $productIds)->delete();
-                }
+                $safeDeleteByColumn('transfer_items', 'product_id', $productIds);
+                $safeDeleteByColumn('transfers', 'product_id', $productIds);
 
                 // 10. Purchase order items, purchase request items, material request items
-                if (Schema::hasTable('purchase_order_items')) {
-                    DB::table('purchase_order_items')->whereIn('product_id', $productIds)->delete();
-                }
-                if (Schema::hasTable('purchase_request_items')) {
-                    DB::table('purchase_request_items')->whereIn('product_id', $productIds)->delete();
-                }
-                if (Schema::hasTable('material_request_items')) {
-                    DB::table('material_request_items')->whereIn('product_id', $productIds)->delete();
-                }
+                $safeDeleteByColumn('purchase_order_items', 'product_id', $productIds);
+                $safeDeleteByColumn('purchase_request_items', 'product_id', $productIds);
+                $safeDeleteByColumn('material_request_items', 'product_id', $productIds);
 
                 // 11. Material usage items & cut optimization
-                if (Schema::hasTable('material_usage_items')) {
-                    DB::table('material_usage_items')->whereIn('product_id', $productIds)->delete();
-                }
-                if (Schema::hasTable('cut_optimization_items')) {
-                    DB::table('cut_optimization_items')->whereIn('product_id', $productIds)->delete();
-                }
-                if (Schema::hasTable('waste_items')) {
-                    DB::table('waste_items')->whereIn('product_id', $productIds)->delete();
-                }
-                if (Schema::hasTable('material_plan_items')) {
-                    DB::table('material_plan_items')->whereIn('product_id', $productIds)->delete();
-                }
+                $safeDeleteByColumn('material_usage_items', 'product_id', $productIds);
+                $safeDeleteByColumn('cut_optimization_items', 'product_id', $productIds);
+                $safeDeleteByColumn('waste_items', 'product_id', $productIds);
+                $safeDeleteByColumn('material_plan_items', 'product_id', $productIds);
 
                 // 12. Market research
-                if (Schema::hasTable('market_research_items')) {
-                    DB::table('market_research_items')->whereIn('product_id', $productIds)->delete();
-                }
-                if (Schema::hasTable('market_research')) {
-                    DB::table('market_research')->whereIn('product_id', $productIds)->delete();
-                }
+                $safeDeleteByColumn('market_research_items', 'product_id', $productIds);
+                $safeDeleteByColumn('market_research', 'product_id', $productIds);
 
                 // 13. Tool transactions
-                if (Schema::hasTable('tool_transactions')) {
-                    DB::table('tool_transactions')->whereIn('equipment_id', $productIds)->delete();
-                }
+                $safeDeleteByColumn('tool_transactions', 'equipment_id', $productIds);
 
                 // 14. Nullify references in boq_items, takeoff_items, office_material_requests, equipment_masters
-                if (Schema::hasTable('boq_items') && Schema::hasColumn('boq_items', 'product_id')) {
-                    DB::table('boq_items')->whereIn('product_id', $productIds)->update(['product_id' => null]);
-                }
-                if (Schema::hasTable('takeoff_items') && Schema::hasColumn('takeoff_items', 'product_id')) {
-                    DB::table('takeoff_items')->whereIn('product_id', $productIds)->update(['product_id' => null]);
-                }
-                if (Schema::hasTable('office_material_request_items') && Schema::hasColumn('office_material_request_items', 'product_id')) {
-                    DB::table('office_material_request_items')->whereIn('product_id', $productIds)->update(['product_id' => null]);
-                }
-                if (Schema::hasTable('office_material_requests') && Schema::hasColumn('office_material_requests', 'product_id')) {
-                    DB::table('office_material_requests')->whereIn('product_id', $productIds)->update(['product_id' => null]);
-                }
-                if (Schema::hasTable('equipment_masters') && Schema::hasColumn('equipment_masters', 'product_id')) {
-                    DB::table('equipment_masters')->whereIn('product_id', $productIds)->update(['product_id' => null]);
-                }
-                if (Schema::hasTable('equipment_fixed_asset_units') && Schema::hasColumn('equipment_fixed_asset_units', 'product_id')) {
-                    DB::table('equipment_fixed_asset_units')->whereIn('product_id', $productIds)->update(['product_id' => null]);
-                }
+                $safeNullifyByColumn('boq_items', 'product_id', $productIds);
+                $safeNullifyByColumn('takeoff_items', 'product_id', $productIds);
+                $safeNullifyByColumn('office_material_request_items', 'product_id', $productIds);
+                $safeNullifyByColumn('office_material_requests', 'product_id', $productIds);
+                $safeNullifyByColumn('equipment_masters', 'product_id', $productIds);
+                $safeNullifyByColumn('equipment_fixed_asset_units', 'product_id', $productIds);
 
                 // 15. Force delete the Product model records
-                Product::withTrashed()->whereIn('id', $productIds)->forceDelete();
+                try {
+                    Product::withTrashed()->whereIn('id', $productIds)->forceDelete();
+                } catch (\Throwable $e) {}
 
                 // Direct table purge for any residual row
-                DB::table('products')->whereIn('id', $productIds)->delete();
+                $safeDeleteByColumn('products', 'id', $productIds);
             }
 
             // Direct table purge by SKU just in case
-            DB::table('products')
-                ->where('sku', $sku)
-                ->orWhere('sku', $skuUpper)
-                ->orWhere(DB::raw('LOWER(TRIM(sku))'), $skuLower)
-                ->delete();
+            try {
+                if (Schema::hasTable('products') && Schema::hasColumn('products', 'sku')) {
+                    DB::table('products')
+                        ->where('sku', $sku)
+                        ->orWhere('sku', $skuUpper)
+                        ->orWhere(DB::raw('LOWER(TRIM(sku))'), $skuLower)
+                        ->delete();
+                }
+            } catch (\Throwable $e) {}
 
             Log::info("Material SKU '{$sku}' permanently deleted by Global Admin ID " . Auth::id());
         });
