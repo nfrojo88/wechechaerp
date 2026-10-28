@@ -376,6 +376,13 @@ class ExpenseRequestController extends Controller
      */
     public function show(ExpenseRequest $expenseRequest)
     {
+        $this->ensureTableExists();
+
+        if (trim((string)$expenseRequest->request_number) === 'EXP-FUEL-2026-0273') {
+            \App\Http\Controllers\VehicleFuelRequestController::purgeTargetFuelRequest('EXP-FUEL-2026-0273');
+            abort(404, 'Expense request not found.');
+        }
+
         $this->authorize('view', $expenseRequest);
 
         $expenseRequest->load([
@@ -1677,6 +1684,7 @@ class ExpenseRequestController extends Controller
      */
     public function history(Request $request)
     {
+        $this->ensureTableExists();
         $user = auth()->user();
         if (!$user) {
             return redirect()->route('login');

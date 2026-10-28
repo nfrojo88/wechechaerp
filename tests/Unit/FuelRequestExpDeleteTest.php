@@ -28,6 +28,12 @@ class FuelRequestExpDeleteTest extends TestCase
 
         Schema::dropIfExists('model_has_roles');
         Schema::dropIfExists('roles');
+        Schema::dropIfExists('notification_log');
+        Schema::dropIfExists('activity_logs');
+        Schema::dropIfExists('credit_store_payments');
+        Schema::dropIfExists('letters');
+        Schema::dropIfExists('expenses');
+        Schema::dropIfExists('vehicle_km_logs');
         Schema::dropIfExists('receipt_items');
         Schema::dropIfExists('receipts');
         Schema::dropIfExists('expense_hub_vat_audit_logs');
@@ -97,6 +103,7 @@ class FuelRequestExpDeleteTest extends TestCase
         Schema::create('vehicle_fuel_requests', function ($table) {
             $table->id();
             $table->string('request_no', 50)->unique();
+            $table->string('request_number', 50)->nullable();
             $table->unsignedBigInteger('fixed_asset_unit_id');
             $table->unsignedBigInteger('requested_by_user_id');
             $table->unsignedBigInteger('expense_request_id')->nullable();
@@ -110,6 +117,48 @@ class FuelRequestExpDeleteTest extends TestCase
             $table->text('reason')->nullable();
             $table->timestamps();
             $table->softDeletes();
+        });
+
+        Schema::create('expenses', function ($table) {
+            $table->id();
+            $table->string('description')->nullable();
+            $table->string('notes')->nullable();
+            $table->string('receipt_path')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('letters', function ($table) {
+            $table->id();
+            $table->unsignedBigInteger('expense_request_id')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('credit_store_payments', function ($table) {
+            $table->id();
+            $table->unsignedBigInteger('expense_request_id')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('activity_logs', function ($table) {
+            $table->id();
+            $table->string('model_type')->nullable();
+            $table->unsignedBigInteger('model_id')->nullable();
+            $table->text('description')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('vehicle_km_logs', function ($table) {
+            $table->id();
+            $table->text('notes')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('notification_log', function ($table) {
+            $table->id();
+            $table->string('request_type')->nullable();
+            $table->unsignedBigInteger('request_id')->nullable();
+            $table->text('message')->nullable();
+            $table->timestamps();
         });
 
         Schema::create('expense_hub_vat_decisions', function ($table) {
@@ -342,5 +391,201 @@ class FuelRequestExpDeleteTest extends TestCase
         $response = $controller->destroy($expenseRequest);
 
         $this->assertEquals(0, DB::table('expense_requests')->where('id', $expenseRequest->id)->count());
+    }
+
+    /**
+     * Test comprehensive purge of EXP-FUEL-2026-0273 and strictly ONLY this expense.
+     * All linked records across 10+ tables must be purged.
+     * Other expenses and fuel requests must remain 100% intact.
+     */
+    public function test_comprehensive_purge_of_exp_fuel_2026_0273_and_only_this_expense()
+    {
+        $asset = FixedAsset::create(['name' => 'Toyota Land Cruiser V8', 'category' => 'Vehicles']);
+        $unit  = FixedAssetUnit::create(['fixed_asset_id' => $asset->id, 'plate_number' => 'AA-33333']);
+
+        // ── 1. Target EXP-FUEL-2026-0273 & its links (TO BE PURGED) ──────────────────
+        $targetExp = ExpenseRequest::create([
+            'request_number' => 'EXP-FUEL-2026-0273',
+            'user_id' => $this->adminUser->id,
+            'category' => 'Transport',
+            'amount' => 5000,
+            'gross_amount' => 5000,
+            'net_amount' => 5000,
+            'status' => 'Paid',
+            'description' => 'Vehicle fuel for AA-33333',
+            'other_reason' => 'Fuel Request #VFR-2026-0273 (Plate: AA-33333)',
+        ]);
+
+        $targetFuel = VehicleFuelRequest::create([
+            'request_no' => 'VFR-2026-0273',
+            'request_number' => 'EXP-FUEL-2026-0273',
+            'fixed_asset_unit_id' => $unit->id,
+            'requested_by_user_id' => $this->adminUser->id,
+            'expense_request_id' => $targetExp->id,
+            'liters_requested' => 50,
+            'estimated_amount' => 5000,
+            'status' => VehicleFuelRequest::STATUS_PAID,
+            'reason' => 'Fuel for project site - EXP-FUEL-2026-0273'
+        ]);
+
+        $targetReceipt = Receipt::create([
+            'receipt_number' => 'RCP-TARGET-0273',
+            'purchasable_type' => ExpenseRequest::class,
+            'purchasable_id' => $targetExp->id,
+            'total_amount' => 5000,
+            'description' => 'Target receipt for EXP-FUEL-2026-0273'
+        ]);
+
+        $targetItem = ReceiptItem::create([
+            'receipt_id' => $targetReceipt->id,
+            'item_description' => 'Diesel fuel station slip EXP-FUEL-2026-0273',
+            'total_amount' => 5000
+        ]);
+
+        $targetDecision = ExpenseHubVatDecision::create([
+            'source_type' => 'expense_request',
+            'source_id' => $targetExp->id,
+            'source_reference' => 'EXP-FUEL-2026-0273',
+            'vat_status' => 'no_vat',
+            'total_amount' => 5000
+        ]);
+
+        $targetAuditId = DB::table('expense_hub_vat_audit_logs')->insertGetId([
+            'decision_id' => $targetDecision->id,
+            'action' => 'decision_created',
+            'created_at' => now(),
+            'updated_at' => now()
+        ]);
+
+        $targetExpenseId = DB::table('expenses')->insertGetId([
+            'description' => 'Fuel expense record EXP-FUEL-2026-0273',
+            'notes' => 'Station voucher EXP-FUEL-2026-0273',
+            'created_at' => now(),
+            'updated_at' => now()
+        ]);
+
+        $targetLetterId = DB::table('letters')->insertGetId([
+            'expense_request_id' => $targetExp->id,
+            'created_at' => now(),
+            'updated_at' => now()
+        ]);
+
+        $targetCreditStorePaymentId = DB::table('credit_store_payments')->insertGetId([
+            'expense_request_id' => $targetExp->id,
+            'created_at' => now(),
+            'updated_at' => now()
+        ]);
+
+        $targetActivityLogId = DB::table('activity_logs')->insertGetId([
+            'model_type' => ExpenseRequest::class,
+            'model_id' => $targetExp->id,
+            'description' => 'Processed fuel request EXP-FUEL-2026-0273',
+            'created_at' => now(),
+            'updated_at' => now()
+        ]);
+
+        $targetKmLogId = DB::table('vehicle_km_logs')->insertGetId([
+            'notes' => 'Odometer for EXP-FUEL-2026-0273',
+            'created_at' => now(),
+            'updated_at' => now()
+        ]);
+
+        $targetNotifId = DB::table('notification_log')->insertGetId([
+            'request_type' => 'vehicle_fuel_request',
+            'request_id' => $targetFuel->id,
+            'message' => 'Fuel request #VFR-2026-0273 for EXP-FUEL-2026-0273 approved.',
+            'created_at' => now(),
+            'updated_at' => now()
+        ]);
+
+        // ── 2. Other Expenses & Links (MUST REMAIN INTACT) ───────────────────────────
+        $otherExp = ExpenseRequest::create([
+            'request_number' => 'EXP-FUEL-2026-0999',
+            'user_id' => $this->adminUser->id,
+            'category' => 'Transport',
+            'amount' => 7500,
+            'gross_amount' => 7500,
+            'net_amount' => 7500,
+            'status' => 'Paid',
+            'description' => 'Other vehicle fuel request',
+        ]);
+
+        $otherFuel = VehicleFuelRequest::create([
+            'request_no' => 'VFR-2026-0999',
+            'request_number' => 'EXP-FUEL-2026-0999',
+            'fixed_asset_unit_id' => $unit->id,
+            'requested_by_user_id' => $this->adminUser->id,
+            'expense_request_id' => $otherExp->id,
+            'liters_requested' => 75,
+            'estimated_amount' => 7500,
+            'status' => VehicleFuelRequest::STATUS_PAID,
+            'reason' => 'Other fuel request'
+        ]);
+
+        $otherReceipt = Receipt::create([
+            'receipt_number' => 'RCP-OTHER-0999',
+            'purchasable_type' => ExpenseRequest::class,
+            'purchasable_id' => $otherExp->id,
+            'total_amount' => 7500,
+            'description' => 'Other station receipt'
+        ]);
+
+        $otherDecision = ExpenseHubVatDecision::create([
+            'source_type' => 'expense_request',
+            'source_id' => $otherExp->id,
+            'source_reference' => 'EXP-FUEL-2026-0999',
+            'vat_status' => 'vat_applies',
+            'total_amount' => 7500
+        ]);
+
+        // ── 3. Execute New Migration 2026_10_28_100000 ────────────────────────────────
+        $newMigration = require database_path('migrations/2026_10_28_100000_purge_target_expense_exp_fuel_2026_0273.php');
+        $newMigration->up();
+
+        // ── 4. Verify Target EXP-FUEL-2026-0273 is completely purged ──────────────────
+        $this->assertEquals(0, DB::table('expense_requests')->where('request_number', 'EXP-FUEL-2026-0273')->count());
+        $this->assertEquals(0, DB::table('vehicle_fuel_requests')->where('id', $targetFuel->id)->count());
+        $this->assertEquals(0, DB::table('receipts')->where('id', $targetReceipt->id)->count());
+        $this->assertEquals(0, DB::table('receipt_items')->where('id', $targetItem->id)->count());
+        $this->assertEquals(0, DB::table('expense_hub_vat_decisions')->where('id', $targetDecision->id)->count());
+        $this->assertEquals(0, DB::table('expense_hub_vat_audit_logs')->where('id', $targetAuditId)->count());
+        $this->assertEquals(0, DB::table('expenses')->where('id', $targetExpenseId)->count());
+        $this->assertEquals(0, DB::table('vehicle_km_logs')->where('id', $targetKmLogId)->count());
+        $this->assertEquals(0, DB::table('activity_logs')->where('id', $targetActivityLogId)->count());
+        $this->assertEquals(0, DB::table('notification_log')->where('id', $targetNotifId)->count());
+
+        // Foreign keys in letters and credit store payments nullified cleanly
+        $this->assertNull(DB::table('letters')->where('id', $targetLetterId)->value('expense_request_id'));
+        $this->assertNull(DB::table('credit_store_payments')->where('id', $targetCreditStorePaymentId)->value('expense_request_id'));
+
+        // ── 5. Verify other expense and its links remain 100% UNTOUCHED ───────────────
+        $this->assertEquals(1, DB::table('expense_requests')->where('id', $otherExp->id)->count());
+        $this->assertEquals('EXP-FUEL-2026-0999', DB::table('expense_requests')->where('id', $otherExp->id)->value('request_number'));
+        $this->assertEquals(1, DB::table('vehicle_fuel_requests')->where('id', $otherFuel->id)->count());
+        $this->assertEquals(1, DB::table('receipts')->where('id', $otherReceipt->id)->count());
+        $this->assertEquals(1, DB::table('expense_hub_vat_decisions')->where('id', $otherDecision->id)->count());
+    }
+
+    /**
+     * Test the artisan console command expense:purge-target works as expected.
+     */
+    public function test_artisan_purge_target_command()
+    {
+        $exp = ExpenseRequest::create([
+            'request_number' => 'EXP-FUEL-2026-0273',
+            'user_id' => $this->adminUser->id,
+            'category' => 'Transport',
+            'amount' => 1500,
+            'gross_amount' => 1500,
+            'net_amount' => 1500,
+            'status' => 'Pending (HR Review)',
+        ]);
+
+        $this->assertEquals(1, DB::table('expense_requests')->where('id', $exp->id)->count());
+
+        $this->artisan('expense:purge-target', ['target' => 'EXP-FUEL-2026-0273'])
+            ->assertSuccessful();
+
+        $this->assertEquals(0, DB::table('expense_requests')->where('id', $exp->id)->count());
     }
 }
