@@ -7,38 +7,38 @@
 
     {{-- ── Breadcrumb Navigation ──────────────────────────────────────────────── --}}
     <nav aria-label="breadcrumb" class="mb-3 d-print-none">
-        <ol class="breadcrumb mb-0 py-1 px-2 rounded-3 bg-light bg-opacity-75 small">
+        <ol class="breadcrumb mb-0 py-1 px-1 small">
             <li class="breadcrumb-item"><a href="{{ route('dashboard') }}" class="text-decoration-none text-muted"><i class="fa-solid fa-house me-1"></i>Dashboard</a></li>
-            <li class="breadcrumb-item"><a href="{{ route('finance.tax-deductions.index') }}" class="text-decoration-none text-muted">VAT &amp; Withholding Tax</a></li>
-            <li class="breadcrumb-item active text-dark fw-semibold" aria-current="page">Financial Movements &amp; Tax Audit</li>
+            <li class="breadcrumb-item"><a href="{{ route('finance.tax-deductions.index') }}" class="text-decoration-none text-muted">VAT &amp; Withholding</a></li>
+            <li class="breadcrumb-item active text-dark fw-semibold" aria-current="page">Movements &amp; Tax Audit</li>
         </ol>
     </nav>
 
     {{-- ── Main Header & Period Filter Hub ────────────────────────────────────── --}}
-    <div class="card border-0 shadow-sm rounded-4 mb-4 bg-white overflow-hidden">
-        <div class="card-body p-3 p-md-4">
+    <div class="card border border-slate-200 shadow-xs rounded-3 mb-3.5 bg-white">
+        <div class="card-body p-3 p-md-3.5">
             <div class="d-flex flex-column flex-xl-row justify-content-between align-items-start align-items-xl-center gap-3">
                 {{-- Title & Subtitle --}}
                 <div class="d-flex align-items-center gap-3">
-                    <div class="p-3 rounded-4 bg-primary bg-opacity-10 text-primary fs-3 flex-shrink-0">
-                        <i class="fa-solid fa-scale-balanced"></i>
+                    <div class="rounded-3 bg-primary-subtle text-primary d-flex align-items-center justify-content-center flex-shrink-0" style="width: 42px; height: 42px;">
+                        <i class="fa-solid fa-scale-balanced fs-5"></i>
                     </div>
                     <div>
                         <div class="d-flex align-items-center gap-2 flex-wrap">
-                            <h1 class="h4 fw-bold text-dark mb-0">Financial Movements &amp; Tax Audit</h1>
-                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill px-2.5 py-1 small fw-semibold font-monospace">
+                            <h1 class="h5 fw-bold text-dark mb-0 tracking-tight">Financial Movements &amp; Tax Audit</h1>
+                            <span class="badge bg-light text-dark border rounded-pill px-2.5 py-0.5 small fw-semibold font-monospace">
                                 {{ $movementsData['month']['title'] ?? 'Period' }}
                             </span>
                             @if(!empty($movementsData['summary']['is_cleared']))
-                                <span class="badge bg-success text-white rounded-pill px-2.5 py-1 small fw-semibold">
+                                <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2.5 py-0.5 small fw-semibold">
                                     <i class="fa-solid fa-circle-check me-1"></i>Cleared (0.00 ETB)
                                 </span>
                             @endif
                         </div>
-                        <p class="text-muted small mb-0 mt-1">
-                            <i class="fa-regular fa-calendar me-1 text-primary"></i>
-                            <strong>Gregorian Period Window:</strong> {{ $movementsData['month']['gregorian_window'] ?? 'Period' }} 
-                            &bull; Official ERCA Line 100 VAT &amp; Withholding Tax Reconciliation
+                        <p class="text-muted small mb-0 mt-0.5">
+                            <span class="text-secondary"><i class="fa-regular fa-calendar me-1 text-primary"></i>GC Window:</span> 
+                            <strong class="text-dark">{{ $movementsData['month']['gregorian_window'] ?? 'Period' }}</strong> 
+                            <span class="text-muted mx-1.5">&bull;</span> ERCA Line 100 VAT &amp; Withholding Reconciliation
                         </p>
                     </div>
                 </div>
@@ -46,25 +46,25 @@
                 {{-- Action & Filter Hub --}}
                 <div class="d-flex flex-column flex-sm-row align-items-stretch align-items-sm-center gap-2 flex-wrap w-100 w-xl-auto justify-content-xl-end d-print-none">
                     {{-- Quick Month/Year Selector Form --}}
-                    <form method="GET" action="{{ route('finance.tax-deductions.movements') }}" class="d-flex align-items-center gap-1.5 bg-light p-1.5 rounded-pill border">
+                    <form method="GET" action="{{ route('finance.tax-deductions.movements') }}" class="d-flex align-items-center gap-1 bg-light border rounded-pill px-1.5 py-1">
                         <input type="hidden" name="tab" value="{{ $activeTab }}">
                         
                         {{-- Prev Month Button --}}
                         <a href="{{ route('finance.tax-deductions.movements', ['ethiopian_year' => $prevYear, 'ethiopian_month' => $prevMonth, 'tab' => $activeTab]) }}" 
-                           class="btn btn-sm btn-light rounded-circle shadow-xs p-0 d-flex align-items-center justify-content-center" 
-                           style="width: 28px; height: 28px;" title="Previous Month">
-                            <i class="fa-solid fa-chevron-left" style="font-size: 0.7rem;"></i>
+                           class="btn btn-sm btn-white bg-white rounded-circle border shadow-xs p-0 d-flex align-items-center justify-content-center text-muted hover-dark" 
+                           style="width: 26px; height: 26px;" title="Previous Month">
+                            <i class="fa-solid fa-chevron-left" style="font-size: 0.65rem;"></i>
                         </a>
 
                         {{-- Year Select --}}
-                        <select name="ethiopian_year" class="form-select form-select-sm border-0 bg-transparent fw-bold text-dark pe-3" style="width: auto; font-size: 0.8rem;" onchange="this.form.submit()">
+                        <select name="ethiopian_year" class="form-select form-select-sm border-0 bg-transparent fw-semibold text-dark pe-3 py-0" style="width: auto; font-size: 0.8rem; cursor: pointer;" onchange="this.form.submit()">
                             @foreach($availableEthYears as $y)
                                 <option value="{{ $y }}" {{ $selectedEthYear == $y ? 'selected' : '' }}>{{ $y }} ዓ.ም.</option>
                             @endforeach
                         </select>
 
                         {{-- Month Select --}}
-                        <select name="ethiopian_month" class="form-select form-select-sm border-0 bg-transparent fw-bold text-primary pe-3" style="width: auto; font-size: 0.8rem;" onchange="this.form.submit()">
+                        <select name="ethiopian_month" class="form-select form-select-sm border-0 bg-transparent fw-bold text-primary pe-3 py-0" style="width: auto; font-size: 0.8rem; cursor: pointer;" onchange="this.form.submit()">
                             @foreach($availableEthMonths as $mNum => $m)
                                 @php
                                     $monthText = is_array($m) ? ($m['label'] ?? (($m['name_en'] ?? '') . ' (' . ($m['name_am'] ?? '') . ')')) : "{$mNum}. {$m}";
@@ -77,36 +77,36 @@
 
                         {{-- Next Month Button --}}
                         <a href="{{ route('finance.tax-deductions.movements', ['ethiopian_year' => $nextYear, 'ethiopian_month' => $nextMonth, 'tab' => $activeTab]) }}" 
-                           class="btn btn-sm btn-light rounded-circle shadow-xs p-0 d-flex align-items-center justify-content-center" 
-                           style="width: 28px; height: 28px;" title="Next Month">
-                            <i class="fa-solid fa-chevron-right" style="font-size: 0.7rem;"></i>
+                           class="btn btn-sm btn-white bg-white rounded-circle border shadow-xs p-0 d-flex align-items-center justify-content-center text-muted hover-dark" 
+                           style="width: 26px; height: 26px;" title="Next Month">
+                            <i class="fa-solid fa-chevron-right" style="font-size: 0.65rem;"></i>
                         </a>
                     </form>
 
                     {{-- Excel Export Dropdown --}}
                     <div class="dropdown">
-                        <button class="btn btn-sm btn-success text-white rounded-pill px-3 py-2 fw-semibold shadow-xs dropdown-toggle d-inline-flex align-items-center gap-1.5" type="button" id="movementsExcelDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                        <button class="btn btn-sm btn-success text-white rounded-pill px-3 py-1.5 fw-semibold shadow-xs dropdown-toggle d-inline-flex align-items-center gap-1.5" type="button" id="movementsExcelDropdown" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="fa-solid fa-file-excel"></i>
                             <span>Export Excel</span>
                         </button>
-                        <ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-4 p-2" aria-labelledby="movementsExcelDropdown" style="min-width: 320px;">
-                            <li class="dropdown-header small text-uppercase text-muted fw-bold px-3 py-1">ERCA Tax Export Formats</li>
+                        <ul class="dropdown-menu dropdown-menu-end shadow-sm border rounded-3 p-2" aria-labelledby="movementsExcelDropdown" style="min-width: 300px;">
+                            <li class="dropdown-header small text-uppercase text-muted fw-bold px-2 py-1" style="font-size: 0.68rem; letter-spacing: 0.05em;">ERCA Tax Declarations</li>
                             
                             {{-- Sales Excel --}}
                             <li class="px-2 pt-1 pb-0.5">
-                                <span class="small fw-bold text-dark d-flex align-items-center gap-1.5 px-2">
+                                <span class="small fw-semibold text-dark d-flex align-items-center gap-1.5">
                                     <i class="fa-solid fa-hand-holding-dollar text-success"></i> 1. Sales Excel (13 Cols)
                                 </span>
                             </li>
                             <li>
-                                <a class="dropdown-item rounded-3 py-1 px-3 d-flex align-items-center justify-content-between small" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'sales', 'calendar' => 'ec', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
-                                    <span><i class="fa-solid fa-calendar-day text-success me-1.5"></i>All in Ethiopian Calendar</span>
+                                <a class="dropdown-item rounded-2 py-1 px-2.5 d-flex align-items-center justify-content-between small" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'sales', 'calendar' => 'ec', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
+                                    <span><i class="fa-solid fa-calendar-day text-success me-1.5"></i>Ethiopian Calendar</span>
                                     <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">EC</span>
                                 </a>
                             </li>
                             <li>
-                                <a class="dropdown-item rounded-3 py-1 px-3 d-flex align-items-center justify-content-between small" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'sales', 'calendar' => 'gc', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
-                                    <span><i class="fa-solid fa-globe text-primary me-1.5"></i>All in Gregorian Calendar</span>
+                                <a class="dropdown-item rounded-2 py-1 px-2.5 d-flex align-items-center justify-content-between small" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'sales', 'calendar' => 'gc', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
+                                    <span><i class="fa-solid fa-globe text-primary me-1.5"></i>Gregorian Calendar</span>
                                     <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">GC</span>
                                 </a>
                             </li>
@@ -115,19 +115,19 @@
 
                             {{-- Purchase TAS Excel --}}
                             <li class="px-2 pt-1 pb-0.5">
-                                <span class="small fw-bold text-dark d-flex align-items-center gap-1.5 px-2">
+                                <span class="small fw-semibold text-dark d-flex align-items-center gap-1.5">
                                     <i class="fa-solid fa-file-invoice text-primary"></i> 2. Purchase TAS Excel (9 Cols)
                                 </span>
                             </li>
                             <li>
-                                <a class="dropdown-item rounded-3 py-1 px-3 d-flex align-items-center justify-content-between small" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_tas', 'calendar' => 'ec', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
-                                    <span><i class="fa-solid fa-calendar-day text-success me-1.5"></i>All in Ethiopian Calendar</span>
+                                <a class="dropdown-item rounded-2 py-1 px-2.5 d-flex align-items-center justify-content-between small" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_tas', 'calendar' => 'ec', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
+                                    <span><i class="fa-solid fa-calendar-day text-success me-1.5"></i>Ethiopian Calendar</span>
                                     <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">EC</span>
                                 </a>
                             </li>
                             <li>
-                                <a class="dropdown-item rounded-3 py-1 px-3 d-flex align-items-center justify-content-between small" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_tas', 'calendar' => 'gc', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
-                                    <span><i class="fa-solid fa-globe text-primary me-1.5"></i>All in Gregorian Calendar</span>
+                                <a class="dropdown-item rounded-2 py-1 px-2.5 d-flex align-items-center justify-content-between small" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_tas', 'calendar' => 'gc', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
+                                    <span><i class="fa-solid fa-globe text-primary me-1.5"></i>Gregorian Calendar</span>
                                     <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">GC</span>
                                 </a>
                             </li>
@@ -136,19 +136,19 @@
 
                             {{-- Purchase VAT Excel --}}
                             <li class="px-2 pt-1 pb-0.5">
-                                <span class="small fw-bold text-dark d-flex align-items-center gap-1.5 px-2">
+                                <span class="small fw-semibold text-dark d-flex align-items-center gap-1.5">
                                     <i class="fa-solid fa-percent text-danger"></i> 3. Purchase VAT Excel (15 Cols)
                                 </span>
                             </li>
                             <li>
-                                <a class="dropdown-item rounded-3 py-1 px-3 d-flex align-items-center justify-content-between small" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_vat', 'calendar' => 'ec', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
-                                    <span><i class="fa-solid fa-calendar-day text-success me-1.5"></i>All in Ethiopian Calendar</span>
+                                <a class="dropdown-item rounded-2 py-1 px-2.5 d-flex align-items-center justify-content-between small" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_vat', 'calendar' => 'ec', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
+                                    <span><i class="fa-solid fa-calendar-day text-success me-1.5"></i>Ethiopian Calendar</span>
                                     <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">EC</span>
                                 </a>
                             </li>
                             <li>
-                                <a class="dropdown-item rounded-3 py-1 px-3 d-flex align-items-center justify-content-between small" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_vat', 'calendar' => 'gc', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
-                                    <span><i class="fa-solid fa-globe text-primary me-1.5"></i>All in Gregorian Calendar</span>
+                                <a class="dropdown-item rounded-2 py-1 px-2.5 d-flex align-items-center justify-content-between small" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_vat', 'calendar' => 'gc', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
+                                    <span><i class="fa-solid fa-globe text-primary me-1.5"></i>Gregorian Calendar</span>
                                     <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">GC</span>
                                 </a>
                             </li>
@@ -157,7 +157,7 @@
 
                             {{-- Withholding --}}
                             <li>
-                                <a class="dropdown-item rounded-3 py-1.5 px-3 d-flex align-items-center gap-2 small" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'withholding', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
+                                <a class="dropdown-item rounded-2 py-1.5 px-2.5 d-flex align-items-center gap-2 small" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'withholding', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
                                     <i class="fa-solid fa-hand-holding-dollar text-warning"></i>
                                     <span class="fw-semibold text-dark">4. Withholding Tax Excel</span>
                                 </a>
@@ -166,20 +166,20 @@
                     </div>
 
                     {{-- Print Report Button --}}
-                    <button type="button" class="btn btn-sm btn-light text-primary rounded-pill px-3 py-2 fw-semibold shadow-xs border" onclick="window.print()">
-                        <i class="fa-solid fa-print me-1"></i>Print Report
+                    <button type="button" class="btn btn-sm btn-light border text-dark rounded-pill px-3 py-1.5 fw-medium shadow-xs" onclick="window.print()">
+                        <i class="fa-solid fa-print me-1 text-muted"></i>Print
                     </button>
 
                     {{-- Back to Tax Deductions Ledger --}}
-                    <a href="{{ route('finance.tax-deductions.index', ['ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}" class="btn btn-sm btn-outline-secondary rounded-pill px-3 py-2 fw-semibold shadow-xs">
-                        <i class="fa-solid fa-arrow-left me-1"></i>Tax Ledger
+                    <a href="{{ route('finance.tax-deductions.index', ['ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}" class="btn btn-sm btn-outline-secondary rounded-pill px-3 py-1.5 fw-medium shadow-xs">
+                        <i class="fa-solid fa-arrow-left me-1"></i>Ledger
                     </a>
                 </div>
             </div>
         </div>
     </div>
 
-    {{-- ── 1. Top KPI Summary Strip: 5 Balanced Columns ─────────────────────────── --}}
+    {{-- ── 1. Top KPI Summary Strip: Modern Minimalist Cards ───────────────────── --}}
     @php
         $sum = $movementsData['summary'] ?? [];
         $salesBase = (float)($sum['sales_base'] ?? 0);
@@ -198,21 +198,21 @@
         $netDisbursed = (float)($sum['net_disbursed'] ?? 0);
     @endphp
 
-    <div class="row g-2.5 mb-4 row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-5">
+    <div class="row g-2.5 mb-3.5 row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-5">
         {{-- 1. Sales & Output VAT --}}
         <div class="col">
-            <div class="card border-0 shadow-sm rounded-4 h-100 bg-white border-top border-4 border-primary">
+            <div class="card border border-slate-200 shadow-xs rounded-3 h-100 bg-white">
                 <div class="card-body p-3">
                     <div class="d-flex justify-content-between align-items-center mb-1">
-                        <span class="text-muted small text-uppercase fw-bold" style="font-size: 0.68rem;">Sales Base (ገቢ)</span>
-                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill" style="font-size: 0.65rem;">
-                            {{ $sum['income_count'] ?? 0 }} receipts
+                        <span class="text-muted small text-uppercase fw-semibold" style="font-size: 0.68rem; letter-spacing: 0.04em;">Sales Base (ገቢ)</span>
+                        <span class="badge bg-light text-muted border rounded-pill font-monospace" style="font-size: 0.65rem;">
+                            {{ $sum['income_count'] ?? 0 }} rcpts
                         </span>
                     </div>
                     <div class="fs-5 fw-bold text-dark font-monospace">ETB {{ number_format($salesBase, 2) }}</div>
-                    <div class="mt-2 pt-2 border-top border-secondary-subtle d-flex justify-content-between align-items-center">
-                        <span class="text-muted small" style="font-size: 0.72rem;">Output VAT (15%)</span>
-                        <span class="fw-bold text-danger font-monospace small">+ ETB {{ number_format($outputVat, 2) }}</span>
+                    <div class="mt-2 pt-2 border-top border-light d-flex justify-content-between align-items-center text-xs">
+                        <span class="text-muted" style="font-size: 0.72rem;">Output VAT (15%)</span>
+                        <span class="fw-semibold text-danger font-monospace" style="font-size: 0.75rem;">+{{ number_format($outputVat, 2) }}</span>
                     </div>
                 </div>
             </div>
@@ -220,18 +220,18 @@
 
         {{-- 2. Purchases & Input VAT --}}
         <div class="col">
-            <div class="card border-0 shadow-sm rounded-4 h-100 bg-white border-top border-4 border-success">
+            <div class="card border border-slate-200 shadow-xs rounded-3 h-100 bg-white">
                 <div class="card-body p-3">
                     <div class="d-flex justify-content-between align-items-center mb-1">
-                        <span class="text-muted small text-uppercase fw-bold" style="font-size: 0.68rem;">Purchases Base (ግዢ)</span>
-                        <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill" style="font-size: 0.65rem;">
+                        <span class="text-muted small text-uppercase fw-semibold" style="font-size: 0.68rem; letter-spacing: 0.04em;">Purchases Base (ግዢ)</span>
+                        <span class="badge bg-light text-muted border rounded-pill font-monospace" style="font-size: 0.65rem;">
                             {{ $sum['expense_count'] ?? 0 }} items
                         </span>
                     </div>
                     <div class="fs-5 fw-bold text-dark font-monospace">ETB {{ number_format($purchasesBase, 2) }}</div>
-                    <div class="mt-2 pt-2 border-top border-secondary-subtle d-flex justify-content-between align-items-center">
-                        <span class="text-muted small" style="font-size: 0.72rem;">Input VAT (15%)</span>
-                        <span class="fw-bold text-success font-monospace small">ETB {{ number_format($inputVat, 2) }}</span>
+                    <div class="mt-2 pt-2 border-top border-light d-flex justify-content-between align-items-center text-xs">
+                        <span class="text-muted" style="font-size: 0.72rem;">Input VAT (15%)</span>
+                        <span class="fw-semibold text-success font-monospace" style="font-size: 0.75rem;">{{ number_format($inputVat, 2) }}</span>
                     </div>
                 </div>
             </div>
@@ -239,16 +239,16 @@
 
         {{-- 3. Opening Credit --}}
         <div class="col">
-            <div class="card border-0 shadow-sm rounded-4 h-100 bg-white border-top border-4 border-info">
+            <div class="card border border-slate-200 shadow-xs rounded-3 h-100 bg-white">
                 <div class="card-body p-3">
                     <div class="d-flex justify-content-between align-items-center mb-1">
-                        <span class="text-muted small text-uppercase fw-bold" style="font-size: 0.68rem;">Opening Credit</span>
-                        <span class="badge bg-info-subtle text-info border border-info-subtle rounded-pill" style="font-size: 0.65rem;">Prev month</span>
+                        <span class="text-muted small text-uppercase fw-semibold" style="font-size: 0.68rem; letter-spacing: 0.04em;">Opening Credit</span>
+                        <span class="badge bg-info-subtle text-info border border-info-subtle rounded-pill font-monospace" style="font-size: 0.62rem;">Prev Mo</span>
                     </div>
                     <div class="fs-5 fw-bold text-info font-monospace">+ ETB {{ number_format($openingCredit, 2) }}</div>
-                    <div class="mt-2 pt-2 border-top border-secondary-subtle d-flex justify-content-between align-items-center">
-                        <span class="text-muted small" style="font-size: 0.72rem;">Creditable Pool</span>
-                        <span class="fw-bold text-dark font-monospace small">ETB {{ number_format($totalCreditable, 2) }}</span>
+                    <div class="mt-2 pt-2 border-top border-light d-flex justify-content-between align-items-center text-xs">
+                        <span class="text-muted" style="font-size: 0.72rem;">Creditable Pool</span>
+                        <span class="fw-semibold text-dark font-monospace" style="font-size: 0.75rem;">{{ number_format($totalCreditable, 2) }}</span>
                     </div>
                 </div>
             </div>
@@ -256,16 +256,16 @@
 
         {{-- 4. Signed Net VAT --}}
         <div class="col">
-            <div class="card border-0 shadow-sm rounded-4 h-100 bg-white border-top border-4 {{ $isPayable ? 'border-danger bg-danger bg-opacity-10' : ($isCredit ? 'border-success bg-success bg-opacity-10' : 'border-warning') }}">
+            <div class="card border shadow-xs rounded-3 h-100 bg-white {{ $isPayable ? 'border-danger-subtle bg-danger-subtle bg-opacity-10' : ($isCredit ? 'border-success-subtle bg-success-subtle bg-opacity-10' : 'border-slate-200') }}">
                 <div class="card-body p-3">
                     <div class="d-flex justify-content-between align-items-center mb-1">
-                        <span class="text-muted small text-uppercase fw-bold" style="font-size: 0.68rem;">Signed Net VAT</span>
-                        <span class="badge {{ $badgeClass }} rounded-pill small" style="font-size: 0.65rem;">
+                        <span class="text-muted small text-uppercase fw-semibold" style="font-size: 0.68rem; letter-spacing: 0.04em;">Signed Net VAT</span>
+                        <span class="badge {{ $badgeClass }} rounded-pill small" style="font-size: 0.62rem;">
                             {{ $statusLabel }}
                         </span>
                     </div>
                     <div class="fs-5 fw-bold font-monospace {{ $textClass }}">{{ $signedNetFormatted }}</div>
-                    <div class="mt-2 pt-2 border-top border-secondary-subtle">
+                    <div class="mt-2 pt-2 border-top border-light">
                         <small class="text-muted d-block text-truncate" style="font-size: 0.72rem;">
                             @if($isPayable)
                                 ETB {{ number_format($sum['payable_amount'] ?? 0, 2) }} payable to ERCA
@@ -282,69 +282,69 @@
 
         {{-- 5. Withholding Tax (3%) --}}
         <div class="col">
-            <div class="card border-0 shadow-sm rounded-4 h-100 bg-white border-top border-4 border-danger">
+            <div class="card border border-slate-200 shadow-xs rounded-3 h-100 bg-white">
                 <div class="card-body p-3">
                     <div class="d-flex justify-content-between align-items-center mb-1">
-                        <span class="text-muted small text-uppercase fw-bold" style="font-size: 0.68rem;">3% Withholding</span>
-                        <span class="badge bg-warning-subtle text-dark border border-warning-subtle rounded-pill" style="font-size: 0.65rem;">Separate</span>
+                        <span class="text-muted small text-uppercase fw-semibold" style="font-size: 0.68rem; letter-spacing: 0.04em;">3% Withholding</span>
+                        <span class="badge bg-warning-subtle text-dark border border-warning-subtle rounded-pill font-monospace" style="font-size: 0.62rem;">Separate</span>
                     </div>
                     <div class="fs-5 fw-bold text-danger font-monospace">- ETB {{ number_format($wht, 2) }}</div>
-                    <div class="mt-2 pt-2 border-top border-secondary-subtle d-flex justify-content-between align-items-center">
-                        <span class="text-muted small" style="font-size: 0.72rem;">Net Disbursed</span>
-                        <span class="fw-bold text-success font-monospace small">ETB {{ number_format($netDisbursed, 2) }}</span>
+                    <div class="mt-2 pt-2 border-top border-light d-flex justify-content-between align-items-center text-xs">
+                        <span class="text-muted" style="font-size: 0.72rem;">Net Disbursed</span>
+                        <span class="fw-semibold text-success font-monospace" style="font-size: 0.75rem;">{{ number_format($netDisbursed, 2) }}</span>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    {{-- ── 2. Interactive Navigation Tabs ───────────────────────────────────────── --}}
-    <ul class="nav nav-pills gap-2 mb-3 bg-white p-2 rounded-4 shadow-sm border d-print-none" id="movementsPageTab" role="tablist">
+    {{-- ── 2. Interactive Navigation Tabs (Modern Segmented Pills) ────────────── --}}
+    <ul class="nav nav-pills gap-1.5 mb-3 bg-white p-1.5 rounded-3 border border-slate-200 shadow-xs d-print-none" id="movementsPageTab" role="tablist">
         <li class="nav-item" role="presentation">
             <button class="nav-link {{ $activeTab === 'income' ? 'active' : '' }} rounded-pill fw-semibold small d-inline-flex align-items-center gap-1.5" 
                     id="page-income-tab" data-bs-toggle="pill" data-bs-target="#page-income" type="button" role="tab">
                 <i class="fa-solid fa-arrow-down-long text-success"></i>
-                <span>Where Income Came From (ገቢ)</span>
-                <span class="badge bg-success-subtle text-success rounded-pill ms-1">{{ count($movementsData['incomes'] ?? []) }}</span>
+                <span>Income &amp; Sales (ገቢ)</span>
+                <span class="badge bg-light text-muted rounded-pill ms-1">{{ count($movementsData['incomes'] ?? []) }}</span>
             </button>
         </li>
         <li class="nav-item" role="presentation">
             <button class="nav-link {{ $activeTab === 'expense' ? 'active' : '' }} rounded-pill fw-semibold small d-inline-flex align-items-center gap-1.5" 
                     id="page-expense-tab" data-bs-toggle="pill" data-bs-target="#page-expense" type="button" role="tab">
                 <i class="fa-solid fa-arrow-up-long text-danger"></i>
-                <span>Purchases &amp; Paid Expenses (ግዢ)</span>
-                <span class="badge bg-danger-subtle text-danger rounded-pill ms-1">{{ count($movementsData['expenses'] ?? []) }}</span>
+                <span>Purchases &amp; Expenses (ግዢ)</span>
+                <span class="badge bg-light text-muted rounded-pill ms-1">{{ count($movementsData['expenses'] ?? []) }}</span>
             </button>
         </li>
         <li class="nav-item" role="presentation">
             <button class="nav-link {{ $activeTab === 'tas' ? 'active' : '' }} rounded-pill fw-semibold small d-inline-flex align-items-center gap-1.5" 
                     id="page-tas-tab" data-bs-toggle="pill" data-bs-target="#page-tas" type="button" role="tab">
                 <i class="fa-solid fa-file-invoice text-primary"></i>
-                <span>TAS Purchases (0% VAT / Fuel Receipts — e-Tax Format)</span>
-                <span class="badge bg-primary-subtle text-primary rounded-pill ms-1">{{ $movementsData['tas_purchases_count'] ?? count($movementsData['tas_purchases'] ?? []) }}</span>
+                <span>TAS Purchases (0% VAT)</span>
+                <span class="badge bg-light text-muted rounded-pill ms-1">{{ $movementsData['tas_purchases_count'] ?? count($movementsData['tas_purchases'] ?? []) }}</span>
             </button>
         </li>
         <li class="nav-item" role="presentation">
             <button class="nav-link {{ $activeTab === 'ocr' ? 'active' : '' }} rounded-pill fw-semibold small d-inline-flex align-items-center gap-1.5" 
                     id="page-ocr-tab" data-bs-toggle="pill" data-bs-target="#page-ocr" type="button" role="tab">
                 <i class="fa-solid fa-receipt text-primary"></i>
-                <span>Scanned OCR Receipts</span>
-                <span class="badge bg-primary-subtle text-primary rounded-pill ms-1">{{ count($movementsData['ocr_items'] ?? []) }}</span>
+                <span>Scanned Receipts</span>
+                <span class="badge bg-light text-muted rounded-pill ms-1">{{ count($movementsData['ocr_items'] ?? []) }}</span>
             </button>
         </li>
         <li class="nav-item" role="presentation">
             <button class="nav-link {{ $activeTab === 'withholding' ? 'active' : '' }} rounded-pill fw-semibold small d-inline-flex align-items-center gap-1.5" 
                     id="page-withholding-tab" data-bs-toggle="pill" data-bs-target="#page-withholding" type="button" role="tab" title="Withholding Tax Deductions (2%, 3%, 30%) and Certificates">
                 <i class="fa-solid fa-hand-holding-dollar text-warning"></i>
-                <span>Withholding Tax (WHT Deductions)</span>
-                <span class="badge bg-warning-subtle text-dark border border-warning-subtle rounded-pill ms-1" id="tabBadgeWhtCount">{{ count($movementsData['wht_expenses'] ?? []) }}</span>
+                <span>Withholding Tax (WHT)</span>
+                <span class="badge bg-light text-muted rounded-pill ms-1" id="tabBadgeWhtCount">{{ count($movementsData['wht_expenses'] ?? []) }}</span>
             </button>
         </li>
         <li class="nav-item" role="presentation">
             <button class="nav-link {{ $activeTab === 'audit' ? 'active' : '' }} rounded-pill fw-semibold small d-inline-flex align-items-center gap-1.5" 
                     id="page-audit-tab" data-bs-toggle="pill" data-bs-target="#page-audit" type="button" role="tab">
                 <i class="fa-solid fa-scale-balanced text-dark"></i>
-                <span>ERCA Line 100 Audit Sheet</span>
+                <span>ERCA Line 100 Audit</span>
             </button>
         </li>
     </ul>
@@ -354,23 +354,24 @@
 
         {{-- ── TAB 1: INCOMES & SALES ────────────────────────────────────────── --}}
         <div class="tab-pane fade {{ $activeTab === 'income' ? 'show active' : '' }}" id="page-income" role="tabpanel">
-            <div class="card border-0 shadow-sm rounded-4 overflow-hidden bg-white">
-                <div class="card-header bg-white border-bottom py-3 px-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div class="card border border-slate-200 shadow-xs rounded-3 overflow-hidden bg-white">
+                <div class="card-header bg-white border-bottom py-2.5 px-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <div class="d-flex align-items-center gap-2">
                         <span class="badge bg-success-subtle text-success p-2 rounded-3"><i class="fa-solid fa-hand-holding-dollar fs-6"></i></span>
                         <div>
-                            <h6 class="fw-bold mb-0 text-dark">Company Income &amp; Sales Receipts</h6>
+                            <h6 class="fw-bold mb-0 text-dark" style="font-size: 0.92rem;">Company Income &amp; Sales Receipts</h6>
                             <small class="text-muted">Sources of all company revenues, client payments, and 15% Output VAT</small>
                         </div>
                     </div>
                     <div class="d-flex align-items-center gap-2 d-print-none">
                         <a href="{{ route('finance.tax-deductions.export-excel', ['type' => 'sales', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}" 
-                           class="btn btn-sm btn-outline-success rounded-pill px-3 fw-semibold shadow-xs text-nowrap d-inline-flex align-items-center gap-1.5">
+                           class="btn btn-sm btn-outline-success rounded-pill px-3 fw-medium shadow-xs text-nowrap d-inline-flex align-items-center gap-1.5">
                             <i class="fa-solid fa-file-excel"></i>
                             <span>Export Sales</span>
                         </a>
-                        <div style="min-width: 250px;">
-                            <input type="text" class="form-control form-control-sm rounded-pill" placeholder="Search customer, invoice #, project..." onkeyup="filterLocalTable('pageIncomeTable', this.value)">
+                        <div class="position-relative" style="min-width: 240px;">
+                            <i class="fa-solid fa-magnifying-glass position-absolute top-50 start-0 translate-middle-y ms-3 text-muted" style="font-size: 0.75rem;"></i>
+                            <input type="text" class="form-control form-control-sm rounded-pill ps-5 border-slate-200" placeholder="Search customer, invoice #, project..." onkeyup="filterLocalTable('pageIncomeTable', this.value)">
                         </div>
                     </div>
                 </div>
@@ -467,12 +468,12 @@
 
         {{-- ── TAB 2: PURCHASES & EXPENSES ───────────────────────────────────── --}}
         <div class="tab-pane fade {{ $activeTab === 'expense' ? 'show active' : '' }}" id="page-expense" role="tabpanel">
-            <div class="card border-0 shadow-sm rounded-4 overflow-hidden bg-white">
-                <div class="card-header bg-white border-bottom py-3 px-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div class="card border border-slate-200 shadow-xs rounded-3 overflow-hidden bg-white">
+                <div class="card-header bg-white border-bottom py-2.5 px-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <div class="d-flex align-items-center gap-2">
                         <span class="badge bg-danger-subtle text-danger p-2 rounded-3"><i class="fa-solid fa-file-invoice fs-6"></i></span>
                         <div>
-                            <h6 class="fw-bold mb-0 text-dark">Purchases, Petty Cash &amp; Paid Expense Vouchers</h6>
+                            <h6 class="fw-bold mb-0 text-dark" style="font-size: 0.92rem;">Purchases &amp; Expenses (ግዢ)</h6>
                             <small class="text-muted">Creditable business expenditures, 15% Input VAT, and 3% Withholding Deductions</small>
                         </div>
                     </div>
@@ -496,7 +497,7 @@
                         </div>
                         <button type="button" class="btn btn-sm rounded-pill px-2.5 py-1 fw-semibold btn-outline-info shadow-xs d-inline-flex align-items-center gap-1.5" id="btnOpenVerifiedArchive" onclick="openVerifiedArchiveModal()" title="View operational expenses verified without fiscal receipt">
                             <i class="fa-solid fa-box-archive text-info"></i>
-                            <span>Verified (No Receipt) Archive</span>
+                            <span>Verified Archive</span>
                             <span class="badge bg-info-subtle text-info rounded-pill ms-0.5" id="filterCountVerifiedNoReceipt">{{ $movementsData['summary']['verified_no_receipt_count'] ?? count($movementsData['verified_no_receipt'] ?? []) }}</span>
                         </button>
                         <div class="btn-group shadow-xs rounded-pill overflow-hidden">
@@ -506,7 +507,7 @@
                                     <i class="fa-solid fa-file-excel"></i>
                                     <span>Purchase TAS</span>
                                 </button>
-                                <ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-3 p-2 small" style="min-width: 250px;">
+                                <ul class="dropdown-menu dropdown-menu-end shadow-sm border rounded-3 p-2 small" style="min-width: 250px;">
                                     <li class="dropdown-header small text-uppercase text-muted fw-bold px-2 py-1">Choose Calendar (TAS 9-Cols)</li>
                                     <li>
                                         <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center justify-content-between" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_tas', 'calendar' => 'ec', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
@@ -529,7 +530,7 @@
                                     <i class="fa-solid fa-file-excel"></i>
                                     <span>Purchase VAT</span>
                                 </button>
-                                <ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-3 p-2 small" style="min-width: 250px;">
+                                <ul class="dropdown-menu dropdown-menu-end shadow-sm border rounded-3 p-2 small" style="min-width: 250px;">
                                     <li class="dropdown-header small text-uppercase text-muted fw-bold px-2 py-1">Choose Calendar (VAT 15-Cols)</li>
                                     <li>
                                         <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center justify-content-between" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_vat', 'calendar' => 'ec', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
@@ -552,8 +553,9 @@
                                 <span>Export WHT</span>
                             </a>
                         </div>
-                        <div style="min-width: 200px;">
-                            <input type="text" class="form-control form-control-sm rounded-pill" placeholder="Search payee, voucher #, category..." onkeyup="filterLocalTable('pageExpenseTable', this.value)">
+                        <div class="position-relative" style="min-width: 200px;">
+                            <i class="fa-solid fa-magnifying-glass position-absolute top-50 start-0 translate-middle-y ms-3 text-muted" style="font-size: 0.75rem;"></i>
+                            <input type="text" class="form-control form-control-sm rounded-pill ps-5 border-slate-200" placeholder="Search payee, voucher #, category..." onkeyup="filterLocalTable('pageExpenseTable', this.value)">
                         </div>
                     </div>
                 </div>
@@ -1199,18 +1201,18 @@
             $tasTinCompliancePercent = $tasTotalCount > 0 ? round(($tasWithTinCount / $tasTotalCount) * 100) : 0;
         @endphp
         <div class="tab-pane fade {{ $activeTab === 'tas' ? 'show active' : '' }}" id="page-tas" role="tabpanel">
-            <div class="card border-0 shadow-sm rounded-4 overflow-hidden bg-white">
-                <div class="card-header bg-white border-bottom py-3 px-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div class="card border border-slate-200 shadow-xs rounded-3 overflow-hidden bg-white">
+                <div class="card-header bg-white border-bottom py-2.5 px-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <div class="d-flex align-items-center gap-2">
                         <span class="badge bg-primary-subtle text-primary p-2 rounded-3"><i class="fa-solid fa-file-invoice fs-6"></i></span>
                         <div>
                             <div class="d-flex align-items-center gap-2 flex-wrap">
-                                <h6 class="fw-bold mb-0 text-dark">TAS Purchases (0% VAT / Fuel Receipts — e-Tax Format)</h6>
-                                <span class="badge bg-primary text-white rounded-pill small fw-semibold px-2.5 py-0.5">
-                                    <i class="fa-solid fa-receipt me-1"></i>e-Tax Purchase Declaration (All Qualified Purchases)
+                                <h6 class="fw-bold mb-0 text-dark" style="font-size: 0.92rem;">TAS Purchases (0% VAT / Fuel — e-Tax Format)</h6>
+                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill small fw-semibold px-2 py-0.5">
+                                    <i class="fa-solid fa-receipt me-1"></i>e-Tax Standard
                                 </span>
                             </div>
-                            <small class="text-muted">Purchases and expenses with registered Seller TIN &amp; receipt added (Both 15% VAT and 0% TAS / Fuel) declared under Ethiopian e-Tax (pro.doc 9-column standard)</small>
+                            <small class="text-muted">Purchases with Seller TIN &amp; receipt declared under Ethiopian e-Tax (9-column standard)</small>
                         </div>
                     </div>
                     <div class="d-flex align-items-center gap-2 d-print-none flex-wrap">
@@ -1258,10 +1260,11 @@
                         <a href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_tas', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}" 
                            class="btn btn-sm btn-primary text-white rounded-pill px-3 py-1.5 fw-semibold shadow-xs d-inline-flex align-items-center gap-1.5">
                             <i class="fa-solid fa-file-excel"></i>
-                            <span>Export Purchase TAS Excel (9 Cols)</span>
+                            <span>Export TAS Excel</span>
                         </a>
-                        <div style="min-width: 220px;">
-                            <input type="text" class="form-control form-control-sm rounded-pill" placeholder="Search FS #, vendor TIN, payee..." onkeyup="filterLocalTable('pageTasTable', this.value)">
+                        <div class="position-relative" style="min-width: 220px;">
+                            <i class="fa-solid fa-magnifying-glass position-absolute top-50 start-0 translate-middle-y ms-3 text-muted" style="font-size: 0.75rem;"></i>
+                            <input type="text" class="form-control form-control-sm rounded-pill ps-5 border-slate-200" placeholder="Search FS #, vendor TIN, payee..." onkeyup="filterLocalTable('pageTasTable', this.value)">
                         </div>
                     </div>
                 </div>
@@ -1545,17 +1548,17 @@
 
         {{-- ── TAB 4: SCANNED OCR RECEIPTS ───────────────────────────────────── --}}
         <div class="tab-pane fade {{ $activeTab === 'ocr' ? 'show active' : '' }}" id="page-ocr" role="tabpanel">
-            <div class="card border-0 shadow-sm rounded-4 overflow-hidden bg-white">
-                <div class="card-header bg-white border-bottom py-3 px-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div class="card border border-slate-200 shadow-xs rounded-3 overflow-hidden bg-white">
+                <div class="card-header bg-white border-bottom py-2.5 px-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <div class="d-flex align-items-center gap-2">
                         <span class="badge bg-primary-subtle text-primary p-2 rounded-3"><i class="fa-solid fa-camera-retro fs-6"></i></span>
                         <div>
                             <div class="d-flex align-items-center gap-2 flex-wrap">
-                                <h6 class="fw-bold mb-0 text-dark">Scanned OCR Receipts (ERCA Cash Register Invoices)</h6>
-                                <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill small fw-semibold px-2.5 py-0.5">
-                                    <i class="fa-solid fa-shield-check me-1"></i>Verified Receipts
+                                <h6 class="fw-bold mb-0 text-dark" style="font-size: 0.92rem;">Scanned Receipts (ERCA Invoices)</h6>
+                                <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill small fw-semibold px-2 py-0.5">
+                                    <i class="fa-solid fa-shield-check me-1"></i>Verified
                                 </span>
-                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill small fw-semibold px-2.5 py-0.5">
+                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill small fw-semibold px-2 py-0.5">
                                     <i class="fa-solid fa-ban me-1"></i>Duplicate Blocking Active
                                 </span>
                             </div>
@@ -1569,14 +1572,14 @@
                                     id="btnPageOcrVat" 
                                     onclick="filterPageOcrCategory('vat')" 
                                     title="Show Only Receipts with 15% VAT">
-                                <i class="fa-solid fa-percent me-1"></i>Only VAT Receipts ({{ $movementsData['summary']['ocr_vat_count'] ?? count($movementsData['vat_ocr_items'] ?? []) }})
+                                <i class="fa-solid fa-percent me-1"></i>Only VAT ({{ $movementsData['summary']['ocr_vat_count'] ?? count($movementsData['vat_ocr_items'] ?? []) }})
                             </button>
                             <button type="button" 
                                     class="btn btn-sm rounded-pill px-2.5 py-1 fw-semibold text-muted" 
                                     id="btnPageOcrTas" 
                                     onclick="filterPageOcrCategory('tas')" 
                                     title="Show Receipts with 0% VAT (TAS / Exempt)">
-                                <i class="fa-solid fa-receipt me-1"></i>TAS Receipts (0% VAT) ({{ $movementsData['summary']['ocr_tas_count'] ?? count($movementsData['tas_ocr_items'] ?? []) }})
+                                <i class="fa-solid fa-receipt me-1"></i>TAS 0% ({{ $movementsData['summary']['ocr_tas_count'] ?? count($movementsData['tas_ocr_items'] ?? []) }})
                             </button>
                             <button type="button" 
                                     class="btn btn-sm rounded-pill px-2.5 py-1 fw-semibold {{ !($vatOnly ?? true) ? 'btn-secondary text-white shadow-xs' : 'text-muted' }}" 
@@ -1593,7 +1596,7 @@
                                     <i class="fa-solid fa-file-excel"></i>
                                     <span>Purchase TAS</span>
                                 </button>
-                                <ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-3 p-2 small" style="min-width: 250px;">
+                                <ul class="dropdown-menu dropdown-menu-end shadow-sm border rounded-3 p-2 small" style="min-width: 250px;">
                                     <li class="dropdown-header small text-uppercase text-muted fw-bold px-2 py-1">Choose Calendar (TAS 9-Cols)</li>
                                     <li>
                                         <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center justify-content-between" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_tas', 'calendar' => 'ec', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
@@ -1616,7 +1619,7 @@
                                     <i class="fa-solid fa-file-excel"></i>
                                     <span>Purchase VAT</span>
                                 </button>
-                                <ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-3 p-2 small" style="min-width: 250px;">
+                                <ul class="dropdown-menu dropdown-menu-end shadow-sm border rounded-3 p-2 small" style="min-width: 250px;">
                                     <li class="dropdown-header small text-uppercase text-muted fw-bold px-2 py-1">Choose Calendar (VAT 15-Cols)</li>
                                     <li>
                                         <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center justify-content-between" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_vat', 'calendar' => 'ec', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
@@ -1643,8 +1646,9 @@
                             <i class="fa-solid fa-circle-plus"></i>
                             <span>Add Manual Invoice</span>
                         </button>
-                        <div style="min-width: 220px;">
-                            <input type="text" class="form-control form-control-sm rounded-pill" placeholder="Search vendor, FS #, item..." onkeyup="filterLocalTable('pageOcrTable', this.value)">
+                        <div class="position-relative" style="min-width: 220px;">
+                            <i class="fa-solid fa-magnifying-glass position-absolute top-50 start-0 translate-middle-y ms-3 text-muted" style="font-size: 0.75rem;"></i>
+                            <input type="text" class="form-control form-control-sm rounded-pill ps-5 border-slate-200" placeholder="Search vendor, FS #, item..." onkeyup="filterLocalTable('pageOcrTable', this.value)">
                         </div>
                     </div>
                 </div>
@@ -1921,15 +1925,15 @@
 
         {{-- ── TAB 4: ERCA LINE 100 AUDIT RECONCILIATION ──────────────────────── --}}
         <div class="tab-pane fade {{ $activeTab === 'audit' ? 'show active' : '' }}" id="page-audit" role="tabpanel">
-            <div class="card border-0 shadow-sm rounded-4 overflow-hidden bg-white p-4">
-                <div class="d-flex align-items-center justify-content-between mb-4 pb-3 border-bottom">
+            <div class="card border border-slate-200 shadow-xs rounded-3 overflow-hidden bg-white p-3.5 p-md-4">
+                <div class="d-flex align-items-center justify-content-between mb-3.5 pb-3 border-bottom">
                     <div>
-                        <h5 class="fw-bold mb-1 text-dark">
-                            <i class="fa-solid fa-stamp text-primary me-2"></i>ERCA VAT Line 100 Monthly Declaration Audit
+                        <h5 class="fw-bold mb-0.5 text-dark" style="font-size: 1.05rem;">
+                            <i class="fa-solid fa-stamp text-primary me-2"></i>ERCA VAT Line 100 Declaration Audit
                         </h5>
                         <p class="text-muted small mb-0">Official net tax reconciliation formula for Ethiopian Revenue and Customs Authority filing</p>
                     </div>
-                    <span class="badge bg-primary text-white rounded-pill px-3 py-1.5 font-monospace">
+                    <span class="badge bg-light text-dark border rounded-pill px-3 py-1.5 font-monospace">
                         {{ $movementsData['month']['title'] ?? 'Period' }}
                     </span>
                 </div>
@@ -2120,13 +2124,13 @@
 
         {{-- ── TAB 6: WITHHOLDING TAX (WHT DEDUCTIONS) ──────────────────────── --}}
         <div class="tab-pane fade {{ $activeTab === 'withholding' ? 'show active' : '' }}" id="page-withholding" role="tabpanel">
-            <div class="card border-0 shadow-sm rounded-4 overflow-hidden bg-white">
-                <div class="card-header bg-white border-bottom py-3 px-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div class="card border border-slate-200 shadow-xs rounded-3 overflow-hidden bg-white">
+                <div class="card-header bg-white border-bottom py-2.5 px-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <div class="d-flex align-items-center gap-2">
                         <span class="badge bg-warning-subtle text-dark p-2 rounded-3 border border-warning-subtle"><i class="fa-solid fa-hand-holding-dollar fs-6 text-warning"></i></span>
                         <div>
-                            <h6 class="fw-bold mb-0 text-dark">Withholding Tax (WHT Deductions) &mdash; የተቀናሽ ታክስ መዝገብ</h6>
-                            <small class="text-muted">Withholding tax deductions withheld from suppliers &amp; service providers (2% Goods, 3% Services, 30% No TIN) and WHT certificate tracking</small>
+                            <h6 class="fw-bold mb-0 text-dark" style="font-size: 0.92rem;">Withholding Tax (WHT) &mdash; የተቀናሽ ታክስ መዝገብ</h6>
+                            <small class="text-muted">Deductions from suppliers &amp; service providers (2% Goods, 3% Services, 30% No TIN) and certificates</small>
                         </div>
                     </div>
                     <div class="d-flex align-items-center gap-2 d-print-none flex-wrap">
@@ -2152,8 +2156,9 @@
                             <i class="fa-solid fa-file-excel text-success"></i>
                             <span>Export WHT Excel</span>
                         </a>
-                        <div style="min-width: 220px;">
-                            <input type="text" class="form-control form-control-sm rounded-pill" placeholder="Search payee, voucher, TIN..." onkeyup="filterLocalTable('pageWithholdingTable', this.value)">
+                        <div class="position-relative" style="min-width: 220px;">
+                            <i class="fa-solid fa-magnifying-glass position-absolute top-50 start-0 translate-middle-y ms-3 text-muted" style="font-size: 0.75rem;"></i>
+                            <input type="text" class="form-control form-control-sm rounded-pill ps-5 border-slate-200" placeholder="Search payee, voucher, TIN..." onkeyup="filterLocalTable('pageWithholdingTable', this.value)">
                         </div>
                     </div>
                 </div>
@@ -2416,7 +2421,7 @@
         <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden d-flex flex-column" style="max-height: 94vh;">
             
             {{-- Fixed Modal Header --}}
-            <div class="modal-header bg-dark text-white py-2.5 px-4 flex-shrink-0" style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%) !important;">
+            <div class="modal-header bg-dark text-white py-2.5 px-4 flex-shrink-0" style="background-color: #0f172a !important;">
                 <div class="d-flex align-items-center gap-2.5">
                     <div class="bg-primary bg-opacity-25 text-info p-2 rounded-circle d-flex align-items-center justify-content-center" style="width:36px; height:36px;">
                         <i class="fa-solid fa-receipt fs-5"></i>
@@ -2873,7 +2878,7 @@
         <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden d-flex flex-column" style="max-height: 94vh;">
 
             {{-- Header --}}
-            <div class="modal-header bg-dark text-white py-2.5 px-4 flex-shrink-0" style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%) !important;">
+            <div class="modal-header bg-dark text-white py-2.5 px-4 flex-shrink-0" style="background-color: #0f172a !important;">
                 <div class="d-flex align-items-center gap-2.5">
                     <div class="p-2 bg-info bg-opacity-20 text-info rounded-3 border border-info border-opacity-25 d-flex align-items-center justify-content-center shadow-xs">
                         <i class="fa-solid fa-file-invoice-dollar fs-5"></i>
@@ -3152,7 +3157,7 @@
         <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden d-flex flex-column" style="max-height: 94vh;">
 
             {{-- Header --}}
-            <div class="modal-header bg-dark text-white py-2.5 px-4 flex-shrink-0" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%) !important;">
+            <div class="modal-header bg-dark text-white py-2.5 px-4 flex-shrink-0" style="background-color: #0f172a !important;">
                 <div class="d-flex align-items-center gap-2.5">
                     <div class="p-2 bg-info bg-opacity-20 text-info rounded-3 border border-info border-opacity-25 d-flex align-items-center justify-content-center shadow-xs">
                         <i class="fa-solid fa-box-archive fs-5"></i>
@@ -7184,6 +7189,140 @@
 @endpush
 
 <style>
+    /* ── Modern & Simplistic Movements & Tax Audit Design System ──────────── */
+    #movementsPageContainer {
+        color: #1e293b;
+        font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+        -webkit-font-smoothing: antialiased;
+    }
+
+    #movementsPageContainer .card {
+        border: 1px solid #e2e8f0 !important;
+        border-radius: 12px !important;
+        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.03), 0 1px 2px -1px rgba(0, 0, 0, 0.02) !important;
+        background-color: #ffffff;
+    }
+
+    #movementsPageContainer .card-header {
+        background-color: #ffffff !important;
+        border-bottom: 1px solid #f1f5f9 !important;
+    }
+
+    /* Modern Pill Navigation Tabs */
+    #movementsPageTab {
+        background: #ffffff !important;
+        border: 1px solid #e2e8f0 !important;
+        border-radius: 12px !important;
+    }
+
+    #movementsPageTab .nav-link {
+        color: #64748b !important;
+        font-weight: 500 !important;
+        font-size: 0.81rem !important;
+        padding: 6px 14px !important;
+        border-radius: 9999px !important;
+        border: 1px solid transparent !important;
+        transition: all 0.15s ease-in-out !important;
+    }
+
+    #movementsPageTab .nav-link:hover {
+        color: #0f172a !important;
+        background-color: #f8fafc !important;
+    }
+
+    #movementsPageTab .nav-link.active {
+        background-color: #0f172a !important;
+        color: #ffffff !important;
+        box-shadow: 0 2px 4px rgba(15, 23, 42, 0.12) !important;
+    }
+
+    #movementsPageTab .nav-link.active i {
+        color: #38bdf8 !important;
+    }
+
+    #movementsPageTab .nav-link.active .badge {
+        background-color: rgba(255, 255, 255, 0.22) !important;
+        color: #ffffff !important;
+        border: none !important;
+    }
+
+    /* Modern Segmented Filter Bars */
+    .btn-group.p-0.5,
+    .btn-group.p-1 {
+        background-color: #f8fafc !important;
+        border: 1px solid #e2e8f0 !important;
+        border-radius: 9999px !important;
+    }
+
+    .btn-group.p-0.5 .btn {
+        font-size: 0.74rem !important;
+        font-weight: 500 !important;
+        border-radius: 9999px !important;
+        padding: 4px 11px !important;
+        border: none !important;
+        transition: all 0.12s ease-in-out !important;
+    }
+
+    /* Clean Minimalist Tables */
+    #movementsPageContainer .table thead th {
+        background-color: #f8fafc !important;
+        color: #475569 !important;
+        font-size: 0.71rem !important;
+        letter-spacing: 0.04em !important;
+        text-transform: uppercase !important;
+        font-weight: 600 !important;
+        border-bottom: 1px solid #e2e8f0 !important;
+        padding: 9px 12px !important;
+        white-space: nowrap;
+    }
+
+    #movementsPageContainer .table tbody td {
+        border-bottom: 1px solid #f1f5f9 !important;
+        padding: 9px 12px !important;
+        font-size: 0.81rem !important;
+        vertical-align: middle !important;
+    }
+
+    #movementsPageContainer .table-hover tbody tr:hover {
+        background-color: #f8fafc !important;
+    }
+
+    /* Modern Monospace Formatting */
+    #movementsPageContainer .font-monospace {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
+        letter-spacing: -0.015em;
+    }
+
+    /* Smooth Micro Buttons */
+    #movementsPageContainer .btn-sm {
+        font-size: 0.78rem;
+    }
+
+    .shadow-xs {
+        box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.04) !important;
+    }
+
+    /* Custom Scrollbars */
+    #movementsPageContainer ::-webkit-scrollbar,
+    .modal ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+    }
+    #movementsPageContainer ::-webkit-scrollbar-track,
+    .modal ::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    #movementsPageContainer ::-webkit-scrollbar-thumb,
+    .modal ::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 9999px;
+    }
+    #movementsPageContainer ::-webkit-scrollbar-thumb:hover,
+    .modal ::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8;
+    }
+
+    /* Print View */
     @media print {
         body {
             background: #fff !important;
