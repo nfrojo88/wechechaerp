@@ -40,11 +40,24 @@ class PurchaseVatExport
     /**
      * Build rows from Expense Hub items (Outcome 1 only: VAT Applies)
      */
-    public static function buildRows(Collection $expenses, ?string $calendarOverride = null): array
+    public static function buildRows(Collection $expenses, ?string $calendarOverride = null, bool $includeTotal = true): array
     {
         $rawCal = strtolower(trim((string)$calendarOverride));
         $userCal = in_array($rawCal, ['e', 'ec', 'ethiopian']) ? 'E' : (in_array($rawCal, ['g', 'gc', 'gregorian']) ? 'G' : null);
+
+        // Sort latest information first (disbursement date descending, then id descending)
+        $expenses = $expenses->sortByDesc(function ($item) {
+            $d = $item->disbursement_date ?: ($item->created_at ?: null);
+            $ts = $d ? Carbon::parse($d)->timestamp : 0;
+            $id = (int)($item->id ?? 0);
+            return sprintf('%012d_%010d', $ts, $id);
+        })->values();
+
         $rows = [];
+        $totalQty = 0.0;
+        $totalBase = 0.0;
+        $totalVat = 0.0;
+        $totalVal = 0.0;
 
         foreach ($expenses as $item) {
             // Strictly Outcome 1: With VAT Receipt (vat_applies)
@@ -53,20 +66,20 @@ class PurchaseVatExport
             }
 
             // Category G=Goods, S=Services
-            $categoryRaw = strtoupper(trim((string)($item->vat_category ?: 'G')));
+            $categoryRaw = strtoupper(trim((string)(($item->vat_category ?? null) ?: 'G')));
             $vatCategory = ($categoryRaw === 'S') ? 'S' : 'G';
 
             // Calendar Type E=Ethiopian, G=Gregorian
             if ($userCal !== null) {
                 $calendarType = $userCal;
             } else {
-                $calType = strtoupper(trim((string)($item->calendar_type ?: 'G')));
+                $calType = strtoupper(trim((string)(($item->calendar_type ?? null) ?: 'G')));
                 $calendarType = ($calType === 'E') ? 'E' : 'G';
             }
 
             // FixedAsset rows use Line 65 (purchase_type = 1). Otherwise local input = 3
-            $isFixedAsset = ($item->source_type === 'fixed_asset' || !empty($item->is_capex));
-            $purchaseType = $isFixedAsset ? 1 : (int)($item->purchase_type ?: 3);
+            $isFixedAsset = (($item->source_type ?? null) === 'fixed_asset' || !empty($item->is_capex));
+            $purchaseType = $isFixedAsset ? 1 : (int)(($item->purchase_type ?? null) ?: 3);
             if (!in_array($purchaseType, [1, 2, 3, 4, 5, 6])) {
                 $purchaseType = $isFixedAsset ? 1 : 3;
             }
@@ -94,7 +107,7 @@ class PurchaseVatExport
 
             // FS Number / Voucher Number
             $rawFs = trim((string)($item->fs_no ?? ''));
-            $fsNo = $rawFs ?: ($item->reference_no ?: '');
+            $fsNo = $rawFs ?: (($item->reference_no ?? null) ?: '');
 
             // Description
             $desc = trim((string)(($item->item_desc ?? null) ?: (($item->description ?? null) ?: (($item->purpose_detail ?? null) ?: 'Construction Materials'))));
@@ -137,6 +150,11 @@ class PurchaseVatExport
 
             $unitVal = round($baseVal / $qty, 2);
 
+            $totalQty += $qty;
+            $totalBase += $baseVal;
+            $totalVat += $vatVal;
+            $totalVal += $totVal;
+
             $rows[] = [
                 $vatCategory,
                 $calendarType,
@@ -153,6 +171,27 @@ class PurchaseVatExport
                 $baseVal,
                 $vatVal,
                 $totVal,
+            ];
+        }
+
+        // Add TOTAL summary row at the bottom of the Excel/CSV sheet
+        if ($includeTotal && !empty($rows)) {
+            $rows[] = [
+                'TOTAL',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                round($totalQty, 4),
+                '',
+                round($totalBase, 2),
+                round($totalVat, 2),
+                round($totalVal, 2),
             ];
         }
 

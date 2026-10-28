@@ -393,17 +393,19 @@ class TaxMovementsOcrDuplicateCheckTest extends TestCase
 
         // Export forced to Ethiopian (EC)
         $vatRowsEc = \App\Exports\PurchaseVatExport::buildRows(collect([$dummyVatExpense]), 'ec');
-        $this->assertCount(1, $vatRowsEc);
+        $this->assertCount(2, $vatRowsEc, 'Purchase VAT export includes data row plus bottom TOTAL row');
         // Col 2: CALENDAR TYPE
         $this->assertEquals('E', $vatRowsEc[0][1], 'Purchase VAT Col 2 must be E when exporting in Ethiopian calendar');
         // Col 6: Date of Purchase
         $this->assertEquals('18/02/2019', $vatRowsEc[0][5], 'Purchase VAT Col 6 date must be formatted in Ethiopian calendar (d/m/Y)');
+        $this->assertEquals('TOTAL', $vatRowsEc[1][0], 'Last row must be TOTAL');
 
         // Export forced to Gregorian (GC)
         $vatRowsGc = \App\Exports\PurchaseVatExport::buildRows(collect([$dummyVatExpense]), 'gc');
-        $this->assertCount(1, $vatRowsGc);
+        $this->assertCount(2, $vatRowsGc, 'Purchase VAT export includes data row plus bottom TOTAL row');
         $this->assertEquals('G', $vatRowsGc[0][1], 'Purchase VAT Col 2 must be G when exporting in Gregorian calendar');
         $this->assertEquals('28/10/2026', $vatRowsGc[0][5], 'Purchase VAT Col 6 date must be formatted in Gregorian calendar (d/m/Y)');
+        $this->assertEquals('TOTAL', $vatRowsGc[1][0], 'Last row must be TOTAL');
 
         // 4. Verify PurchaseTasExport calendar override
         $dummyTasExpense = (object)[
@@ -421,12 +423,281 @@ class TaxMovementsOcrDuplicateCheckTest extends TestCase
         ];
 
         $tasRowsEc = \App\Exports\PurchaseTasExport::buildRows(collect([$dummyTasExpense]), 'ec');
-        $this->assertCount(1, $tasRowsEc);
+        $this->assertCount(2, $tasRowsEc, 'Purchase TAS export includes data row plus bottom TOTAL row');
         // Col 5: Receipt Date (EC d-m-Y)
         $this->assertEquals('18-02-2019', $tasRowsEc[0][4], 'Purchase TAS Col 5 Receipt Date must be Ethiopian format d-m-Y');
+        $this->assertEquals('TOTAL', $tasRowsEc[1][0], 'Last row must be TOTAL');
 
         $tasRowsGc = \App\Exports\PurchaseTasExport::buildRows(collect([$dummyTasExpense]), 'gc');
-        $this->assertCount(1, $tasRowsGc);
+        $this->assertCount(2, $tasRowsGc, 'Purchase TAS export includes data row plus bottom TOTAL row');
         $this->assertEquals('28-10-2026', $tasRowsGc[0][4], 'Purchase TAS Col 5 Receipt Date must be Gregorian format d-m-Y');
+        $this->assertEquals('TOTAL', $tasRowsGc[1][0], 'Last row must be TOTAL');
+    }
+
+    /**
+     * Test that exported Excel rows show latest information first and include a TOTAL row at the bottom.
+     */
+    public function test_export_excel_shows_latest_information_first_and_total_at_bottom(): void
+    {
+        // 1. Purchase VAT Export with older and newer records
+        $olderVatExpense = (object)[
+            'id' => 1,
+            'vat_status' => \App\Models\ExpenseHubVatDecision::STATUS_VAT_APPLIES,
+            'tin' => '0011111111',
+            'supplier_name' => 'Older Supplier',
+            'disbursement_date' => '2026-10-01',
+            'created_at' => Carbon::parse('2026-10-01 10:00:00'),
+            'reference_no' => 'OLD-01',
+            'qty' => 2.0,
+            'decision_base_amount' => 200.00,
+            'decision_vat_amount' => 30.00,
+            'decision_total_amount' => 230.00,
+        ];
+
+        $newerVatExpense = (object)[
+            'id' => 2,
+            'vat_status' => \App\Models\ExpenseHubVatDecision::STATUS_VAT_APPLIES,
+            'tin' => '0022222222',
+            'supplier_name' => 'Newer Supplier',
+            'disbursement_date' => '2026-10-25',
+            'created_at' => Carbon::parse('2026-10-25 10:00:00'),
+            'reference_no' => 'NEW-02',
+            'qty' => 5.0,
+            'decision_base_amount' => 500.00,
+            'decision_vat_amount' => 75.00,
+            'decision_total_amount' => 575.00,
+        ];
+
+        // Pass in older first, newer second
+        $vatRows = \App\Exports\PurchaseVatExport::buildRows(collect([$olderVatExpense, $newerVatExpense]), 'gc');
+        
+        // Assert count: 2 items + 1 TOTAL row = 3
+        $this->assertCount(3, $vatRows);
+
+        // Assert latest information first: row 0 must be newer (2026-10-25)
+        $this->assertEquals('NEW-02', $vatRows[0][7], 'First row must be the latest item');
+        $this->assertEquals('25/10/2026', $vatRows[0][5], 'First row must have the latest date');
+
+        // Row 1 must be older
+        $this->assertEquals('OLD-01', $vatRows[1][7], 'Second row must be the older item');
+
+        // Row 2 must be TOTAL row
+        $totalRow = $vatRows[2];
+        $this->assertEquals('TOTAL', $totalRow[0], 'Col 1 of summary row must be TOTAL');
+        $this->assertEquals(7.0, $totalRow[10], 'Col 11 Quantity sum must be 7.0');
+        $this->assertEquals(700.00, $totalRow[12], 'Col 13 Base sum must be 700.00');
+        $this->assertEquals(105.00, $totalRow[13], 'Col 14 VAT sum must be 105.00');
+        $this->assertEquals(805.00, $totalRow[14], 'Col 15 Total sum must be 805.00');
+
+        // 2. Purchase TAS Export with older and newer records
+        $olderTas = (object)[
+            'id' => 10,
+            'vat_status' => \App\Models\ExpenseHubVatDecision::STATUS_NO_VAT,
+            'is_verified_without_receipt' => false,
+            'tin' => '0011111111',
+            'disbursement_date' => '2026-10-05',
+            'created_at' => Carbon::parse('2026-10-05 10:00:00'),
+            'reference_no' => 'TAS-OLD',
+            'decision_total_amount' => 1500.00,
+            'amount' => 1500.00,
+        ];
+
+        $newerTas = (object)[
+            'id' => 20,
+            'vat_status' => \App\Models\ExpenseHubVatDecision::STATUS_NO_VAT,
+            'is_verified_without_receipt' => false,
+            'tin' => '0022222222',
+            'disbursement_date' => '2026-10-27',
+            'created_at' => Carbon::parse('2026-10-27 10:00:00'),
+            'reference_no' => 'TAS-NEW',
+            'decision_total_amount' => 2500.00,
+            'amount' => 2500.00,
+        ];
+
+        $tasRows = \App\Exports\PurchaseTasExport::buildRows(collect([$olderTas, $newerTas]), 'gc');
+        $this->assertCount(3, $tasRows);
+
+        // Latest first
+        $this->assertEquals('TAS-NEW', $tasRows[0][3], 'First row must be the latest TAS item');
+        $this->assertEquals('27-10-2026', $tasRows[0][4], 'First row must have the latest TAS date');
+
+        // Older second
+        $this->assertEquals('TAS-OLD', $tasRows[1][3], 'Second row must be the older TAS item');
+
+        // TOTAL at the bottom
+        $this->assertEquals('TOTAL', $tasRows[2][0]);
+        $this->assertEquals(4000.00, $tasRows[2][2], 'Amount sum must be 4000.00');
+    }
+
+    /**
+     * Test FinanceTaxReportController::exportExcel with actual SQLite DB records and OpenSpout XLSX reader:
+     * - Latest records appear first (descending order).
+     * - Summary TOTAL row is added at the bottom.
+     */
+    public function test_finance_tax_report_controller_export_excel_order_and_totals(): void
+    {
+        // 1. Create older and newer receipts with receipt_items
+        $rOlder = Receipt::create([
+            'receipt_number' => 'REC-OLDER-001',
+            'receipt_date'   => '2026-10-02',
+            'fs_no'          => 'FS00000001',
+            'vendor_tin'     => '0011111111',
+            'vendor_name'    => 'Older Vendor',
+            'subtotal'       => 100.00,
+            'vat_amount'     => 15.00,
+            'total_amount'   => 115.00,
+            'tax_type'       => 'vat',
+        ]);
+        ReceiptItem::create([
+            'receipt_id'       => $rOlder->id,
+            'item_description' => 'Older Item',
+            'vat_category'     => 'G',
+            'calendar_type'    => 'G',
+            'purchase_type'    => 3,
+            'uom'              => '9',
+            'qty'              => 1.0,
+            'unit_price'       => 100.00,
+            'total_value'      => 100.00,
+            'vat_amount'       => 15.00,
+            'value_after_vat'  => 115.00,
+        ]);
+
+        $rNewer = Receipt::create([
+            'receipt_number' => 'REC-NEWER-002',
+            'receipt_date'   => '2026-10-26',
+            'fs_no'          => 'FS00000002',
+            'vendor_tin'     => '0022222222',
+            'vendor_name'    => 'Newer Vendor',
+            'subtotal'       => 200.00,
+            'vat_amount'     => 30.00,
+            'total_amount'   => 230.00,
+            'tax_type'       => 'vat',
+        ]);
+        ReceiptItem::create([
+            'receipt_id'       => $rNewer->id,
+            'item_description' => 'Newer Item',
+            'vat_category'     => 'G',
+            'calendar_type'    => 'G',
+            'purchase_type'    => 3,
+            'uom'              => '9',
+            'qty'              => 2.0,
+            'unit_price'       => 100.00,
+            'total_value'      => 200.00,
+            'vat_amount'       => 30.00,
+            'value_after_vat'  => 230.00,
+        ]);
+
+        $controller = new FinanceTaxReportController();
+
+        // Test Purchase VAT Excel export
+        $requestVat = new \Illuminate\Http\Request([
+            'type'        => 'purchase_vat',
+            'calendar'    => 'gc',
+            'from_date'   => '2026-10-01',
+            'to_date'     => '2026-10-31',
+        ]);
+
+        $responseVat = $controller->exportExcel($requestVat);
+        $this->assertNotNull($responseVat);
+
+        $vatRows = [];
+        if ($responseVat instanceof \Symfony\Component\HttpFoundation\BinaryFileResponse) {
+            $vatFilePath = $responseVat->getFile()->getPathname();
+            $reader = new \OpenSpout\Reader\XLSX\Reader();
+            $reader->open($vatFilePath);
+            foreach ($reader->getSheetIterator() as $sheet) {
+                foreach ($sheet->getRowIterator() as $row) {
+                    $vatRows[] = $row->toArray();
+                }
+            }
+            $reader->close();
+        } else {
+            // Streamed CSV fallback (when ZipArchive is not installed in environment)
+            ob_start();
+            $responseVat->sendContent();
+            $rawCsv = ob_get_clean();
+            $rawCsv = preg_replace('/^\xEF\xBB\xBF/', '', $rawCsv);
+            foreach (explode("\n", trim($rawCsv)) as $line) {
+                if ($line !== '') {
+                    $vatRows[] = str_getcsv($line);
+                }
+            }
+        }
+
+        // 1 header + 2 data rows + 1 TOTAL row = 4 rows
+        $this->assertCount(4, $vatRows);
+
+        // Header
+        $this->assertEquals('VAT CATEGORY  (G=GOODS;S=SERVICES)', $vatRows[0][0]);
+
+        // Row 1: Must be NEWER receipt (2026-10-26) - latest information first!
+        $this->assertEquals('26/10/2026', $vatRows[1][5], 'First data row must be the latest transaction date');
+        $this->assertEquals('FS00000002', $vatRows[1][7]);
+
+        // Row 2: Must be OLDER receipt (2026-10-02)
+        $this->assertEquals('02/10/2026', $vatRows[2][5], 'Second data row must be older transaction date');
+        $this->assertEquals('FS00000001', $vatRows[2][7]);
+
+        // Row 3: Must be TOTAL summary row
+        $totalRow = $vatRows[3];
+        $this->assertEquals('TOTAL', $totalRow[0]);
+        $this->assertEquals(3.0, (float)$totalRow[10], 'Quantity sum must be 3.0');
+        $this->assertEquals(300.00, (float)$totalRow[12], 'Taxable Base sum must be 300.00');
+        $this->assertEquals(45.00, (float)$totalRow[13], 'VAT sum must be 45.00');
+        $this->assertEquals(345.00, (float)$totalRow[14], 'Value After VAT sum must be 345.00');
+
+        // Test Purchase TAS Excel export
+        $requestTas = new \Illuminate\Http\Request([
+            'type'        => 'purchase_tas',
+            'calendar'    => 'gc',
+            'from_date'   => '2026-10-01',
+            'to_date'     => '2026-10-31',
+        ]);
+
+        $responseTas = $controller->exportExcel($requestTas);
+        $this->assertNotNull($responseTas);
+
+        $tasExcelRows = [];
+        if ($responseTas instanceof \Symfony\Component\HttpFoundation\BinaryFileResponse) {
+            $tasFilePath = $responseTas->getFile()->getPathname();
+            $reader = new \OpenSpout\Reader\XLSX\Reader();
+            $reader->open($tasFilePath);
+            foreach ($reader->getSheetIterator() as $sheet) {
+                foreach ($sheet->getRowIterator() as $row) {
+                    $tasExcelRows[] = $row->toArray();
+                }
+            }
+            $reader->close();
+        } else {
+            // Streamed CSV fallback
+            ob_start();
+            $responseTas->sendContent();
+            $rawCsv = ob_get_clean();
+            $rawCsv = preg_replace('/^\xEF\xBB\xBF/', '', $rawCsv);
+            foreach (explode("\n", trim($rawCsv)) as $line) {
+                if ($line !== '') {
+                    $tasExcelRows[] = str_getcsv($line);
+                }
+            }
+        }
+
+        // 1 header + 2 data rows + 1 TOTAL row = 4 rows
+        $this->assertCount(4, $tasExcelRows);
+
+        // Header (9 cols)
+        $this->assertEquals('Purchaser TIN', $tasExcelRows[0][0]);
+        $this->assertEquals('Amount', $tasExcelRows[0][2]);
+
+        // Latest first
+        $this->assertEquals('FS00000002', $tasExcelRows[1][3]);
+        $this->assertEquals('26-10-2026', $tasExcelRows[1][4]);
+
+        // Older second
+        $this->assertEquals('FS00000001', $tasExcelRows[2][3]);
+        $this->assertEquals('02-10-2026', $tasExcelRows[2][4]);
+
+        // Total row at bottom
+        $this->assertEquals('TOTAL', $tasExcelRows[3][0]);
+        $this->assertEquals(345.00, (float)$tasExcelRows[3][2], 'TAS Total Amount must be 345.00');
     }
 }

@@ -4199,11 +4199,27 @@ class FinanceTaxReportController extends Controller
         $movements = $this->calculateMonthMovementsData($year, $month, false);
         $whtList = collect($movements['wht_expenses'] ?? []);
 
+        // Sort latest information first (transaction date descending, then id descending)
+        $whtList = $whtList->sortByDesc(function ($item) {
+            $d = $item['date_gc'] ?? ($item['disbursement_date'] ?? ($item['created_at'] ?? ''));
+            $ts = $d ? Carbon::parse($d)->timestamp : 0;
+            $id = (int)($item['id'] ?? 0);
+            return sprintf('%012d_%010d', $ts, $id);
+        })->values();
+
+        $totalBase = 0.0;
+        $totalWht = 0.0;
+        $totalNet = 0.0;
+
         foreach ($whtList as $item) {
             $baseVal = round((float)($item['base_amount'] ?? 0), 2);
             $whtRateVal = round((float)($item['withholding_rate'] ?? 0), 1);
             $whtAmtVal = round((float)($item['withholding_amount'] ?? 0), 2);
             $netVal = round((float)($item['net_disbursed'] ?? max(0, $baseVal - $whtAmtVal)), 2);
+
+            $totalBase += $baseVal;
+            $totalWht += $whtAmtVal;
+            $totalNet += $netVal;
 
             $rows[] = [
                 $item['request_number'] ?? '-',
@@ -4219,6 +4235,25 @@ class FinanceTaxReportController extends Controller
                 $whtAmtVal,
                 $netVal,
                 $item['withholding_receipt_number'] ?? '-',
+            ];
+        }
+
+        // Add TOTAL summary row at the bottom of the Excel sheet
+        if (!empty($rows)) {
+            $rows[] = [
+                'TOTAL',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                round($totalBase, 2),
+                '',
+                round($totalWht, 2),
+                round($totalNet, 2),
+                '',
             ];
         }
 
@@ -4260,8 +4295,8 @@ class FinanceTaxReportController extends Controller
                            $sub->whereNull('income_date')->whereBetween('receipt_date', [$startDate, $endDate]);
                        });
                 })
-                ->orderBy('income_date', 'asc')
-                ->orderBy('id', 'asc')
+                ->orderByRaw('COALESCE(income_date, receipt_date) desc')
+                ->orderBy('id', 'desc')
                 ->get();
         }
 
@@ -4270,6 +4305,9 @@ class FinanceTaxReportController extends Controller
         if (!$defaultSellerDigits) $defaultSellerDigits = 38480010;
 
         $rows = [];
+        $totalQty = 0.0;
+        $totalPrice = 0.0;
+
         foreach ($incomes as $inc) {
             // Col A: Seller TIN
             $rawSeller = $inc->seller_tin ?: $defaultSellerTin;
@@ -4318,6 +4356,9 @@ class FinanceTaxReportController extends Controller
             // Col K: Price
             $priceVal = round((float)($inc->unit_price > 0 ? $inc->unit_price : $inc->amount), 2);
 
+            $totalQty += $qtyVal;
+            $totalPrice += $priceVal;
+
             // Col L: Receipt Date (Format: DD/MM/YYYY EC or DD/MM/YYYY GC)
             $rDate = $inc->receipt_date ?: $inc->income_date;
             if ($userCalendar === 'G') {
@@ -4350,6 +4391,25 @@ class FinanceTaxReportController extends Controller
                 $priceVal,
                 $receiptDateFormatted,
                 $encodedBy,
+            ];
+        }
+
+        // Add TOTAL summary row at the bottom of the Excel sheet
+        if (!empty($rows)) {
+            $rows[] = [
+                'TOTAL',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                round($totalQty, 2),
+                round($totalPrice, 2),
+                '',
+                '',
             ];
         }
 
@@ -4443,7 +4503,7 @@ class FinanceTaxReportController extends Controller
                 $standaloneQuery->where('vat_amount', '>', 0);
             }
 
-            $standaloneReceipts = $standaloneQuery->orderBy('id', 'asc')->get();
+            $standaloneReceipts = $standaloneQuery->orderByRaw('COALESCE(receipt_date, created_at) desc')->orderBy('id', 'desc')->get();
         }
 
         $defaultPurchaserTin = SystemSetting::get('purchaser_tin', SystemSetting::get('company_tin', '38480010'));
@@ -4462,6 +4522,15 @@ class FinanceTaxReportController extends Controller
                 $tasPurchases = $tasPurchases->filter(fn($it) => !empty($it['is_vat_purchase']));
             }
 
+            // Sort latest information first (date descending, then id descending)
+            $tasPurchases = $tasPurchases->sortByDesc(function ($item) {
+                $d = $item['raw_date'] ?? ($item['date_gc'] ?? ($item['disbursement_date'] ?? ($item['created_at'] ?? '')));
+                $ts = $d ? Carbon::parse($d)->timestamp : 0;
+                $id = (int)($item['id'] ?? 0);
+                return sprintf('%012d_%010d', $ts, $id);
+            })->values();
+
+            $totalAmount = 0.0;
             foreach ($tasPurchases as $item) {
                 $rawPurchaser = (string)($item['purchaser_tin'] ?? $defaultPurchaserDigits);
                 $pDigits = preg_replace('/^0+/', '', preg_replace('/[^0-9]/', '', $rawPurchaser));
@@ -4472,6 +4541,7 @@ class FinanceTaxReportController extends Controller
                 $sellerTinVal = ($sDigits !== '') ? (int)$sDigits : (trim($rawSeller) ?: '');
 
                 $amountVal = round((float)($item['total_amount'] ?? ($item['gross_amount'] ?? (($item['base_amount'] ?? 0) + ($item['vat_amount'] ?? 0)))), 2);
+                $totalAmount += $amountVal;
 
                 $receiptNo = '';
                 if (!empty($item['fs_no']) && $item['fs_no'] !== '-') {
@@ -4511,6 +4581,17 @@ class FinanceTaxReportController extends Controller
             }
 
             if (!empty($rows)) {
+                $rows[] = [
+                    'TOTAL',
+                    '',
+                    round($totalAmount, 2),
+                    '',
+                    '',
+                    '',
+                    '',
+                    '',
+                    '',
+                ];
                 return $this->writeExcelFile($headers, $rows, $tempPath, $filename);
             }
         }
@@ -4568,6 +4649,15 @@ class FinanceTaxReportController extends Controller
             }
         }
         $ocrItems = collect($uniqueCleanedItems);
+
+        // Sort latest information first (receipt date descending, then id descending)
+        $ocrItems = $ocrItems->sortByDesc(function ($item) {
+            $r = $item->receipt;
+            $d = ($r && $r->receipt_date) ? $r->receipt_date : ($item->created_at ?: ($r?->created_at ?: null));
+            $ts = $d ? Carbon::parse($d)->timestamp : 0;
+            $rId = (int)($r?->id ?: $item->id);
+            return sprintf('%012d_%010d', $ts, $rId);
+        })->values();
 
         foreach ($ocrItems as $item) {
             $r = $item->receipt;
@@ -4711,7 +4801,8 @@ class FinanceTaxReportController extends Controller
                 ->where(function ($q) {
                     $q->whereNull('vat_type')->orWhere('vat_type', '!=', 'vat_b');
                 })
-                ->orderByRaw('COALESCE(paid_at, created_at) asc')
+                ->orderByRaw('COALESCE(paid_at, created_at) desc')
+                ->orderBy('id', 'desc')
                 ->get();
 
             foreach ($expenses as $exp) {
@@ -4728,6 +4819,25 @@ class FinanceTaxReportController extends Controller
                     'wechacha',
                 ];
             }
+        }
+
+        // Add TOTAL summary row at the bottom of the Excel sheet
+        if (!empty($rows)) {
+            $totalAmount = 0.0;
+            foreach ($rows as $row) {
+                $totalAmount += (float)($row[2] ?? 0);
+            }
+            $rows[] = [
+                'TOTAL',
+                '',
+                round($totalAmount, 2),
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+            ];
         }
 
         return $this->writeExcelFile($headers, $rows, $tempPath, $filename);
@@ -5033,6 +5143,15 @@ class FinanceTaxReportController extends Controller
 
         $ocrItems = collect($uniqueCleanedItems);
 
+        // Sort latest information first (receipt date descending, then id descending)
+        $ocrItems = $ocrItems->sortByDesc(function ($item) {
+            $r = $item->receipt;
+            $d = ($r && $r->receipt_date) ? $r->receipt_date : ($item->created_at ?: ($r?->created_at ?: null));
+            $ts = $d ? Carbon::parse($d)->timestamp : 0;
+            $rId = (int)($r?->id ?: $item->id);
+            return sprintf('%012d_%010d', $ts, $rId);
+        })->values();
+
         // Apply filters if requested
         if ($request->filled('search')) {
             $s = strtolower(trim((string)$request->search));
@@ -5065,6 +5184,11 @@ class FinanceTaxReportController extends Controller
         }
 
         $rows = [];
+        $totalQty = 0.0;
+        $totalBase = 0.0;
+        $totalVat = 0.0;
+        $totalAfterVat = 0.0;
+
         foreach ($ocrItems as $item) {
             $r = $item->receipt;
 
@@ -5178,6 +5302,11 @@ class FinanceTaxReportController extends Controller
             $vatVal   = round($vatVal, 2);
             $afterVal = round($afterVal, 2);
 
+            $totalQty += $qtyVal;
+            $totalBase += $baseVal;
+            $totalVat += $vatVal;
+            $totalAfterVat += $afterVal;
+
             $rows[] = [
                 $vatCategory,
                 $calendarType,
@@ -5218,7 +5347,8 @@ class FinanceTaxReportController extends Controller
                     $q->whereNull('vat_type')->orWhere('vat_type', '!=', 'vat_b');
                 })
                 ->where('vat_amount', '>', 0)
-                ->orderByRaw('COALESCE(paid_at, created_at) asc')
+                ->orderByRaw('COALESCE(paid_at, created_at) desc')
+                ->orderBy('id', 'desc')
                 ->get();
 
             foreach ($expenses as $exp) {
@@ -5227,6 +5357,11 @@ class FinanceTaxReportController extends Controller
                 $base = round($gross - $vatAmount, 2);
                 $date = $exp->paid_at ?: $exp->created_at;
                 $dateFormatted = $date ? Carbon::parse($date)->format('d/m/Y') : now()->format('d/m/Y');
+
+                $totalQty += 1;
+                $totalBase += $base;
+                $totalVat += $vatAmount;
+                $totalAfterVat += $gross;
 
                 $rows[] = [
                     'G',
@@ -5246,6 +5381,27 @@ class FinanceTaxReportController extends Controller
                     $gross,
                 ];
             }
+        }
+
+        // Add TOTAL summary row at the bottom of the Excel sheet
+        if (!empty($rows)) {
+            $rows[] = [
+                'TOTAL',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                round($totalQty, 4),
+                '',
+                round($totalBase, 2),
+                round($totalVat, 2),
+                round($totalAfterVat, 2),
+            ];
         }
 
         return $this->writeExcelFile($headers, $rows, $tempPath, $filename);
@@ -5511,10 +5667,22 @@ class FinanceTaxReportController extends Controller
                 'Status',
             ]);
 
+            $totalGross = 0.0;
+            $totalVat = 0.0;
+            $totalWht = 0.0;
+            $totalNet = 0.0;
+
             foreach ($records as $item) {
                 $gross = (float)($item->gross_amount > 0 ? $item->gross_amount : $item->amount);
+                $vatAmt = (float)($item->vat_amount ?? 0);
                 $wht = (float)$item->calculated_withholding_amount;
                 $net = (float)$item->effective_payable_amount;
+
+                $totalGross += $gross;
+                $totalVat += $vatAmt;
+                $totalWht += $wht;
+                $totalNet += $net;
+
                 $vatLabel = match ($item->vat_type) {
                     'exclusive' => '15% VAT Added',
                     'inclusive' => '15% VAT Included',
@@ -5534,7 +5702,7 @@ class FinanceTaxReportController extends Controller
                     number_format($gross, 2, '.', ''),
                     $vatLabel,
                     number_format((float)($item->vat_rate ?? 15.00), 2, '.', ''),
-                    number_format((float)($item->vat_amount ?? 0), 2, '.', ''),
+                    number_format($vatAmt, 2, '.', ''),
                     $item->vat_settled ? 'YES' : 'NO',
                     number_format($wht, 2, '.', ''),
                     $item->withholding_settled ? 'YES' : 'NO',
@@ -5545,6 +5713,30 @@ class FinanceTaxReportController extends Controller
                     $item->withholding_receipt_number ?? 'N/A',
                     !empty($item->withholding_receipt) ? 'YES' : 'NO',
                     $item->status,
+                ]);
+            }
+
+            if ($records->isNotEmpty()) {
+                fputcsv($handle, [
+                    'TOTAL',
+                    '',
+                    '',
+                    '',
+                    '',
+                    number_format($totalGross, 2, '.', ''),
+                    '',
+                    '',
+                    number_format($totalVat, 2, '.', ''),
+                    '',
+                    number_format($totalWht, 2, '.', ''),
+                    '',
+                    number_format($totalNet, 2, '.', ''),
+                    '',
+                    '',
+                    '',
+                    '',
+                    '',
+                    '',
                 ]);
             }
 

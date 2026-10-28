@@ -1475,6 +1475,16 @@ class OCRReceiptScannerController extends Controller
         $items = $query->get();
         // Immediately block double receipts (same FS No. & Seller TIN) - do NOT add to Excel
         $items = $this->deduplicateReceiptItems($items);
+
+        // Sort latest information first (receipt date descending, then id descending)
+        $items = $items->sortByDesc(function ($item) {
+            $r = $item->receipt;
+            $d = ($r && $r->receipt_date) ? $r->receipt_date : ($item->created_at ?: ($r?->created_at ?: null));
+            $ts = $d ? Carbon::parse($d)->timestamp : 0;
+            $rId = (int)($r?->id ?: $item->id);
+            return sprintf('%012d_%010d', $ts, $rId);
+        })->values();
+
         $template = $request->input('template', 'etax');
         $userCalendar = $this->resolveCalendarOption($request);
         $calSuffix = ($userCalendar === 'E') ? '_EC' : (($userCalendar === 'G') ? '_GC' : '');
@@ -1510,6 +1520,11 @@ class OCRReceiptScannerController extends Controller
                 ];
                 $headerCells = array_map(fn($h) => Cell::fromValue($h), $ercaHeaders);
                 $writer->addRow(new Row($headerCells));
+
+                $totalQty = 0.0;
+                $totalBase = 0.0;
+                $totalVat = 0.0;
+                $totalAfterVat = 0.0;
 
                 foreach ($items as $item) {
                     $r = $item->receipt;
@@ -1607,6 +1622,11 @@ class OCRReceiptScannerController extends Controller
                     $vatVal   = round($vatVal, 2);
                     $afterVal = round($afterVal, 2);
 
+                    $totalQty += $qtyVal;
+                    $totalBase += $baseVal;
+                    $totalVat += $vatVal;
+                    $totalAfterVat += $afterVal;
+
                     $rowCells = [
                         Cell::fromValue($vatCategory),
                         Cell::fromValue($calendarType),
@@ -1626,6 +1646,28 @@ class OCRReceiptScannerController extends Controller
                     ];
                     $writer->addRow(new Row($rowCells));
                 }
+
+                // Add TOTAL summary row at the bottom of the Excel sheet
+                if ($items->isNotEmpty()) {
+                    $summaryCells = [
+                        Cell::fromValue('TOTAL'),
+                        Cell::fromValue(''),
+                        Cell::fromValue(''),
+                        Cell::fromValue(''),
+                        Cell::fromValue(''),
+                        Cell::fromValue(''),
+                        Cell::fromValue(''),
+                        Cell::fromValue(''),
+                        Cell::fromValue(''),
+                        Cell::fromValue(''),
+                        Cell::fromValue(round($totalQty, 4)),
+                        Cell::fromValue(''),
+                        Cell::fromValue(round($totalBase, 2)),
+                        Cell::fromValue(round($totalVat, 2)),
+                        Cell::fromValue(round($totalAfterVat, 2)),
+                    ];
+                    $writer->addRow(new Row($summaryCells));
+                }
             } else {
                 // e-Tax Purchase Declaration Form (Exact 9 Columns: Purchaser TIN | Seller TIN | Amount | Receipt No | Receipt Date | Encoding Date | MRC | PurcType | Encoded By)
                 $headerCells = [
@@ -1640,6 +1682,8 @@ class OCRReceiptScannerController extends Controller
                     Cell::fromValue('Encoded By'),
                 ];
                 $writer->addRow(new Row($headerCells));
+
+                $totalAmount = 0.0;
 
                 foreach ($items as $item) {
                     $r = $item->receipt;
@@ -1657,6 +1701,7 @@ class OCRReceiptScannerController extends Controller
                     // Col C: Amount (Receipt gross total / value after vat)
                     $amountVal = (float)($item->value_after_vat > 0 ? $item->value_after_vat : ($item->total_value > 0 ? $item->total_value : ($r ? $r->total_amount : 0)));
                     $amountVal = round($amountVal, 2);
+                    $totalAmount += $amountVal;
 
                     // Col D: Receipt No (e.g. FS00003898, FS00016506)
                     $receiptNo = '';
@@ -1726,6 +1771,22 @@ class OCRReceiptScannerController extends Controller
                         Cell::fromValue($encodedBy),
                     ];
                     $writer->addRow(new Row($rowCells));
+                }
+
+                // Add TOTAL summary row at the bottom of the Excel sheet
+                if ($items->isNotEmpty()) {
+                    $summaryCells = [
+                        Cell::fromValue('TOTAL'),
+                        Cell::fromValue(''),
+                        Cell::fromValue(round($totalAmount, 2)),
+                        Cell::fromValue(''),
+                        Cell::fromValue(''),
+                        Cell::fromValue(''),
+                        Cell::fromValue(''),
+                        Cell::fromValue(''),
+                        Cell::fromValue(''),
+                    ];
+                    $writer->addRow(new Row($summaryCells));
                 }
             }
 
@@ -1830,6 +1891,15 @@ class OCRReceiptScannerController extends Controller
         // Immediately block double receipts (same FS No. & Seller TIN) - do NOT add to CSV
         $items = $this->deduplicateReceiptItems($items);
 
+        // Sort latest information first (receipt date descending, then id descending)
+        $items = $items->sortByDesc(function ($item) {
+            $r = $item->receipt;
+            $d = ($r && $r->receipt_date) ? $r->receipt_date : ($item->created_at ?: ($r?->created_at ?: null));
+            $ts = $d ? Carbon::parse($d)->timestamp : 0;
+            $rId = (int)($r?->id ?: $item->id);
+            return sprintf('%012d_%010d', $ts, $rId);
+        })->values();
+
         $userCalendar = $this->resolveCalendarOption($request);
         $calSuffix = ($userCalendar === 'E') ? '_EC' : (($userCalendar === 'G') ? '_GC' : '');
 
@@ -1869,6 +1939,11 @@ class OCRReceiptScannerController extends Controller
                     'vat',
                     'value after vat',
                 ]);
+
+                $totalQty = 0.0;
+                $totalBase = 0.0;
+                $totalVat = 0.0;
+                $totalAfterVat = 0.0;
 
                 foreach ($items as $item) {
                     $r = $item->receipt;
@@ -1966,6 +2041,11 @@ class OCRReceiptScannerController extends Controller
                     $vatVal   = round($vatVal, 2);
                     $afterVal = round($afterVal, 2);
 
+                    $totalQty += $qtyVal;
+                    $totalBase += $baseVal;
+                    $totalVat += $vatVal;
+                    $totalAfterVat += $afterVal;
+
                     fputcsv($out, [
                         $vatCategory,
                         $calendarType,
@@ -1984,6 +2064,26 @@ class OCRReceiptScannerController extends Controller
                         $afterVal,
                     ]);
                 }
+
+                if ($items->isNotEmpty()) {
+                    fputcsv($out, [
+                        'TOTAL',
+                        '',
+                        '',
+                        '',
+                        '',
+                        '',
+                        '',
+                        '',
+                        '',
+                        '',
+                        round($totalQty, 4),
+                        '',
+                        number_format($totalBase, 2, '.', ''),
+                        number_format($totalVat, 2, '.', ''),
+                        number_format($totalAfterVat, 2, '.', ''),
+                    ]);
+                }
             } else {
                 // e-Tax Purchase Declaration Form (Exact 9 Columns: Purchaser TIN | Seller TIN | Amount | Receipt No | Receipt Date | Encoding Date | MRC | PurcType | Encoded By)
                 fputcsv($out, [
@@ -1998,6 +2098,8 @@ class OCRReceiptScannerController extends Controller
                     'Encoded By',
                 ]);
 
+                $totalAmount = 0.0;
+
                 foreach ($items as $item) {
                     $r = $item->receipt;
 
@@ -2010,6 +2112,7 @@ class OCRReceiptScannerController extends Controller
                     $sellerTin = ($sellerDigits !== '') ? $sellerDigits : '';
 
                     $amount = (float)($item->value_after_vat > 0 ? $item->value_after_vat : ($item->total_value > 0 ? $item->total_value : ($r ? $r->total_amount : 0)));
+                    $totalAmount += $amount;
 
                     $receiptNo = '';
                     if ($r) {
@@ -2071,6 +2174,20 @@ class OCRReceiptScannerController extends Controller
                         $mrc,
                         $purcType,
                         $encodedBy,
+                    ]);
+                }
+
+                if ($items->isNotEmpty()) {
+                    fputcsv($out, [
+                        'TOTAL',
+                        '',
+                        number_format($totalAmount, 2, '.', ''),
+                        '',
+                        '',
+                        '',
+                        '',
+                        '',
+                        '',
                     ]);
                 }
             }

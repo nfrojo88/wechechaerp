@@ -29,10 +29,18 @@ class PurchaseTasExport
     /**
      * Build rows from Expense Hub items (Outcome 2 only: No VAT / TAS 0%)
      */
-    public static function buildRows(Collection $expenses, ?string $calendarOverride = null): array
+    public static function buildRows(Collection $expenses, ?string $calendarOverride = null, bool $includeTotal = true): array
     {
         $rawCal = strtolower(trim((string)$calendarOverride));
         $targetCal = in_array($rawCal, ['g', 'gc', 'gregorian']) ? 'G' : 'E';
+
+        // Sort latest information first (disbursement date descending, then id descending)
+        $expenses = $expenses->sortByDesc(function ($item) {
+            $d = $item->disbursement_date ?: ($item->created_at ?: null);
+            $ts = $d ? Carbon::parse($d)->timestamp : 0;
+            $id = (int)($item->id ?? 0);
+            return sprintf('%012d_%010d', $ts, $id);
+        })->values();
 
         $defaultPurchaserTin = SystemSetting::get('purchaser_tin', SystemSetting::get('company_tin', '38480010'));
         $defaultPurchaserDigits = (int)preg_replace('/^0+/', '', preg_replace('/[^0-9]/', '', (string)$defaultPurchaserTin));
@@ -41,6 +49,7 @@ class PurchaseTasExport
         }
 
         $rows = [];
+        $totalAmount = 0.0;
 
         foreach ($expenses as $item) {
             // Strictly Outcome 2: Without VAT receipt (no_vat, but NOT verified without receipt which is outcome 4)
@@ -58,6 +67,7 @@ class PurchaseTasExport
 
             // Col 3: Amount
             $amountVal = round((float)($item->decision_total_amount ?: $item->amount), 2);
+            $totalAmount += $amountVal;
 
             // Col 4: Receipt No
             $rawFs = trim((string)($item->fs_no ?? ''));
@@ -93,6 +103,21 @@ class PurchaseTasExport
                 $mrcVal,
                 $purcType,
                 $encodedBy,
+            ];
+        }
+
+        // Add TOTAL summary row at the bottom of the Excel/CSV sheet
+        if ($includeTotal && !empty($rows)) {
+            $rows[] = [
+                'TOTAL',
+                '',
+                round($totalAmount, 2),
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
             ];
         }
 

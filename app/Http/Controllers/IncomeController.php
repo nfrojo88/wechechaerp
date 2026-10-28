@@ -794,6 +794,9 @@ class IncomeController extends Controller
             ];
             $writer->addRow(new Row($headerCells));
 
+            $totalQty = 0.0;
+            $totalPrice = 0.0;
+
             foreach ($items as $inc) {
                 // Col A: Seller TIN (Wechecha Construction TIN: 38480010 without leading zeros)
                 $sellerTinVal = (int)$inc->formatted_seller_tin;
@@ -840,6 +843,9 @@ class IncomeController extends Controller
                 $priceVal = (float)($inc->unit_price > 0 ? $inc->unit_price : $inc->amount);
                 $priceVal = round($priceVal, 2);
 
+                $totalQty += $qtyVal;
+                $totalPrice += $priceVal;
+
                 // Col L: Receipt Date (Format: DD/MM/YYYY EC, e.g. 15/01/2018 EC)
                 $rDate = $inc->receipt_date ?: $inc->income_date;
                 $receiptDateFormatted = $rDate ? EthiopianDate::formatDateEc($rDate, 'DD/MM/YYYY EC') : EthiopianDate::formatDateEc(now(), 'DD/MM/YYYY EC');
@@ -872,6 +878,26 @@ class IncomeController extends Controller
                     Cell::fromValue($encodedBy),
                 ];
                 $writer->addRow(new Row($rowCells));
+            }
+
+            // Add TOTAL summary row at the bottom of the Excel sheet
+            if ($items->isNotEmpty()) {
+                $summaryCells = [
+                    Cell::fromValue('TOTAL'),
+                    Cell::fromValue(''),
+                    Cell::fromValue(''),
+                    Cell::fromValue(''),
+                    Cell::fromValue(''),
+                    Cell::fromValue(''),
+                    Cell::fromValue(''),
+                    Cell::fromValue(''),
+                    Cell::fromValue(''),
+                    Cell::fromValue(round($totalQty, 2)),
+                    Cell::fromValue(round($totalPrice, 2)),
+                    Cell::fromValue(''),
+                    Cell::fromValue(''),
+                ];
+                $writer->addRow(new Row($summaryCells));
             }
 
             $writer->close();
@@ -919,6 +945,9 @@ class IncomeController extends Controller
                 'Encoded By',
             ]);
 
+            $totalQty = 0.0;
+            $totalPrice = 0.0;
+
             foreach ($items as $inc) {
                 $sellerTin = $inc->formatted_seller_tin;
                 $buyerTin  = $inc->formatted_buyer_tin;
@@ -945,6 +974,9 @@ class IncomeController extends Controller
 
                 $qty   = (float)($inc->quantity > 0 ? $inc->quantity : 1.00);
                 $price = (float)($inc->unit_price > 0 ? $inc->unit_price : $inc->amount);
+
+                $totalQty += $qty;
+                $totalPrice += $price;
 
                 $rDate = $inc->receipt_date ?: $inc->income_date;
                 $receiptDateFormatted = $rDate ? EthiopianDate::formatDateEc($rDate, 'DD/MM/YYYY EC') : EthiopianDate::formatDateEc(now(), 'DD/MM/YYYY EC');
@@ -974,6 +1006,24 @@ class IncomeController extends Controller
                     number_format($price, 2, '.', ''),
                     $receiptDateFormatted,
                     $encodedBy,
+                ]);
+            }
+
+            if ($items->isNotEmpty()) {
+                fputcsv($out, [
+                    'TOTAL',
+                    '',
+                    '',
+                    '',
+                    '',
+                    '',
+                    '',
+                    '',
+                    '',
+                    number_format($totalQty, 2, '.', ''),
+                    number_format($totalPrice, 2, '.', ''),
+                    '',
+                    '',
                 ]);
             }
 
