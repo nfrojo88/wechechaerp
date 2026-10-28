@@ -749,4 +749,58 @@ class TaxMovementsOcrDuplicateCheckTest extends TestCase
         $this->assertStringContainsString('function openMovementEditSlipModal(', $bladeContent);
         $this->assertStringContainsString('function buildWhtCertCellHtml(', $bladeContent);
     }
+
+    /**
+     * Test Withholding Tax (WHT) Monthly Breakdown & Inline Drawer contracts:
+     * - Dual-segmented pill tabs: VAT (15%) Monthly Trend vs Withholding Tax (WHT) Monthly Breakdown
+     * - 13-Month Withholding Breakdown table rendered with Base, 2%, 3%, 30%, Total WHT, Net Disbursed, and Remittance
+     * - Inline drawer row for each month (#trend-wht-drawer-row-)
+     * - Inline drawer tab & pane for Withholding Tax (#drawer-wht-tab- & #drawer-wht-)
+     * - Controller indexes and passes monthlyWhtTrend and yearlyWhtTotals
+     */
+    public function test_withholding_tax_monthly_breakdown_and_drawer_contract(): void
+    {
+        // 1. Verify View Contracts in index.blade.php
+        $indexBladePath = resource_path('views/finance/tax-deductions/index.blade.php');
+        $this->assertFileExists($indexBladePath);
+        $indexBladeContent = file_get_contents($indexBladePath);
+
+        // Dual-tab segmented pills
+        $this->assertStringContainsString('id="pills-vat-trend-tab"', $indexBladeContent);
+        $this->assertStringContainsString('id="pills-wht-trend-tab"', $indexBladeContent);
+        $this->assertStringContainsString('id="pills-vat-trend"', $indexBladeContent);
+        $this->assertStringContainsString('id="pills-wht-trend"', $indexBladeContent);
+        $this->assertStringContainsString('Withholding Tax (WHT) Monthly Breakdown', $indexBladeContent);
+
+        // 13-Month WHT breakdown table structure
+        $this->assertStringContainsString('id="trend-wht-drawer-row-{{ $mNum }}"', $indexBladeContent);
+        $this->assertStringContainsString('id="trend-wht-drawer-content-{{ $mNum }}"', $indexBladeContent);
+        $this->assertStringContainsString('2% Goods', $indexBladeContent);
+        $this->assertStringContainsString('3% Services', $indexBladeContent);
+        $this->assertStringContainsString('30% Non-TIN', $indexBladeContent);
+        $this->assertStringContainsString('Total WHT Deducted', $indexBladeContent);
+        $this->assertStringContainsString('Net Disbursed', $indexBladeContent);
+        $this->assertStringContainsString('WHT Receipts', $indexBladeContent);
+
+        // Inline Drawer Withholding Tax Tab & Itemized list
+        $this->assertStringContainsString('id="drawer-wht-tab-${monthNum}"', $indexBladeContent);
+        $this->assertStringContainsString('id="drawer-wht-${monthNum}"', $indexBladeContent);
+        $this->assertStringContainsString('Withholding Tax (WHT)', $indexBladeContent);
+        $this->assertStringContainsString('Withhold Cert #', $indexBladeContent);
+
+        // Drawer JS functions support defaultTab & WHT target rows
+        $this->assertStringContainsString('function toggleMonthInlineDrawer(ethYear, ethMonth, monthEn, monthAm, defaultTab = null)', $indexBladeContent);
+        $this->assertStringContainsString('trend-wht-drawer-row-', $indexBladeContent);
+        $this->assertStringContainsString('closeMonthInlineDrawer', $indexBladeContent);
+
+        // 2. Verify Controller Contract
+        $controllerPath = app_path('Http/Controllers/Finance/FinanceTaxReportController.php');
+        $this->assertFileExists($controllerPath);
+        $controllerContent = file_get_contents($controllerPath);
+
+        $this->assertStringContainsString("'monthlyWhtTrend'", $controllerContent);
+        $this->assertStringContainsString("'yearlyWhtTotals'", $controllerContent);
+        $this->assertStringContainsString('$monthlyWhtTrend[$m] =', $controllerContent);
+        $this->assertStringContainsString('$yearlyWhtTotals =', $controllerContent);
+    }
 }

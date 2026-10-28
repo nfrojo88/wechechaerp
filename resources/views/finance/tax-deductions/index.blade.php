@@ -490,143 +490,368 @@
         </div>
     </div>
 
-    {{-- ── 12-Month Trend Table (Meskerem to Pagume) ────────────────────────────── --}}
+    {{-- ── 13-Month Tax Reconciliation & Monthly Trend (Meskerem to Pagume) ─────── --}}
     <div class="card border-0 shadow-sm rounded-4 mb-4 bg-white overflow-hidden">
-        <div class="card-header bg-white border-bottom py-3 px-3 px-md-4 d-flex justify-content-between align-items-center">
+        <div class="card-header bg-white border-bottom py-3 px-3 px-md-4 d-flex flex-wrap justify-content-between align-items-center gap-3">
             <div class="d-flex align-items-center gap-2">
                 <div class="p-2 rounded-3 bg-primary bg-opacity-10 text-primary fs-5">
                     <i class="fa-solid fa-chart-line"></i>
                 </div>
                 <div>
-                    <h6 class="fw-bold mb-0 text-dark">Ethiopian Year {{ $selectedEthYear }} EC VAT Trend (Meskerem &ndash; Pagume)</h6>
-                    <small class="text-muted">13-Month Output, Input, Opening Credit, and Signed Net reconciliation</small>
+                    <h6 class="fw-bold mb-0 text-dark">Ethiopian Year {{ $selectedEthYear }} EC Monthly Tax Reconciliation (Meskerem &ndash; Pagume)</h6>
+                    <small class="text-muted">13-Month VAT (15%) Output/Input/Net &amp; Withholding Tax (2%, 3%, 30%) by Month</small>
                 </div>
             </div>
-            <span class="badge bg-light text-muted border rounded-pill px-3 py-1.5 font-monospace">
-                {{ $selectedEthYear }} ዓ.ም.
-            </span>
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <ul class="nav nav-pills gap-1 bg-light p-1 rounded-pill border" id="monthlyTaxTrendTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link rounded-pill px-3 py-1.5 fw-semibold small d-inline-flex align-items-center gap-1.5 {{ $tab !== 'withholding' ? 'active shadow-xs' : '' }}" 
+                                id="pills-vat-trend-tab" 
+                                data-bs-toggle="pill" 
+                                data-bs-target="#pills-vat-trend" 
+                                type="button" 
+                                role="tab" 
+                                aria-controls="pills-vat-trend" 
+                                aria-selected="{{ $tab !== 'withholding' ? 'true' : 'false' }}">
+                            <i class="fa-solid fa-percent text-danger"></i>
+                            <span>VAT (15%) Monthly Trend</span>
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link rounded-pill px-3 py-1.5 fw-semibold small d-inline-flex align-items-center gap-1.5 {{ $tab === 'withholding' ? 'active shadow-xs' : '' }}" 
+                                id="pills-wht-trend-tab" 
+                                data-bs-toggle="pill" 
+                                data-bs-target="#pills-wht-trend" 
+                                type="button" 
+                                role="tab" 
+                                aria-controls="pills-wht-trend" 
+                                aria-selected="{{ $tab === 'withholding' ? 'true' : 'false' }}">
+                            <i class="fa-solid fa-hand-holding-dollar text-warning"></i>
+                            <span>Withholding Tax (WHT) Monthly Breakdown</span>
+                            <span class="badge bg-warning text-dark rounded-pill ms-1 font-monospace" style="font-size: 0.68rem;">{{ $yearlyWhtTotals['total_transactions'] ?? 0 }}</span>
+                        </button>
+                    </li>
+                </ul>
+                <span class="badge bg-light text-muted border rounded-pill px-3 py-2 font-monospace">
+                    {{ $selectedEthYear }} ዓ.ም.
+                </span>
+            </div>
         </div>
-        <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0 text-nowrap">
-                <thead class="bg-light-subtle text-muted text-uppercase fw-bold" style="font-size: 0.72rem; letter-spacing: 0.5px;">
-                    <tr>
-                        <th class="ps-4 py-3">Month (EC)</th>
-                        <th class="py-3">Gregorian Window</th>
-                        <th class="py-3 text-end text-danger">Output VAT (15%)</th>
-                        <th class="py-3 text-end text-success">Input VAT (Creditable)</th>
-                        <th class="py-3 text-end text-info">Opening Credit</th>
-                        <th class="py-3 text-end text-dark">Signed Net VAT</th>
-                        <th class="py-3 text-center">Status</th>
-                        <th class="py-3 text-center pe-4">Action</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y">
-                    @foreach($monthlyTrend as $mNum => $mTrend)
-                        <tr class="{{ $mTrend['is_current'] ? 'table-primary bg-primary bg-opacity-10 fw-semibold' : (!empty($mTrend['is_cleared']) ? 'bg-success bg-opacity-10' : '') }}">
-                            <td class="ps-4">
-                                <span class="fw-bold font-monospace text-dark">{{ $mNum }}.</span>
-                                <span class="fw-bold {{ $mTrend['is_current'] ? 'text-primary' : 'text-dark' }}">{{ $mTrend['month_name'] }}</span>
-                                <small class="text-muted">({{ $mTrend['month_am'] }})</small>
-                                @if($mTrend['is_current'])
-                                    <span class="badge bg-primary text-white rounded-pill px-2 py-0.5 ms-1 small" style="font-size: 0.65rem;">Selected</span>
-                                @endif
-                                @if(!empty($mTrend['is_cleared']))
-                                    <span class="badge bg-success text-white rounded-pill px-2 py-0.5 ms-1 small" style="font-size: 0.65rem;" title="Cleared to 0.00 ETB (Settled)">
-                                        <i class="fa-solid fa-check-double me-0.5"></i>Cleared
+
+        <div class="tab-content" id="monthlyTaxTrendTabsContent">
+            {{-- Tab Pane 1: VAT (15%) Trend Table --}}
+            <div class="tab-pane fade {{ $tab !== 'withholding' ? 'show active' : '' }}" id="pills-vat-trend" role="tabpanel" aria-labelledby="pills-vat-trend-tab">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0 text-nowrap">
+                        <thead class="bg-light-subtle text-muted text-uppercase fw-bold" style="font-size: 0.72rem; letter-spacing: 0.5px;">
+                            <tr>
+                                <th class="ps-4 py-3">Month (EC)</th>
+                                <th class="py-3">Gregorian Window</th>
+                                <th class="py-3 text-end text-danger">Output VAT (15%)</th>
+                                <th class="py-3 text-end text-success">Input VAT (Creditable)</th>
+                                <th class="py-3 text-end text-info">Opening Credit</th>
+                                <th class="py-3 text-end text-dark">Signed Net VAT</th>
+                                <th class="py-3 text-center">Status</th>
+                                <th class="py-3 text-center pe-4">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y">
+                            @foreach($monthlyTrend as $mNum => $mTrend)
+                                <tr class="{{ $mTrend['is_current'] ? 'table-primary bg-primary bg-opacity-10 fw-semibold' : (!empty($mTrend['is_cleared']) ? 'bg-success bg-opacity-10' : '') }}">
+                                    <td class="ps-4">
+                                        <span class="fw-bold font-monospace text-dark">{{ $mNum }}.</span>
+                                        <span class="fw-bold {{ $mTrend['is_current'] ? 'text-primary' : 'text-dark' }}">{{ $mTrend['month_name'] }}</span>
+                                        <small class="text-muted">({{ $mTrend['month_am'] }})</small>
+                                        @if($mTrend['is_current'])
+                                            <span class="badge bg-primary text-white rounded-pill px-2 py-0.5 ms-1 small" style="font-size: 0.65rem;">Selected</span>
+                                        @endif
+                                        @if(!empty($mTrend['is_cleared']))
+                                            <span class="badge bg-success text-white rounded-pill px-2 py-0.5 ms-1 small" style="font-size: 0.65rem;" title="Cleared to 0.00 ETB (Settled)">
+                                                <i class="fa-solid fa-check-double me-0.5"></i>Cleared
+                                            </span>
+                                        @elseif(!empty($mTrend['is_fresh_start']))
+                                            <span class="badge bg-info text-dark rounded-pill px-2 py-0.5 ms-1 small" style="font-size: 0.65rem;" title="Month previously cleared; new transactions accruing fresh from 0.00 ETB">
+                                                <i class="fa-solid fa-seedling me-0.5"></i>Fresh Start
+                                            </span>
+                                        @endif
+                                    </td>
+                                    <td class="small text-muted font-monospace">
+                                        {{ $mTrend['start_date'] }} &rarr; {{ $mTrend['end_date'] }}
+                                    </td>
+                                    <td class="text-end font-monospace text-danger">
+                                        ETB {{ number_format($mTrend['output_vat'], 2) }}
+                                    </td>
+                                    <td class="text-end font-monospace text-success">
+                                        ETB {{ number_format($mTrend['input_vat'], 2) }}
+                                    </td>
+                                    <td class="text-end font-monospace text-info">
+                                        + ETB {{ number_format($mTrend['opening_credit'], 2) }}
+                                    </td>
+                                    <td class="text-end font-monospace fw-bold {{ $mTrend['text_class'] }}">
+                                        {{ $mTrend['signed_net_formatted'] }}
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge {{ $mTrend['badge_class'] }} rounded-pill px-2.5 py-1 small">
+                                            {{ $mTrend['label'] }}
+                                        </span>
+                                    </td>
+                                    <td class="text-center pe-4">
+                                        <div class="d-inline-flex align-items-center gap-1.5">
+                                            <button type="button" 
+                                                    class="btn btn-sm btn-primary rounded-pill px-3 py-1 small d-inline-flex align-items-center gap-1.5 shadow-xs fw-semibold"
+                                                    id="btn-drawer-{{ $mNum }}"
+                                                    data-year="{{ $selectedEthYear }}"
+                                                    data-month="{{ $mNum }}"
+                                                    data-name-en="{{ $mTrend['month_name'] }}"
+                                                    data-name-am="{{ $mTrend['month_am'] }}"
+                                                    onclick="toggleMonthInlineDrawer(this.dataset.year, this.dataset.month, this.dataset.nameEn, this.dataset.nameAm)"
+                                                    title="View detailed transaction movements for {{ $mTrend['month_name'] }} directly in page">
+                                                <i class="fa-solid fa-receipt" id="icon-drawer-{{ $mNum }}"></i>
+                                                <span id="text-drawer-{{ $mNum }}">Movements</span>
+                                            </button>
+                                            <a href="{{ route('finance.tax-deductions.movements', ['ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $mNum]) }}" 
+                                               class="btn btn-sm btn-outline-primary rounded-pill px-2 py-1 small"
+                                               title="Open dedicated Financial Movements & Tax Audit page for {{ $mTrend['month_name'] }}">
+                                                <i class="fa-solid fa-up-right-from-square"></i>
+                                            </a>
+                                            <a href="{{ route('finance.tax-deductions.index', array_merge(request()->query(), ['ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $mNum])) }}" 
+                                               class="btn btn-sm {{ $mTrend['is_current'] ? 'btn-outline-primary active' : 'btn-outline-secondary' }} rounded-pill px-2.5 py-1 small" 
+                                               title="Filter whole page to this month">
+                                                <i class="fa-solid fa-filter"></i>
+                                            </a>
+                                            @if(!empty($mTrend['is_cleared']))
+                                                <button type="button" 
+                                                        class="btn btn-sm btn-outline-success rounded-pill px-2.5 py-1 small fw-semibold d-inline-flex align-items-center gap-1" 
+                                                        onclick="openAdminClearModalForMonth({{ $selectedEthYear }}, {{ $mNum }}, '{{ $mTrend['month_name'] }}', true)"
+                                                        title="{{ $mTrend['month_name'] }} is Cleared (0.00 ETB) — Click to manage or Re-open">
+                                                    <i class="fa-solid fa-check-double text-success"></i>
+                                                    <span>Cleared</span>
+                                                </button>
+                                            @elseif(!empty($mTrend['is_fresh_start']))
+                                                <button type="button" 
+                                                        class="btn btn-sm btn-outline-warning text-dark rounded-pill px-2 py-1 small" 
+                                                        onclick="openAdminClearModalForMonth({{ $selectedEthYear }}, {{ $mNum }}, '{{ $mTrend['month_name'] }}', false)" 
+                                                        title="Clear new active transactions in {{ $mTrend['month_name'] }} to 0.00 ETB">
+                                                    <i class="fa-solid fa-broom"></i>
+                                                </button>
+                                                <button type="button" 
+                                                        class="btn btn-sm btn-outline-secondary rounded-pill px-2 py-1 small" 
+                                                        onclick="openAdminClearModalForMonth({{ $selectedEthYear }}, {{ $mNum }}, '{{ $mTrend['month_name'] }}', true)" 
+                                                        title="Manage or Re-open {{ $mTrend['month_name'] }}">
+                                                    <i class="fa-solid fa-gear"></i>
+                                                </button>
+                                            @else
+                                                <button type="button" 
+                                                        class="btn btn-sm btn-outline-warning text-dark rounded-pill px-2 py-1 small" 
+                                                        onclick="openAdminClearModalForMonth({{ $selectedEthYear }}, {{ $mNum }}, '{{ $mTrend['month_name'] }}', false)" 
+                                                        title="Clear {{ $mTrend['month_name'] }} to start from zero">
+                                                    <i class="fa-solid fa-broom"></i>
+                                                </button>
+                                            @endif
+                                        </div>
+                                    </td>
+                                </tr>
+                                {{-- Expandable Inline Drawer Row for this Month --}}
+                                <tr id="trend-drawer-row-{{ $mNum }}" class="trend-drawer-row d-none" style="background-color: #f8fafc;">
+                                    <td colspan="8" class="p-0 border-top-0 border-bottom">
+                                        <div id="trend-drawer-content-{{ $mNum }}" class="p-2 p-md-3">
+                                            {{-- Dynamically loaded inline movement details --}}
+                                        </div>
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {{-- Tab Pane 2: Withholding Tax (WHT) Monthly Breakdown Table --}}
+            <div class="tab-pane fade {{ $tab === 'withholding' ? 'show active' : '' }}" id="pills-wht-trend" role="tabpanel" aria-labelledby="pills-wht-trend-tab">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0 text-nowrap">
+                        <thead class="bg-light-subtle text-muted text-uppercase fw-bold" style="font-size: 0.72rem; letter-spacing: 0.5px;">
+                            <tr>
+                                <th class="ps-4 py-3">Month (EC)</th>
+                                <th class="py-3">Gregorian Window</th>
+                                <th class="py-3 text-end text-dark">Base Amount (ETB)</th>
+                                <th class="py-3 text-end text-info">2% Goods Supply</th>
+                                <th class="py-3 text-end text-warning">3% Services</th>
+                                <th class="py-3 text-end text-danger">30% Non-TIN</th>
+                                <th class="py-3 text-end text-danger fw-bold">Total WHT Deducted</th>
+                                <th class="py-3 text-end text-success fw-bold">Net Disbursed</th>
+                                <th class="py-3 text-center">WHT Receipts</th>
+                                <th class="py-3 text-center">Status</th>
+                                <th class="py-3 text-center pe-4">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y">
+                            @foreach($monthlyWhtTrend as $mNum => $whtTrend)
+                                <tr class="{{ $whtTrend['is_current'] ? 'table-warning bg-warning bg-opacity-10 fw-semibold' : (!empty($whtTrend['is_settled']) ? 'bg-success bg-opacity-10' : '') }}">
+                                    <td class="ps-4">
+                                        <span class="fw-bold font-monospace text-dark">{{ $mNum }}.</span>
+                                        <span class="fw-bold {{ $whtTrend['is_current'] ? 'text-warning text-dark' : 'text-dark' }}">{{ $whtTrend['month_name'] }}</span>
+                                        <small class="text-muted">({{ $whtTrend['month_am'] }})</small>
+                                        @if($whtTrend['is_current'])
+                                            <span class="badge bg-warning text-dark rounded-pill px-2 py-0.5 ms-1 small" style="font-size: 0.65rem;">Selected</span>
+                                        @endif
+                                        @if(!empty($whtTrend['is_settled']))
+                                            <span class="badge bg-success text-white rounded-pill px-2 py-0.5 ms-1 small" style="font-size: 0.65rem;" title="Remitted to ERCA">
+                                                <i class="fa-solid fa-check-double me-0.5"></i>Remitted
+                                            </span>
+                                        @endif
+                                    </td>
+                                    <td class="small text-muted font-monospace">
+                                        {{ $whtTrend['start_date'] }} &rarr; {{ $whtTrend['end_date'] }}
+                                    </td>
+                                    <td class="text-end font-monospace text-dark">
+                                        ETB {{ number_format($whtTrend['base_amount'], 2) }}
+                                    </td>
+                                    <td class="text-end font-monospace">
+                                        @if($whtTrend['wht_2_amount'] > 0)
+                                            <span class="text-info fw-semibold">ETB {{ number_format($whtTrend['wht_2_amount'], 2) }}</span>
+                                            <small class="text-muted d-block" style="font-size: 0.68rem;">({{ $whtTrend['wht_2_count'] }})</small>
+                                        @else
+                                            <span class="text-muted small">&mdash;</span>
+                                        @endif
+                                    </td>
+                                    <td class="text-end font-monospace">
+                                        @if($whtTrend['wht_3_amount'] > 0)
+                                            <span class="text-warning-emphasis fw-semibold">ETB {{ number_format($whtTrend['wht_3_amount'], 2) }}</span>
+                                            <small class="text-muted d-block" style="font-size: 0.68rem;">({{ $whtTrend['wht_3_count'] }})</small>
+                                        @else
+                                            <span class="text-muted small">&mdash;</span>
+                                        @endif
+                                    </td>
+                                    <td class="text-end font-monospace">
+                                        @if($whtTrend['wht_30_amount'] > 0)
+                                            <span class="text-danger fw-semibold">ETB {{ number_format($whtTrend['wht_30_amount'], 2) }}</span>
+                                            <small class="text-muted d-block" style="font-size: 0.68rem;">({{ $whtTrend['wht_30_count'] }})</small>
+                                        @else
+                                            <span class="text-muted small">&mdash;</span>
+                                        @endif
+                                    </td>
+                                    <td class="text-end font-monospace fw-bold text-danger">
+                                        @if($whtTrend['total_wht'] > 0)
+                                            - ETB {{ number_format($whtTrend['total_wht'], 2) }}
+                                            <small class="text-muted d-block fw-normal" style="font-size: 0.68rem;">({{ $whtTrend['vouchers_count'] }} items)</small>
+                                        @else
+                                            <span class="text-muted fw-normal">ETB 0.00</span>
+                                        @endif
+                                    </td>
+                                    <td class="text-end font-monospace text-success fw-bold">
+                                        ETB {{ number_format($whtTrend['net_disbursed'], 2) }}
+                                    </td>
+                                    <td class="text-center">
+                                        <div class="d-inline-flex align-items-center gap-1">
+                                            @if($whtTrend['slips_count'] > 0)
+                                                <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2 py-0.5 small" title="Attached Slips">
+                                                    <i class="fa-solid fa-check me-0.5"></i>{{ $whtTrend['slips_count'] }}
+                                                </span>
+                                            @endif
+                                            @if($whtTrend['missing_slips_count'] > 0)
+                                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill px-2 py-0.5 small" title="Missing Slips">
+                                                    <i class="fa-solid fa-ban me-0.5"></i>{{ $whtTrend['missing_slips_count'] }}
+                                                </span>
+                                            @endif
+                                            @if($whtTrend['slips_count'] == 0 && $whtTrend['missing_slips_count'] == 0)
+                                                <span class="text-muted small">&mdash;</span>
+                                            @endif
+                                        </div>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge {{ $whtTrend['badge_class'] }} rounded-pill px-2.5 py-1 small">
+                                            {{ $whtTrend['label'] }}
+                                        </span>
+                                    </td>
+                                    <td class="text-center pe-4">
+                                        <div class="d-inline-flex align-items-center gap-1.5">
+                                            <button type="button" 
+                                                    class="btn btn-sm btn-warning text-dark rounded-pill px-3 py-1 small d-inline-flex align-items-center gap-1.5 shadow-xs fw-semibold"
+                                                    id="btn-wht-drawer-{{ $mNum }}"
+                                                    data-year="{{ $selectedEthYear }}"
+                                                    data-month="{{ $mNum }}"
+                                                    data-name-en="{{ $whtTrend['month_name'] }}"
+                                                    data-name-am="{{ $whtTrend['month_am'] }}"
+                                                    onclick="toggleMonthInlineDrawer(this.dataset.year, this.dataset.month, this.dataset.nameEn, this.dataset.nameAm, 'wht')"
+                                                    title="View detailed Withholding Tax deductions for {{ $whtTrend['month_name'] }}">
+                                                <i class="fa-solid fa-hand-holding-dollar" id="icon-wht-drawer-{{ $mNum }}"></i>
+                                                <span id="text-wht-drawer-{{ $mNum }}">Movements</span>
+                                            </button>
+                                            <a href="{{ route('finance.tax-deductions.movements', ['ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $mNum]) }}#page-withholding" 
+                                               class="btn btn-sm btn-outline-warning text-dark rounded-pill px-2 py-1 small"
+                                               title="Open dedicated Withholding Audit page for {{ $whtTrend['month_name'] }}">
+                                                <i class="fa-solid fa-up-right-from-square"></i>
+                                            </a>
+                                            <a href="{{ route('finance.tax-deductions.index', array_merge(request()->query(), ['ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $mNum, 'tab' => 'withholding'])) }}" 
+                                               class="btn btn-sm {{ $whtTrend['is_current'] ? 'btn-outline-warning active text-dark fw-bold' : 'btn-outline-secondary' }} rounded-pill px-2.5 py-1 small" 
+                                               title="Filter page to {{ $whtTrend['month_name'] }} Withholding">
+                                                <i class="fa-solid fa-filter"></i>
+                                            </a>
+                                            <button type="button" 
+                                                    class="btn btn-sm {{ $whtTrend['is_settled'] ? 'btn-outline-success text-success' : 'btn-outline-danger' }} rounded-pill px-2.5 py-1 small fw-semibold d-inline-flex align-items-center gap-1"
+                                                    data-bs-toggle="modal" 
+                                                    data-bs-target="#payWithholdingModal"
+                                                    title="{{ $whtTrend['is_settled'] ? 'Withholding Remitted' : 'Remit Withholding Tax to ERCA' }}">
+                                                <i class="fa-solid {{ $whtTrend['is_settled'] ? 'fa-check-double' : 'fa-credit-card' }}"></i>
+                                                <span>{{ $whtTrend['is_settled'] ? 'Remitted' : 'Remit' }}</span>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {{-- Expandable Inline Drawer Row for Withholding Month --}}
+                                <tr id="trend-wht-drawer-row-{{ $mNum }}" class="trend-drawer-row d-none" style="background-color: #f8fafc;">
+                                    <td colspan="11" class="p-0 border-top-0 border-bottom">
+                                        <div id="trend-wht-drawer-content-{{ $mNum }}" class="p-2 p-md-3">
+                                            {{-- Dynamically loaded inline Withholding movement details --}}
+                                        </div>
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                        <tfoot class="bg-light-subtle fw-bold border-top border-2" style="font-size: 0.82rem;">
+                            <tr>
+                                <td colspan="2" class="ps-4 py-2.5 text-uppercase text-muted">
+                                    Total EC {{ $selectedEthYear }} Withholding ({{ $yearlyWhtTotals['total_transactions'] ?? 0 }} items)
+                                </td>
+                                <td class="text-end py-2.5 font-monospace text-dark">
+                                    ETB {{ number_format($yearlyWhtTotals['total_base'] ?? 0, 2) }}
+                                </td>
+                                <td class="text-end py-2.5 font-monospace text-info">
+                                    ETB {{ number_format($yearlyWhtTotals['total_2_amt'] ?? 0, 2) }}
+                                    <small class="text-muted d-block fw-normal" style="font-size: 0.68rem;">({{ $yearlyWhtTotals['total_2_count'] ?? 0 }})</small>
+                                </td>
+                                <td class="text-end py-2.5 font-monospace text-warning-emphasis">
+                                    ETB {{ number_format($yearlyWhtTotals['total_3_amt'] ?? 0, 2) }}
+                                    <small class="text-muted d-block fw-normal" style="font-size: 0.68rem;">({{ $yearlyWhtTotals['total_3_count'] ?? 0 }})</small>
+                                </td>
+                                <td class="text-end py-2.5 font-monospace text-danger">
+                                    ETB {{ number_format($yearlyWhtTotals['total_30_amt'] ?? 0, 2) }}
+                                    <small class="text-muted d-block fw-normal" style="font-size: 0.68rem;">({{ $yearlyWhtTotals['total_30_count'] ?? 0 }})</small>
+                                </td>
+                                <td class="text-end py-2.5 font-monospace text-danger fw-bold">
+                                    - ETB {{ number_format($yearlyWhtTotals['total_wht'] ?? 0, 2) }}
+                                </td>
+                                <td class="text-end py-2.5 font-monospace text-success fw-bold">
+                                    ETB {{ number_format($yearlyWhtTotals['total_net_disbursed'] ?? 0, 2) }}
+                                </td>
+                                <td class="text-center py-2.5">
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2 py-0.5">
+                                        {{ $yearlyWhtTotals['total_slips'] ?? 0 }} Attached
                                     </span>
-                                @elseif(!empty($mTrend['is_fresh_start']))
-                                    <span class="badge bg-info text-dark rounded-pill px-2 py-0.5 ms-1 small" style="font-size: 0.65rem;" title="Month previously cleared; new transactions accruing fresh from 0.00 ETB">
-                                        <i class="fa-solid fa-seedling me-0.5"></i>Fresh Start
-                                    </span>
-                                @endif
-                            </td>
-                            <td class="small text-muted font-monospace">
-                                {{ $mTrend['start_date'] }} &rarr; {{ $mTrend['end_date'] }}
-                            </td>
-                            <td class="text-end font-monospace text-danger">
-                                ETB {{ number_format($mTrend['output_vat'], 2) }}
-                            </td>
-                            <td class="text-end font-monospace text-success">
-                                ETB {{ number_format($mTrend['input_vat'], 2) }}
-                            </td>
-                            <td class="text-end font-monospace text-info">
-                                + ETB {{ number_format($mTrend['opening_credit'], 2) }}
-                            </td>
-                            <td class="text-end font-monospace fw-bold {{ $mTrend['text_class'] }}">
-                                {{ $mTrend['signed_net_formatted'] }}
-                            </td>
-                            <td class="text-center">
-                                <span class="badge {{ $mTrend['badge_class'] }} rounded-pill px-2.5 py-1 small">
-                                    {{ $mTrend['label'] }}
-                                </span>
-                            </td>
-                            <td class="text-center pe-4">
-                                <div class="d-inline-flex align-items-center gap-1.5">
-                                    <button type="button" 
-                                            class="btn btn-sm btn-primary rounded-pill px-3 py-1 small d-inline-flex align-items-center gap-1.5 shadow-xs fw-semibold"
-                                            id="btn-drawer-{{ $mNum }}"
-                                            data-year="{{ $selectedEthYear }}"
-                                            data-month="{{ $mNum }}"
-                                            data-name-en="{{ $mTrend['month_name'] }}"
-                                            data-name-am="{{ $mTrend['month_am'] }}"
-                                            onclick="toggleMonthInlineDrawer(this.dataset.year, this.dataset.month, this.dataset.nameEn, this.dataset.nameAm)"
-                                            title="View detailed transaction movements for {{ $mTrend['month_name'] }} directly in page">
-                                        <i class="fa-solid fa-receipt" id="icon-drawer-{{ $mNum }}"></i>
-                                        <span id="text-drawer-{{ $mNum }}">Movements</span>
-                                    </button>
-                                    <a href="{{ route('finance.tax-deductions.movements', ['ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $mNum]) }}" 
-                                       class="btn btn-sm btn-outline-primary rounded-pill px-2 py-1 small"
-                                       title="Open dedicated Financial Movements & Tax Audit page for {{ $mTrend['month_name'] }}">
-                                        <i class="fa-solid fa-up-right-from-square"></i>
-                                    </a>
-                                    <a href="{{ route('finance.tax-deductions.index', array_merge(request()->query(), ['ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $mNum])) }}" 
-                                       class="btn btn-sm {{ $mTrend['is_current'] ? 'btn-outline-primary active' : 'btn-outline-secondary' }} rounded-pill px-2.5 py-1 small" 
-                                       title="Filter whole page to this month">
-                                        <i class="fa-solid fa-filter"></i>
-                                    </a>
-                                    @if(!empty($mTrend['is_cleared']))
-                                        <button type="button" 
-                                                class="btn btn-sm btn-outline-success rounded-pill px-2.5 py-1 small fw-semibold d-inline-flex align-items-center gap-1" 
-                                                onclick="openAdminClearModalForMonth({{ $selectedEthYear }}, {{ $mNum }}, '{{ $mTrend['month_name'] }}', true)"
-                                                title="{{ $mTrend['month_name'] }} is Cleared (0.00 ETB) — Click to manage or Re-open">
-                                            <i class="fa-solid fa-check-double text-success"></i>
-                                            <span>Cleared</span>
-                                        </button>
-                                    @elseif(!empty($mTrend['is_fresh_start']))
-                                        <button type="button" 
-                                                class="btn btn-sm btn-outline-warning text-dark rounded-pill px-2 py-1 small" 
-                                                onclick="openAdminClearModalForMonth({{ $selectedEthYear }}, {{ $mNum }}, '{{ $mTrend['month_name'] }}', false)" 
-                                                title="Clear new active transactions in {{ $mTrend['month_name'] }} to 0.00 ETB">
-                                            <i class="fa-solid fa-broom"></i>
-                                        </button>
-                                        <button type="button" 
-                                                class="btn btn-sm btn-outline-secondary rounded-pill px-2 py-1 small" 
-                                                onclick="openAdminClearModalForMonth({{ $selectedEthYear }}, {{ $mNum }}, '{{ $mTrend['month_name'] }}', true)" 
-                                                title="Manage or Re-open {{ $mTrend['month_name'] }}">
-                                            <i class="fa-solid fa-gear"></i>
-                                        </button>
-                                    @else
-                                        <button type="button" 
-                                                class="btn btn-sm btn-outline-warning text-dark rounded-pill px-2 py-1 small" 
-                                                onclick="openAdminClearModalForMonth({{ $selectedEthYear }}, {{ $mNum }}, '{{ $mTrend['month_name'] }}', false)" 
-                                                title="Clear {{ $mTrend['month_name'] }} to start from zero">
-                                            <i class="fa-solid fa-broom"></i>
-                                        </button>
+                                    @if(($yearlyWhtTotals['total_missing_slips'] ?? 0) > 0)
+                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill px-2 py-0.5 ms-1">
+                                            {{ $yearlyWhtTotals['total_missing_slips'] }} Missing
+                                        </span>
                                     @endif
-                                </div>
-                            </td>
-                        </tr>
-                        {{-- Expandable Inline Drawer Row for this Month --}}
-                        <tr id="trend-drawer-row-{{ $mNum }}" class="trend-drawer-row d-none" style="background-color: #f8fafc;">
-                            <td colspan="8" class="p-0 border-top-0 border-bottom">
-                                <div id="trend-drawer-content-{{ $mNum }}" class="p-2 p-md-3">
-                                    {{-- Dynamically loaded inline movement details --}}
-                                </div>
-                            </td>
-                        </tr>
-                    @endforeach
-                </tbody>
-            </table>
+                                </td>
+                                <td colspan="2" class="text-center pe-4 text-muted small">
+                                    ERCA Monthly Summary
+                                </td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -5896,12 +6121,13 @@
     }
 
     // ── INLINE DRAWER: View movements directly inside the table ───────────────
-    function toggleMonthInlineDrawer(ethYear, ethMonth, monthEn, monthAm) {
-        const drawerRow = document.getElementById(`trend-drawer-row-${ethMonth}`);
-        const btn = document.getElementById(`btn-drawer-${ethMonth}`);
-        const icon = document.getElementById(`icon-drawer-${ethMonth}`);
-        const text = document.getElementById(`text-drawer-${ethMonth}`);
-        const contentContainer = document.getElementById(`trend-drawer-content-${ethMonth}`);
+    function toggleMonthInlineDrawer(ethYear, ethMonth, monthEn, monthAm, defaultTab = null) {
+        const isWht = (defaultTab === 'wht');
+        const drawerRow = document.getElementById(isWht ? `trend-wht-drawer-row-${ethMonth}` : `trend-drawer-row-${ethMonth}`);
+        const btn = document.getElementById(isWht ? `btn-wht-drawer-${ethMonth}` : `btn-drawer-${ethMonth}`);
+        const icon = document.getElementById(isWht ? `icon-wht-drawer-${ethMonth}` : `icon-drawer-${ethMonth}`);
+        const text = document.getElementById(isWht ? `text-wht-drawer-${ethMonth}` : `text-drawer-${ethMonth}`);
+        const contentContainer = document.getElementById(isWht ? `trend-wht-drawer-content-${ethMonth}` : `trend-drawer-content-${ethMonth}`);
         if (!drawerRow || !contentContainer) return;
 
         // If clicking currently open drawer, close it
@@ -5918,23 +6144,30 @@
         // Open this drawer
         drawerRow.classList.remove('d-none');
         openDrawerMonth = ethMonth;
-        if (btn) btn.classList.replace('btn-primary', 'btn-dark');
+        if (btn) {
+            if (isWht) {
+                btn.classList.replace('btn-warning', 'btn-dark');
+                btn.classList.replace('text-dark', 'text-white');
+            } else {
+                btn.classList.replace('btn-primary', 'btn-dark');
+            }
+        }
         if (icon) icon.className = 'fa-solid fa-chevron-up';
         if (text) text.innerText = 'Hide';
 
         // Check cache or fetch
         const cacheKey = `${ethYear}-${ethMonth}`;
         if (movementsCache[cacheKey]) {
-            renderInlineDrawer(ethMonth, movementsCache[cacheKey]);
+            renderInlineDrawer(ethMonth, movementsCache[cacheKey], defaultTab);
             return;
         }
 
         // Loading spinner
         contentContainer.innerHTML = `
             <div class="text-center py-4 bg-white rounded-4 border border-secondary-subtle shadow-xs">
-                <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+                <div class="spinner-border spinner-border-sm ${isWht ? 'text-warning' : 'text-primary'} me-2" role="status"></div>
                 <span class="text-dark fw-semibold">Retrieving detailed financial movements for ${monthEn} (${monthAm})...</span>
-                <div class="text-muted small mt-1">Loading customer sales receipts, company expenditures, and ERCA tax lines</div>
+                <div class="text-muted small mt-1">Loading customer sales receipts, company expenditures, withholding taxes, and ERCA tax lines</div>
             </div>
         `;
 
@@ -5952,7 +6185,7 @@
         .then(data => {
             if (data.success) {
                 movementsCache[cacheKey] = data;
-                renderInlineDrawer(ethMonth, data);
+                renderInlineDrawer(ethMonth, data, defaultTab);
             } else {
                 throw new Error(data.message || 'Error loading transaction movements');
             }
@@ -5965,7 +6198,7 @@
                         <i class="fa-solid fa-triangle-exclamation me-2"></i>
                         <span>Failed to load transaction movements: ${err.message || 'Unknown error'}</span>
                     </div>
-                    <button type="button" class="btn btn-sm btn-outline-danger rounded-pill" onclick="toggleMonthInlineDrawer(${ethYear}, ${ethMonth}, '${monthEn}', '${monthAm}')">
+                    <button type="button" class="btn btn-sm btn-outline-danger rounded-pill" onclick="toggleMonthInlineDrawer(${ethYear}, ${ethMonth}, '${monthEn}', '${monthAm}', '${defaultTab || ''}')">
                         <i class="fa-solid fa-rotate-right me-1"></i>Retry
                     </button>
                 </div>
@@ -5974,24 +6207,35 @@
     }
 
     function closeMonthInlineDrawer(ethMonth) {
-        const drawerRow = document.getElementById(`trend-drawer-row-${ethMonth}`);
-        const btn = document.getElementById(`btn-drawer-${ethMonth}`);
-        const icon = document.getElementById(`icon-drawer-${ethMonth}`);
-        const text = document.getElementById(`text-drawer-${ethMonth}`);
-        if (drawerRow) drawerRow.classList.add('d-none');
-        if (btn) btn.classList.replace('btn-dark', 'btn-primary');
-        if (icon) icon.className = 'fa-solid fa-receipt';
-        if (text) text.innerText = 'Movements';
+        const vatRow = document.getElementById(`trend-drawer-row-${ethMonth}`);
+        const vatBtn = document.getElementById(`btn-drawer-${ethMonth}`);
+        const vatIcon = document.getElementById(`icon-drawer-${ethMonth}`);
+        const vatText = document.getElementById(`text-drawer-${ethMonth}`);
+        if (vatRow) vatRow.classList.add('d-none');
+        if (vatBtn) vatBtn.className = 'btn btn-sm btn-primary rounded-pill px-3 py-1 small d-inline-flex align-items-center gap-1.5 shadow-xs fw-semibold';
+        if (vatIcon) vatIcon.className = 'fa-solid fa-receipt';
+        if (vatText) vatText.innerText = 'Movements';
+
+        const whtRow = document.getElementById(`trend-wht-drawer-row-${ethMonth}`);
+        const whtBtn = document.getElementById(`btn-wht-drawer-${ethMonth}`);
+        const whtIcon = document.getElementById(`icon-wht-drawer-${ethMonth}`);
+        const whtText = document.getElementById(`text-wht-drawer-${ethMonth}`);
+        if (whtRow) whtRow.classList.add('d-none');
+        if (whtBtn) whtBtn.className = 'btn btn-sm btn-warning text-dark rounded-pill px-3 py-1 small d-inline-flex align-items-center gap-1.5 shadow-xs fw-semibold';
+        if (whtIcon) whtIcon.className = 'fa-solid fa-hand-holding-dollar';
+        if (whtText) whtText.innerText = 'Movements';
+
         if (openDrawerMonth === ethMonth) openDrawerMonth = null;
     }
 
-    function renderInlineDrawer(monthNum, data) {
+    function renderInlineDrawer(monthNum, data, defaultTab = null) {
+        const isWht = (defaultTab === 'wht');
         const m = data.month;
         const s = data.summary;
         const totalCreditable = (parseFloat(s.total_creditable_input) > 0)
             ? parseFloat(s.total_creditable_input)
             : Math.round(((parseFloat(s.input_vat) || 0) + (parseFloat(s.opening_credit) || 0)) * 100) / 100;
-        const container = document.getElementById(`trend-drawer-content-${monthNum}`);
+        const container = document.getElementById(isWht ? `trend-wht-drawer-content-${monthNum}` : `trend-drawer-content-${monthNum}`) || document.getElementById(`trend-drawer-content-${monthNum}`);
         if (!container) return;
 
         let incomeRows = '';
@@ -6058,6 +6302,63 @@
             });
         } else {
             expenseRows = `<tr><td colspan="10" class="text-center py-4 text-muted"><i class="fa-solid fa-folder-open me-2 text-secondary"></i>No purchases or paid expenses recorded for this month.</td></tr>`;
+        }
+
+        let whtRows = '';
+        if (data.wht_expenses && data.wht_expenses.length > 0) {
+            data.wht_expenses.forEach((whtExp, idx) => {
+                const baseVal = parseFloat(whtExp.base_amount || 0);
+                const whtVal = parseFloat(whtExp.withholding_amount || 0);
+                const netVal = parseFloat(whtExp.net_disbursed || 0);
+                const rateVal = parseFloat(whtExp.withholding_rate || 3.0);
+                const slip = whtExp.withholding_receipt_url || whtExp.receipt_slip_url || whtExp.attachment_url;
+                const isPdf = slip && slip.toLowerCase().includes('.pdf');
+                const receiptNo = whtExp.withholding_receipt_number || '-';
+
+                let rateBadge = `<span class="badge bg-warning-subtle text-dark border border-warning-subtle rounded-pill font-monospace" style="font-size:0.65rem;">${rateVal}% Services</span>`;
+                if (Math.round(rateVal * 10) / 10 === 2.0) {
+                    rateBadge = `<span class="badge bg-info-subtle text-info border border-info-subtle rounded-pill font-monospace" style="font-size:0.65rem;">2% Goods</span>`;
+                } else if (Math.round(rateVal * 10) / 10 === 30.0) {
+                    rateBadge = `<span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill font-monospace" style="font-size:0.65rem;">30% Non-TIN</span>`;
+                }
+
+                const slipBtn = slip
+                    ? `<a href="${slip}" target="_blank" class="btn btn-xs ${isPdf ? 'btn-outline-danger' : 'btn-outline-warning text-dark'} rounded-pill px-2.5 py-1 d-inline-flex align-items-center gap-1 shadow-2xs" style="font-size:0.65rem;" title="View Withholding Receipt Slip">
+                         <i class="fa-solid ${isPdf ? 'fa-file-pdf text-danger' : 'fa-receipt text-warning'}"></i>
+                         <span>${isPdf ? 'PDF Slip' : 'Slip'}</span>
+                       </a>`
+                    : `<span class="badge bg-light text-muted border" style="font-size:0.65rem;"><i class="fa-solid fa-ban me-1"></i>Missing</span>`;
+
+                whtRows += `
+                    <tr>
+                        <td class="ps-3 font-monospace small text-muted">${idx + 1}</td>
+                        <td>
+                            <span class="fw-bold font-monospace text-dark d-block">${whtExp.date_ec || '-'}</span>
+                            <small class="text-muted" style="font-size:0.75rem;">${whtExp.date_gc || '-'}</small>
+                        </td>
+                        <td>
+                            <span class="badge bg-light text-dark border font-monospace">${whtExp.request_number || ('WHT-' + whtExp.id)}</span>
+                            ${whtExp.payment_reference && whtExp.payment_reference !== '-' ? `<small class="text-muted d-block font-monospace" style="font-size:0.68rem;">Ref: ${whtExp.payment_reference}</small>` : ''}
+                        </td>
+                        <td>
+                            <span class="fw-semibold text-dark d-block">${whtExp.payee || 'Payee / Vendor'}</span>
+                            ${whtExp.seller_tin && whtExp.seller_tin !== '-' ? `<small class="text-muted font-monospace d-block" style="font-size:0.7rem;">TIN: ${whtExp.seller_tin}</small>` : '<small class="text-danger font-monospace d-block" style="font-size:0.68rem;">No TIN (30% WHT)</small>'}
+                        </td>
+                        <td>
+                            <span class="badge bg-light text-secondary border rounded-pill small">${whtExp.category || 'Expense'}</span>
+                            <small class="text-muted d-block" style="font-size:0.75rem;">${whtExp.project_name || 'General'}</small>
+                        </td>
+                        <td class="text-end font-monospace">ETB ${formatMoney(baseVal)}</td>
+                        <td class="text-center">${rateBadge}</td>
+                        <td class="text-end font-monospace text-danger fw-bold">- ETB ${formatMoney(whtVal)}</td>
+                        <td class="text-end font-monospace text-success fw-semibold">ETB ${formatMoney(netVal)}</td>
+                        <td><span class="badge bg-light text-dark border font-monospace" style="font-size:0.7rem;">${receiptNo}</span></td>
+                        <td class="text-center pe-3">${slipBtn}</td>
+                    </tr>
+                `;
+            });
+        } else {
+            whtRows = `<tr><td colspan="11" class="text-center py-4 text-muted"><i class="fa-solid fa-folder-open me-2 text-warning"></i>No withholding tax deductions recorded for this month.</td></tr>`;
         }
 
         let tasRows = '';
@@ -6287,13 +6588,13 @@
                         <div class="col">
                             <div class="p-2.5 rounded-3 bg-light border border-secondary-subtle">
                                 <div class="d-flex justify-content-between align-items-center mb-1">
-                                    <span class="text-muted text-uppercase fw-bold" style="font-size: 0.65rem;">3% Withholding</span>
-                                    <span class="badge bg-warning-subtle text-dark rounded-pill" style="font-size: 0.62rem;">Separate</span>
+                                    <span class="text-muted text-uppercase fw-bold" style="font-size: 0.65rem;">Withholding Tax (WHT)</span>
+                                    <span class="badge bg-warning-subtle text-dark rounded-pill" style="font-size: 0.62rem;">${data.wht_summary ? data.wht_summary.wht_count : 0} items</span>
                                 </div>
-                                <div class="fw-bold text-danger font-monospace fs-6">- ETB ${formatMoney(s.withholding_tax)}</div>
+                                <div class="fw-bold text-danger font-monospace fs-6">- ETB ${formatMoney(data.wht_summary ? data.wht_summary.total_wht_amount : s.withholding_tax)}</div>
                                 <div class="mt-1 pt-1 border-top border-secondary-subtle d-flex justify-content-between small" style="font-size: 0.7rem;">
                                     <span class="text-muted">Net Disbursed:</span>
-                                    <span class="fw-bold text-success font-monospace">ETB ${formatMoney(s.net_disbursed)}</span>
+                                    <span class="fw-bold text-success font-monospace">ETB ${formatMoney(data.wht_summary ? data.wht_summary.total_net_disbursed : s.net_disbursed)}</span>
                                 </div>
                             </div>
                         </div>
@@ -6302,13 +6603,18 @@
                     <!-- Inner Navigation Tabs -->
                     <ul class="nav nav-tabs mb-3" id="drawerTab-${monthNum}" role="tablist">
                         <li class="nav-item">
-                            <button class="nav-link active fw-semibold small" id="drawer-income-tab-${monthNum}" data-bs-toggle="tab" data-bs-target="#drawer-income-${monthNum}" type="button" role="tab">
+                            <button class="nav-link ${isWht ? '' : 'active'} fw-semibold small" id="drawer-income-tab-${monthNum}" data-bs-toggle="tab" data-bs-target="#drawer-income-${monthNum}" type="button" role="tab">
                                 <i class="fa-solid fa-arrow-down-long text-success me-1"></i>Where Income Came From (${s.income_count})
                             </button>
                         </li>
                         <li class="nav-item">
                             <button class="nav-link fw-semibold small" id="drawer-expense-tab-${monthNum}" data-bs-toggle="tab" data-bs-target="#drawer-expense-${monthNum}" type="button" role="tab">
                                 <i class="fa-solid fa-arrow-up-long text-danger me-1"></i>Purchases &amp; Paid Expenses (${s.expense_count})
+                            </button>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link ${isWht ? 'active' : ''} fw-semibold small" id="drawer-wht-tab-${monthNum}" data-bs-toggle="tab" data-bs-target="#drawer-wht-${monthNum}" type="button" role="tab">
+                                <i class="fa-solid fa-hand-holding-dollar text-warning me-1"></i>Withholding Tax (WHT) (${(data.wht_expenses || []).length})
                             </button>
                         </li>
                         <li class="nav-item">
@@ -6330,7 +6636,7 @@
 
                     <div class="tab-content" id="drawerTabContent-${monthNum}">
                         <!-- Income Tab -->
-                        <div class="tab-pane fade show active" id="drawer-income-${monthNum}" role="tabpanel">
+                        <div class="tab-pane fade ${isWht ? '' : 'show active'}" id="drawer-income-${monthNum}" role="tabpanel">
                             <div class="table-responsive" style="max-height: 380px;">
                                 <table class="table table-hover table-sm align-middle mb-0">
                                     <thead class="bg-light sticky-top text-muted text-uppercase fw-bold" style="font-size: 0.68rem;">
@@ -6387,6 +6693,52 @@
                                             <td class="text-end py-2 font-monospace text-success">ETB ${formatMoney(s.input_vat)}</td>
                                             <td class="text-end py-2 font-monospace text-danger">- ETB ${formatMoney(s.withholding_tax)}</td>
                                             <td class="text-end py-2 font-monospace text-dark pe-3">ETB ${formatMoney(s.net_disbursed)}</td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Withholding Tax (WHT) Tab -->
+                        <div class="tab-pane fade ${isWht ? 'show active' : ''}" id="drawer-wht-${monthNum}" role="tabpanel">
+                            <div class="p-2.5 bg-light border-bottom d-flex align-items-center justify-content-between flex-wrap gap-2 small">
+                                <div class="d-flex align-items-center gap-2 flex-wrap">
+                                    <span class="fw-semibold text-dark"><i class="fa-solid fa-hand-holding-dollar text-warning me-1"></i>Withholding Deductions:</span>
+                                    <span class="badge bg-info-subtle text-info border border-info-subtle">2% Goods: ${data.wht_summary ? data.wht_summary.wht_2_count : 0} (ETB ${formatMoney(data.wht_summary ? data.wht_summary.wht_2_amount : 0)})</span>
+                                    <span class="badge bg-warning-subtle text-dark border border-warning-subtle">3% Services: ${data.wht_summary ? data.wht_summary.wht_3_count : 0} (ETB ${formatMoney(data.wht_summary ? data.wht_summary.wht_3_amount : 0)})</span>
+                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle">30% Non-TIN: ${data.wht_summary ? data.wht_summary.wht_30_count : 0} (ETB ${formatMoney(data.wht_summary ? data.wht_summary.wht_30_amount : 0)})</span>
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle"><i class="fa-solid fa-check me-1"></i>${data.wht_summary ? data.wht_summary.with_receipt_count : 0} Slips Attached</span>
+                                </div>
+                                <a href="{{ route('finance.tax-deductions.movements') }}?ethiopian_year=${m.year}&ethiopian_month=${m.month}#page-withholding" class="btn btn-xs btn-outline-warning text-dark rounded-pill px-2.5 py-1 fw-semibold" title="Open Full Withholding Audit">
+                                    <i class="fa-solid fa-up-right-from-square me-1"></i>Full WHT Audit
+                                </a>
+                            </div>
+                            <div class="table-responsive" style="max-height: 380px;">
+                                <table class="table table-hover table-sm align-middle mb-0">
+                                    <thead class="bg-light sticky-top text-muted text-uppercase fw-bold" style="font-size: 0.68rem;">
+                                        <tr>
+                                            <th class="ps-3 py-2">#</th>
+                                            <th class="py-2">Date (EC / GC)</th>
+                                            <th class="py-2">Voucher / Ref #</th>
+                                            <th class="py-2">Payee &amp; TIN</th>
+                                            <th class="py-2">Category &amp; Project</th>
+                                            <th class="py-2 text-end">Base Invoiced</th>
+                                            <th class="py-2 text-center">WHT Rate</th>
+                                            <th class="py-2 text-end text-danger">WHT Deducted</th>
+                                            <th class="py-2 text-end text-success">Net Disbursed</th>
+                                            <th class="py-2">Withhold Cert #</th>
+                                            <th class="py-2 text-center pe-3">Receipt Slip</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y">${whtRows}</tbody>
+                                    <tfoot class="bg-light fw-bold">
+                                        <tr>
+                                            <td colspan="5" class="ps-3 py-2 small text-uppercase text-muted">Total Month Withholding Deductions (${(data.wht_expenses || []).length} items)</td>
+                                            <td class="text-end py-2 font-monospace">ETB ${formatMoney(data.wht_summary ? data.wht_summary.total_base_amount : 0)}</td>
+                                            <td></td>
+                                            <td class="text-end py-2 font-monospace text-danger">- ETB ${formatMoney(data.wht_summary ? data.wht_summary.total_wht_amount : s.withholding_tax)}</td>
+                                            <td class="text-end py-2 font-monospace text-success pe-3">ETB ${formatMoney(data.wht_summary ? data.wht_summary.total_net_disbursed : s.net_disbursed)}</td>
+                                            <td colspan="2" class="pe-3"></td>
                                         </tr>
                                     </tfoot>
                                 </table>

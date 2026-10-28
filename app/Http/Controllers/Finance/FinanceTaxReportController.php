@@ -880,7 +880,66 @@ class FinanceTaxReportController extends Controller
 
         // 6. 12-Month Trend Table (Meskerem to Pagume, months 1 to 13 of selected Ethiopian Year)
         $monthlyTrend = [];
+        $monthlyWhtTrend = [];
         $runningOpeningCredit = 0.0;
+
+        $yearRangeStart = EthiopianDate::monthRange($selectedEthYear, 1)['start'];
+        $yearRangeEnd   = EthiopianDate::monthRange($selectedEthYear, 13)['end'];
+
+        $yearWhtSettlements = collect();
+        if (Schema::hasTable('tax_settlements')) {
+            $yearWhtSettlements = TaxSettlement::where('status', TaxSettlement::STATUS_PAID)
+                ->whereIn('tax_type', ['withholding', 'both'])
+                ->where(function ($q) use ($selectedEthYear, $yearRangeStart, $yearRangeEnd) {
+                    $q->where('ethiopian_year', $selectedEthYear)
+                      ->orWhere(function ($sq) use ($yearRangeStart, $yearRangeEnd) {
+                          $sq->whereBetween('period_from', [$yearRangeStart, $yearRangeEnd]);
+                      });
+                })
+                ->get();
+        }
+
+        $yearWhtExpenses = collect();
+        if (Schema::hasTable('expense_requests')) {
+            $yearWhtExpenses = ExpenseRequest::where(function ($q) {
+                    $q->whereIn('status', [ExpenseRequest::STATUS_PAID, 'paid', 'PAID', 'approved', 'completed'])
+                      ->orWhereNotNull('paid_at')
+                      ->orWhereNotNull('payment_reference');
+                })
+                ->whereNotIn('status', [ExpenseRequest::STATUS_REJECTED, 'rejected', 'Rejected'])
+                ->where(function ($q) use ($yearRangeStart, $yearRangeEnd) {
+                    $q->whereBetween('paid_at', [$yearRangeStart, $yearRangeEnd])
+                      ->orWhere(function ($sub) use ($yearRangeStart, $yearRangeEnd) {
+                          $sub->whereNull('paid_at')->whereBetween('created_at', [$yearRangeStart, $yearRangeEnd]);
+                      })
+                      ->orWhereBetween('created_at', [$yearRangeStart, $yearRangeEnd]);
+                })
+                ->where(function ($q) {
+                    $q->where('has_withholding', true)
+                      ->orWhere('withholding_amount', '>', 0);
+                })
+                ->get();
+        }
+
+        $yearProcWht = collect();
+        if (Schema::hasTable('procurement_payments')) {
+            try {
+                $yearProcWht = \App\Models\ProcurementPayment::where(function ($q) {
+                        $q->where('status', 'paid')->orWhereNotNull('paid_at');
+                    })
+                    ->where(function ($q) use ($yearRangeStart, $yearRangeEnd) {
+                        $q->whereBetween('paid_at', [$yearRangeStart, $yearRangeEnd])
+                          ->orWhere(function ($sub) use ($yearRangeStart, $yearRangeEnd) {
+                              $sub->whereNull('paid_at')->whereBetween('created_at', [$yearRangeStart, $yearRangeEnd]);
+                          });
+                    })
+                    ->where(function ($q) {
+                        $q->where('has_withholding', true)->orWhere('withholding_amount', '>', 0);
+                    })
+                    ->get();
+            } catch (\Throwable $e) {}
+        }
+
         for ($m = 1; $m <= 13; $m++) {
             $mRange = EthiopianDate::monthRange($selectedEthYear, $m);
 
@@ -1036,7 +1095,194 @@ class FinanceTaxReportController extends Controller
 
                 $runningOpeningCredit = $mNetCalc['credit_carry_forward'];
             }
+
+            // Withholding Tax Monthly Trend Calculation for Month $m
+            $mStart = $mRange['start'];
+            $mEnd   = $mRange['end'];
+
+            $mWhtSettlement = $yearWhtSettlements->first(function ($s) use ($selectedEthYear, $m, $mRange) {
+                return ($s->ethiopian_year == $selectedEthYear && $s->ethiopian_month == $m)
+                    || ($s->period_from == $mRange['start'] && $s->period_to == $mRange['end']);
+            });
+
+            $mWhtExp = $yearWhtExpenses->filter(function ($item) use ($mStart, $mEnd) {
+                $itemDate = $item->paid_at ?: $item->created_at;
+                if (!$itemDate) return false;
+                $dt = Carbon::parse($itemDate);
+                return $dt->betweenIncluded($mStart, $mEnd);
+            });
+
+            $mProcExp = $yearProcWht->filter(function ($item) use ($mStart, $mEnd) {
+                $itemDate = $item->paid_at ?: $item->created_at;
+                if (!$itemDate) return false;
+                $dt = Carbon::parse($itemDate);
+                return $dt->betweenIncluded($mStart, $mEnd);
+            });
+
+            $mWhtBase = 0.0;
+            $mWhtTotal = 0.0;
+            $mWht2Amt = 0.0;
+            $mWht2Count = 0;
+            $mWht3Amt = 0.0;
+            $mWht3Count = 0;
+            $mWht30Amt = 0.0;
+            $mWht30Count = 0;
+            $mWhtNetDisbursed = 0.0;
+            $mWhtSlipsCount = 0;
+            $mWhtMissingSlipsCount = 0;
+            $mWhtVouchersCount = 0;
+
+            foreach ($mWhtExp as $item) {
+                $gross = (float)($item->gross_amount > 0 ? $item->gross_amount : $item->amount);
+                $base = (float)($item->base_amount > 0 ? $item->base_amount : $gross);
+                if ($item->vat_type === 'inclusive') {
+                    $vatRate = (float)($item->vat_rate ?: 15.0);
+                    $base = round($gross / (1 + ($vatRate / 100)), 2);
+                }
+
+                $wht = (float)$item->calculated_withholding_amount;
+                if ($wht <= 0 && (float)($item->withholding_amount ?? 0) > 0) {
+                    $wht = round((float)$item->withholding_amount, 2);
+                }
+                if ($wht <= 0 && $item->has_withholding) {
+                    $rate = (float)($item->withholding_rate ?: 3.00);
+                    $wht = round($base * ($rate / 100), 2);
+                }
+
+                $rate = (float)($item->withholding_rate ?: ($wht > 0 && $base > 0 ? round(($wht / $base) * 100, 1) : 3.00));
+                $rRounded = round($rate, 1);
+
+                if ($rRounded == 2.0) {
+                    $mWht2Amt += $wht;
+                    $mWht2Count++;
+                } elseif ($rRounded == 30.0) {
+                    $mWht30Amt += $wht;
+                    $mWht30Count++;
+                } else {
+                    $mWht3Amt += $wht;
+                    $mWht3Count++;
+                }
+
+                $mWhtBase += $base;
+                $mWhtTotal += $wht;
+
+                $net = (float)$item->effective_payable_amount;
+                if ($net <= 0) {
+                    $net = max(0.0, round($base - $wht, 2));
+                }
+                $mWhtNetDisbursed += $net;
+
+                $hasSlip = !empty($item->withholding_receipt) || !empty($item->withholding_receipt_number);
+                if ($hasSlip) {
+                    $mWhtSlipsCount++;
+                } else {
+                    $mWhtMissingSlipsCount++;
+                }
+                $mWhtVouchersCount++;
+            }
+
+            foreach ($mProcExp as $item) {
+                $gross = (float)$item->amount;
+                $base = (float)($item->base_amount ?: $gross);
+                $wht = (float)($item->withholding_amount ?: ($item->has_withholding ? round($base * (($item->withholding_rate ?: 3) / 100), 2) : 0));
+                $rate = (float)($item->withholding_rate ?: ($wht > 0 && $base > 0 ? round(($wht / $base) * 100, 1) : 3.00));
+                $rRounded = round($rate, 1);
+
+                if ($rRounded == 2.0) {
+                    $mWht2Amt += $wht;
+                    $mWht2Count++;
+                } elseif ($rRounded == 30.0) {
+                    $mWht30Amt += $wht;
+                    $mWht30Count++;
+                } else {
+                    $mWht3Amt += $wht;
+                    $mWht3Count++;
+                }
+
+                $mWhtBase += $base;
+                $mWhtTotal += $wht;
+
+                $net = (float)($item->net_amount ?: max(0.0, round($base - $wht, 2)));
+                $mWhtNetDisbursed += $net;
+
+                $hasSlip = !empty($item->withholding_receipt) || !empty($item->withholding_receipt_number);
+                if ($hasSlip) {
+                    $mWhtSlipsCount++;
+                } else {
+                    $mWhtMissingSlipsCount++;
+                }
+                $mWhtVouchersCount++;
+            }
+
+            $mWhtBase = round($mWhtBase, 2);
+            $mWhtTotal = round($mWhtTotal, 2);
+            $mWht2Amt = round($mWht2Amt, 2);
+            $mWht3Amt = round($mWht3Amt, 2);
+            $mWht30Amt = round($mWht30Amt, 2);
+            $mWhtNetDisbursed = round($mWhtNetDisbursed, 2);
+
+            $isWhtSettled = ($mWhtSettlement !== null) || ($mWhtVouchersCount > 0 && $mWhtExp->isNotEmpty() && $mWhtExp->every(fn($e) => (bool)$e->withholding_settled));
+
+            if ($isWhtSettled) {
+                $whtStatus = 'cleared';
+                $whtLabel = 'Remitted to ERCA';
+                $whtBadgeClass = 'bg-success text-white';
+                $whtTextClass = 'text-success';
+            } elseif ($mWhtTotal > 0) {
+                $whtStatus = 'pending';
+                $whtLabel = 'Pending Remittance';
+                $whtBadgeClass = 'bg-warning text-dark';
+                $whtTextClass = 'text-warning';
+            } else {
+                $whtStatus = 'zero';
+                $whtLabel = '0.00 ETB (No WHT)';
+                $whtBadgeClass = 'bg-light text-muted border';
+                $whtTextClass = 'text-muted';
+            }
+
+            $monthlyWhtTrend[$m] = [
+                'month'                => $m,
+                'month_name'           => EthiopianDate::MONTHS_EN[$m],
+                'month_am'             => EthiopianDate::MONTHS_AM[$m],
+                'start_date'           => $mRange['start_date'],
+                'end_date'             => $mRange['end_date'],
+                'gregorian_window'     => $mRange['start']->format('M d, Y') . ' – ' . $mRange['end']->format('M d, Y'),
+                'base_amount'          => $mWhtBase,
+                'total_wht'            => $mWhtTotal,
+                'wht_2_amount'         => $mWht2Amt,
+                'wht_2_count'          => $mWht2Count,
+                'wht_3_amount'         => $mWht3Amt,
+                'wht_3_count'          => $mWht3Count,
+                'wht_30_amount'        => $mWht30Amt,
+                'wht_30_count'         => $mWht30Count,
+                'net_disbursed'        => $mWhtNetDisbursed,
+                'vouchers_count'       => $mWhtVouchersCount,
+                'slips_count'          => $mWhtSlipsCount,
+                'missing_slips_count'  => $mWhtMissingSlipsCount,
+                'is_current'           => ($m === $selectedEthMonth),
+                'is_settled'           => $isWhtSettled,
+                'status'               => $whtStatus,
+                'label'                => $whtLabel,
+                'badge_class'          => $whtBadgeClass,
+                'text_class'           => $whtTextClass,
+                'settlement_number'    => $mWhtSettlement?->settlement_number,
+            ];
         }
+
+        $yearlyWhtTotals = [
+            'total_base'         => round((float)collect($monthlyWhtTrend)->sum('base_amount'), 2),
+            'total_wht'          => round((float)collect($monthlyWhtTrend)->sum('total_wht'), 2),
+            'total_2_amt'        => round((float)collect($monthlyWhtTrend)->sum('wht_2_amount'), 2),
+            'total_2_count'      => (int)collect($monthlyWhtTrend)->sum('wht_2_count'),
+            'total_3_amt'        => round((float)collect($monthlyWhtTrend)->sum('wht_3_amount'), 2),
+            'total_3_count'      => (int)collect($monthlyWhtTrend)->sum('wht_3_count'),
+            'total_30_amt'       => round((float)collect($monthlyWhtTrend)->sum('wht_30_amount'), 2),
+            'total_30_count'     => (int)collect($monthlyWhtTrend)->sum('wht_30_count'),
+            'total_net_disbursed'=> round((float)collect($monthlyWhtTrend)->sum('net_disbursed'), 2),
+            'total_transactions' => (int)collect($monthlyWhtTrend)->sum('vouchers_count'),
+            'total_slips'        => (int)collect($monthlyWhtTrend)->sum('slips_count'),
+            'total_missing_slips'=> (int)collect($monthlyWhtTrend)->sum('missing_slips_count'),
+        ];
 
         $availableEthYears  = EthiopianDate::getYears();
         $availableEthMonths = EthiopianDate::getMonths();
@@ -1118,6 +1364,8 @@ class FinanceTaxReportController extends Controller
             'incomeWithholding',
             'monthNetDisbursed',
             'monthlyTrend',
+            'monthlyWhtTrend',
+            'yearlyWhtTotals',
             'isGeneralAdmin',
             'isMonthVatCleared',
             'isFreshStart',
