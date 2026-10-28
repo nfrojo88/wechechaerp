@@ -1472,8 +1472,9 @@ class OCRReceiptScannerController extends Controller
         }
 
         $items = $query->get();
+        // Immediately block double receipts (same FS No. & Seller TIN) - do NOT add to Excel
+        $items = $this->deduplicateReceiptItems($items);
         $template = $request->input('template', 'etax');
-        $items = $query->get();
         $tempPath = storage_path('app/temp_' . uniqid() . '.xlsx');
 
         if ($template === 'erca_15') {
@@ -1813,6 +1814,8 @@ class OCRReceiptScannerController extends Controller
 
         $template = $request->input('template', 'etax');
         $items = $query->get();
+        // Immediately block double receipts (same FS No. & Seller TIN) - do NOT add to CSV
+        $items = $this->deduplicateReceiptItems($items);
 
         if ($template === 'erca_15') {
             $filename = 'VAT_REPORT_' . now()->format('Y_m_d_His') . '.csv';
@@ -2147,6 +2150,106 @@ class OCRReceiptScannerController extends Controller
             'success' => true,
             'reply'   => $reply,
         ]);
+    }
+
+    /**
+     * Deduplicate receipt items before Excel/CSV export based on ERCA rule:
+     * Matching BOTH normalized FS No. and Seller TIN = double receipt.
+     * Keep the first original receipt, immediately block double receipts, and do not add to Excel/CSV.
+     */
+    protected function deduplicateReceiptItems(iterable $items)
+    {
+        $normalizeFs = function ($rawFs) {
+            $raw = trim((string)$rawFs);
+            $stripped = preg_replace('/^FS[:\s_#-]*\s*/i', '', $raw);
+            $alphanumeric = strtoupper(preg_replace('/[^0-9A-Z]/i', '', $stripped));
+            $normalized = ltrim($alphanumeric, '0');
+            return ($normalized === '' && $alphanumeric !== '') ? '0' : $normalized;
+        };
+
+        $normalizeTin = function ($rawTin) {
+            return strtoupper(preg_replace('/[^0-9A-Z]/i', '', trim((string)$rawTin)));
+        };
+
+        $groupedByMatch = [];
+        $uniqueCleanedItems = [];
+
+        foreach ($items as $item) {
+            $r = $item->receipt;
+            $rawFs = $r ? ($r->fs_no ?: ($r->fs_no_raw ?: ($r->receipt_number ?: ''))) : '';
+            $rawTin = $r ? ($r->vendor_tin ?: '') : '';
+
+            $normFs = $normalizeFs($rawFs);
+            $normTin = $normalizeTin($rawTin);
+
+            $fsMissing = ($normFs === '' || $normFs === '0' || in_array(strtoupper(trim((string)$rawFs)), ['', '-', '--', 'N/A', 'NA', 'NULL', 'NONE', 'UNKNOWN', '?', '0']));
+            $tinMissing = ($normTin === '' || strlen($normTin) < 5 || in_array(strtoupper(trim((string)$rawTin)), ['', '-', '--', 'N/A', 'NA', 'NULL', 'NONE', 'UNKNOWN', '?']));
+
+            if ($fsMissing || $tinMissing) {
+                $uniqueCleanedItems[] = $item;
+            } else {
+                $matchKey = $normTin . '___' . $normFs;
+                $groupedByMatch[$matchKey][] = $item;
+            }
+        }
+
+        foreach ($groupedByMatch as $matchKey => $group) {
+            $receiptsInGroup = [];
+            foreach ($group as $item) {
+                $rId = (string)($item->receipt_id ?: ($item->receipt?->id ?: $item->id));
+                $receiptsInGroup[$rId][] = $item;
+            }
+
+            if (count($receiptsInGroup) === 1) {
+                foreach ($group as $it) {
+                    $uniqueCleanedItems[] = $it;
+                }
+                continue;
+            }
+
+            // Multiple receipts with identical FS No. & Seller TIN: Keep the FIRST original receipt!
+            $receiptList = array_values($receiptsInGroup);
+            usort($receiptList, function ($itemsA, $itemsB) {
+                $itemA = $itemsA[0];
+                $itemB = $itemsB[0];
+                $rA = $itemA->receipt;
+                $rB = $itemB->receipt;
+
+                $parsedA = is_string($rA?->parsed_data ?? null) ? (json_decode($rA->parsed_data, true) ?: []) : (array)($rA?->parsed_data ?? []);
+                $parsedB = is_string($rB?->parsed_data ?? null) ? (json_decode($rB->parsed_data, true) ?: []) : (array)($rB?->parsed_data ?? []);
+                $editA = (int)($parsedA['manually_edited_at'] ?? ($parsedA['last_updated_at'] ?? 0));
+                $editB = (int)($parsedB['manually_edited_at'] ?? ($parsedB['last_updated_at'] ?? 0));
+                if ($editA !== $editB) {
+                    return $editB <=> $editA;
+                }
+
+                $uploadA = $itemA->created_at ? $itemA->created_at->timestamp : ($rA?->created_at ? $rA->created_at->timestamp : 0);
+                $uploadB = $itemB->created_at ? $itemB->created_at->timestamp : ($rB?->created_at ? $rB->created_at->timestamp : 0);
+                if ($uploadA !== $uploadB && $uploadA > 0 && $uploadB > 0) {
+                    return $uploadA <=> $uploadB;
+                }
+
+                $dateA = $rA?->receipt_date ? Carbon::parse($rA->receipt_date)->timestamp : 0;
+                $dateB = $rB?->receipt_date ? Carbon::parse($rB->receipt_date)->timestamp : 0;
+                if ($dateA !== $dateB && $dateA > 0 && $dateB > 0) {
+                    return $dateA <=> $dateB;
+                }
+
+                $idA = (int)($rA?->id ?: $itemA->id);
+                $idB = (int)($rB?->id ?: $itemB->id);
+                if ($idA !== $idB && $idA > 0 && $idB > 0) {
+                    return $idA <=> $idB;
+                }
+                return strcmp((string)$itemA->id, (string)$itemB->id);
+            });
+
+            // Keep only items of the first original receipt; immediately block double receipts (DO NOT ADD TO EXCEL)
+            foreach ($receiptList[0] as $keptItem) {
+                $uniqueCleanedItems[] = $keptItem;
+            }
+        }
+
+        return collect($uniqueCleanedItems);
     }
 
     /**

@@ -3493,10 +3493,13 @@
                                     <div class="d-flex align-items-center gap-2">
                                         <span class="badge bg-primary-subtle text-primary p-2 rounded-3"><i class="fa-solid fa-camera-retro fs-6"></i></span>
                                         <div>
-                                            <div class="d-flex align-items-center gap-2">
+                                            <div class="d-flex align-items-center gap-2 flex-wrap">
                                                 <h6 class="fw-bold mb-0 text-dark">Scanned OCR Receipts (ERCA Cash Register Invoices)</h6>
                                                 <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill small fw-semibold px-2.5 py-0.5">
                                                     <i class="fa-solid fa-shield-check me-1"></i>Verified Receipts
+                                                </span>
+                                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill small fw-semibold px-2.5 py-0.5">
+                                                    <i class="fa-solid fa-ban me-1"></i>Duplicate Blocking Active
                                                 </span>
                                             </div>
                                             <small class="text-muted">Itemized receipts with verified 15% VAT or 0% TAS, Vendor TIN, FS Numbers, and Machine MRC</small>
@@ -3530,6 +3533,29 @@
                                     </div>
                                 </div>
 
+                                {{-- ── DUPLICATE RECEIPT COMMENT RULE ────────────────────────────────── --}}
+                                <div class="px-3 py-2.5 bg-light border-bottom">
+                                    <div class="p-2.5 rounded-3 bg-white border border-primary-subtle shadow-2xs d-flex align-items-start gap-2.5">
+                                        <span class="badge bg-primary-subtle text-primary p-2 rounded-circle mt-0.5"><i class="fa-solid fa-shield-halved fs-6"></i></span>
+                                        <div class="flex-grow-1">
+                                            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-1">
+                                                <div class="d-flex align-items-center gap-2">
+                                                    <span class="fw-bold text-dark small text-uppercase" style="letter-spacing: 0.5px;">
+                                                        <i class="fa-solid fa-gavel text-primary me-1"></i>Duplicate Receipt Comment &amp; Blocking Rule
+                                                    </span>
+                                                    <span class="badge bg-danger text-white rounded-pill px-2 py-0.5 font-monospace small">Active Policy</span>
+                                                </div>
+                                                <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2.5 py-0.5 small fw-semibold">
+                                                    <i class="fa-solid fa-file-excel me-1"></i>Excel Protected: No Double Receipts
+                                                </span>
+                                            </div>
+                                            <div class="small text-secondary" style="font-size: 0.8rem; line-height: 1.45;">
+                                                <strong>Rule:</strong> A receipt is classified as a duplicate if <strong>BOTH FS No. and Seller TIN</strong> match an existing receipt. Under this rule, the system <strong>immediately blocks</strong> double receipts, preserving only the <strong>first original receipt</strong>. All blocked double receipts are strictly <strong>excluded from matrix totals and from Excel export</strong> (Purchase VAT &amp; Purchase TAS) to guarantee no double-counting before ERCA submission.
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 {{-- Deduplication Summary Bar --}}
                                 <div class="px-3 py-2 bg-light bg-opacity-75 border-bottom d-flex align-items-center justify-content-between flex-wrap gap-2" id="mOcrSummaryBar">
                                     <div class="d-flex align-items-center gap-3 flex-wrap">
@@ -3538,11 +3564,11 @@
                                             <span class="badge bg-secondary text-white rounded-pill font-monospace fw-bold px-2 py-0.5" id="mOcrTotalScanned">0</span>
                                         </div>
                                         <div class="d-flex align-items-center gap-1.5 small">
-                                            <span class="text-muted fw-semibold"><i class="fa-solid fa-clone me-1 text-danger"></i>Duplicates Removed:</span>
-                                            <span class="badge bg-danger text-white rounded-pill font-monospace fw-bold px-2 py-0.5" id="mOcrDuplicatesRemoved">0</span>
+                                            <span class="text-muted fw-semibold"><i class="fa-solid fa-clone me-1 text-danger"></i>Duplicates Blocked:</span>
+                                            <span class="badge bg-danger text-white rounded-pill font-monospace fw-bold px-2 py-0.5" id="mOcrDuplicatesRemoved">0 Blocked</span>
                                         </div>
                                         <div class="d-flex align-items-center gap-1.5 small">
-                                            <span class="text-muted fw-semibold"><i class="fa-solid fa-check-double me-1 text-success"></i>Unique Receipts Used:</span>
+                                            <span class="text-muted fw-semibold"><i class="fa-solid fa-check-double me-1 text-success"></i>Unique Receipts Kept:</span>
                                             <span class="badge bg-success text-white rounded-pill font-monospace fw-bold px-2 py-0.5" id="mOcrUniqueUsed">0</span>
                                         </div>
                                         <div class="d-flex align-items-center gap-1.5 small d-none" id="mOcrNeedsReviewContainer">
@@ -3554,7 +3580,7 @@
                                     </div>
                                     <div class="small text-muted d-flex align-items-center gap-1">
                                         <i class="fa-solid fa-circle-info text-primary"></i>
-                                        <span>Deduplicated by <strong>FS No.</strong> &amp; <strong>Seller TIN</strong> (keeps latest receipt).</span>
+                                        <span>Deduplicated by <strong>FS No.</strong> &amp; <strong>Seller TIN</strong> (first original receipt kept; double receipts immediately blocked &amp; excluded from Excel).</span>
                                     </div>
                                 </div>
 
@@ -3590,19 +3616,19 @@
                                 </div>
                             </div>
 
-                            {{-- ── DUPLICATES REMOVED TABLE ───────────────────────────── --}}
+                            {{-- ── BLOCKED DOUBLE RECEIPTS TABLE ───────────────────────────── --}}
                             <div class="card border-0 shadow-sm rounded-4 overflow-hidden bg-white mt-4" id="mOcrDuplicatesCard">
                                 <div class="card-header bg-white border-bottom py-3 px-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
                                     <div class="d-flex align-items-center gap-2">
                                         <span class="badge bg-danger-subtle text-danger p-2 rounded-3"><i class="fa-solid fa-clone fs-6"></i></span>
                                         <div>
-                                            <div class="d-flex align-items-center gap-2">
-                                                <h6 class="fw-bold mb-0 text-dark">Duplicates Removed</h6>
+                                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                                <h6 class="fw-bold mb-0 text-dark">Blocked Double Receipts (Excluded from Excel)</h6>
                                                 <span class="badge bg-danger text-white rounded-pill small fw-semibold px-2.5 py-0.5" id="mOcrDuplicatesBadge">
-                                                    0 Duplicates Excluded
+                                                    0 Double Receipts Blocked (Not in Excel)
                                                 </span>
                                             </div>
-                                            <small class="text-muted">Receipts with identical FS No. &amp; Seller TIN — only the latest receipt was kept; older duplicates excluded from matrix and totals</small>
+                                            <small class="text-muted">Receipts with identical FS No. &amp; Seller TIN — original first receipt preserved; duplicate double receipts immediately blocked and excluded from matrix, totals, and Excel export</small>
                                         </div>
                                     </div>
                                 </div>
@@ -3611,10 +3637,10 @@
                                         <thead class="table-light text-muted text-uppercase fw-bold" style="font-size: 0.7rem;">
                                             <tr>
                                                 <th class="ps-3 py-2.5">FS No.</th>
-                                                <th class="py-2.5">Seller TIN</th>
-                                                <th class="py-2.5">Kept Receipt (date/ref)</th>
-                                                <th class="py-2.5">Removed Receipt(s) (date/ref)</th>
-                                                <th class="py-2.5 pe-3">Reason</th>
+                                                <th class="py-2.5">Seller TIN &amp; Vendor</th>
+                                                <th class="py-2.5">Kept Original Receipt (First Entry)</th>
+                                                <th class="py-2.5">Blocked Double Receipt(s) (Excluded from Excel)</th>
+                                                <th class="py-2.5 pe-3">Comment Rule / Reason</th>
                                             </tr>
                                         </thead>
                                         <tbody class="divide-y" id="mOcrDuplicatesTableBody">
@@ -6209,9 +6235,9 @@
                                 <div class="d-flex align-items-center gap-2 flex-wrap">
                                     <span><strong>Scanned:</strong> ${s.ocr_total_scanned !== undefined ? s.ocr_total_scanned : (data.ocr_items || []).length}</span>
                                     <span class="text-muted">&bull;</span>
-                                    <span class="text-danger"><strong>Duplicates Excluded:</strong> ${s.ocr_duplicates_removed !== undefined ? s.ocr_duplicates_removed : (data.duplicates_removed || []).length}</span>
+                                    <span class="text-danger"><strong>Duplicates Blocked:</strong> ${s.ocr_duplicates_removed !== undefined ? s.ocr_duplicates_removed : (data.duplicates_removed || []).length}</span>
                                     <span class="text-muted">&bull;</span>
-                                    <span class="text-success"><strong>Unique Used:</strong> ${s.ocr_unique_used !== undefined ? s.ocr_unique_used : (data.ocr_items || []).length}</span>
+                                    <span class="text-success"><strong>Unique Kept:</strong> ${s.ocr_unique_used !== undefined ? s.ocr_unique_used : (data.ocr_items || []).length}</span>
                                     ${(s.ocr_needs_review_count || (data.ocr_needs_manual_review || []).length) ? `<span class="badge bg-warning text-dark border border-warning ms-1"><i class="fa-solid fa-triangle-exclamation me-1"></i>${s.ocr_needs_review_count || data.ocr_needs_manual_review.length} Needs Review</span>` : ''}
                                 </div>
                             </div>
@@ -6920,6 +6946,9 @@
                 const reviewBadgeHtml = ocr.needs_manual_review
                     ? `<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-pill small fw-semibold px-2 py-0.5 d-inline-flex align-items-center gap-1 ms-1" title="${ocr.review_reason || 'Needs manual review'}"><i class="fa-solid fa-triangle-exclamation"></i>Needs review</span>`
                     : '';
+                const keptOriginalBadgeHtml = ocr.has_duplicates_blocked
+                    ? `<span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill small fw-semibold px-2 py-0.5 d-inline-flex align-items-center gap-1 ms-1" title="First original receipt preserved; ${ocr.blocked_duplicates_count || 1} double receipt(s) immediately blocked"><i class="fa-solid fa-shield-check"></i>Kept (Original)</span>`
+                    : '';
 
                 const tr = document.createElement('tr');
                 tr.id = 'm-ocr-row-' + ocr.id;
@@ -6932,6 +6961,7 @@
                     <td>
                         <div class="d-flex align-items-center gap-1 flex-wrap">
                             <span class="badge bg-light text-primary border font-monospace cell-fs">${ocr.fs_no || '-'}</span>
+                            ${keptOriginalBadgeHtml}
                             ${reviewBadgeHtml}
                         </div>
                         <small class="text-muted d-block cell-receipt-no" style="font-size:0.75rem;">${ocr.receipt_number || ''}</small>
@@ -6985,7 +7015,7 @@
         if (badge) {
             if (totalRemoved > 0) {
                 badge.className = 'badge bg-danger text-white rounded-pill small fw-semibold px-2.5 py-0.5';
-                badge.innerText = `${totalRemoved} Duplicates Excluded`;
+                badge.innerText = `${totalRemoved} Double Receipts Blocked (Not in Excel)`;
             } else {
                 badge.className = 'badge bg-success-subtle text-success border border-success-subtle rounded-pill small fw-semibold px-2.5 py-0.5';
                 badge.innerHTML = '<i class="fa-solid fa-check me-1"></i>0 Duplicates';
@@ -7002,11 +7032,12 @@
                     removedHtml += `
                         <div class="d-inline-flex align-items-center gap-2 p-1.5 rounded-3 bg-danger-subtle bg-opacity-35 border border-danger-subtle mb-1">
                             <span class="badge bg-danger text-white rounded-pill px-2 py-0.5 small fw-semibold">
-                                <i class="fa-solid fa-trash-can me-1"></i>Removed
+                                <i class="fa-solid fa-ban me-1"></i>Blocked
                             </span>
                             <div>
                                 <span class="font-monospace text-muted d-block text-decoration-line-through" style="font-size: 0.8rem;">${rem.ref || rem.receipt_number || ''}</span>
                                 <small class="text-muted" style="font-size: 0.75rem;">${rem.date || '-'} &bull; ETB ${formatMoney(rem.amount || 0)}</small>
+                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill px-1.5 py-0 mt-0.5" style="font-size: 0.68rem;">Excluded from Excel</span>
                             </div>
                         </div>
                     `;
@@ -7024,7 +7055,7 @@
                     <td>
                         <div class="d-inline-flex align-items-center gap-2 p-2 rounded-3 bg-success-subtle bg-opacity-50 border border-success-subtle">
                             <span class="badge bg-success text-white rounded-pill px-2 py-0.5 small fw-semibold">
-                                <i class="fa-solid fa-check me-1"></i>Kept
+                                <i class="fa-solid fa-shield-halved me-1"></i>Kept (Original)
                             </span>
                             <div>
                                 <span class="fw-bold font-monospace text-dark d-block" style="font-size: 0.8rem;">${kept.ref || kept.receipt_number || ''}</span>
@@ -7038,7 +7069,7 @@
                         </div>
                     </td>
                     <td class="pe-3">
-                        <span class="small text-muted">${dup.reason || 'Identical FS No. and Seller TIN'}</span>
+                        <span class="small text-muted">${dup.reason || 'Identical FS No. and Seller TIN (First original scan kept, subsequent double scans blocked)'}</span>
                     </td>
                 `;
                 tbody.appendChild(tr);
@@ -7047,7 +7078,7 @@
             tbody.innerHTML = `
                 <tr>
                     <td colspan="5" class="text-center py-4 text-muted">
-                        <i class="fa-solid fa-shield-check text-success me-2 fs-5"></i>No duplicate OCR receipts found for this period. Every receipt has a unique FS No. and Seller TIN.
+                        <i class="fa-solid fa-shield-check text-success me-2 fs-5"></i>No duplicate OCR receipts found for this period. Every receipt has a unique FS No. and Seller TIN. Duplicate blocking rule is active.
                     </td>
                 </tr>
             `;

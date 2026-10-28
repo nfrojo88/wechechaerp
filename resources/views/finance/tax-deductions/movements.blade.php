@@ -1470,10 +1470,13 @@
                     <div class="d-flex align-items-center gap-2">
                         <span class="badge bg-primary-subtle text-primary p-2 rounded-3"><i class="fa-solid fa-camera-retro fs-6"></i></span>
                         <div>
-                            <div class="d-flex align-items-center gap-2">
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
                                 <h6 class="fw-bold mb-0 text-dark">Scanned OCR Receipts (ERCA Cash Register Invoices)</h6>
                                 <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill small fw-semibold px-2.5 py-0.5">
                                     <i class="fa-solid fa-shield-check me-1"></i>Verified Receipts
+                                </span>
+                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill small fw-semibold px-2.5 py-0.5">
+                                    <i class="fa-solid fa-ban me-1"></i>Duplicate Blocking Active
                                 </span>
                             </div>
                             <small class="text-muted">Itemized receipts with verified 15% VAT or 0% TAS, Vendor TIN, FS Numbers, and Machine MRC</small>
@@ -1530,6 +1533,29 @@
                     </div>
                 </div>
 
+                {{-- ── DUPLICATE RECEIPT COMMENT RULE ────────────────────────────────── --}}
+                <div class="px-3 py-2.5 bg-light border-bottom">
+                    <div class="p-2.5 rounded-3 bg-white border border-primary-subtle shadow-2xs d-flex align-items-start gap-2.5">
+                        <span class="badge bg-primary-subtle text-primary p-2 rounded-circle mt-0.5"><i class="fa-solid fa-shield-halved fs-6"></i></span>
+                        <div class="flex-grow-1">
+                            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-1">
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="fw-bold text-dark small text-uppercase" style="letter-spacing: 0.5px;">
+                                        <i class="fa-solid fa-gavel text-primary me-1"></i>Duplicate Receipt Comment &amp; Blocking Rule
+                                    </span>
+                                    <span class="badge bg-danger text-white rounded-pill px-2 py-0.5 font-monospace small">Active Policy</span>
+                                </div>
+                                <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2.5 py-0.5 small fw-semibold">
+                                    <i class="fa-solid fa-file-excel me-1"></i>Excel Protected: No Double Receipts
+                                </span>
+                            </div>
+                            <div class="small text-secondary" style="font-size: 0.8rem; line-height: 1.45;">
+                                <strong>Rule:</strong> A receipt is classified as a duplicate if <strong>BOTH FS No. and Seller TIN</strong> match an existing receipt. Under this rule, the system <strong>immediately blocks</strong> double receipts, preserving only the <strong>first original receipt</strong>. All blocked double receipts are strictly <strong>excluded from matrix totals and from Excel export</strong> (Purchase VAT &amp; Purchase TAS) to guarantee no double-counting before ERCA submission.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 {{-- Deduplication Summary Bar --}}
                 @php
                     $allOcrList = $movementsData['all_ocr_items'] ?? ($movementsData['ocr_items'] ?? []);
@@ -1545,15 +1571,15 @@
                             <span class="badge bg-secondary text-white rounded-pill font-monospace fw-bold px-2 py-0.5">{{ $totalScanned }}</span>
                         </div>
                         <div class="d-flex align-items-center gap-1.5 small">
-                            <span class="text-muted fw-semibold"><i class="fa-solid fa-clone me-1 text-danger"></i>Duplicates Removed:</span>
+                            <span class="text-muted fw-semibold"><i class="fa-solid fa-clone me-1 text-danger"></i>Duplicates Blocked:</span>
                             @if($dupsRemoved > 0)
-                                <span class="badge bg-danger text-white rounded-pill font-monospace fw-bold px-2 py-0.5">{{ $dupsRemoved }}</span>
+                                <span class="badge bg-danger text-white rounded-pill font-monospace fw-bold px-2 py-0.5">{{ $dupsRemoved }} Blocked</span>
                             @else
                                 <span class="badge bg-light text-muted border rounded-pill font-monospace px-2 py-0.5">0</span>
                             @endif
                         </div>
                         <div class="d-flex align-items-center gap-1.5 small">
-                            <span class="text-muted fw-semibold"><i class="fa-solid fa-check-double me-1 text-success"></i>Unique Receipts Used:</span>
+                            <span class="text-muted fw-semibold"><i class="fa-solid fa-check-double me-1 text-success"></i>Unique Receipts Kept:</span>
                             <span class="badge bg-success text-white rounded-pill font-monospace fw-bold px-2 py-0.5">{{ $uniqueUsed }}</span>
                         </div>
                         @if($needsReviewCount > 0)
@@ -1567,7 +1593,7 @@
                     </div>
                     <div class="small text-muted d-flex align-items-center gap-1">
                         <i class="fa-solid fa-circle-info text-primary"></i>
-                        <span>Deduplicated by <strong>FS No.</strong> &amp; <strong>Seller TIN</strong> (keeps latest receipt).</span>
+                        <span>Deduplicated by <strong>FS No.</strong> &amp; <strong>Seller TIN</strong> (first original receipt kept; double receipts immediately blocked &amp; excluded from Excel).</span>
                     </div>
                 </div>
 
@@ -1621,6 +1647,11 @@
                                     <td>
                                         <div class="d-flex align-items-center gap-1.5 flex-wrap">
                                             <span class="badge bg-light text-primary border font-monospace cell-fs">{{ $ocr['fs_no'] ?? '-' }}</span>
+                                            @if(!empty($ocr['has_duplicates_blocked']))
+                                                <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill small fw-semibold px-2 py-0.5 d-inline-flex align-items-center gap-1" title="First original receipt preserved; {{ $ocr['blocked_duplicates_count'] ?? 1 }} double receipt(s) immediately blocked">
+                                                    <i class="fa-solid fa-shield-check"></i>Kept (Original)
+                                                </span>
+                                            @endif
                                             @if($needsReview)
                                                 <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-pill small fw-semibold px-2 py-0.5 d-inline-flex align-items-center gap-1" title="{{ $ocr['review_reason'] ?? 'Needs manual review' }}">
                                                     <i class="fa-solid fa-triangle-exclamation"></i>Needs manual review
@@ -1685,18 +1716,18 @@
                 </div>
             </div>
 
-            {{-- ── DUPLICATES REMOVED TABLE ──────────────────────────────────── --}}
+            {{-- ── BLOCKED DOUBLE RECEIPTS TABLE ───────────────────────────── --}}
             <div class="card border-0 shadow-sm rounded-4 overflow-hidden bg-white mt-4">
                 <div class="card-header bg-white border-bottom py-3 px-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <div class="d-flex align-items-center gap-2">
                         <span class="badge bg-danger-subtle text-danger p-2 rounded-3"><i class="fa-solid fa-clone fs-6"></i></span>
                         <div>
-                            <div class="d-flex align-items-center gap-2">
-                                <h6 class="fw-bold mb-0 text-dark">Duplicates Removed</h6>
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <h6 class="fw-bold mb-0 text-dark">Blocked Double Receipts (Excluded from Excel)</h6>
                                 @php $dupList = $movementsData['duplicates_removed'] ?? []; @endphp
                                 @if(count($dupList) > 0)
                                     <span class="badge bg-danger text-white rounded-pill small fw-semibold px-2.5 py-0.5">
-                                        {{ $dupsRemoved }} Duplicates Excluded
+                                        {{ $dupsRemoved }} Double Receipts Blocked (Not in Excel)
                                     </span>
                                 @else
                                     <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill small fw-semibold px-2.5 py-0.5">
@@ -1704,7 +1735,7 @@
                                     </span>
                                 @endif
                             </div>
-                            <small class="text-muted">Receipts with identical FS No. &amp; Seller TIN — only the latest receipt was kept; older duplicates excluded from matrix and totals</small>
+                            <small class="text-muted">Receipts with identical FS No. &amp; Seller TIN — original first receipt preserved; duplicate double receipts immediately blocked and excluded from matrix, totals, and Excel export</small>
                         </div>
                     </div>
                 </div>
@@ -1713,10 +1744,10 @@
                         <thead class="table-light text-muted text-uppercase fw-bold" style="font-size: 0.7rem;">
                             <tr>
                                 <th class="ps-3 py-2.5">FS No.</th>
-                                <th class="py-2.5">Seller TIN</th>
-                                <th class="py-2.5">Kept Receipt (date/ref)</th>
-                                <th class="py-2.5">Removed Receipt(s) (date/ref)</th>
-                                <th class="py-2.5 pe-3">Reason</th>
+                                <th class="py-2.5">Seller TIN &amp; Vendor</th>
+                                <th class="py-2.5">Kept Original Receipt (First Entry)</th>
+                                <th class="py-2.5">Blocked Double Receipt(s) (Excluded from Excel)</th>
+                                <th class="py-2.5 pe-3">Comment Rule / Reason</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y">
@@ -1732,7 +1763,7 @@
                                     <td>
                                         <div class="d-inline-flex align-items-center gap-2 p-2 rounded-3 bg-success-subtle bg-opacity-50 border border-success-subtle">
                                             <span class="badge bg-success text-white rounded-pill px-2 py-0.5 small fw-semibold">
-                                                <i class="fa-solid fa-check me-1"></i>Kept
+                                                <i class="fa-solid fa-check me-1"></i>Kept (Original)
                                             </span>
                                             <div>
                                                 <span class="fw-bold font-monospace text-dark d-block" style="font-size: 0.8rem;">{{ $dup['kept_receipt']['ref'] ?? '' }}</span>
@@ -1745,7 +1776,7 @@
                                             @foreach($dup['removed_receipts'] ?? [] as $rem)
                                                 <div class="d-inline-flex align-items-center gap-2 p-1.5 rounded-3 bg-danger-subtle bg-opacity-35 border border-danger-subtle">
                                                     <span class="badge bg-danger text-white rounded-pill px-2 py-0.5 small fw-semibold">
-                                                        <i class="fa-solid fa-trash-can me-1"></i>Removed
+                                                        <i class="fa-solid fa-ban me-1"></i>Blocked
                                                     </span>
                                                     <div>
                                                         <span class="font-monospace text-muted d-block text-decoration-line-through" style="font-size: 0.8rem;">{{ $rem['ref'] ?? '' }}</span>

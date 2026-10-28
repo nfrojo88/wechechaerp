@@ -77,7 +77,8 @@ class TaxMovementsOcrDuplicateCheckTest extends TestCase
 
     /**
      * Test duplicate rule:
-     * - Identical FS No & Seller TIN -> only latest kept, older removed.
+     * - Identical FS No & Seller TIN -> First original receipt preserved, subsequent double receipt immediately blocked!
+     * - Blocked double receipts are strictly excluded from matrix totals and NEVER added to Excel.
      * - Only FS No matches -> kept (not duplicate).
      * - Only Seller TIN matches -> kept (not duplicate).
      * - Missing/unreadable FS No or TIN -> kept, flagged as "Needs manual review".
@@ -86,11 +87,11 @@ class TaxMovementsOcrDuplicateCheckTest extends TestCase
     {
         // October 2026 falls within Meskerem/Tikimt 2019 EC.
         // Let's create receipts in a specific date window: 2026-10-15
-        $date1 = '2026-10-10'; // older
-        $date2 = '2026-10-20'; // newer
+        $date1 = '2026-10-10'; // first original
+        $date2 = '2026-10-20'; // double scan
 
         // 1. DUPLICATE PAIR: FS "00012345" and TIN "0012345678"
-        // Older duplicate (should be removed)
+        // First original receipt (MUST BE KEPT)
         $r1 = Receipt::create([
             'receipt_number' => 'REC-001',
             'receipt_date'   => $date1,
@@ -104,15 +105,15 @@ class TaxMovementsOcrDuplicateCheckTest extends TestCase
         ]);
         ReceiptItem::create([
             'receipt_id'      => $r1->id,
-            'item_description'=> 'Hardware Older',
+            'item_description'=> 'Hardware Original First',
             'total_value'     => 1000.00,
             'vat_amount'      => 150.00,
             'value_after_vat' => 1150.00,
             'created_at'      => Carbon::parse('2026-10-10 10:00:00'),
         ]);
 
-        // Newer duplicate: FS normalized matches "FS-12345" -> "12345", TIN matches "00-1234-5678" -> "0012345678"
-        // (should be KEPT)
+        // Double scan: FS normalized matches "FS-12345" -> "12345", TIN matches "00-1234-5678" -> "0012345678"
+        // Uploaded later (MUST BE IMMEDIATELY BLOCKED & EXCLUDED)
         $r2 = Receipt::create([
             'receipt_number' => 'REC-002',
             'receipt_date'   => $date2,
@@ -126,7 +127,7 @@ class TaxMovementsOcrDuplicateCheckTest extends TestCase
         ]);
         ReceiptItem::create([
             'receipt_id'      => $r2->id,
-            'item_description'=> 'Hardware Newer',
+            'item_description'=> 'Hardware Double Scan',
             'total_value'     => 1000.00,
             'vat_amount'      => 150.00,
             'value_after_vat' => 1150.00,
@@ -203,8 +204,8 @@ class TaxMovementsOcrDuplicateCheckTest extends TestCase
 
         // Verification of Summary Stats:
         // Total receipts scanned = 5
-        // Duplicates removed = 1 (r1 removed)
-        // Unique receipts used = 4 (r2, r3, r4, r5)
+        // Duplicates removed = 1 (r2 blocked)
+        // Unique receipts used = 4 (r1, r3, r4, r5)
         // Needs manual review = 1 (r5)
         $summary = $result['summary'];
         $this->assertEquals(5, $summary['ocr_total_scanned'], 'Total receipts scanned must be 5');
@@ -215,11 +216,17 @@ class TaxMovementsOcrDuplicateCheckTest extends TestCase
         // Check Cleaned Matrix: exactly 4 unique rows
         $this->assertCount(4, $result['ocr_items']);
         $keptIds = collect($result['ocr_items'])->pluck('receipt_id')->all();
-        $this->assertContains($r2->id, $keptIds, 'Latest receipt r2 must be kept');
-        $this->assertNotContains($r1->id, $keptIds, 'Older duplicate receipt r1 must be removed');
+        $this->assertContains($r1->id, $keptIds, 'First original receipt r1 must be kept');
+        $this->assertNotContains($r2->id, $keptIds, 'Subsequent double receipt r2 must be blocked');
         $this->assertContains($r3->id, $keptIds, 'Different TIN receipt r3 must be kept');
         $this->assertContains($r4->id, $keptIds, 'Different FS receipt r4 must be kept');
         $this->assertContains($r5->id, $keptIds, 'Unreadable receipt r5 must be kept in matrix');
+
+        // Check that first kept receipt has has_duplicates_blocked = true
+        $r1Cleaned = collect($result['ocr_items'])->firstWhere('receipt_id', $r1->id);
+        $this->assertNotNull($r1Cleaned);
+        $this->assertTrue($r1Cleaned['has_duplicates_blocked'], 'Kept receipt should indicate blocked duplicates');
+        $this->assertEquals(1, $r1Cleaned['blocked_duplicates_count']);
 
         // Check that Flagged item in Cleaned Matrix has needs_manual_review = true
         $r5Cleaned = collect($result['ocr_items'])->firstWhere('receipt_id', $r5->id);
@@ -230,18 +237,94 @@ class TaxMovementsOcrDuplicateCheckTest extends TestCase
         // Check "Duplicates Removed" Table structure
         $this->assertCount(1, $result['duplicates_removed']);
         $dupEntry = $result['duplicates_removed'][0];
-        $this->assertEquals('FS-12345', $dupEntry['fs_no']);
+        $this->assertEquals('00012345', $dupEntry['fs_no']);
         $this->assertEquals('12345', $dupEntry['norm_fs']);
         $this->assertEquals('Vendor Alpha', $dupEntry['vendor_name']);
-        $this->assertEquals($r2->id, $dupEntry['kept_receipt']['receipt_id']);
+        $this->assertEquals($r1->id, $dupEntry['kept_receipt']['receipt_id']);
         $this->assertCount(1, $dupEntry['removed_receipts']);
-        $this->assertEquals($r1->id, $dupEntry['removed_receipts'][0]['receipt_id']);
-        $this->assertStringContainsString('kept latest receipt', $dupEntry['reason']);
+        $this->assertEquals($r2->id, $dupEntry['removed_receipts'][0]['receipt_id']);
+        $this->assertStringContainsString('Double receipt immediately blocked', $dupEntry['reason']);
+        $this->assertStringContainsString('excluded from Excel export', $dupEntry['reason']);
 
         // Check Totals:
-        // Base value: r2 (1000) + r3 (500) + r4 (200) + r5 (300) = 2000.00 (r1 1000 is excluded!)
-        // VAT amount: r2 (150) + r3 (75) + r4 (30) + r5 (45) = 300.00 (r1 150 is excluded!)
+        // Base value: r1 (1000) + r3 (500) + r4 (200) + r5 (300) = 2000.00 (r2 1000 is excluded!)
+        // VAT amount: r1 (150) + r3 (75) + r4 (30) + r5 (45) = 300.00 (r2 150 is excluded!)
         $this->assertEquals(2000.00, (float)$summary['ocr_base']);
         $this->assertEquals(300.00, (float)$summary['ocr_vat']);
+    }
+
+    /**
+     * Test that double receipts are strictly excluded from Excel export data:
+     * - First original receipt is included.
+     * - Double scan is blocked and NOT included in the Excel rows.
+     */
+    public function test_double_receipts_are_not_added_to_excel_export(): void
+    {
+        $date1 = '2026-10-10';
+        $date2 = '2026-10-20';
+
+        // Original first receipt
+        $r1 = Receipt::create([
+            'receipt_number' => 'REC-EXCEL-001',
+            'receipt_date'   => $date1,
+            'fs_no'          => 'FS-98765',
+            'vendor_tin'     => '0098765432',
+            'vendor_name'    => 'Excel Test Vendor',
+            'total_amount'   => 1150.00,
+            'vat_amount'     => 150.00,
+            'subtotal'       => 1000.00,
+            'created_at'     => Carbon::parse('2026-10-10 09:00:00'),
+        ]);
+        $item1 = ReceiptItem::create([
+            'receipt_id'      => $r1->id,
+            'item_description'=> 'Original Item',
+            'total_value'     => 1000.00,
+            'vat_amount'      => 150.00,
+            'value_after_vat' => 1150.00,
+            'created_at'      => Carbon::parse('2026-10-10 09:00:00'),
+        ]);
+
+        // Duplicate double scan (same FS and TIN)
+        $r2 = Receipt::create([
+            'receipt_number' => 'REC-EXCEL-002',
+            'receipt_date'   => $date2,
+            'fs_no'          => '0098765',
+            'vendor_tin'     => '0098765432',
+            'vendor_name'    => 'Excel Test Vendor',
+            'total_amount'   => 1150.00,
+            'vat_amount'     => 150.00,
+            'subtotal'       => 1000.00,
+            'created_at'     => Carbon::parse('2026-10-20 16:00:00'),
+        ]);
+        $item2 = ReceiptItem::create([
+            'receipt_id'      => $r2->id,
+            'item_description'=> 'Duplicate Item',
+            'total_value'     => 1000.00,
+            'vat_amount'      => 150.00,
+            'value_after_vat' => 1150.00,
+            'created_at'      => Carbon::parse('2026-10-20 16:00:00'),
+        ]);
+
+        // Load items with receipt relation as done in exportPurchaseVatExcel
+        $ocrItems = ReceiptItem::with('receipt')->whereIn('receipt_id', [$r1->id, $r2->id])->get();
+        $this->assertCount(2, $ocrItems);
+
+        // Run through OCRScanner deduplicateReceiptItems
+        $ocrScanner = new \App\Http\Controllers\Admin\OCRReceiptScannerController();
+        $refMethod = new \ReflectionMethod($ocrScanner, 'deduplicateReceiptItems');
+        $refMethod->setAccessible(true);
+        $dedupedOcrScanner = $refMethod->invoke($ocrScanner, $ocrItems);
+
+        $this->assertCount(1, $dedupedOcrScanner, 'OCR Scanner Excel export must contain only 1 item');
+        $this->assertEquals($item1->id, $dedupedOcrScanner[0]->id, 'First original receipt item must be kept');
+
+        // Test month movements for ERCA Excel export
+        $ethDate = \App\Services\EthiopianDate::toEthiopian(Carbon::parse('2026-10-15'));
+        $controller = new FinanceTaxReportController();
+        $result = $controller->calculateMonthMovementsData($ethDate['year'], $ethDate['month'], true);
+
+        $keptReceiptIds = collect($result['ocr_items'])->pluck('receipt_id')->all();
+        $this->assertContains($r1->id, $keptReceiptIds, 'Excel data source must include original receipt');
+        $this->assertNotContains($r2->id, $keptReceiptIds, 'Excel data source must NEVER include double scan');
     }
 }
