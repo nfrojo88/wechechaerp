@@ -700,4 +700,53 @@ class TaxMovementsOcrDuplicateCheckTest extends TestCase
         $this->assertEquals('TOTAL', $tasExcelRows[3][0]);
         $this->assertEquals(345.00, (float)$tasExcelRows[3][2], 'TAS Total Amount must be 345.00');
     }
+
+    /**
+     * Test Withholding Tax (WHT) Section Receipt display & viewer modal contracts:
+     * - Column 10 shows Withhold Receipt & Certificate
+     * - Dedicated lightbox modal whtReceiptModal is defined with dual-document switcher & controls
+     * - JavaScript functions and window._pageWhtExpenses cache are properly configured
+     */
+    public function test_withholding_tax_section_receipt_presentation_and_modal_contract(): void
+    {
+        $bladePath = resource_path('views/finance/tax-deductions/movements.blade.php');
+        $this->assertFileExists($bladePath);
+        $bladeContent = file_get_contents($bladePath);
+
+        // 1. Column 10 Header
+        $this->assertStringContainsString('Withhold Receipt &amp; Cert. # (የተቀናሽ ደረሰኝ)', $bladeContent);
+
+        // 2. Buttons in table rows
+        $this->assertStringContainsString('View Withhold Slip', $bladeContent);
+        $this->assertStringContainsString('Slip Missing', $bladeContent);
+        $this->assertStringContainsString('Attach Slip', $bladeContent);
+        $this->assertStringContainsString('openWithholdingReceiptModal', $bladeContent);
+
+        // 3. Dedicated modal whtReceiptModal
+        $this->assertStringContainsString('id="whtReceiptModal"', $bladeContent);
+        $this->assertStringContainsString('Withholding Tax (WHT) Receipt &amp; Certificate &mdash; የተቀናሽ ታክስ ደረሰኝ', $bladeContent);
+        $this->assertStringContainsString('id="whtModalSwitchWhtBtn"', $bladeContent);
+        $this->assertStringContainsString('id="whtModalSwitchInvoiceBtn"', $bladeContent);
+        $this->assertStringContainsString('switchWhtModalDoc', $bladeContent);
+        $this->assertStringContainsString('id="whtSlipImg"', $bladeContent);
+        $this->assertStringContainsString('id="whtSlipPdf"', $bladeContent);
+        $this->assertStringContainsString('id="whtSlipEmptyState"', $bladeContent);
+        $this->assertStringContainsString('id="whtModalAttachNowBtn"', $bladeContent);
+
+        // 4. Modal switcher in movementSlipModal
+        $this->assertStringContainsString('id="movementModalDocTabs"', $bladeContent);
+        $this->assertStringContainsString('id="movementModalTabWht"', $bladeContent);
+        $this->assertStringContainsString('switchMovementModalDoc', $bladeContent);
+
+        // 5. JavaScript definitions
+        $this->assertStringContainsString('window._pageWhtExpenses =', $bladeContent);
+        $this->assertStringContainsString('function openWithholdingReceiptModal(', $bladeContent);
+        $this->assertStringContainsString('function switchWhtModalDoc(', $bladeContent);
+        $this->assertStringContainsString('function zoomWhtSlip(', $bladeContent);
+        $this->assertStringContainsString('function rotateWhtSlip(', $bladeContent);
+        $this->assertStringContainsString('function printWhtSlip(', $bladeContent);
+        $this->assertStringContainsString('function openInspectorFromWhtModal(', $bladeContent);
+        $this->assertStringContainsString('function openMovementEditSlipModal(', $bladeContent);
+        $this->assertStringContainsString('function buildWhtCertCellHtml(', $bladeContent);
+    }
 }

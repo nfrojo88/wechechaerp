@@ -2237,7 +2237,7 @@
                                 <th class="text-center" style="width: 90px;">WHT Rate</th>
                                 <th class="text-end" style="width: 130px;">WHT Deducted</th>
                                 <th class="text-end" style="width: 130px;">Net Disbursed</th>
-                                <th class="text-center" style="width: 140px;">WHT Certificate #</th>
+                                <th class="text-center" style="width: 170px;">Withhold Receipt &amp; Cert. # (የተቀናሽ ደረሰኝ)</th>
                                 <th class="text-center pe-3" style="width: 110px;">Actions</th>
                             </tr>
                         </thead>
@@ -2254,6 +2254,7 @@
                                     $rawTin = (string)($wht['seller_tin'] ?? '');
                                     $cleanTin = preg_replace('/\D/', '', $rawTin);
                                     $isTinValid = strlen($cleanTin) === 10;
+                                    $origInvoiceSlip = $wht['receipt_slip_url'] ?? ($wht['attachment_url'] ?? null);
                                 @endphp
                                 <tr class="wht-row" 
                                     id="page-wht-row-{{ $wht['id'] ?? $wIdx }}"
@@ -2276,6 +2277,11 @@
                                         @endif
                                         @if(!empty($wht['fs_no']) && $wht['fs_no'] !== '-')
                                             <small class="text-primary d-block font-monospace fw-semibold" style="font-size:0.68rem;"><i class="fa-solid fa-barcode me-0.5"></i>FS: {{ $wht['fs_no'] }}</small>
+                                        @endif
+                                        @if(!empty($origInvoiceSlip))
+                                            <button type="button" class="btn btn-xs btn-outline-secondary rounded-pill px-1.5 py-0.2 mt-0.5 d-inline-flex align-items-center gap-1 text-muted shadow-2xs" style="font-size:0.65rem;" onclick="openSlipModal('{{ $origInvoiceSlip }}', 'Invoice Slip #{{ $wht['request_number'] }}')" title="View Original Purchase / Invoice Slip">
+                                                <i class="fa-solid fa-receipt text-primary"></i>Invoice Slip
+                                            </button>
                                         @endif
                                     </td>
                                     <td>
@@ -2321,16 +2327,57 @@
                                     </td>
                                     <td class="text-center">
                                         @if($hasWhtCertNo)
-                                            <span class="badge bg-light text-dark border font-monospace px-1.5 py-0.5 rounded-2 d-inline-block fw-semibold" style="font-size:0.7rem;">
+                                            <span class="badge bg-light text-dark border font-monospace px-1.5 py-0.5 rounded-2 d-inline-block fw-semibold mb-1" style="font-size:0.7rem;">
                                                 <i class="fa-solid fa-stamp me-0.5 text-warning"></i>{{ $wht['withholding_receipt_number'] }}
                                             </span>
-                                        @else
-                                            <span class="text-muted small font-monospace">-</span>
                                         @endif
                                         @if($hasWhtSlip)
-                                            <a href="{{ $wht['withholding_receipt_url'] }}" target="_blank" class="btn btn-xs btn-outline-danger rounded-pill px-2 py-0.2 d-block ms-auto me-auto mt-0.5 shadow-2xs" style="font-size:0.65rem;" title="View Attached WHT Certificate">
-                                                <i class="fa-solid fa-file-invoice-dollar me-0.5"></i>View Slip
-                                            </a>
+                                            @php
+                                                $whtExt = strtolower(pathinfo($wht['withholding_receipt_url'], PATHINFO_EXTENSION));
+                                                $isWhtPdf = ($whtExt === 'pdf' || str_contains(strtolower($wht['withholding_receipt_url']), '.pdf'));
+                                            @endphp
+                                            <div class="d-flex align-items-center justify-content-center gap-1.5 mt-0.5 flex-wrap">
+                                                @if(!$isWhtPdf)
+                                                    <button type="button" class="btn p-0 border-0 bg-transparent" onclick="openWithholdingReceiptModal({{ $wIdx }})" title="Click to preview Withhold Receipt">
+                                                        <img src="{{ $wht['withholding_receipt_url'] }}" alt="WHT Slip" class="rounded-2 border shadow-2xs object-fit-cover" style="width: 30px; height: 30px; transition: transform 0.15s ease;" onmouseover="this.style.transform='scale(1.15)'" onmouseout="this.style.transform='scale(1)'">
+                                                    </button>
+                                                @endif
+                                                <button type="button" class="btn btn-xs btn-outline-danger rounded-pill px-2.5 py-1 d-inline-flex align-items-center gap-1 shadow-2xs fw-semibold" onclick="openWithholdingReceiptModal({{ $wIdx }})" title="View Scanned Withholding Tax (WHT) Receipt &amp; Certificate">
+                                                    <i class="fa-solid fa-file-invoice-dollar text-danger"></i>
+                                                    <span style="font-size: 0.7rem;">View Withhold Slip</span>
+                                                    @if($isWhtPdf)
+                                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill py-0 px-1" style="font-size: 0.58rem;">PDF</span>
+                                                    @else
+                                                        <span class="badge bg-info-subtle text-info border border-info-subtle rounded-pill py-0 px-1" style="font-size: 0.58rem;">IMG</span>
+                                                    @endif
+                                                </button>
+                                            </div>
+                                        @else
+                                            <div class="d-flex flex-column align-items-center gap-1">
+                                                <span class="badge bg-warning-subtle text-dark border border-warning-subtle rounded-pill py-0.5 px-2 font-monospace d-inline-flex align-items-center gap-1" style="font-size:0.68rem;">
+                                                    <i class="fa-solid fa-triangle-exclamation text-warning"></i>Slip Missing
+                                                </span>
+                                                @php
+                                                    $matchIdx = -1;
+                                                    if (!empty($movementsData['expenses'])) {
+                                                        foreach ($movementsData['expenses'] as $mIdx => $me) {
+                                                            if (($me['id'] ?? '') == ($wht['id'] ?? '') || ($me['request_number'] ?? '') == ($wht['request_number'] ?? '')) {
+                                                                $matchIdx = $mIdx;
+                                                                break;
+                                                            }
+                                                        }
+                                                    }
+                                                @endphp
+                                                @if($matchIdx !== -1)
+                                                    <button type="button" class="btn btn-xs btn-outline-dashed rounded-pill px-2 py-0.5 text-muted border shadow-2xs" style="font-size:0.68rem;" onclick="openExpenseInspector({{ $matchIdx }})" title="Attach / Upload Withhold Receipt">
+                                                        <i class="fa-solid fa-arrow-up-from-bracket me-1 text-warning"></i>Attach Slip
+                                                    </button>
+                                                @else
+                                                    <button type="button" class="btn btn-xs btn-outline-dashed rounded-pill px-2 py-0.5 text-muted border shadow-2xs" style="font-size:0.68rem;" onclick="openMovementEditSlipModal('{{ $wht['id'] }}', '{{ $wht['receipt_id'] ?? '' }}', '{{ $wht['request_number'] ?? '' }}', '{{ $wht['payee'] ?? '' }}', '{{ $wht['seller_tin'] ?? '' }}', '{{ $wht['fs_no'] ?? '' }}', '{{ $wht['mrc_no'] ?? '' }}', '{{ $wht['raw_date'] ?? '' }}', {{ $wBase }}, {{ $wAmt }}, {{ $wNet }})" title="Attach / Upload Withhold Receipt">
+                                                        <i class="fa-solid fa-arrow-up-from-bracket me-1 text-warning"></i>Attach Slip
+                                                    </button>
+                                                @endif
+                                            </div>
                                         @endif
                                     </td>
                                     <td class="text-center pe-3 text-nowrap">
@@ -2757,9 +2804,9 @@
                                                     <label class="form-label small fw-semibold text-muted mb-0.5" style="font-size:0.7rem;">WHT Certificate Voucher Slip</label>
                                                     <div class="d-flex align-items-center gap-1">
                                                         <input type="file" class="form-control form-control-sm" id="movement_edit_withholding_file" name="withholding_file" accept=".jpg,.jpeg,.png,.webp,.pdf">
-                                                        <a id="movement_edit_current_wht_slip_link" href="#" target="_blank" class="btn btn-xs btn-outline-warning text-nowrap d-none py-1 px-2" title="View attached WHT certificate">
-                                                            <i class="fa-solid fa-file-invoice"></i> View
-                                                        </a>
+                                                        <button type="button" id="movement_edit_current_wht_slip_link" class="btn btn-xs btn-outline-danger text-nowrap d-none py-1 px-2 rounded-pill shadow-2xs" onclick="switchMovementModalDoc('wht')" title="Preview attached WHT certificate in right viewport">
+                                                            <i class="fa-solid fa-file-invoice-dollar me-1"></i>View Slip
+                                                        </button>
                                                     </div>
                                                     <input type="hidden" id="movement_edit_withholding_receipt_path" name="withholding_receipt_path">
                                                 </div>
@@ -2777,7 +2824,14 @@
                             <div class="card-header bg-white border-bottom py-2 px-3 d-flex align-items-center justify-content-between flex-shrink-0 flex-wrap gap-2">
                                 <div class="d-flex align-items-center gap-2">
                                     <i class="fa-solid fa-image text-info"></i>
-                                    <span class="fw-bold text-dark small text-uppercase">Original Scanned Receipt Slip</span>
+                                    <div class="btn-group btn-group-sm rounded-pill p-0.5 bg-light border" role="group" id="movementModalDocTabs">
+                                        <button type="button" class="btn btn-sm rounded-pill px-2.5 py-0.5 fw-semibold btn-primary text-white shadow-2xs" id="movementModalTabInvoice" onclick="switchMovementModalDoc('invoice')">
+                                            <i class="fa-solid fa-receipt me-1"></i>Invoice Slip
+                                        </button>
+                                        <button type="button" class="btn btn-sm rounded-pill px-2.5 py-0.5 fw-semibold text-muted d-none" id="movementModalTabWht" onclick="switchMovementModalDoc('wht')">
+                                            <i class="fa-solid fa-file-invoice-dollar me-1 text-danger"></i>Withhold Receipt
+                                        </button>
+                                    </div>
                                 </div>
                                 <div class="d-flex align-items-center gap-1.5 flex-wrap">
                                     <button type="button" class="btn btn-primary btn-sm py-1 px-2.5 rounded-pill shadow-xs d-inline-flex align-items-center gap-1.5 fw-semibold" onclick="triggerMovementReceiptUpload()" title="Upload or Replace Receipt Slip">
@@ -2972,10 +3026,10 @@
                                 <small class="text-muted d-block" style="font-size:0.7rem;">WHT Certificate Document</small>
                                 <div id="tasWhtDocBtnWrapper" class="mt-0.5">
                                     <span class="badge bg-light text-muted border" id="tasWhtNoDocBadge" style="font-size:0.72rem;">No Slip Attached</span>
-                                    <a href="#" target="_blank" class="btn btn-xs btn-outline-danger rounded-pill px-2.5 py-1 d-none align-items-center gap-1 shadow-2xs" id="tasWhtDocLink">
-                                        <i class="fa-solid fa-file-pdf"></i>
+                                    <button type="button" class="btn btn-xs btn-outline-danger rounded-pill px-2.5 py-1 d-none align-items-center gap-1 shadow-2xs" id="tasWhtDocLink" onclick="openWhtModalFromTasDetail()">
+                                        <i class="fa-solid fa-file-invoice-dollar"></i>
                                         <span>View WHT Slip</span>
-                                    </a>
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -3151,6 +3205,134 @@
     </div>
 </div>
 
+{{-- ── Dedicated Withholding Tax (WHT) Receipt & Certificate Lightbox Modal ── --}}
+<div class="modal fade" id="whtReceiptModal" tabindex="-1" aria-labelledby="whtReceiptModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable my-lg-3" style="max-height: 94vh;">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden d-flex flex-column" style="max-height: 94vh;">
+
+            {{-- Modal Header --}}
+            <div class="modal-header bg-dark text-white py-2.5 px-4 flex-shrink-0" style="background-color: #0f172a !important;">
+                <div class="d-flex align-items-center gap-2.5">
+                    <div class="p-2 bg-danger bg-opacity-20 text-danger rounded-3 border border-danger border-opacity-25 d-flex align-items-center justify-content-center shadow-xs" style="width:38px; height:38px;">
+                        <i class="fa-solid fa-file-invoice-dollar fs-5 text-danger"></i>
+                    </div>
+                    <div>
+                        <div class="d-flex align-items-center gap-2">
+                            <h5 class="modal-title fw-bold mb-0 text-white fs-6" id="whtReceiptModalLabel">
+                                Withholding Tax (WHT) Receipt &amp; Certificate &mdash; የተቀናሽ ታክስ ደረሰኝ
+                            </h5>
+                            <span class="badge bg-warning text-dark font-monospace px-2 py-0.5 rounded-pill shadow-2xs" id="whtModalCertBadge">
+                                Cert #
+                            </span>
+                        </div>
+                        <small class="text-white-50" style="font-size:0.75rem;">
+                            ERCA 2% Goods, 3% Services or 30% Non-TIN Withholding Certificate Document &bull; Reconciled with Financial Ledgers
+                        </small>
+                    </div>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <span id="whtModalRateBadge" class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill px-2.5 py-1 small font-monospace">3.0% WHT</span>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+            </div>
+
+            {{-- Tax Transaction Summary Strip --}}
+            <div class="py-2.5 px-4 bg-light border-bottom flex-shrink-0">
+                <div class="row g-2 align-items-center font-monospace" style="font-size: 0.8rem;">
+                    <div class="col-6 col-md-3">
+                        <small class="text-muted text-uppercase d-block" style="font-size:0.68rem;">Payee / Beneficiary</small>
+                        <span class="fw-bold text-dark text-truncate d-block" id="whtModalPayeeName">-</span>
+                        <div id="whtModalTinWrapper" class="small mt-0.5"></div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <small class="text-muted text-uppercase d-block" style="font-size:0.68rem;">Voucher / Date</small>
+                        <span class="fw-bold text-dark d-block" id="whtModalVoucherNo">-</span>
+                        <small class="text-muted" id="whtModalDates">-</small>
+                    </div>
+                    <div class="col-4 col-md-2 text-end">
+                        <small class="text-muted text-uppercase d-block" style="font-size:0.68rem;">Taxable Base</small>
+                        <span class="fw-bold text-dark" id="whtModalBaseAmount">ETB 0.00</span>
+                    </div>
+                    <div class="col-4 col-md-2 text-end">
+                        <small class="text-muted text-uppercase d-block" style="font-size:0.68rem;">WHT Deducted</small>
+                        <span class="fw-bold text-danger fs-6" id="whtModalDeductedAmount">- ETB 0.00</span>
+                    </div>
+                    <div class="col-4 col-md-2 text-end">
+                        <small class="text-muted text-uppercase d-block" style="font-size:0.68rem;">Net Disbursed</small>
+                        <span class="fw-bold text-success fs-6" id="whtModalNetAmount">ETB 0.00</span>
+                    </div>
+                </div>
+            </div>
+
+            {{-- Controls & Document Switcher Toolbar --}}
+            <div class="py-2 px-4 bg-white border-bottom d-flex align-items-center justify-content-between flex-wrap gap-2 flex-shrink-0">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="text-muted small fw-semibold text-uppercase" style="font-size:0.72rem;">Viewing Document:</span>
+                    <div class="btn-group btn-group-sm rounded-pill p-0.5 bg-light border" role="group" id="whtModalDocSwitchGroup">
+                        <button type="button" class="btn btn-sm rounded-pill px-3 py-1 fw-semibold btn-danger text-white shadow-2xs" id="whtModalSwitchWhtBtn" onclick="switchWhtModalDoc('wht')">
+                            <i class="fa-solid fa-file-invoice-dollar me-1"></i>Withhold Receipt (የተቀናሽ ደረሰኝ)
+                        </button>
+                        <button type="button" class="btn btn-sm rounded-pill px-3 py-1 fw-semibold text-muted" id="whtModalSwitchInvoiceBtn" onclick="switchWhtModalDoc('invoice')">
+                            <i class="fa-solid fa-receipt me-1 text-primary"></i>Purchase / Invoice Slip
+                        </button>
+                    </div>
+                </div>
+                <div class="d-flex align-items-center gap-1.5 flex-wrap">
+                    <div class="btn-group btn-group-sm shadow-xs" role="group">
+                        <button type="button" class="btn btn-outline-secondary btn-sm py-1 px-2.5" onclick="zoomWhtSlip(0.15)" title="Zoom In"><i class="fa-solid fa-magnifying-glass-plus"></i></button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm py-1 px-2.5" onclick="zoomWhtSlip(-0.15)" title="Zoom Out"><i class="fa-solid fa-magnifying-glass-minus"></i></button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm py-1 px-2.5" onclick="rotateWhtSlip()" title="Rotate 90°"><i class="fa-solid fa-rotate-right"></i></button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm py-1 px-2.5" onclick="resetWhtSlip()" title="Reset View"><i class="fa-solid fa-arrows-rotate"></i></button>
+                        <a id="whtModalOpenNewTab" href="#" target="_blank" class="btn btn-outline-secondary btn-sm py-1 px-2.5" title="Open in New Tab"><i class="fa-solid fa-up-right-from-square"></i></a>
+                    </div>
+                </div>
+            </div>
+
+            {{-- Modal Body: Slip Viewport --}}
+            <div class="modal-body p-3 bg-slate-50 flex-grow-1 d-flex flex-column" style="overflow-y: auto;">
+                <div class="flex-grow-1 position-relative border rounded-3 bg-white d-flex align-items-center justify-content-center p-3 shadow-2xs" style="min-height: 480px; overflow: auto;" id="whtSlipViewport">
+                    <img id="whtSlipImg" src="" alt="Withholding Receipt Slip" class="img-fluid rounded shadow-sm" style="max-height: 65vh; width: auto; object-fit: contain; transition: transform 0.2s ease;">
+                    <iframe id="whtSlipPdf" src="" class="w-100 rounded d-none" style="height: 65vh; border: none;"></iframe>
+
+                    {{-- Empty State if no slip attached --}}
+                    <div id="whtSlipEmptyState" class="text-center p-4 d-none w-100 h-100 d-flex flex-column align-items-center justify-content-center">
+                        <div class="p-3 bg-danger bg-opacity-10 text-danger rounded-circle d-inline-block mb-2 shadow-xs">
+                            <i class="fa-solid fa-file-circle-xmark fs-2"></i>
+                        </div>
+                        <div class="fw-bold text-dark fs-6 mb-1">No Scanned Withhold Slip Attached</div>
+                        <p class="text-muted small mb-3" style="max-width: 360px;">
+                            An official Withholding Tax Receipt slip (የተቀናሽ ታክስ ደረሰኝ) has not been uploaded for this transaction yet.
+                        </p>
+                        <button type="button" class="btn btn-primary btn-sm rounded-pill px-3.5 py-1.5 shadow-sm fw-semibold" id="whtModalAttachNowBtn" onclick="openInspectorFromWhtModal()">
+                            <i class="fa-solid fa-arrow-up-from-bracket me-1.5"></i>Attach Withhold Receipt in Inspector
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            {{-- Modal Footer --}}
+            <div class="modal-footer bg-white border-top py-2.5 px-4 d-flex justify-content-between align-items-center flex-shrink-0">
+                <span class="small text-muted font-monospace" id="whtModalDocFilename">Document: Withhold Receipt</span>
+                <div class="d-flex gap-2 align-items-center">
+                    <button type="button" class="btn btn-outline-secondary rounded-pill px-3 py-1.5" onclick="printWhtSlip()">
+                        <i class="fa-solid fa-print me-1.5"></i>Print
+                    </button>
+                    <a id="whtModalDownloadBtn" href="#" target="_blank" download class="btn btn-outline-primary rounded-pill px-3 py-1.5 shadow-2xs">
+                        <i class="fa-solid fa-download me-1.5"></i>Download
+                    </a>
+                    <button type="button" class="btn btn-outline-warning text-dark rounded-pill px-3 py-1.5 shadow-2xs" id="whtModalEditBtn" onclick="openInspectorFromWhtModal()">
+                        <i class="fa-solid fa-pen-to-square me-1.5 text-warning"></i>Edit / Replace Receipt
+                    </button>
+                    <button type="button" class="btn btn-secondary rounded-pill px-3.5 py-1.5" data-bs-dismiss="modal">
+                        Close
+                    </button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
 {{-- ── Verified Without Receipt (Operational Expenses 0% VAT) Archive Modal ── --}}
 <div class="modal fade" id="verifiedNoReceiptArchiveModal" tabindex="-1" aria-labelledby="verifiedNoReceiptArchiveModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable my-lg-3" style="max-height: 94vh;">
@@ -3279,6 +3461,7 @@
     window._pageTasPurchases = @json($movementsData['tas_purchases'] ?? []);
     window._pageExpenses = @json($movementsData['expenses'] ?? []);
     window._pageVerifiedNoReceipt = @json($movementsData['verified_no_receipt'] ?? []);
+    window._pageWhtExpenses = @json($movementsData['wht_expenses'] ?? []);
 
     // Toggle TAS / e-Tax Purchases by filter: 'all', 'vat', 'tas', 'with_wht', 'with_tin', 'missing_tin'
     let _activeTasTinFilter = 'all';
@@ -4041,6 +4224,7 @@
         }
 
         // Preview empty dropzone
+        _setupMovementModalDocTabs(null, null);
         _setPageSlipPreview(null);
 
         // Show modal
@@ -4048,6 +4232,41 @@
             bootstrap.Modal.getOrCreateInstance(modalEl).show();
         } else if (window.$ && typeof $(modalEl).modal === 'function') {
             $(modalEl).modal('show');
+        }
+    }
+
+    // Active document URLs in movementSlipModal
+    window._activeMovementInvoiceSlipUrl = '';
+    window._activeMovementWhtSlipUrl = '';
+
+    function _setupMovementModalDocTabs(invoiceUrl, whtUrl) {
+        window._activeMovementInvoiceSlipUrl = invoiceUrl || '';
+        window._activeMovementWhtSlipUrl = whtUrl || '';
+
+        const whtTabBtn = document.getElementById('movementModalTabWht');
+        const invoiceTabBtn = document.getElementById('movementModalTabInvoice');
+        if (whtTabBtn && invoiceTabBtn) {
+            if (window._activeMovementWhtSlipUrl) {
+                whtTabBtn.classList.remove('d-none');
+            } else {
+                whtTabBtn.classList.add('d-none');
+            }
+            invoiceTabBtn.className = 'btn btn-sm rounded-pill px-2.5 py-0.5 fw-semibold btn-primary text-white shadow-2xs';
+            whtTabBtn.className = 'btn btn-sm rounded-pill px-2.5 py-0.5 fw-semibold text-muted' + (!window._activeMovementWhtSlipUrl ? ' d-none' : '');
+        }
+    }
+
+    function switchMovementModalDoc(docType) {
+        const whtTabBtn = document.getElementById('movementModalTabWht');
+        const invoiceTabBtn = document.getElementById('movementModalTabInvoice');
+        if (docType === 'wht') {
+            if (whtTabBtn) whtTabBtn.className = 'btn btn-sm rounded-pill px-2.5 py-0.5 fw-semibold btn-danger text-white shadow-2xs';
+            if (invoiceTabBtn) invoiceTabBtn.className = 'btn btn-sm rounded-pill px-2.5 py-0.5 fw-semibold text-muted';
+            _setPageSlipPreview(window._activeMovementWhtSlipUrl, 'Withholding Certificate Receipt');
+        } else {
+            if (invoiceTabBtn) invoiceTabBtn.className = 'btn btn-sm rounded-pill px-2.5 py-0.5 fw-semibold btn-primary text-white shadow-2xs';
+            if (whtTabBtn) whtTabBtn.className = 'btn btn-sm rounded-pill px-2.5 py-0.5 fw-semibold text-muted' + (!window._activeMovementWhtSlipUrl ? ' d-none' : '');
+            _setPageSlipPreview(window._activeMovementInvoiceSlipUrl, 'Fiscal Invoice Receipt');
         }
     }
 
@@ -4236,6 +4455,7 @@
         }
 
         // Set right column preview
+        _setupMovementModalDocTabs(ocr.file_url, ocr.withholding_receipt_url);
         _setPageSlipPreview(ocr.file_url);
 
         // Show modal
@@ -4470,6 +4690,7 @@
 
         // Set preview image / pdf
         const slipUrl = tas.receipt_slip_url || tas.attachment_url;
+        _setupMovementModalDocTabs(slipUrl, tas.withholding_receipt_url);
         _setPageSlipPreview(slipUrl);
 
         // Show modal
@@ -4977,6 +5198,7 @@
 
         // Set preview
         const slipUrl = exp.receipt_slip_url || exp.attachment_url || exp.attachment;
+        _setupMovementModalDocTabs(slipUrl, exp.withholding_receipt_url);
         _setPageSlipPreview(slipUrl);
 
         // Show modal
@@ -6046,13 +6268,51 @@
                 // Update cert / slip
                 const certTd = whtTr.querySelector('td:nth-child(10)');
                 if (certTd) {
-                    let certHtml = (whtCertNo && whtCertNo !== '-')
-                        ? `<span class="badge bg-light text-dark border font-monospace px-1.5 py-0.5 rounded-2 d-inline-block fw-semibold" style="font-size:0.7rem;"><i class="fa-solid fa-stamp me-0.5 text-warning"></i>${whtCertNo}</span>`
-                        : `<span class="text-muted small font-monospace">-</span>`;
-                    if (whtSlipUrl) {
-                        certHtml += `<a href="${whtSlipUrl}" target="_blank" class="btn btn-xs btn-outline-danger rounded-pill px-2 py-0.2 d-block ms-auto me-auto mt-0.5 shadow-2xs" style="font-size:0.65rem;" title="View Attached WHT Certificate"><i class="fa-solid fa-file-invoice-dollar me-0.5"></i>View Slip</a>`;
+                    const rowWhtObj = {
+                        id: rowId,
+                        request_number: reqNo,
+                        payee: payeeName,
+                        seller_tin: rawTin,
+                        base_amount: baseVal,
+                        withholding_rate: whtRate,
+                        withholding_amount: whtAmt,
+                        net_disbursed: netVal,
+                        withholding_receipt_number: whtCertNo,
+                        withholding_receipt_url: whtSlipUrl,
+                        receipt_slip_url: exp.receipt_slip_url || exp.attachment_url || '',
+                        date_ec: exp.date_ec || '-',
+                        date_gc: exp.date_gc || '-'
+                    };
+                    certTd.innerHTML = buildWhtCertCellHtml(whtCertNo, whtSlipUrl, rowWhtObj, rowId);
+                }
+
+                // Update cache
+                if (window._pageWhtExpenses) {
+                    const cIdx = window._pageWhtExpenses.findIndex(it => (it.id && it.id == rowId) || (it.request_number && it.request_number == reqNo));
+                    const cacheObj = {
+                        id: rowId,
+                        request_number: reqNo,
+                        payee: payeeName,
+                        seller_name: payeeName,
+                        seller_tin: rawTin,
+                        category: exp.category || 'Expense',
+                        project_name: exp.project_name || 'General',
+                        date_ec: exp.date_ec || '-',
+                        date_gc: exp.date_gc || '-',
+                        base_amount: baseVal,
+                        withholding_rate: whtRate,
+                        withholding_amount: whtAmt,
+                        net_disbursed: netVal,
+                        withholding_receipt_number: whtCertNo,
+                        withholding_receipt_url: whtSlipUrl,
+                        receipt_slip_url: exp.receipt_slip_url || exp.attachment_url || '',
+                        attachment_url: exp.attachment_url || ''
+                    };
+                    if (cIdx !== -1) {
+                        window._pageWhtExpenses[cIdx] = Object.assign(window._pageWhtExpenses[cIdx], cacheObj);
+                    } else {
+                        window._pageWhtExpenses.unshift(cacheObj);
                     }
-                    certTd.innerHTML = certHtml;
                 }
 
                 // Flash row green
@@ -6091,11 +6351,25 @@
                         ? `<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle font-monospace px-1.5 py-0.5 rounded-2 fw-semibold" style="font-size:0.68rem;" title="Incomplete TIN"><i class="fa-solid fa-triangle-exclamation text-warning me-0.5"></i>${rawTin}</span>`
                         : `<span class="badge bg-danger-subtle text-danger border border-danger-subtle font-monospace px-1.5 py-0.5 rounded-2 fw-semibold" style="font-size:0.68rem;"><i class="fa-solid fa-circle-xmark me-0.5"></i>No TIN</span>`);
 
-                let certHtml = (whtCertNo && whtCertNo !== '-')
-                    ? `<span class="badge bg-light text-dark border font-monospace px-1.5 py-0.5 rounded-2 d-inline-block fw-semibold" style="font-size:0.7rem;"><i class="fa-solid fa-stamp me-0.5 text-warning"></i>${whtCertNo}</span>`
-                    : `<span class="text-muted small font-monospace">-</span>`;
-                if (whtSlipUrl) {
-                    certHtml += `<a href="${whtSlipUrl}" target="_blank" class="btn btn-xs btn-outline-danger rounded-pill px-2 py-0.2 d-block ms-auto me-auto mt-0.5 shadow-2xs" style="font-size:0.65rem;" title="View Attached WHT Certificate"><i class="fa-solid fa-file-invoice-dollar me-0.5"></i>View Slip</a>`;
+                const newRowWhtObj = {
+                    id: rowId,
+                    request_number: reqNo,
+                    payee: payeeName,
+                    seller_tin: rawTin,
+                    base_amount: baseVal,
+                    withholding_rate: whtRate,
+                    withholding_amount: whtAmt,
+                    net_disbursed: netVal,
+                    withholding_receipt_number: whtCertNo,
+                    withholding_receipt_url: whtSlipUrl,
+                    receipt_slip_url: exp.receipt_slip_url || exp.attachment_url || '',
+                    date_ec: exp.date_ec || '-',
+                    date_gc: exp.date_gc || '-'
+                };
+                let certHtml = buildWhtCertCellHtml(whtCertNo, whtSlipUrl, newRowWhtObj, rowId);
+
+                if (window._pageWhtExpenses) {
+                    window._pageWhtExpenses.unshift(Object.assign({ seller_name: payeeName, category: exp.category || 'Expense', project_name: exp.project_name || 'General' }, newRowWhtObj));
                 }
 
                 newTr.innerHTML = `
@@ -7099,6 +7373,376 @@
         } else {
             openPageOcrInspector(0);
             _setPageSlipPreview(url);
+        }
+    }
+
+    // Helper to build modern Withhold Receipt column HTML in #pageWithholdingTable
+    function buildWhtCertCellHtml(whtCertNo, whtSlipUrl, whtObj, expId) {
+        let certBadgeHtml = (whtCertNo && whtCertNo !== '-')
+            ? `<span class="badge bg-light text-dark border font-monospace px-1.5 py-0.5 rounded-2 d-inline-block fw-semibold mb-1" style="font-size:0.7rem;"><i class="fa-solid fa-stamp me-0.5 text-warning"></i>${whtCertNo}</span>`
+            : '';
+
+        if (whtSlipUrl) {
+            const isPdf = whtSlipUrl.toLowerCase().includes('.pdf');
+            const itmJsonStr = JSON.stringify(whtObj || {}).replace(/"/g, '&quot;');
+            return `
+                ${certBadgeHtml}
+                <div class="d-flex align-items-center justify-content-center gap-1.5 mt-0.5 flex-wrap">
+                    ${!isPdf ? `<button type="button" class="btn p-0 border-0 bg-transparent" onclick="openWithholdingReceiptModal(${itmJsonStr})" title="Click to preview Withhold Receipt"><img src="${whtSlipUrl}" alt="WHT Slip" class="rounded-2 border shadow-2xs object-fit-cover" style="width: 30px; height: 30px; transition: transform 0.15s ease;" onmouseover="this.style.transform='scale(1.15)'" onmouseout="this.style.transform='scale(1)'"></button>` : ''}
+                    <button type="button" class="btn btn-xs btn-outline-danger rounded-pill px-2.5 py-1 d-inline-flex align-items-center gap-1 shadow-2xs fw-semibold" onclick="openWithholdingReceiptModal(${itmJsonStr})" title="View Scanned Withholding Tax (WHT) Receipt &amp; Certificate">
+                        <i class="fa-solid fa-file-invoice-dollar text-danger"></i>
+                        <span style="font-size: 0.7rem;">View Withhold Slip</span>
+                        ${isPdf ? '<span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill py-0 px-1" style="font-size: 0.58rem;">PDF</span>' : '<span class="badge bg-info-subtle text-info border border-info-subtle rounded-pill py-0 px-1" style="font-size: 0.58rem;">IMG</span>'}
+                    </button>
+                </div>
+            `;
+        } else {
+            return `
+                ${certBadgeHtml}
+                <div class="d-flex flex-column align-items-center gap-1">
+                    <span class="badge bg-warning-subtle text-dark border border-warning-subtle rounded-pill py-0.5 px-2 font-monospace d-inline-flex align-items-center gap-1" style="font-size:0.68rem;">
+                        <i class="fa-solid fa-triangle-exclamation text-warning"></i>Slip Missing
+                    </span>
+                    <button type="button" class="btn btn-xs btn-outline-dashed rounded-pill px-2 py-0.5 text-muted border shadow-2xs" style="font-size:0.68rem;" onclick="openExpenseInspector('${expId}')" title="Attach / Upload Withhold Receipt">
+                        <i class="fa-solid fa-arrow-up-from-bracket me-1 text-warning"></i>Attach Slip
+                    </button>
+                </div>
+            `;
+        }
+    }
+
+    // Open Movement live inspector modal for Withholding row when direct index is unknown
+    function openMovementEditSlipModal(id, receiptId, reqNo, payee, sellerTin, fsNo, mrcNo, rawDate, baseAmt, whtAmt, netDisbursed) {
+        let foundIdx = -1;
+        if (window._pageExpenses && window._pageExpenses.length > 0) {
+            foundIdx = window._pageExpenses.findIndex(it => (id && it.id == id) || (reqNo && it.request_number == reqNo));
+        }
+        if (foundIdx !== -1) {
+            openExpenseInspector(foundIdx);
+            return;
+        }
+
+        const mockItem = {
+            id: id,
+            receipt_id: receiptId,
+            request_number: reqNo,
+            payee: payee,
+            seller_name: payee,
+            seller_tin: sellerTin,
+            fs_no: fsNo,
+            mrc_no: mrcNo,
+            date_ec: rawDate,
+            raw_date: rawDate,
+            base_amount: baseAmt || 0,
+            has_withholding: true,
+            withholding_rate: (baseAmt > 0 && whtAmt > 0) ? Math.round((whtAmt / baseAmt) * 100) : 3,
+            withholding_amount: whtAmt || 0,
+            net_disbursed: netDisbursed || (baseAmt - whtAmt),
+            withholding_receipt_number: '',
+            withholding_receipt_url: '',
+            receipt_slip_url: '',
+            attachment_url: ''
+        };
+        if (!window._pageExpenses) window._pageExpenses = [];
+        window._pageExpenses.push(mockItem);
+        openExpenseInspector(window._pageExpenses.length - 1);
+    }
+
+    // Dedicated Withholding Tax (WHT) Receipt Lightbox Modal Viewer
+    let _activeWhtModalData = null;
+    let _whtSlipZoom = 1;
+    let _whtSlipRotation = 0;
+
+    function openWithholdingReceiptModal(itemOrIdx) {
+        let itm = null;
+        if (typeof itemOrIdx === 'number') {
+            itm = (window._pageWhtExpenses && window._pageWhtExpenses[itemOrIdx]) || null;
+        } else if (typeof itemOrIdx === 'string') {
+            itm = (window._pageWhtExpenses || []).find(it => it.id == itemOrIdx || it.request_number == itemOrIdx) || null;
+        } else if (typeof itemOrIdx === 'object' && itemOrIdx !== null) {
+            itm = itemOrIdx;
+        }
+
+        if (!itm) return;
+        _activeWhtModalData = itm;
+
+        const modalEl = document.getElementById('whtReceiptModal');
+        if (!modalEl) return;
+
+        // Reset transforms
+        resetWhtSlip();
+
+        // Populate Payee & TIN
+        const payeeEl = document.getElementById('whtModalPayeeName');
+        if (payeeEl) payeeEl.textContent = itm.payee || itm.seller_name || 'Vendor / Payee';
+
+        const tinWrapper = document.getElementById('whtModalTinWrapper');
+        if (tinWrapper) {
+            const rawTin = String(itm.seller_tin || '');
+            const cleanTin = rawTin.replace(/\D/g, '');
+            if (cleanTin.length === 10) {
+                tinWrapper.innerHTML = `<span class="badge bg-success-subtle text-success border border-success-subtle font-monospace px-1.5 py-0.5 rounded-2 fw-bold"><i class="fa-solid fa-circle-check text-success me-1"></i>TIN: ${cleanTin}</span>`;
+            } else if (cleanTin.length > 0) {
+                tinWrapper.innerHTML = `<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle font-monospace px-1.5 py-0.5 rounded-2"><i class="fa-solid fa-triangle-exclamation text-warning me-1"></i>TIN: ${rawTin}</span>`;
+            } else {
+                tinWrapper.innerHTML = `<span class="badge bg-danger-subtle text-danger border border-danger-subtle font-monospace px-1.5 py-0.5 rounded-2"><i class="fa-solid fa-circle-xmark me-1"></i>No TIN Registered</span>`;
+            }
+        }
+
+        // Populate Voucher & Date
+        const voucherEl = document.getElementById('whtModalVoucherNo');
+        if (voucherEl) voucherEl.textContent = itm.request_number || ('EXP #' + (itm.id || ''));
+
+        const datesEl = document.getElementById('whtModalDates');
+        if (datesEl) {
+            datesEl.textContent = (itm.date_ec || '-') + (itm.date_gc ? ' (GC: ' + itm.date_gc + ')' : '');
+        }
+
+        // Populate Amounts
+        const baseAmt = parseFloat(itm.base_amount || 0);
+        const whtAmt = parseFloat(itm.withholding_amount || 0);
+        const netAmt = parseFloat(itm.net_disbursed !== undefined ? itm.net_disbursed : Math.max(0, baseAmt - whtAmt));
+        const whtRate = parseFloat(itm.withholding_rate || 3);
+
+        const baseEl = document.getElementById('whtModalBaseAmount');
+        if (baseEl) baseEl.textContent = 'ETB ' + baseAmt.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+
+        const dedEl = document.getElementById('whtModalDeductedAmount');
+        if (dedEl) dedEl.textContent = '- ETB ' + whtAmt.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+
+        const netEl = document.getElementById('whtModalNetAmount');
+        if (netEl) netEl.textContent = 'ETB ' + netAmt.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+
+        // Populate Badges
+        const rateBadge = document.getElementById('whtModalRateBadge');
+        if (rateBadge) {
+            if (Math.round(whtRate) == 2) {
+                rateBadge.className = 'badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill px-2.5 py-1 small font-monospace';
+                rateBadge.textContent = '2.0% WHT (Goods Supply)';
+            } else if (Math.round(whtRate) == 30) {
+                rateBadge.className = 'badge bg-danger text-white rounded-pill px-2.5 py-1 small font-monospace';
+                rateBadge.textContent = '30.0% WHT (Unregistered / No TIN)';
+            } else {
+                rateBadge.className = 'badge bg-warning bg-opacity-25 text-dark border border-warning-subtle rounded-pill px-2.5 py-1 small font-monospace';
+                rateBadge.textContent = whtRate.toFixed(1) + '% WHT (Services)';
+            }
+        }
+
+        const certBadge = document.getElementById('whtModalCertBadge');
+        if (certBadge) {
+            if (itm.withholding_receipt_number && itm.withholding_receipt_number !== '-') {
+                certBadge.innerHTML = `<i class="fa-solid fa-stamp me-1"></i>Cert #${itm.withholding_receipt_number}`;
+                certBadge.className = 'badge bg-warning text-dark font-monospace px-2.5 py-0.5 rounded-pill shadow-2xs';
+            } else {
+                certBadge.innerHTML = '<i class="fa-solid fa-stamp me-1"></i>Cert # Pending';
+                certBadge.className = 'badge bg-secondary-subtle text-muted font-monospace px-2 py-0.5 rounded-pill';
+            }
+        }
+
+        // Document switcher buttons
+        const invoiceBtn = document.getElementById('whtModalSwitchInvoiceBtn');
+        const invoiceUrl = itm.receipt_slip_url || itm.attachment_url;
+        if (invoiceBtn) {
+            if (invoiceUrl) {
+                invoiceBtn.classList.remove('d-none');
+            } else {
+                invoiceBtn.classList.add('d-none');
+            }
+        }
+
+        // Show WHT doc by default
+        switchWhtModalDoc('wht');
+
+        // Show modal
+        if (window.bootstrap && bootstrap.Modal) {
+            bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        } else if (window.$ && typeof $(modalEl).modal === 'function') {
+            $(modalEl).modal('show');
+        }
+    }
+
+    function switchWhtModalDoc(type) {
+        if (!_activeWhtModalData) return;
+
+        resetWhtSlip();
+        const whtBtn = document.getElementById('whtModalSwitchWhtBtn');
+        const invoiceBtn = document.getElementById('whtModalSwitchInvoiceBtn');
+        const imgEl = document.getElementById('whtSlipImg');
+        const pdfEl = document.getElementById('whtSlipPdf');
+        const emptyEl = document.getElementById('whtSlipEmptyState');
+        const dlBtn = document.getElementById('whtModalDownloadBtn');
+        const newTabBtn = document.getElementById('whtModalOpenNewTab');
+        const fnLabel = document.getElementById('whtModalDocFilename');
+
+        let targetUrl = '';
+        let docTitle = '';
+
+        if (type === 'wht') {
+            targetUrl = _activeWhtModalData.withholding_receipt_url || '';
+            docTitle = 'Withholding Tax (WHT) Receipt & Certificate';
+            if (whtBtn) {
+                whtBtn.className = 'btn btn-sm rounded-pill px-3 py-1 fw-semibold btn-danger text-white shadow-2xs';
+            }
+            if (invoiceBtn) {
+                invoiceBtn.className = 'btn btn-sm rounded-pill px-3 py-1 fw-semibold text-muted';
+            }
+        } else {
+            targetUrl = _activeWhtModalData.receipt_slip_url || _activeWhtModalData.attachment_url || '';
+            docTitle = 'Original Purchase / Invoice Receipt';
+            if (invoiceBtn) {
+                invoiceBtn.className = 'btn btn-sm rounded-pill px-3 py-1 fw-semibold btn-primary text-white shadow-2xs';
+            }
+            if (whtBtn) {
+                whtBtn.className = 'btn btn-sm rounded-pill px-3 py-1 fw-semibold text-muted';
+            }
+        }
+
+        if (fnLabel) {
+            fnLabel.textContent = 'Document: ' + docTitle;
+        }
+
+        if (!targetUrl) {
+            if (imgEl) { imgEl.classList.add('d-none'); imgEl.src = ''; }
+            if (pdfEl) { pdfEl.classList.add('d-none'); pdfEl.src = ''; }
+            if (emptyEl) {
+                emptyEl.classList.remove('d-none');
+                emptyEl.classList.add('d-flex');
+            }
+            if (dlBtn) dlBtn.classList.add('d-none');
+            if (newTabBtn) newTabBtn.classList.add('d-none');
+            return;
+        }
+
+        if (emptyEl) {
+            emptyEl.classList.add('d-none');
+            emptyEl.classList.remove('d-flex');
+        }
+        if (dlBtn) {
+            dlBtn.classList.remove('d-none');
+            dlBtn.href = targetUrl;
+        }
+        if (newTabBtn) {
+            newTabBtn.classList.remove('d-none');
+            newTabBtn.href = targetUrl;
+        }
+
+        const isPdf = targetUrl.toLowerCase().includes('.pdf');
+        if (isPdf) {
+            if (imgEl) { imgEl.classList.add('d-none'); imgEl.src = ''; }
+            if (pdfEl) {
+                pdfEl.src = targetUrl;
+                pdfEl.classList.remove('d-none');
+            }
+        } else {
+            if (pdfEl) { pdfEl.classList.add('d-none'); pdfEl.src = ''; }
+            if (imgEl) {
+                imgEl.src = targetUrl;
+                imgEl.classList.remove('d-none');
+            }
+        }
+    }
+
+    function zoomWhtSlip(delta) {
+        _whtSlipZoom = Math.max(0.2, Math.min(3.5, _whtSlipZoom + delta));
+        _applyWhtSlipTransform();
+    }
+
+    function rotateWhtSlip() {
+        _whtSlipRotation = (_whtSlipRotation + 90) % 360;
+        _applyWhtSlipTransform();
+    }
+
+    function resetWhtSlip() {
+        _whtSlipZoom = 1;
+        _whtSlipRotation = 0;
+        _applyWhtSlipTransform();
+    }
+
+    function _applyWhtSlipTransform() {
+        const imgEl = document.getElementById('whtSlipImg');
+        if (imgEl) {
+            imgEl.style.transform = `scale(${_whtSlipZoom}) rotate(${_whtSlipRotation}deg)`;
+        }
+    }
+
+    function printWhtSlip() {
+        if (!_activeWhtModalData) return;
+        const url = _activeWhtModalData.withholding_receipt_url || _activeWhtModalData.receipt_slip_url || _activeWhtModalData.attachment_url;
+        if (!url) {
+            alert('No document attached to print.');
+            return;
+        }
+        const printWin = window.open(url, '_blank');
+        if (printWin) {
+            printWin.focus();
+            setTimeout(() => {
+                try { printWin.print(); } catch (e) {}
+            }, 1000);
+        }
+    }
+
+    function openInspectorFromWhtModal() {
+        if (!_activeWhtModalData) return;
+        const curData = Object.assign({}, _activeWhtModalData);
+
+        const modalEl = document.getElementById('whtReceiptModal');
+        if (modalEl) {
+            if (window.bootstrap && bootstrap.Modal) {
+                const inst = bootstrap.Modal.getInstance(modalEl);
+                if (inst) inst.hide();
+            } else if (window.$ && typeof $(modalEl).modal === 'function') {
+                $(modalEl).modal('hide');
+            }
+        }
+
+        setTimeout(() => {
+            let matchIdx = -1;
+            if (window._pageExpenses && window._pageExpenses.length > 0) {
+                matchIdx = window._pageExpenses.findIndex(it => 
+                    (curData.id && it.id == curData.id) || 
+                    (curData.request_number && it.request_number == curData.request_number)
+                );
+            }
+            if (matchIdx !== -1) {
+                openExpenseInspector(matchIdx);
+            } else {
+                openMovementEditSlipModal(
+                    curData.id, 
+                    curData.receipt_id || '', 
+                    curData.request_number || '', 
+                    curData.payee || '', 
+                    curData.seller_tin || '', 
+                    curData.fs_no || '', 
+                    curData.mrc_no || '', 
+                    curData.date_ec || curData.raw_date || '', 
+                    curData.base_amount || 0, 
+                    curData.withholding_amount || 0, 
+                    curData.net_disbursed || 0
+                );
+            }
+        }, 300);
+    }
+
+    function openWhtModalFromTasDetail() {
+        const modalEl = document.getElementById('tasExpenseDetailModal');
+        if (modalEl) {
+            if (window.bootstrap && bootstrap.Modal) {
+                const inst = bootstrap.Modal.getInstance(modalEl);
+                if (inst) inst.hide();
+            } else if (window.$ && typeof $(modalEl).modal === 'function') {
+                $(modalEl).modal('hide');
+            }
+        }
+        let item = null;
+        if (_activeExpenseDetailType === 'expense' && window._pageExpenses && _activeTasDetailIdx !== null) {
+            item = window._pageExpenses[_activeTasDetailIdx];
+        } else if (window._pageTasPurchases && _activeTasDetailIdx !== null) {
+            item = window._pageTasPurchases[_activeTasDetailIdx];
+        }
+        if (item) {
+            setTimeout(() => {
+                openWithholdingReceiptModal(item);
+            }, 300);
         }
     }
 
