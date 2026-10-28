@@ -4230,7 +4230,9 @@ class FinanceTaxReportController extends Controller
      */
     protected function exportSalesExcel(Request $request, string $startDate, string $endDate, int $year, ?int $month, string $monthSuffix)
     {
-        $filename = 'Sales_Report' . $monthSuffix . '_' . now()->format('Ymd_His') . '.xlsx';
+        $userCalendar = $this->resolveCalendarOption($request);
+        $calSuffix = ($userCalendar === 'G') ? '_GC' : (($userCalendar === 'E') ? '_EC' : '');
+        $filename = 'Sales_Report' . $calSuffix . $monthSuffix . '_' . now()->format('Ymd_His') . '.xlsx';
         $tempPath = storage_path('app/sales_export_' . uniqid() . '.xlsx');
 
         $headers = [
@@ -4316,9 +4318,13 @@ class FinanceTaxReportController extends Controller
             // Col K: Price
             $priceVal = round((float)($inc->unit_price > 0 ? $inc->unit_price : $inc->amount), 2);
 
-            // Col L: Receipt Date (Format: DD/MM/YYYY EC)
+            // Col L: Receipt Date (Format: DD/MM/YYYY EC or DD/MM/YYYY GC)
             $rDate = $inc->receipt_date ?: $inc->income_date;
-            $receiptDateFormatted = $rDate ? EthiopianDate::formatDateEc($rDate, 'DD/MM/YYYY EC') : EthiopianDate::formatDateEc(now(), 'DD/MM/YYYY EC');
+            if ($userCalendar === 'G') {
+                $receiptDateFormatted = $this->formatExportDate($rDate, null, 'G', '/');
+            } else {
+                $receiptDateFormatted = $this->formatExportDate($rDate, null, 'E', '/') . ' EC';
+            }
 
             // Col M: Encoded By
             $encodedBy = trim((string)($inc->encoded_by ?: ($request->input('encoded_by') ?: (
@@ -4356,7 +4362,9 @@ class FinanceTaxReportController extends Controller
      */
     protected function exportPurchaseTasExcel(Request $request, string $startDate, string $endDate, int $year, ?int $month, string $monthSuffix)
     {
-        $filename = 'Purchase_TAS' . $monthSuffix . '_' . now()->format('Ymd_His') . '.xlsx';
+        $userCalendar = $this->resolveCalendarOption($request) ?: 'E';
+        $calSuffix = ($userCalendar === 'G') ? '_GC' : '_EC';
+        $filename = 'Purchase_TAS' . $calSuffix . $monthSuffix . '_' . now()->format('Ymd_His') . '.xlsx';
         $tempPath = storage_path('app/purch_tas_' . uniqid() . '.xlsx');
 
         $headers = [
@@ -4481,8 +4489,10 @@ class FinanceTaxReportController extends Controller
                     $receiptNo = trim($item['request_number'] ?? '');
                 }
 
-                $receiptDate = !empty($item['receipt_date_ec']) && $item['receipt_date_ec'] !== '-' ? $item['receipt_date_ec'] : EthiopianDate::formatDateEc(now(), 'd-m-Y');
-                $encodingDate = !empty($item['encoding_date_ec']) && $item['encoding_date_ec'] !== '-' ? $item['encoding_date_ec'] : EthiopianDate::formatDateEc(now(), 'd-m-Y');
+                $rawDate = $item['raw_date'] ?? ($item['date_gc'] ?? null);
+                $ecDate  = $item['receipt_date_ec'] ?? ($item['date_ec'] ?? null);
+                $receiptDate = $this->formatExportDate($rawDate, $ecDate, $userCalendar, '-');
+                $encodingDate = $this->formatExportDate(now(), $item['encoding_date_ec'] ?? null, $userCalendar, '-');
                 $mrc = (!empty($item['mrc_no']) && $item['mrc_no'] !== '-') ? trim($item['mrc_no']) : '';
                 $purcType = !empty($item['purc_type']) ? $item['purc_type'] : 'PUR_GD';
                 $encodedBy = !empty($item['encoded_by']) ? $item['encoded_by'] : 'wechacha';
@@ -4599,17 +4609,10 @@ class FinanceTaxReportController extends Controller
             }
 
             $parsed = is_string($r->parsed_data ?? null) ? (json_decode($r->parsed_data, true) ?: []) : (array)($r->parsed_data ?? []);
-            $receiptDate = !empty($parsed['receipt_date']) && preg_match('/^\d{2}-\d{2}-\d{4}$/', trim($parsed['receipt_date']))
-                ? trim($parsed['receipt_date'])
-                : (!empty($parsed['receipt_date'])
-                    ? EthiopianDate::formatDateEc($parsed['receipt_date'], 'd-m-Y')
-                    : ($r && $r->receipt_date ? EthiopianDate::formatDateEc($r->receipt_date, 'd-m-Y') : EthiopianDate::formatDateEc(now(), 'd-m-Y')));
-
-            $encodingDate = !empty($parsed['encoding_date']) && preg_match('/^\d{2}-\d{2}-\d{4}$/', trim($parsed['encoding_date']))
-                ? trim($parsed['encoding_date'])
-                : (!empty($parsed['encoding_date'])
-                    ? EthiopianDate::formatDateEc($parsed['encoding_date'], 'd-m-Y')
-                    : (($r && $r->created_at) ? EthiopianDate::formatDateEc($r->created_at, 'd-m-Y') : EthiopianDate::formatDateEc(now(), 'd-m-Y')));
+            $rawDate = ($r && $r->receipt_date) ? $r->receipt_date : $item->created_at;
+            $rawEcDate = !empty($parsed['receipt_date']) ? $parsed['receipt_date'] : null;
+            $receiptDate = $this->formatExportDate($rawDate, $rawEcDate, $userCalendar, '-');
+            $encodingDate = $this->formatExportDate($r?->created_at ?: now(), !empty($parsed['encoding_date']) ? $parsed['encoding_date'] : null, $userCalendar, '-');
             $mrc = $r && !empty($r->mrc_no) ? trim((string)$r->mrc_no) : (!empty($parsed['mrc']) ? trim((string)$parsed['mrc']) : '');
 
             $purcNorm = QcService::normalizePurchaseType(
@@ -4659,17 +4662,10 @@ class FinanceTaxReportController extends Controller
                 $receiptNo = 'FS' . str_pad($r->fs_no, 8, '0', STR_PAD_LEFT);
             }
 
-            $receiptDate = !empty($parsed['receipt_date']) && preg_match('/^\d{2}-\d{2}-\d{4}$/', trim($parsed['receipt_date']))
-                ? trim($parsed['receipt_date'])
-                : (!empty($parsed['receipt_date'])
-                    ? EthiopianDate::formatDateEc($parsed['receipt_date'], 'd-m-Y')
-                    : ($r->receipt_date ? EthiopianDate::formatDateEc($r->receipt_date, 'd-m-Y') : EthiopianDate::formatDateEc(now(), 'd-m-Y')));
-
-            $encodingDate = !empty($parsed['encoding_date']) && preg_match('/^\d{2}-\d{2}-\d{4}$/', trim($parsed['encoding_date']))
-                ? trim($parsed['encoding_date'])
-                : (!empty($parsed['encoding_date'])
-                    ? EthiopianDate::formatDateEc($parsed['encoding_date'], 'd-m-Y')
-                    : ($r->created_at ? EthiopianDate::formatDateEc($r->created_at, 'd-m-Y') : EthiopianDate::formatDateEc(now(), 'd-m-Y')));
+            $rawDate = $r->receipt_date ?: $r->created_at;
+            $rawEcDate = !empty($parsed['receipt_date']) ? $parsed['receipt_date'] : null;
+            $receiptDate = $this->formatExportDate($rawDate, $rawEcDate, $userCalendar, '-');
+            $encodingDate = $this->formatExportDate($r->created_at ?: now(), !empty($parsed['encoding_date']) ? $parsed['encoding_date'] : null, $userCalendar, '-');
             $mrc = trim((string)($r->mrc_no ?: (!empty($parsed['mrc']) ? $parsed['mrc'] : '')));
 
             $purcNorm = QcService::normalizePurchaseType(!empty($parsed['purc_type']) ? $parsed['purc_type'] : $r->category, ($r->description ?? '') . ' ' . $r->vendor_name);
@@ -4725,8 +4721,8 @@ class FinanceTaxReportController extends Controller
                     '',
                     round($gross, 2),
                     $exp->payment_reference ?: $exp->request_number,
-                    $exp->paid_at ? EthiopianDate::formatDateEc($exp->paid_at, 'd-m-Y') : EthiopianDate::formatDateEc($exp->created_at, 'd-m-Y'),
-                    EthiopianDate::formatDateEc($exp->created_at, 'd-m-Y'),
+                    $this->formatExportDate($exp->paid_at ?: $exp->created_at, null, $userCalendar, '-'),
+                    $this->formatExportDate($exp->created_at ?: now(), null, $userCalendar, '-'),
                     '',
                     'PUR_GD',
                     'wechacha',
@@ -4742,7 +4738,9 @@ class FinanceTaxReportController extends Controller
      */
     protected function exportPurchaseVatExcel(Request $request, string $startDate, string $endDate, int $year, ?int $month, string $monthSuffix)
     {
-        $filename = 'Purchase_VAT_Report' . $monthSuffix . '_' . now()->format('Ymd_His') . '.xlsx';
+        $userCalendar = $this->resolveCalendarOption($request);
+        $calSuffix = ($userCalendar === 'E') ? '_EC' : (($userCalendar === 'G') ? '_GC' : '');
+        $filename = 'Purchase_VAT_Report' . $calSuffix . $monthSuffix . '_' . now()->format('Ymd_His') . '.xlsx';
         $tempPath = storage_path('app/purch_vat_' . uniqid() . '.xlsx');
 
         // Exact 15-column ERCA Purchase VAT headers from pro.doc
@@ -5075,16 +5073,17 @@ class FinanceTaxReportController extends Controller
             $vatCategory = ($cat === 'S' || str_starts_with($cat, 'SERV')) ? 'S' : 'G';
 
             // 2. CALENDAR TYPE: G (default) or E
-            $calType = strtoupper(trim((string)($item->calendar_type ?: ($request->input('calendar_type') ?: 'G'))));
-            $calendarType = ($calType === 'E') ? 'E' : 'G';
-
-            // 6. Date of purchase (dd/mm/yyyy format)
-            $date = $r?->receipt_date ?: $item->created_at;
-            if ($calendarType === 'E') {
-                $dateFormatted = $date ? EthiopianDate::formatDateEc($date, 'd/m/Y') : EthiopianDate::formatDateEc(now(), 'd/m/Y');
+            if ($userCalendar !== null) {
+                $calendarType = $userCalendar;
             } else {
-                $dateFormatted = $date ? Carbon::parse($date)->format('d/m/Y') : now()->format('d/m/Y');
+                $calType = strtoupper(trim((string)($item->calendar_type ?: ($request->input('calendar_type') ?: 'G'))));
+                $calendarType = ($calType === 'E') ? 'E' : 'G';
             }
+
+            // 6. Date of purchase (dd/mm/yyyy format matching calendar type)
+            $rawDate = $r?->receipt_date ?: $item->created_at;
+            $rawEcDate = $item->receipt_date_ec ?? ($r?->receipt_date_ec ?? null);
+            $dateFormatted = $this->formatExportDate($rawDate, $rawEcDate, $calendarType, '/');
 
             // 4. TIN: clean digits only or empty
             $rawTin = $r ? (string)$r->vendor_tin : '';
@@ -5250,6 +5249,78 @@ class FinanceTaxReportController extends Controller
         }
 
         return $this->writeExcelFile($headers, $rows, $tempPath, $filename);
+    }
+
+    /**
+     * Resolve requested calendar format ('E' for Ethiopian, 'G' for Gregorian, or null if unspecified).
+     */
+    protected function resolveCalendarOption(Request $request): ?string
+    {
+        $raw = strtolower(trim((string)($request->input('calendar') ?: ($request->input('calendar_type') ?: ''))));
+        if (in_array($raw, ['e', 'ec', 'ethiopian', 'ethiopia'])) {
+            return 'E';
+        }
+        if (in_array($raw, ['g', 'gc', 'gregorian'])) {
+            return 'G';
+        }
+        return null;
+    }
+
+    /**
+     * Format date according to target calendar ('E' or 'G') with desired separator ('/' or '-').
+     */
+    protected function formatExportDate($rawDate, ?string $rawEcDate, string $targetCalendar, string $separator = '/'): string
+    {
+        if ($targetCalendar === 'G') {
+            // Gregorian Calendar requested
+            // 1. If we have a valid Gregorian date string/Carbon
+            if (!empty($rawDate) && $rawDate !== '-') {
+                try {
+                    return Carbon::parse($rawDate)->format('d' . $separator . 'm' . $separator . 'Y');
+                } catch (\Throwable $e) {
+                    // continue
+                }
+            }
+            // 2. If we only have Ethiopian date string like DD-MM-YYYY or DD/MM/YYYY
+            if (!empty($rawEcDate) && $rawEcDate !== '-') {
+                $clean = trim(preg_replace('/\s*EC$/i', '', (string)$rawEcDate));
+                if (preg_match('/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/', $clean, $m)) {
+                    $d = (int)$m[1];
+                    $mo = (int)$m[2];
+                    $y = (int)$m[3];
+                    if ($y >= 1900 && $y <= 2100 && $mo >= 1 && $mo <= 13 && $d >= 1 && $d <= 30) {
+                        try {
+                            $gcYmd = EthiopianDate::toGregorian($y, $mo, $d);
+                            return Carbon::parse($gcYmd)->format('d' . $separator . 'm' . $separator . 'Y');
+                        } catch (\Throwable $e) {
+                            // continue
+                        }
+                    }
+                }
+            }
+            return now()->format('d' . $separator . 'm' . $separator . 'Y');
+        }
+
+        // Ethiopian Calendar requested ('E')
+        // 1. If we already have a valid Ethiopian date string
+        if (!empty($rawEcDate) && $rawEcDate !== '-') {
+            $clean = trim(preg_replace('/\s*EC$/i', '', (string)$rawEcDate));
+            if (preg_match('/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/', $clean, $m)) {
+                $d = str_pad($m[1], 2, '0', STR_PAD_LEFT);
+                $mo = str_pad($m[2], 2, '0', STR_PAD_LEFT);
+                $y = $m[3];
+                return "{$d}{$separator}{$mo}{$separator}{$y}";
+            }
+        }
+        // 2. Format from Gregorian date
+        if (!empty($rawDate) && $rawDate !== '-') {
+            try {
+                return EthiopianDate::formatDateEc($rawDate, 'd' . $separator . 'm' . $separator . 'Y');
+            } catch (\Throwable $e) {
+                // continue
+            }
+        }
+        return EthiopianDate::formatDateEc(now(), 'd' . $separator . 'm' . $separator . 'Y');
     }
 
     /**

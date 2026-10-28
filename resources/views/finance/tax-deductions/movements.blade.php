@@ -89,33 +89,77 @@
                             <i class="fa-solid fa-file-excel"></i>
                             <span>Export Excel</span>
                         </button>
-                        <ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-4 p-2" aria-labelledby="movementsExcelDropdown" style="min-width: 260px;">
+                        <ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-4 p-2" aria-labelledby="movementsExcelDropdown" style="min-width: 320px;">
                             <li class="dropdown-header small text-uppercase text-muted fw-bold px-3 py-1">ERCA Tax Export Formats</li>
+                            
+                            {{-- Sales Excel --}}
+                            <li class="px-2 pt-1 pb-0.5">
+                                <span class="small fw-bold text-dark d-flex align-items-center gap-1.5 px-2">
+                                    <i class="fa-solid fa-hand-holding-dollar text-success"></i> 1. Sales Excel (13 Cols)
+                                </span>
+                            </li>
                             <li>
-                                <a class="dropdown-item rounded-3 py-2 px-3 d-flex align-items-center gap-2.5" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'sales', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
-                                    <div class="p-2 rounded-circle bg-success bg-opacity-10 text-success"><i class="fa-solid fa-hand-holding-dollar fs-6"></i></div>
-                                    <div>
-                                        <div class="fw-bold text-dark small">1. Sales Excel</div>
-                                        <small class="text-muted d-block" style="font-size: 0.7rem;">13 columns (TIN, MRC, Receipt #, Price)</small>
-                                    </div>
+                                <a class="dropdown-item rounded-3 py-1 px-3 d-flex align-items-center justify-content-between small" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'sales', 'calendar' => 'ec', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
+                                    <span><i class="fa-solid fa-calendar-day text-success me-1.5"></i>All in Ethiopian Calendar</span>
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">EC</span>
                                 </a>
                             </li>
                             <li>
-                                <a class="dropdown-item rounded-3 py-2 px-3 d-flex align-items-center gap-2.5" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_tas', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
-                                    <div class="p-2 rounded-circle bg-primary bg-opacity-10 text-primary"><i class="fa-solid fa-file-invoice fs-6"></i></div>
-                                    <div>
-                                        <div class="fw-bold text-dark small">2. Purchase TAS Excel</div>
-                                        <small class="text-muted d-block" style="font-size: 0.7rem;">9 columns e-Tax Declaration</small>
-                                    </div>
+                                <a class="dropdown-item rounded-3 py-1 px-3 d-flex align-items-center justify-content-between small" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'sales', 'calendar' => 'gc', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
+                                    <span><i class="fa-solid fa-globe text-primary me-1.5"></i>All in Gregorian Calendar</span>
+                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">GC</span>
+                                </a>
+                            </li>
+
+                            <li><hr class="dropdown-divider my-1"></li>
+
+                            {{-- Purchase TAS Excel --}}
+                            <li class="px-2 pt-1 pb-0.5">
+                                <span class="small fw-bold text-dark d-flex align-items-center gap-1.5 px-2">
+                                    <i class="fa-solid fa-file-invoice text-primary"></i> 2. Purchase TAS Excel (9 Cols)
+                                </span>
+                            </li>
+                            <li>
+                                <a class="dropdown-item rounded-3 py-1 px-3 d-flex align-items-center justify-content-between small" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_tas', 'calendar' => 'ec', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
+                                    <span><i class="fa-solid fa-calendar-day text-success me-1.5"></i>All in Ethiopian Calendar</span>
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">EC</span>
                                 </a>
                             </li>
                             <li>
-                                <a class="dropdown-item rounded-3 py-2 px-3 d-flex align-items-center gap-2.5" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_vat', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
-                                    <div class="p-2 rounded-circle bg-danger bg-opacity-10 text-danger"><i class="fa-solid fa-percent fs-6"></i></div>
-                                    <div>
-                                        <div class="fw-bold text-dark small">3. Purchase VAT Excel</div>
-                                        <small class="text-muted d-block" style="font-size: 0.7rem;">ERCA Purchase VAT Report</small>
-                                    </div>
+                                <a class="dropdown-item rounded-3 py-1 px-3 d-flex align-items-center justify-content-between small" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_tas', 'calendar' => 'gc', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
+                                    <span><i class="fa-solid fa-globe text-primary me-1.5"></i>All in Gregorian Calendar</span>
+                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">GC</span>
+                                </a>
+                            </li>
+
+                            <li><hr class="dropdown-divider my-1"></li>
+
+                            {{-- Purchase VAT Excel --}}
+                            <li class="px-2 pt-1 pb-0.5">
+                                <span class="small fw-bold text-dark d-flex align-items-center gap-1.5 px-2">
+                                    <i class="fa-solid fa-percent text-danger"></i> 3. Purchase VAT Excel (15 Cols)
+                                </span>
+                            </li>
+                            <li>
+                                <a class="dropdown-item rounded-3 py-1 px-3 d-flex align-items-center justify-content-between small" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_vat', 'calendar' => 'ec', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
+                                    <span><i class="fa-solid fa-calendar-day text-success me-1.5"></i>All in Ethiopian Calendar</span>
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">EC</span>
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item rounded-3 py-1 px-3 d-flex align-items-center justify-content-between small" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_vat', 'calendar' => 'gc', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
+                                    <span><i class="fa-solid fa-globe text-primary me-1.5"></i>All in Gregorian Calendar</span>
+                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">GC</span>
+                                </a>
+                            </li>
+
+                            <li><hr class="dropdown-divider my-1"></li>
+
+                            {{-- Withholding --}}
+                            <li>
+                                <a class="dropdown-item rounded-3 py-1.5 px-3 d-flex align-items-center gap-2 small" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'withholding', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
+                                    <i class="fa-solid fa-hand-holding-dollar text-warning"></i>
+                                    <span class="fw-semibold text-dark">4. Withholding Tax Excel</span>
                                 </a>
                             </li>
                         </ul>
@@ -456,16 +500,52 @@
                             <span class="badge bg-info-subtle text-info rounded-pill ms-0.5" id="filterCountVerifiedNoReceipt">{{ $movementsData['summary']['verified_no_receipt_count'] ?? count($movementsData['verified_no_receipt'] ?? []) }}</span>
                         </button>
                         <div class="btn-group shadow-xs rounded-pill overflow-hidden">
-                            <a href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_tas', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}" 
-                               class="btn btn-sm btn-outline-primary fw-semibold px-3 text-nowrap d-inline-flex align-items-center gap-1">
-                                <i class="fa-solid fa-file-excel"></i>
-                                <span>Purchase TAS</span>
-                            </a>
-                            <a href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_vat', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}" 
-                               class="btn btn-sm btn-outline-danger fw-semibold px-3 text-nowrap d-inline-flex align-items-center gap-1">
-                                <i class="fa-solid fa-file-excel"></i>
-                                <span>Purchase VAT</span>
-                            </a>
+                            {{-- Purchase TAS with Calendar options --}}
+                            <div class="btn-group">
+                                <button type="button" class="btn btn-sm btn-outline-primary fw-semibold px-2.5 text-nowrap dropdown-toggle d-inline-flex align-items-center gap-1" data-bs-toggle="dropdown" aria-expanded="false">
+                                    <i class="fa-solid fa-file-excel"></i>
+                                    <span>Purchase TAS</span>
+                                </button>
+                                <ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-3 p-2 small" style="min-width: 250px;">
+                                    <li class="dropdown-header small text-uppercase text-muted fw-bold px-2 py-1">Choose Calendar (TAS 9-Cols)</li>
+                                    <li>
+                                        <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center justify-content-between" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_tas', 'calendar' => 'ec', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
+                                            <span><i class="fa-solid fa-calendar-day text-success me-1.5"></i>All Ethiopian Calendar</span>
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">EC</span>
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center justify-content-between" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_tas', 'calendar' => 'gc', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
+                                            <span><i class="fa-solid fa-globe text-primary me-1.5"></i>All Gregorian Calendar</span>
+                                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">GC</span>
+                                        </a>
+                                    </li>
+                                </ul>
+                            </div>
+
+                            {{-- Purchase VAT with Calendar options --}}
+                            <div class="btn-group">
+                                <button type="button" class="btn btn-sm btn-outline-danger fw-semibold px-2.5 text-nowrap dropdown-toggle d-inline-flex align-items-center gap-1" data-bs-toggle="dropdown" aria-expanded="false">
+                                    <i class="fa-solid fa-file-excel"></i>
+                                    <span>Purchase VAT</span>
+                                </button>
+                                <ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-3 p-2 small" style="min-width: 250px;">
+                                    <li class="dropdown-header small text-uppercase text-muted fw-bold px-2 py-1">Choose Calendar (VAT 15-Cols)</li>
+                                    <li>
+                                        <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center justify-content-between" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_vat', 'calendar' => 'ec', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
+                                            <span><i class="fa-solid fa-calendar-day text-success me-1.5"></i>All Ethiopian Calendar</span>
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">EC</span>
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center justify-content-between" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_vat', 'calendar' => 'gc', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
+                                            <span><i class="fa-solid fa-globe text-primary me-1.5"></i>All Gregorian Calendar</span>
+                                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">GC</span>
+                                        </a>
+                                    </li>
+                                </ul>
+                            </div>
+
                             <a href="{{ route('finance.tax-deductions.export-excel', ['type' => 'withholding', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}" 
                                class="btn btn-sm btn-outline-warning text-dark fw-semibold px-3 text-nowrap d-inline-flex align-items-center gap-1" title="Export Withholding Tax Deductions Report">
                                 <i class="fa-solid fa-file-excel text-success"></i>
@@ -1507,16 +1587,52 @@
                             </button>
                         </div>
                         <div class="btn-group shadow-xs rounded-pill overflow-hidden">
-                            <a href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_tas', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}" 
-                               class="btn btn-sm btn-outline-primary fw-semibold px-3 text-nowrap d-inline-flex align-items-center gap-1">
-                                <i class="fa-solid fa-file-excel"></i>
-                                <span>Purchase TAS</span>
-                            </a>
-                            <a href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_vat', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}" 
-                               class="btn btn-sm btn-outline-danger fw-semibold px-3 text-nowrap d-inline-flex align-items-center gap-1">
-                                <i class="fa-solid fa-file-excel"></i>
-                                <span>Purchase VAT</span>
-                            </a>
+                            {{-- Purchase TAS with Calendar options --}}
+                            <div class="btn-group">
+                                <button type="button" class="btn btn-sm btn-outline-primary fw-semibold px-2.5 text-nowrap dropdown-toggle d-inline-flex align-items-center gap-1" data-bs-toggle="dropdown" aria-expanded="false">
+                                    <i class="fa-solid fa-file-excel"></i>
+                                    <span>Purchase TAS</span>
+                                </button>
+                                <ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-3 p-2 small" style="min-width: 250px;">
+                                    <li class="dropdown-header small text-uppercase text-muted fw-bold px-2 py-1">Choose Calendar (TAS 9-Cols)</li>
+                                    <li>
+                                        <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center justify-content-between" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_tas', 'calendar' => 'ec', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
+                                            <span><i class="fa-solid fa-calendar-day text-success me-1.5"></i>All Ethiopian Calendar</span>
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">EC</span>
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center justify-content-between" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_tas', 'calendar' => 'gc', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
+                                            <span><i class="fa-solid fa-globe text-primary me-1.5"></i>All Gregorian Calendar</span>
+                                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">GC</span>
+                                        </a>
+                                    </li>
+                                </ul>
+                            </div>
+
+                            {{-- Purchase VAT with Calendar options --}}
+                            <div class="btn-group">
+                                <button type="button" class="btn btn-sm btn-outline-danger fw-semibold px-2.5 text-nowrap dropdown-toggle d-inline-flex align-items-center gap-1" data-bs-toggle="dropdown" aria-expanded="false">
+                                    <i class="fa-solid fa-file-excel"></i>
+                                    <span>Purchase VAT</span>
+                                </button>
+                                <ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-3 p-2 small" style="min-width: 250px;">
+                                    <li class="dropdown-header small text-uppercase text-muted fw-bold px-2 py-1">Choose Calendar (VAT 15-Cols)</li>
+                                    <li>
+                                        <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center justify-content-between" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_vat', 'calendar' => 'ec', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
+                                            <span><i class="fa-solid fa-calendar-day text-success me-1.5"></i>All Ethiopian Calendar</span>
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">EC</span>
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center justify-content-between" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_vat', 'calendar' => 'gc', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
+                                            <span><i class="fa-solid fa-globe text-primary me-1.5"></i>All Gregorian Calendar</span>
+                                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">GC</span>
+                                        </a>
+                                    </li>
+                                </ul>
+                            </div>
+
                             <a href="{{ route('finance.tax-deductions.export-excel', ['type' => 'withholding', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}" 
                                class="btn btn-sm btn-outline-warning text-dark fw-semibold px-3 text-nowrap d-inline-flex align-items-center gap-1" title="Export Withholding Tax Deductions Report">
                                 <i class="fa-solid fa-file-excel text-success"></i>
@@ -1946,11 +2062,53 @@
                                         <i class="fa-solid fa-file-excel"></i>
                                         <span>Export Excel</span>
                                     </button>
-                                    <ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-3 p-2">
-                                        <li><a class="dropdown-item py-1.5 px-3 rounded-2" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'sales', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}"><i class="fa-solid fa-hand-holding-dollar text-success me-2"></i>1. Sales Excel</a></li>
-                                        <li><a class="dropdown-item py-1.5 px-3 rounded-2" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_tas', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}"><i class="fa-solid fa-file-invoice text-primary me-2"></i>2. Purchase TAS Excel</a></li>
-                                        <li><a class="dropdown-item py-1.5 px-3 rounded-2" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_vat', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}"><i class="fa-solid fa-percent text-danger me-2"></i>3. Purchase VAT Excel</a></li>
-                                        <li><a class="dropdown-item py-1.5 px-3 rounded-2" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'withholding', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}"><i class="fa-solid fa-hand-holding-dollar text-warning me-2"></i>4. Withholding Tax Excel</a></li>
+                                    <ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-4 p-2 small" style="min-width: 290px;">
+                                        <li class="dropdown-header small text-uppercase text-muted fw-bold px-2 py-1">ERCA Tax Export Formats</li>
+                                        <li>
+                                            <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center justify-content-between" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'sales', 'calendar' => 'ec', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
+                                                <span><i class="fa-solid fa-hand-holding-dollar text-success me-1.5"></i>1. Sales (Ethiopian Calendar)</span>
+                                                <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">EC</span>
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center justify-content-between" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'sales', 'calendar' => 'gc', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
+                                                <span><i class="fa-solid fa-hand-holding-dollar text-primary me-1.5"></i>1. Sales (Gregorian Calendar)</span>
+                                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">GC</span>
+                                            </a>
+                                        </li>
+                                        <li><hr class="dropdown-divider my-1"></li>
+                                        <li>
+                                            <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center justify-content-between" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_tas', 'calendar' => 'ec', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
+                                                <span><i class="fa-solid fa-file-invoice text-primary me-1.5"></i>2. Purchase TAS (Ethiopian)</span>
+                                                <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">EC</span>
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center justify-content-between" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_tas', 'calendar' => 'gc', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
+                                                <span><i class="fa-solid fa-file-invoice text-primary me-1.5"></i>2. Purchase TAS (Gregorian)</span>
+                                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">GC</span>
+                                            </a>
+                                        </li>
+                                        <li><hr class="dropdown-divider my-1"></li>
+                                        <li>
+                                            <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center justify-content-between" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_vat', 'calendar' => 'ec', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
+                                                <span><i class="fa-solid fa-percent text-danger me-1.5"></i>3. Purchase VAT (Ethiopian)</span>
+                                                <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">EC</span>
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center justify-content-between" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_vat', 'calendar' => 'gc', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
+                                                <span><i class="fa-solid fa-percent text-danger me-1.5"></i>3. Purchase VAT (Gregorian)</span>
+                                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">GC</span>
+                                            </a>
+                                        </li>
+                                        <li><hr class="dropdown-divider my-1"></li>
+                                        <li>
+                                            <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center gap-2" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'withholding', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
+                                                <i class="fa-solid fa-hand-holding-dollar text-warning"></i>
+                                                <span class="fw-semibold">4. Withholding Tax Excel</span>
+                                            </a>
+                                        </li>
                                     </ul>
                                 </div>
                             </div>

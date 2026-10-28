@@ -9,6 +9,7 @@ use App\Models\ReceiptItem;
 use App\Models\SystemSetting;
 use App\Services\QcService;
 use App\Services\EthiopianDate;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -1475,12 +1476,14 @@ class OCRReceiptScannerController extends Controller
         // Immediately block double receipts (same FS No. & Seller TIN) - do NOT add to Excel
         $items = $this->deduplicateReceiptItems($items);
         $template = $request->input('template', 'etax');
+        $userCalendar = $this->resolveCalendarOption($request);
+        $calSuffix = ($userCalendar === 'E') ? '_EC' : (($userCalendar === 'G') ? '_GC' : '');
         $tempPath = storage_path('app/temp_' . uniqid() . '.xlsx');
 
         if ($template === 'erca_15') {
-            $filename = 'VAT_RECEIPT_REPORT_' . now()->format('Y_m_d_His') . '.xlsx';
+            $filename = 'VAT_RECEIPT_REPORT' . $calSuffix . '_' . now()->format('Y_m_d_His') . '.xlsx';
         } else {
-            $filename = 'Purchase_Declaration_' . now()->format('Y_m_d_His') . '.xlsx';
+            $filename = 'Purchase_Declaration' . $calSuffix . '_' . now()->format('Y_m_d_His') . '.xlsx';
         }
 
         try {
@@ -1514,15 +1517,16 @@ class OCRReceiptScannerController extends Controller
                     $cat = strtoupper(trim((string)($item->vat_category ?: ($r?->vat_category ?: 'G'))));
                     $vatCategory = ($cat === 'S' || str_starts_with($cat, 'SERV')) ? 'S' : 'G';
 
-                    $calType = strtoupper(trim((string)($item->calendar_type ?: ($request->input('calendar_type') ?: 'G'))));
-                    $calendarType = ($calType === 'E') ? 'E' : 'G';
-
-                    $date = $r?->receipt_date ?: $item->created_at;
-                    if ($calendarType === 'E') {
-                        $dateFormatted = $date ? EthiopianDate::formatDateEc($date, 'd/m/Y') : EthiopianDate::formatDateEc(now(), 'd/m/Y');
+                    if ($userCalendar !== null) {
+                        $calendarType = $userCalendar;
                     } else {
-                        $dateFormatted = $date ? Carbon::parse($date)->format('d/m/Y') : now()->format('d/m/Y');
+                        $calType = strtoupper(trim((string)($item->calendar_type ?: ($request->input('calendar_type') ?: 'G'))));
+                        $calendarType = ($calType === 'E') ? 'E' : 'G';
                     }
+
+                    $rawDate = $r?->receipt_date ?: $item->created_at;
+                    $rawEcDate = $item->receipt_date_ec ?? ($r?->receipt_date_ec ?? null);
+                    $dateFormatted = $this->formatExportDate($rawDate, $rawEcDate, $calendarType, '/');
 
                     $rawTin = $r ? (string)$r->vendor_tin : '';
                     $tinDigits = preg_replace('/[^0-9]/', '', $rawTin);
@@ -1673,11 +1677,20 @@ class OCRReceiptScannerController extends Controller
                         }
                     }
 
-                    // Col E: Receipt Date (Format: DD/MM/YYYY EC)
-                    $receiptDate = $r && $r->receipt_date ? EthiopianDate::formatDateEc($r->receipt_date, 'DD/MM/YYYY EC') : EthiopianDate::formatDateEc(now(), 'DD/MM/YYYY EC');
+                    // Col E: Receipt Date (Format: DD/MM/YYYY EC or DD-MM-YYYY GC)
+                    $targetCal = $userCalendar ?: 'E';
+                    $rawDate = $r ? $r->receipt_date : null;
+                    $receiptDate = $this->formatExportDate($rawDate, null, $targetCal, ($targetCal === 'G' ? '-' : '/'));
+                    if ($targetCal === 'E') {
+                        $receiptDate .= ' EC';
+                    }
 
-                    // Col F: Encoding Date (Format: DD/MM/YYYY EC)
-                    $encodingDate = ($r && $r->created_at) ? EthiopianDate::formatDateEc($r->created_at, 'DD/MM/YYYY EC') : EthiopianDate::formatDateEc(now(), 'DD/MM/YYYY EC');
+                    // Col F: Encoding Date (Format: DD/MM/YYYY EC or DD-MM-YYYY GC)
+                    $rawCreated = $r ? $r->created_at : now();
+                    $encodingDate = $this->formatExportDate($rawCreated, null, $targetCal, ($targetCal === 'G' ? '-' : '/'));
+                    if ($targetCal === 'E') {
+                        $encodingDate .= ' EC';
+                    }
 
                     // Col G: MRC (Machine Registration Code, e.g. DDB0000032 or blank)
                     $mrc = $r && !empty($r->mrc_no) ? trim((string)$r->mrc_no) : '';
@@ -1817,10 +1830,13 @@ class OCRReceiptScannerController extends Controller
         // Immediately block double receipts (same FS No. & Seller TIN) - do NOT add to CSV
         $items = $this->deduplicateReceiptItems($items);
 
+        $userCalendar = $this->resolveCalendarOption($request);
+        $calSuffix = ($userCalendar === 'E') ? '_EC' : (($userCalendar === 'G') ? '_GC' : '');
+
         if ($template === 'erca_15') {
-            $filename = 'VAT_REPORT_' . now()->format('Y_m_d_His') . '.csv';
+            $filename = 'VAT_REPORT' . $calSuffix . '_' . now()->format('Y_m_d_His') . '.csv';
         } else {
-            $filename = 'Purchase_Declaration_' . now()->format('Y_m_d_His') . '.csv';
+            $filename = 'Purchase_Declaration' . $calSuffix . '_' . now()->format('Y_m_d_His') . '.csv';
         }
 
         $headers = [
@@ -1831,7 +1847,7 @@ class OCRReceiptScannerController extends Controller
             'Expires'             => '0',
         ];
 
-        $callback = function () use ($items, $template) {
+        $callback = function () use ($items, $template, $userCalendar, $request) {
             $out = fopen('php://output', 'w');
             fprintf($out, chr(0xEF).chr(0xBB).chr(0xBF)); // UTF-8 BOM
 
@@ -1860,15 +1876,16 @@ class OCRReceiptScannerController extends Controller
                     $cat = strtoupper(trim((string)($item->vat_category ?: ($r?->vat_category ?: 'G'))));
                     $vatCategory = ($cat === 'S' || str_starts_with($cat, 'SERV')) ? 'S' : 'G';
 
-                    $calType = strtoupper(trim((string)($item->calendar_type ?: ($request->input('calendar_type') ?: 'G'))));
-                    $calendarType = ($calType === 'E') ? 'E' : 'G';
-
-                    $date = $r?->receipt_date ?: $item->created_at;
-                    if ($calendarType === 'E') {
-                        $dateFormatted = $date ? EthiopianDate::formatDateEc($date, 'd/m/Y') : EthiopianDate::formatDateEc(now(), 'd/m/Y');
+                    if ($userCalendar !== null) {
+                        $calendarType = $userCalendar;
                     } else {
-                        $dateFormatted = $date ? Carbon::parse($date)->format('d/m/Y') : now()->format('d/m/Y');
+                        $calType = strtoupper(trim((string)($item->calendar_type ?: ($request->input('calendar_type') ?: 'G'))));
+                        $calendarType = ($calType === 'E') ? 'E' : 'G';
                     }
+
+                    $rawDate = $r?->receipt_date ?: $item->created_at;
+                    $rawEcDate = $item->receipt_date_ec ?? ($r?->receipt_date_ec ?? null);
+                    $dateFormatted = $this->formatExportDate($rawDate, $rawEcDate, $calendarType, '/');
 
                     $rawTin = $r ? (string)$r->vendor_tin : '';
                     $tinDigits = preg_replace('/[^0-9]/', '', $rawTin);
@@ -2012,8 +2029,18 @@ class OCRReceiptScannerController extends Controller
                         }
                     }
 
-                    $receiptDate = $r && $r->receipt_date ? EthiopianDate::formatDateEc($r->receipt_date, 'DD/MM/YYYY EC') : EthiopianDate::formatDateEc(now(), 'DD/MM/YYYY EC');
-                    $encodingDate = ($r && $r->created_at) ? EthiopianDate::formatDateEc($r->created_at, 'DD/MM/YYYY EC') : EthiopianDate::formatDateEc(now(), 'DD/MM/YYYY EC');
+                    $targetCal = $userCalendar ?: 'E';
+                    $rawDate = $r ? $r->receipt_date : null;
+                    $receiptDate = $this->formatExportDate($rawDate, null, $targetCal, ($targetCal === 'G' ? '-' : '/'));
+                    if ($targetCal === 'E') {
+                        $receiptDate .= ' EC';
+                    }
+
+                    $rawCreated = $r ? $r->created_at : now();
+                    $encodingDate = $this->formatExportDate($rawCreated, null, $targetCal, ($targetCal === 'G' ? '-' : '/'));
+                    if ($targetCal === 'E') {
+                        $encodingDate .= ' EC';
+                    }
                     $mrc = $r && !empty($r->mrc_no) ? trim((string)$r->mrc_no) : '';
 
                     // Col H: PurcType (PUR_GD = Goods, PUR_SR = Services)
@@ -2250,6 +2277,74 @@ class OCRReceiptScannerController extends Controller
         }
 
         return collect($uniqueCleanedItems);
+    }
+
+    /**
+     * Resolve requested calendar format ('E' for Ethiopian, 'G' for Gregorian, or null if unspecified).
+     */
+    protected function resolveCalendarOption(Request $request): ?string
+    {
+        $raw = strtolower(trim((string)($request->input('calendar') ?: ($request->input('calendar_type') ?: ''))));
+        if (in_array($raw, ['e', 'ec', 'ethiopian', 'ethiopia'])) {
+            return 'E';
+        }
+        if (in_array($raw, ['g', 'gc', 'gregorian'])) {
+            return 'G';
+        }
+        return null;
+    }
+
+    /**
+     * Format date according to target calendar ('E' or 'G') with desired separator ('/' or '-').
+     */
+    protected function formatExportDate($rawDate, ?string $rawEcDate, string $targetCalendar, string $separator = '/'): string
+    {
+        if ($targetCalendar === 'G') {
+            // Gregorian Calendar requested
+            if (!empty($rawDate) && $rawDate !== '-') {
+                try {
+                    return Carbon::parse($rawDate)->format('d' . $separator . 'm' . $separator . 'Y');
+                } catch (\Throwable $e) {
+                    // continue
+                }
+            }
+            if (!empty($rawEcDate) && $rawEcDate !== '-') {
+                $clean = trim(preg_replace('/\s*EC$/i', '', (string)$rawEcDate));
+                if (preg_match('/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/', $clean, $m)) {
+                    $d = (int)$m[1];
+                    $mo = (int)$m[2];
+                    $y = (int)$m[3];
+                    if ($y >= 1900 && $y <= 2100 && $mo >= 1 && $mo <= 13 && $d >= 1 && $d <= 30) {
+                        try {
+                            $gcYmd = EthiopianDate::toGregorian($y, $mo, $d);
+                            return Carbon::parse($gcYmd)->format('d' . $separator . 'm' . $separator . 'Y');
+                        } catch (\Throwable $e) {
+                            // continue
+                        }
+                    }
+                }
+            }
+            return now()->format('d' . $separator . 'm' . $separator . 'Y');
+        }
+
+        // Ethiopian Calendar requested ('E')
+        if (!empty($rawEcDate) && $rawEcDate !== '-') {
+            $clean = trim(preg_replace('/\s*EC$/i', '', (string)$rawEcDate));
+            if (preg_match('/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/', $clean, $m)) {
+                $d = str_pad($m[1], 2, '0', STR_PAD_LEFT);
+                $mo = str_pad($m[2], 2, '0', STR_PAD_LEFT);
+                $y = $m[3];
+                return "{$d}{$separator}{$mo}{$separator}{$y}";
+            }
+        }
+        if (!empty($rawDate) && $rawDate !== '-') {
+            try {
+                return EthiopianDate::formatDateEc($rawDate, 'd' . $separator . 'm' . $separator . 'Y');
+            } catch (\Throwable $e) {
+                // continue
+            }
+        }
+        return EthiopianDate::formatDateEc(now(), 'd' . $separator . 'm' . $separator . 'Y');
     }
 
     /**

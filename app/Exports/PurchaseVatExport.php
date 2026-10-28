@@ -40,8 +40,10 @@ class PurchaseVatExport
     /**
      * Build rows from Expense Hub items (Outcome 1 only: VAT Applies)
      */
-    public static function buildRows(Collection $expenses): array
+    public static function buildRows(Collection $expenses, ?string $calendarOverride = null): array
     {
+        $rawCal = strtolower(trim((string)$calendarOverride));
+        $userCal = in_array($rawCal, ['e', 'ec', 'ethiopian']) ? 'E' : (in_array($rawCal, ['g', 'gc', 'gregorian']) ? 'G' : null);
         $rows = [];
 
         foreach ($expenses as $item) {
@@ -55,8 +57,12 @@ class PurchaseVatExport
             $vatCategory = ($categoryRaw === 'S') ? 'S' : 'G';
 
             // Calendar Type E=Ethiopian, G=Gregorian
-            $calType = strtoupper(trim((string)($item->calendar_type ?: 'G')));
-            $calendarType = ($calType === 'E') ? 'E' : 'G';
+            if ($userCal !== null) {
+                $calendarType = $userCal;
+            } else {
+                $calType = strtoupper(trim((string)($item->calendar_type ?: 'G')));
+                $calendarType = ($calType === 'E') ? 'E' : 'G';
+            }
 
             // FixedAsset rows use Line 65 (purchase_type = 1). Otherwise local input = 3
             $isFixedAsset = ($item->source_type === 'fixed_asset' || !empty($item->is_capex));
@@ -91,7 +97,7 @@ class PurchaseVatExport
             $fsNo = $rawFs ?: ($item->reference_no ?: '');
 
             // Description
-            $desc = trim((string)($item->item_desc ?: ($item->description ?: ($item->purpose_detail ?: 'Construction Materials'))));
+            $desc = trim((string)(($item->item_desc ?? null) ?: (($item->description ?? null) ?: (($item->purpose_detail ?? null) ?: 'Construction Materials'))));
             $desc = mb_substr($desc, 0, 200);
 
             // Unit of Measure (ID 2-10)
@@ -113,10 +119,10 @@ class PurchaseVatExport
             }
 
             // Quantities & Amounts
-            $qty = (float)($item->qty > 0 ? $item->qty : 1.0);
-            $baseVal = (float)$item->decision_base_amount;
-            $vatVal = (float)$item->decision_vat_amount;
-            $totVal = (float)$item->decision_total_amount;
+            $qty = (float)(!empty($item->qty) ? $item->qty : 1.0);
+            $baseVal = (float)($item->decision_base_amount ?? 0);
+            $vatVal = (float)($item->decision_vat_amount ?? 0);
+            $totVal = (float)($item->decision_total_amount ?? 0);
 
             if ($baseVal <= 0 && $totVal > 0) {
                 $baseVal = round($totVal / 1.15, 2);
@@ -156,10 +162,12 @@ class PurchaseVatExport
     /**
      * Stream CSV download
      */
-    public static function streamCsv(Collection $expenses, ?string $filename = null): StreamedResponse
+    public static function streamCsv(Collection $expenses, ?string $filename = null, ?string $calendarOverride = null): StreamedResponse
     {
-        $filename = $filename ?: ('Purchase_VAT_Declaration_' . now()->format('Ymd_His') . '.csv');
-        $rows = self::buildRows($expenses);
+        $rawCal = strtolower(trim((string)$calendarOverride));
+        $calSuffix = in_array($rawCal, ['e', 'ec', 'ethiopian']) ? '_EC' : (in_array($rawCal, ['g', 'gc', 'gregorian']) ? '_GC' : '');
+        $filename = $filename ?: ('Purchase_VAT_Declaration' . $calSuffix . '_' . now()->format('Ymd_His') . '.csv');
+        $rows = self::buildRows($expenses, $calendarOverride);
 
         $response = new StreamedResponse(function () use ($rows) {
             $handle = fopen('php://output', 'w');

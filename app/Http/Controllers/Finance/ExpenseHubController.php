@@ -1008,7 +1008,8 @@ class ExpenseHubController extends Controller
         $filters['vat_status'] = ExpenseHubVatDecision::STATUS_VAT_APPLIES;
 
         $expenses = $this->queryService->getExpenses($filters, Auth::user());
-        return PurchaseVatExport::streamCsv($expenses);
+        $cal = $request->input('calendar') ?: $request->input('calendar_type');
+        return PurchaseVatExport::streamCsv($expenses, null, $cal);
     }
 
     /**
@@ -1021,7 +1022,8 @@ class ExpenseHubController extends Controller
         $filters['vat_status'] = ExpenseHubVatDecision::STATUS_NO_VAT;
 
         $expenses = $this->queryService->getExpenses($filters, Auth::user());
-        return PurchaseTasExport::streamCsv($expenses);
+        $cal = $request->input('calendar') ?: $request->input('calendar_type');
+        return PurchaseTasExport::streamCsv($expenses, null, $cal);
     }
 
     /**

@@ -161,24 +161,67 @@
                                 <i class="fa-solid fa-file-excel"></i>
                                 <span class="d-none d-sm-inline">Export Excel</span>
                             </button>
-                            <ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-4 p-2" aria-labelledby="mainExcelDropdown" style="min-width: 250px;">
+                            <ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-4 p-2" aria-labelledby="mainExcelDropdown" style="min-width: 320px;">
                                 <li class="dropdown-header small text-uppercase text-muted fw-bold px-3 py-1">Tax Ledger Exports</li>
+                                
+                                {{-- Sales Excel --}}
+                                <li class="px-2 pt-1 pb-0.5">
+                                    <span class="small fw-bold text-dark d-flex align-items-center gap-1.5 px-2">
+                                        <i class="fa-solid fa-hand-holding-dollar text-success"></i> 1. Sales Excel (13 Cols)
+                                    </span>
+                                </li>
                                 <li>
-                                    <a class="dropdown-item rounded-3 py-2 px-3 d-flex align-items-center gap-2" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'sales', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
-                                        <i class="fa-solid fa-hand-holding-dollar text-success"></i>
-                                        <div class="fw-semibold small">1. Sales Excel (13 Cols)</div>
+                                    <a class="dropdown-item rounded-3 py-1 px-3 d-flex align-items-center justify-content-between small" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'sales', 'calendar' => 'ec', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
+                                        <span><i class="fa-solid fa-calendar-day text-success me-1.5"></i>All in Ethiopian Calendar</span>
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">EC</span>
                                     </a>
                                 </li>
                                 <li>
-                                    <a class="dropdown-item rounded-3 py-2 px-3 d-flex align-items-center gap-2" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_tas', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
-                                        <i class="fa-solid fa-file-invoice text-primary"></i>
-                                        <div class="fw-semibold small">2. Purchase TAS Excel (9 Cols)</div>
+                                    <a class="dropdown-item rounded-3 py-1 px-3 d-flex align-items-center justify-content-between small" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'sales', 'calendar' => 'gc', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
+                                        <span><i class="fa-solid fa-globe text-primary me-1.5"></i>All in Gregorian Calendar</span>
+                                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">GC</span>
+                                    </a>
+                                </li>
+
+                                <li><hr class="dropdown-divider my-1"></li>
+
+                                {{-- Purchase TAS Excel --}}
+                                <li class="px-2 pt-1 pb-0.5">
+                                    <span class="small fw-bold text-dark d-flex align-items-center gap-1.5 px-2">
+                                        <i class="fa-solid fa-file-invoice text-primary"></i> 2. Purchase TAS Excel (9 Cols)
+                                    </span>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item rounded-3 py-1 px-3 d-flex align-items-center justify-content-between small" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_tas', 'calendar' => 'ec', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
+                                        <span><i class="fa-solid fa-calendar-day text-success me-1.5"></i>All in Ethiopian Calendar</span>
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">EC</span>
                                     </a>
                                 </li>
                                 <li>
-                                    <a class="dropdown-item rounded-3 py-2 px-3 d-flex align-items-center gap-2" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_vat', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
-                                        <i class="fa-solid fa-percent text-danger"></i>
-                                        <div class="fw-semibold small">3. Purchase VAT Excel</div>
+                                    <a class="dropdown-item rounded-3 py-1 px-3 d-flex align-items-center justify-content-between small" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_tas', 'calendar' => 'gc', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
+                                        <span><i class="fa-solid fa-globe text-primary me-1.5"></i>All in Gregorian Calendar</span>
+                                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">GC</span>
+                                    </a>
+                                </li>
+
+                                <li><hr class="dropdown-divider my-1"></li>
+
+                                {{-- Purchase VAT Excel --}}
+                                <li class="px-2 pt-1 pb-0.5">
+                                    <span class="small fw-bold text-dark d-flex align-items-center gap-1.5 px-2">
+                                        <i class="fa-solid fa-percent text-danger"></i> 3. Purchase VAT Excel (15 Cols)
+                                    </span>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item rounded-3 py-1 px-3 d-flex align-items-center justify-content-between small" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_vat', 'calendar' => 'ec', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
+                                        <span><i class="fa-solid fa-calendar-day text-success me-1.5"></i>All in Ethiopian Calendar</span>
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">EC</span>
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item rounded-3 py-1 px-3 d-flex align-items-center justify-content-between small" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'purchase_vat', 'calendar' => 'gc', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
+                                        <span><i class="fa-solid fa-globe text-primary me-1.5"></i>All in Gregorian Calendar</span>
+                                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">GC</span>
                                     </a>
                                 </li>
                             </ul>
@@ -3037,42 +3080,77 @@
                             <i class="fa-solid fa-file-excel"></i>
                             <span>Export Excel</span>
                         </button>
-                        <ul class="dropdown-menu dropdown-menu-end shadow-lg border-0 rounded-4 p-2" aria-labelledby="mMovementsExcelDropdown" style="min-width: 270px; z-index: 1060;">
+                        <ul class="dropdown-menu dropdown-menu-end shadow-lg border-0 rounded-4 p-2" aria-labelledby="mMovementsExcelDropdown" style="min-width: 320px; z-index: 1060;">
                             <li class="dropdown-header small text-uppercase text-muted fw-bold px-3 py-1">Tax Movements Exports</li>
+                            
+                            {{-- Sales Excel --}}
+                            <li class="px-2 pt-1 pb-0.5">
+                                <span class="small fw-bold text-dark d-flex align-items-center gap-1.5 px-2">
+                                    <i class="fa-solid fa-hand-holding-dollar text-success"></i> 1. Sales Excel (13 Cols)
+                                </span>
+                            </li>
                             <li>
-                                <a class="dropdown-item rounded-3 py-2 px-3 d-flex align-items-center gap-2.5" href="#" onclick="exportMovementsExcel('sales'); return false;">
-                                    <div class="p-2 rounded-circle bg-success bg-opacity-10 text-success"><i class="fa-solid fa-hand-holding-dollar fs-6"></i></div>
-                                    <div>
-                                        <div class="fw-bold text-dark small">1. Sales Excel</div>
-                                        <small class="text-muted d-block" style="font-size: 0.7rem;">13 columns (TIN, MRC, Receipt #, Price)</small>
-                                    </div>
+                                <a class="dropdown-item rounded-3 py-1 px-3 d-flex align-items-center justify-content-between small" href="#" onclick="exportMovementsExcel('sales', 'ec'); return false;">
+                                    <span><i class="fa-solid fa-calendar-day text-success me-1.5"></i>All in Ethiopian Calendar</span>
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">EC</span>
                                 </a>
                             </li>
                             <li>
-                                <a class="dropdown-item rounded-3 py-2 px-3 d-flex align-items-center gap-2.5" href="#" onclick="exportMovementsExcel('purchase_tas'); return false;">
-                                    <div class="p-2 rounded-circle bg-primary bg-opacity-10 text-primary"><i class="fa-solid fa-file-invoice fs-6"></i></div>
-                                    <div>
-                                        <div class="fw-bold text-dark small">2. Purchase TAS Excel</div>
-                                        <small class="text-muted d-block" style="font-size: 0.7rem;">9 columns e-Tax Purchase Declaration</small>
-                                    </div>
+                                <a class="dropdown-item rounded-3 py-1 px-3 d-flex align-items-center justify-content-between small" href="#" onclick="exportMovementsExcel('sales', 'gc'); return false;">
+                                    <span><i class="fa-solid fa-globe text-primary me-1.5"></i>All in Gregorian Calendar</span>
+                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">GC</span>
+                                </a>
+                            </li>
+
+                            <li><hr class="dropdown-divider my-1"></li>
+
+                            {{-- Purchase TAS Excel --}}
+                            <li class="px-2 pt-1 pb-0.5">
+                                <span class="small fw-bold text-dark d-flex align-items-center gap-1.5 px-2">
+                                    <i class="fa-solid fa-file-invoice text-primary"></i> 2. Purchase TAS Excel (9 Cols)
+                                </span>
+                            </li>
+                            <li>
+                                <a class="dropdown-item rounded-3 py-1 px-3 d-flex align-items-center justify-content-between small" href="#" onclick="exportMovementsExcel('purchase_tas', 'ec'); return false;">
+                                    <span><i class="fa-solid fa-calendar-day text-success me-1.5"></i>All in Ethiopian Calendar</span>
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">EC</span>
                                 </a>
                             </li>
                             <li>
-                                <a class="dropdown-item rounded-3 py-2 px-3 d-flex align-items-center gap-2.5" href="#" onclick="exportMovementsExcel('purchase_vat'); return false;">
-                                    <div class="p-2 rounded-circle bg-danger bg-opacity-10 text-danger"><i class="fa-solid fa-percent fs-6"></i></div>
-                                    <div>
-                                        <div class="fw-bold text-dark small">3. Purchase VAT Excel</div>
-                                        <small class="text-muted d-block" style="font-size: 0.7rem;">ERCA Purchase VAT Report</small>
-                                    </div>
+                                <a class="dropdown-item rounded-3 py-1 px-3 d-flex align-items-center justify-content-between small" href="#" onclick="exportMovementsExcel('purchase_tas', 'gc'); return false;">
+                                    <span><i class="fa-solid fa-globe text-primary me-1.5"></i>All in Gregorian Calendar</span>
+                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">GC</span>
+                                </a>
+                            </li>
+
+                            <li><hr class="dropdown-divider my-1"></li>
+
+                            {{-- Purchase VAT Excel --}}
+                            <li class="px-2 pt-1 pb-0.5">
+                                <span class="small fw-bold text-dark d-flex align-items-center gap-1.5 px-2">
+                                    <i class="fa-solid fa-percent text-danger"></i> 3. Purchase VAT Excel (15 Cols)
+                                </span>
+                            </li>
+                            <li>
+                                <a class="dropdown-item rounded-3 py-1 px-3 d-flex align-items-center justify-content-between small" href="#" onclick="exportMovementsExcel('purchase_vat', 'ec'); return false;">
+                                    <span><i class="fa-solid fa-calendar-day text-success me-1.5"></i>All in Ethiopian Calendar</span>
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">EC</span>
                                 </a>
                             </li>
                             <li>
-                                <a class="dropdown-item rounded-3 py-2 px-3 d-flex align-items-center gap-2.5" href="#" onclick="exportMovementsExcel('withholding'); return false;">
-                                    <div class="p-2 rounded-circle bg-warning bg-opacity-10 text-warning"><i class="fa-solid fa-hand-holding-dollar fs-6"></i></div>
-                                    <div>
-                                        <div class="fw-bold text-dark small">4. Withholding Tax (WHT) Excel</div>
-                                        <small class="text-muted d-block" style="font-size: 0.7rem;">Deductions ledger (2% Goods, 3% Service, 30% Non-TIN)</small>
-                                    </div>
+                                <a class="dropdown-item rounded-3 py-1 px-3 d-flex align-items-center justify-content-between small" href="#" onclick="exportMovementsExcel('purchase_vat', 'gc'); return false;">
+                                    <span><i class="fa-solid fa-globe text-primary me-1.5"></i>All in Gregorian Calendar</span>
+                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">GC</span>
+                                </a>
+                            </li>
+
+                            <li><hr class="dropdown-divider my-1"></li>
+
+                            {{-- Withholding --}}
+                            <li>
+                                <a class="dropdown-item rounded-3 py-1.5 px-3 d-flex align-items-center gap-2 small" href="#" onclick="exportMovementsExcel('withholding'); return false;">
+                                    <i class="fa-solid fa-hand-holding-dollar text-warning"></i>
+                                    <span class="fw-semibold text-dark">4. Withholding Tax (WHT) Excel</span>
                                 </a>
                             </li>
                         </ul>
@@ -3317,14 +3395,52 @@
                                             </button>
                                         </div>
                                         <div class="btn-group shadow-xs rounded-pill overflow-hidden">
-                                            <button type="button" class="btn btn-sm btn-outline-primary fw-semibold px-3 text-nowrap d-inline-flex align-items-center gap-1" onclick="exportMovementsExcel('purchase_tas')">
-                                                <i class="fa-solid fa-file-excel"></i>
-                                                <span>Purchase TAS</span>
-                                            </button>
-                                            <button type="button" class="btn btn-sm btn-outline-danger fw-semibold px-3 text-nowrap d-inline-flex align-items-center gap-1" onclick="exportMovementsExcel('purchase_vat')">
-                                                <i class="fa-solid fa-file-excel"></i>
-                                                <span>Purchase VAT</span>
-                                            </button>
+                                            {{-- Purchase TAS with Calendar choice --}}
+                                            <div class="btn-group">
+                                                <button type="button" class="btn btn-sm btn-outline-primary fw-semibold px-2.5 text-nowrap dropdown-toggle d-inline-flex align-items-center gap-1" data-bs-toggle="dropdown" aria-expanded="false">
+                                                    <i class="fa-solid fa-file-excel"></i>
+                                                    <span>Purchase TAS</span>
+                                                </button>
+                                                <ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-3 p-2 small" style="min-width: 250px; z-index: 1060;">
+                                                    <li class="dropdown-header small text-uppercase text-muted fw-bold px-2 py-1">Choose Calendar (TAS 9-Cols)</li>
+                                                    <li>
+                                                        <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center justify-content-between" href="#" onclick="exportMovementsExcel('purchase_tas', 'ec'); return false;">
+                                                            <span><i class="fa-solid fa-calendar-day text-success me-1.5"></i>All Ethiopian Calendar</span>
+                                                            <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">EC</span>
+                                                        </a>
+                                                    </li>
+                                                    <li>
+                                                        <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center justify-content-between" href="#" onclick="exportMovementsExcel('purchase_tas', 'gc'); return false;">
+                                                            <span><i class="fa-solid fa-globe text-primary me-1.5"></i>All Gregorian Calendar</span>
+                                                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">GC</span>
+                                                        </a>
+                                                    </li>
+                                                </ul>
+                                            </div>
+
+                                            {{-- Purchase VAT with Calendar choice --}}
+                                            <div class="btn-group">
+                                                <button type="button" class="btn btn-sm btn-outline-danger fw-semibold px-2.5 text-nowrap dropdown-toggle d-inline-flex align-items-center gap-1" data-bs-toggle="dropdown" aria-expanded="false">
+                                                    <i class="fa-solid fa-file-excel"></i>
+                                                    <span>Purchase VAT</span>
+                                                </button>
+                                                <ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-3 p-2 small" style="min-width: 250px; z-index: 1060;">
+                                                    <li class="dropdown-header small text-uppercase text-muted fw-bold px-2 py-1">Choose Calendar (VAT 15-Cols)</li>
+                                                    <li>
+                                                        <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center justify-content-between" href="#" onclick="exportMovementsExcel('purchase_vat', 'ec'); return false;">
+                                                            <span><i class="fa-solid fa-calendar-day text-success me-1.5"></i>All Ethiopian Calendar</span>
+                                                            <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">EC</span>
+                                                        </a>
+                                                    </li>
+                                                    <li>
+                                                        <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center justify-content-between" href="#" onclick="exportMovementsExcel('purchase_vat', 'gc'); return false;">
+                                                            <span><i class="fa-solid fa-globe text-primary me-1.5"></i>All Gregorian Calendar</span>
+                                                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">GC</span>
+                                                        </a>
+                                                    </li>
+                                                </ul>
+                                            </div>
+
                                             <button type="button" class="btn btn-sm btn-outline-warning text-dark fw-semibold px-3 text-nowrap d-inline-flex align-items-center gap-1" onclick="exportMovementsExcel('withholding')">
                                                 <i class="fa-solid fa-file-excel text-success"></i>
                                                 <span>WHT Excel</span>
@@ -3518,14 +3634,51 @@
                                             </button>
                                         </div>
                                         <div class="btn-group shadow-xs rounded-pill overflow-hidden">
-                                            <button type="button" class="btn btn-sm btn-outline-primary fw-semibold px-3 text-nowrap d-inline-flex align-items-center gap-1" onclick="exportMovementsExcel('purchase_tas')">
-                                                <i class="fa-solid fa-file-excel"></i>
-                                                <span>Purchase TAS</span>
-                                            </button>
-                                            <button type="button" class="btn btn-sm btn-outline-danger fw-semibold px-3 text-nowrap d-inline-flex align-items-center gap-1" onclick="exportMovementsExcel('purchase_vat')">
-                                                <i class="fa-solid fa-file-excel"></i>
-                                                <span>Purchase VAT</span>
-                                            </button>
+                                            {{-- Purchase TAS with Calendar choice --}}
+                                            <div class="btn-group">
+                                                <button type="button" class="btn btn-sm btn-outline-primary fw-semibold px-2.5 text-nowrap dropdown-toggle d-inline-flex align-items-center gap-1" data-bs-toggle="dropdown" aria-expanded="false">
+                                                    <i class="fa-solid fa-file-excel"></i>
+                                                    <span>Purchase TAS</span>
+                                                </button>
+                                                <ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-3 p-2 small" style="min-width: 250px; z-index: 1060;">
+                                                    <li class="dropdown-header small text-uppercase text-muted fw-bold px-2 py-1">Choose Calendar (TAS 9-Cols)</li>
+                                                    <li>
+                                                        <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center justify-content-between" href="#" onclick="exportMovementsExcel('purchase_tas', 'ec'); return false;">
+                                                            <span><i class="fa-solid fa-calendar-day text-success me-1.5"></i>All Ethiopian Calendar</span>
+                                                            <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">EC</span>
+                                                        </a>
+                                                    </li>
+                                                    <li>
+                                                        <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center justify-content-between" href="#" onclick="exportMovementsExcel('purchase_tas', 'gc'); return false;">
+                                                            <span><i class="fa-solid fa-globe text-primary me-1.5"></i>All Gregorian Calendar</span>
+                                                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">GC</span>
+                                                        </a>
+                                                    </li>
+                                                </ul>
+                                            </div>
+
+                                            {{-- Purchase VAT with Calendar choice --}}
+                                            <div class="btn-group">
+                                                <button type="button" class="btn btn-sm btn-outline-danger fw-semibold px-2.5 text-nowrap dropdown-toggle d-inline-flex align-items-center gap-1" data-bs-toggle="dropdown" aria-expanded="false">
+                                                    <i class="fa-solid fa-file-excel"></i>
+                                                    <span>Purchase VAT</span>
+                                                </button>
+                                                <ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-3 p-2 small" style="min-width: 250px; z-index: 1060;">
+                                                    <li class="dropdown-header small text-uppercase text-muted fw-bold px-2 py-1">Choose Calendar (VAT 15-Cols)</li>
+                                                    <li>
+                                                        <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center justify-content-between" href="#" onclick="exportMovementsExcel('purchase_vat', 'ec'); return false;">
+                                                            <span><i class="fa-solid fa-calendar-day text-success me-1.5"></i>All Ethiopian Calendar</span>
+                                                            <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">EC</span>
+                                                        </a>
+                                                    </li>
+                                                    <li>
+                                                        <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center justify-content-between" href="#" onclick="exportMovementsExcel('purchase_vat', 'gc'); return false;">
+                                                            <span><i class="fa-solid fa-globe text-primary me-1.5"></i>All Gregorian Calendar</span>
+                                                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">GC</span>
+                                                        </a>
+                                                    </li>
+                                                </ul>
+                                            </div>
                                         </div>
                                         <div style="min-width: 220px;">
                                             <input type="text" class="form-control form-control-sm rounded-pill" placeholder="Search vendor, FS #, item..." onkeyup="filterMovementTable('mOcrTable', this.value)">
@@ -3768,11 +3921,53 @@
                                                         <i class="fa-solid fa-file-excel"></i>
                                                         <span>Export Excel</span>
                                                     </button>
-                                                    <ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-3 p-2">
-                                                        <li><a class="dropdown-item py-1.5 px-3 rounded-2" href="#" onclick="exportMovementsExcel('sales'); return false;"><i class="fa-solid fa-hand-holding-dollar text-success me-2"></i>1. Sales Excel</a></li>
-                                                        <li><a class="dropdown-item py-1.5 px-3 rounded-2" href="#" onclick="exportMovementsExcel('purchase_tas'); return false;"><i class="fa-solid fa-file-invoice text-primary me-2"></i>2. Purchase TAS Excel</a></li>
-                                                        <li><a class="dropdown-item py-1.5 px-3 rounded-2" href="#" onclick="exportMovementsExcel('purchase_vat'); return false;"><i class="fa-solid fa-percent text-danger me-2"></i>3. Purchase VAT Excel</a></li>
-                                                        <li><a class="dropdown-item py-1.5 px-3 rounded-2" href="#" onclick="exportMovementsExcel('withholding'); return false;"><i class="fa-solid fa-hand-holding-dollar text-warning me-2"></i>4. Withholding (WHT) Excel</a></li>
+                                                    <ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-4 p-2 small" style="min-width: 290px;">
+                                                        <li class="dropdown-header small text-uppercase text-muted fw-bold px-2 py-1">ERCA Tax Export Formats</li>
+                                                        <li>
+                                                            <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center justify-content-between" href="#" onclick="exportMovementsExcel('sales', 'ec'); return false;">
+                                                                <span><i class="fa-solid fa-hand-holding-dollar text-success me-1.5"></i>1. Sales (Ethiopian Calendar)</span>
+                                                                <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">EC</span>
+                                                            </a>
+                                                        </li>
+                                                        <li>
+                                                            <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center justify-content-between" href="#" onclick="exportMovementsExcel('sales', 'gc'); return false;">
+                                                                <span><i class="fa-solid fa-hand-holding-dollar text-primary me-1.5"></i>1. Sales (Gregorian Calendar)</span>
+                                                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">GC</span>
+                                                            </a>
+                                                        </li>
+                                                        <li><hr class="dropdown-divider my-1"></li>
+                                                        <li>
+                                                            <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center justify-content-between" href="#" onclick="exportMovementsExcel('purchase_tas', 'ec'); return false;">
+                                                                <span><i class="fa-solid fa-file-invoice text-primary me-1.5"></i>2. Purchase TAS (Ethiopian)</span>
+                                                                <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">EC</span>
+                                                            </a>
+                                                        </li>
+                                                        <li>
+                                                            <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center justify-content-between" href="#" onclick="exportMovementsExcel('purchase_tas', 'gc'); return false;">
+                                                                <span><i class="fa-solid fa-file-invoice text-primary me-1.5"></i>2. Purchase TAS (Gregorian)</span>
+                                                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">GC</span>
+                                                            </a>
+                                                        </li>
+                                                        <li><hr class="dropdown-divider my-1"></li>
+                                                        <li>
+                                                            <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center justify-content-between" href="#" onclick="exportMovementsExcel('purchase_vat', 'ec'); return false;">
+                                                                <span><i class="fa-solid fa-percent text-danger me-1.5"></i>3. Purchase VAT (Ethiopian)</span>
+                                                                <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">EC</span>
+                                                            </a>
+                                                        </li>
+                                                        <li>
+                                                            <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center justify-content-between" href="#" onclick="exportMovementsExcel('purchase_vat', 'gc'); return false;">
+                                                                <span><i class="fa-solid fa-percent text-danger me-1.5"></i>3. Purchase VAT (Gregorian)</span>
+                                                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">GC</span>
+                                                            </a>
+                                                        </li>
+                                                        <li><hr class="dropdown-divider my-1"></li>
+                                                        <li>
+                                                            <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center gap-2" href="#" onclick="exportMovementsExcel('withholding'); return false;">
+                                                                <i class="fa-solid fa-hand-holding-dollar text-warning"></i>
+                                                                <span class="fw-semibold">4. Withholding Tax Excel</span>
+                                                            </a>
+                                                        </li>
                                                     </ul>
                                                 </div>
                                             </div>
@@ -7099,7 +7294,7 @@
         });
     }
 
-    function exportMovementsExcel(type) {
+    function exportMovementsExcel(type, calendar = null) {
         let year, month;
         if (currentMovementsData && currentMovementsData.month) {
             year = currentMovementsData.month.year;
@@ -7108,11 +7303,15 @@
             year = '{{ $selectedEthYear }}';
             month = '{{ $selectedEthMonth }}';
         }
-        window.location.href = getExportExcelUrl(type, year, month);
+        window.location.href = getExportExcelUrl(type, year, month, calendar);
     }
 
-    function getExportExcelUrl(type, year, month) {
-        return `{{ route('finance.tax-deductions.export-excel') }}?type=${encodeURIComponent(type)}&ethiopian_year=${encodeURIComponent(year)}&ethiopian_month=${encodeURIComponent(month)}`;
+    function getExportExcelUrl(type, year, month, calendar = null) {
+        let url = `{{ route('finance.tax-deductions.export-excel') }}?type=${encodeURIComponent(type)}&ethiopian_year=${encodeURIComponent(year)}&ethiopian_month=${encodeURIComponent(month)}`;
+        if (calendar) {
+            url += `&calendar=${encodeURIComponent(calendar)}`;
+        }
+        return url;
     }
 
     function printMonthMovements() {

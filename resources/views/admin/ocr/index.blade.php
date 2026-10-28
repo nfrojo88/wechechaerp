@@ -1267,6 +1267,28 @@
                         </div>
                     </div>
 
+                    {{-- Calendar System Selection --}}
+                    <div class="mb-3 p-3 bg-light rounded-3 border">
+                        <label class="form-label small fw-bold text-dark mb-1 d-block">
+                            <i class="fa-solid fa-calendar-alt text-primary me-1"></i>Calendar System
+                        </label>
+                        <div class="d-flex align-items-center gap-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="calendar" id="ocr_cal_ec" value="ec" checked>
+                                <label class="form-check-label small fw-semibold" for="ocr_cal_ec">
+                                    <i class="fa-solid fa-calendar-day text-success me-1"></i>All in Ethiopian Calendar (EC)
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="calendar" id="ocr_cal_gc" value="gc">
+                                <label class="form-check-label small fw-semibold" for="ocr_cal_gc">
+                                    <i class="fa-solid fa-globe text-primary me-1"></i>All in Gregorian Calendar (GC)
+                                </label>
+                            </div>
+                        </div>
+                        <small class="text-muted d-block mt-1">Choose whether dates in the exported file are formatted in Ethiopian Calendar (EC) or Gregorian Calendar (GC).</small>
+                    </div>
+
                     <div class="alert alert-info border-info-subtle small py-2 mb-0 d-flex align-items-center gap-2">
                         <i class="fa-solid fa-circle-info text-info"></i>
                         <span id="ocr_export_preview_summary">Exporting all records. Leave dates blank to export all dates.</span>

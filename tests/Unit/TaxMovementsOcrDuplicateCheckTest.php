@@ -327,4 +327,106 @@ class TaxMovementsOcrDuplicateCheckTest extends TestCase
         $this->assertContains($r1->id, $keptReceiptIds, 'Excel data source must include original receipt');
         $this->assertNotContains($r2->id, $keptReceiptIds, 'Excel data source must NEVER include double scan');
     }
+
+    /**
+     * Test optional calendar selection (Ethiopian vs Gregorian) for Purchase export reports.
+     */
+    public function test_purchase_reports_export_calendar_choice_ec_and_gc(): void
+    {
+        $controller = new FinanceTaxReportController();
+        $refResolve = new \ReflectionMethod($controller, 'resolveCalendarOption');
+        $refResolve->setAccessible(true);
+
+        $refFormat = new \ReflectionMethod($controller, 'formatExportDate');
+        $refFormat->setAccessible(true);
+
+        // 1. Verify resolveCalendarOption
+        $reqEc = new \Illuminate\Http\Request(['calendar' => 'ec']);
+        $this->assertEquals('E', $refResolve->invoke($controller, $reqEc));
+
+        $reqGc = new \Illuminate\Http\Request(['calendar' => 'gc']);
+        $this->assertEquals('G', $refResolve->invoke($controller, $reqGc));
+
+        $reqTypeE = new \Illuminate\Http\Request(['calendar_type' => 'E']);
+        $this->assertEquals('E', $refResolve->invoke($controller, $reqTypeE));
+
+        $reqTypeG = new \Illuminate\Http\Request(['calendar_type' => 'G']);
+        $this->assertEquals('G', $refResolve->invoke($controller, $reqTypeG));
+
+        // 2. Verify formatExportDate bidirectional formatting
+        // Gregorian date: 2026-10-28
+        $gregDate = '2026-10-28';
+        $formattedGcSlash = $refFormat->invoke($controller, $gregDate, null, 'G', '/');
+        $this->assertEquals('28/10/2026', $formattedGcSlash);
+
+        $formattedGcHyphen = $refFormat->invoke($controller, $gregDate, null, 'G', '-');
+        $this->assertEquals('28-10-2026', $formattedGcHyphen);
+
+        // Ethiopian conversion of 2026-10-28:
+        // 2026-10-28 in Ethiopian calendar is Tikimt 18, 2019 (18/02/2019)
+        $formattedEcSlash = $refFormat->invoke($controller, $gregDate, null, 'E', '/');
+        $this->assertEquals('18/02/2019', $formattedEcSlash);
+
+        $formattedEcHyphen = $refFormat->invoke($controller, $gregDate, null, 'E', '-');
+        $this->assertEquals('18-02-2019', $formattedEcHyphen);
+
+        // 3. Verify PurchaseVatExport calendar override
+        $dummyVatExpense = (object)[
+            'vat_status' => \App\Models\ExpenseHubVatDecision::STATUS_VAT_APPLIES,
+            'tin' => '0012345678',
+            'supplier_name' => 'Test Supplier',
+            'mrc_no' => 'MRC-1234',
+            'fs_no' => 'FS-5678',
+            'vat_category' => 'G',
+            'calendar_type' => 'G', // Item defaulted to G
+            'purchase_type' => 3,
+            'disbursement_date' => '2026-10-28',
+            'created_at' => Carbon::parse('2026-10-28 10:00:00'),
+            'reference_no' => 'REF-001',
+            'decision_total_amount' => 1150.00,
+            'decision_vat_amount' => 150.00,
+            'source_type' => 'expense_hub',
+            'is_capex' => false,
+            'project' => null,
+            'project_name' => 'General',
+        ];
+
+        // Export forced to Ethiopian (EC)
+        $vatRowsEc = \App\Exports\PurchaseVatExport::buildRows(collect([$dummyVatExpense]), 'ec');
+        $this->assertCount(1, $vatRowsEc);
+        // Col 2: CALENDAR TYPE
+        $this->assertEquals('E', $vatRowsEc[0][1], 'Purchase VAT Col 2 must be E when exporting in Ethiopian calendar');
+        // Col 6: Date of Purchase
+        $this->assertEquals('18/02/2019', $vatRowsEc[0][5], 'Purchase VAT Col 6 date must be formatted in Ethiopian calendar (d/m/Y)');
+
+        // Export forced to Gregorian (GC)
+        $vatRowsGc = \App\Exports\PurchaseVatExport::buildRows(collect([$dummyVatExpense]), 'gc');
+        $this->assertCount(1, $vatRowsGc);
+        $this->assertEquals('G', $vatRowsGc[0][1], 'Purchase VAT Col 2 must be G when exporting in Gregorian calendar');
+        $this->assertEquals('28/10/2026', $vatRowsGc[0][5], 'Purchase VAT Col 6 date must be formatted in Gregorian calendar (d/m/Y)');
+
+        // 4. Verify PurchaseTasExport calendar override
+        $dummyTasExpense = (object)[
+            'vat_status' => \App\Models\ExpenseHubVatDecision::STATUS_NO_VAT,
+            'is_verified_without_receipt' => false,
+            'tin' => '0012345678',
+            'supplier_name' => 'Test Supplier',
+            'mrc_no' => 'MRC-1234',
+            'fs_no' => 'FS-5678',
+            'disbursement_date' => '2026-10-28',
+            'created_at' => Carbon::parse('2026-10-28 10:00:00'),
+            'reference_no' => 'REF-001',
+            'decision_total_amount' => 1000.00,
+            'amount' => 1000.00,
+        ];
+
+        $tasRowsEc = \App\Exports\PurchaseTasExport::buildRows(collect([$dummyTasExpense]), 'ec');
+        $this->assertCount(1, $tasRowsEc);
+        // Col 5: Receipt Date (EC d-m-Y)
+        $this->assertEquals('18-02-2019', $tasRowsEc[0][4], 'Purchase TAS Col 5 Receipt Date must be Ethiopian format d-m-Y');
+
+        $tasRowsGc = \App\Exports\PurchaseTasExport::buildRows(collect([$dummyTasExpense]), 'gc');
+        $this->assertCount(1, $tasRowsGc);
+        $this->assertEquals('28-10-2026', $tasRowsGc[0][4], 'Purchase TAS Col 5 Receipt Date must be Gregorian format d-m-Y');
+    }
 }
