@@ -1906,8 +1906,11 @@ Route::middleware(['auth'])->group(function () {
         ->name('purchases.receipt-scan');
 
     // Procurement & Purchasing
-    Route::get('purchase-requests/{purchaseRequest}', [App\Http\Controllers\PurchaseRequestController::class, 'show'])->name('purchase-requests.show')->withTrashed();
+    // IMPORTANT: resource route (which registers GET /purchase-requests/create) MUST come before
+    // the wildcard GET /purchase-requests/{purchaseRequest} show route, otherwise "create" gets
+    // caught by the wildcard and returns 404.
     Route::resource('purchase-requests', App\Http\Controllers\PurchaseRequestController::class)->except(['show', 'edit', 'update', 'destroy']);
+    Route::get('purchase-requests/{purchaseRequest}', [App\Http\Controllers\PurchaseRequestController::class, 'show'])->name('purchase-requests.show')->withTrashed();
     Route::delete('purchase-requests/{purchaseRequest}', [App\Http\Controllers\PurchaseRequestController::class, 'destroy'])->name('purchase-requests.destroy');
     Route::post('purchase-requests/{purchaseRequest}/submit', [App\Http\Controllers\PurchaseRequestController::class, 'submit'])->name('purchase-requests.submit');
     Route::post('purchase-requests/{purchaseRequest}/approve', [App\Http\Controllers\PurchaseRequestController::class, 'approve'])->name('purchase-requests.approve');
