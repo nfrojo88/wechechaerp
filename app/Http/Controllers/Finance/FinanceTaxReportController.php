@@ -1574,6 +1574,15 @@ class FinanceTaxReportController extends Controller
             ]);
         }
 
+        // Resolve base64 data URI for each image so html2canvas renders full images with 100% fidelity without CORS issues
+        $addedReceipts = $addedReceipts->map(function ($rec) {
+            $rec['image_base64'] = null;
+            if (!empty($rec['file_url']) && empty($rec['is_pdf'])) {
+                $rec['image_base64'] = $this->resolveLocalImageBase64($rec['file_url']);
+            }
+            return $rec;
+        });
+
         // Summary metrics for the added receipts
         $receiptsSummary = [
             'total_count'       => $addedReceipts->count(),
@@ -1605,6 +1614,52 @@ class FinanceTaxReportController extends Controller
             'receiptFilter',
             'autoDownload'
         ));
+    }
+
+    /**
+     * Convert a local receipt file URL or relative path into a base64 Data URI for seamless PDF export.
+     */
+    private function resolveLocalImageBase64(?string $fileUrl): ?string
+    {
+        if (empty($fileUrl)) {
+            return null;
+        }
+
+        try {
+            $parsed = parse_url($fileUrl, PHP_URL_PATH);
+            $trimmed = ltrim($parsed, '/');
+
+            $candidates = [
+                public_path($trimmed),
+                public_path('uploads/' . $trimmed),
+                public_path('storage/' . $trimmed),
+                public_path(str_replace('storage/', '', $trimmed)),
+                storage_path('app/public/' . ltrim(str_replace(['storage/', 'public/'], '', $trimmed), '/')),
+                base_path($trimmed),
+            ];
+
+            foreach ($candidates as $candidate) {
+                if (!empty($candidate) && file_exists($candidate) && is_file($candidate)) {
+                    $ext = strtolower(pathinfo($candidate, PATHINFO_EXTENSION));
+                    if (in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp'])) {
+                        $mime = match ($ext) {
+                            'png'  => 'image/png',
+                            'webp' => 'image/webp',
+                            'gif'  => 'image/gif',
+                            default => 'image/jpeg',
+                        };
+                        $data = file_get_contents($candidate);
+                        if ($data !== false && strlen($data) > 0) {
+                            return 'data:' . $mime . ';base64,' . base64_encode($data);
+                        }
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::warning("resolveLocalImageBase64 error: " . $e->getMessage());
+        }
+
+        return $fileUrl;
     }
 
     /**
