@@ -8,6 +8,15 @@
         <span class="badge bg-secondary p-2">{{ now()->format('l, F j Y') }}</span>
     </div>
 
+    @if(request()->routeIs('coordinator.emergency-requests*'))
+        <div class="alert alert-danger d-flex align-items-center mb-4 shadow-sm" role="alert">
+            <i class="fas fa-bolt fa-lg me-2"></i>
+            <div>
+                <strong>Emergency Material Requests:</strong> Reviewing high-priority requisitions approved by Planning Manager awaiting your immediate dispatch.
+            </div>
+        </div>
+    @endif
+
     <div class="row">
         <!-- Inventory Value -->
         <div class="col-xl-3 col-md-6 mb-4">
@@ -79,7 +88,8 @@
                         <small class="text-muted">High-priority requests approved by Planning Manager requiring your dispatch to Store or PR buy.</small>
                     </div>
                     @php
-                        $totalCoordEmergency = ($approvedEmergencyRequests->count() ?? 0) + ($pendingCoordinatorPrs->count() ?? 0);
+                        $dedupedPrsCount = $pendingCoordinatorPrs->reject(fn($pr) => $approvedEmergencyRequests->contains('id', $pr->material_request_id))->count();
+                        $totalCoordEmergency = ($approvedEmergencyRequests->count() ?? 0) + $dedupedPrsCount;
                     @endphp
                     @if($totalCoordEmergency > 0)
                         <span class="badge bg-danger rounded-pill px-3 py-2">{{ $totalCoordEmergency }} Action Needed</span>
@@ -318,17 +328,26 @@
                 </div>
                 <div class="card-body p-0">
                     <div class="list-group list-group-flush">
-                        <a href="{{ route('procurement.my-queue') }}" class="list-group-item list-group-item-action d-flex align-items-center justify-content-between">
+                        <a href="#emergencySection" class="list-group-item list-group-item-action d-flex align-items-center justify-content-between border-start border-danger border-3 bg-danger bg-opacity-10">
                             <div class="d-flex align-items-center">
                                 <i class="fas fa-bolt text-danger me-3"></i>
                                 <div>
-                                    <h6 class="mb-0 fw-bold">Procurement Queue</h6>
-                                    <small class="text-muted">Emergency & site requisitions awaiting dispatch</small>
+                                    <h6 class="mb-0 fw-bold text-danger">Emergency Material Request</h6>
+                                    <small class="text-muted">Planning-approved emergency MRs awaiting dispatch</small>
                                 </div>
                             </div>
                             @if(($kpi['approved_emergency_requests'] ?? 0) > 0)
                                 <span class="badge bg-danger rounded-pill">{{ $kpi['approved_emergency_requests'] }} Urgent</span>
                             @endif
+                        </a>
+                        <a href="{{ route('procurement.my-queue') }}" class="list-group-item list-group-item-action d-flex align-items-center justify-content-between">
+                            <div class="d-flex align-items-center">
+                                <i class="fas fa-tasks text-warning me-3"></i>
+                                <div>
+                                    <h6 class="mb-0 fw-bold">Procurement Queue</h6>
+                                    <small class="text-muted">Site requisitions &amp; PR intake queue</small>
+                                </div>
+                            </div>
                         </a>
                         <a href="{{ route('schedules.index') }}" class="list-group-item list-group-item-action d-flex align-items-center">
                             <i class="fas fa-calendar-alt text-success me-3"></i>
@@ -370,3 +389,16 @@
     </div>
 </div>
 @endsection
+
+@push('scripts')
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        if (window.location.hash === '#emergencySection' || {{ request()->routeIs('coordinator.emergency-requests*') ? 'true' : 'false' }}) {
+            const el = document.getElementById('emergencySection');
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }
+    });
+</script>
+@endpush

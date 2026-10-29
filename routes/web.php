@@ -1653,6 +1653,7 @@ Route::middleware(['auth'])->group(function () {
 
     Route::get('/dashboard/planning',       [App\Http\Controllers\DashboardController::class, 'planning'])->name('dashboard.planning');
     Route::get('/dashboard/coordinator',    [App\Http\Controllers\DashboardController::class, 'coordinator'])->name('dashboard.coordinator');
+    Route::get('/coordinator/emergency-requests', [App\Http\Controllers\DashboardController::class, 'coordinator'])->name('coordinator.emergency-requests');
     Route::get('/dashboard/secretary',      [App\Http\Controllers\DashboardController::class, 'secretary'])->name('dashboard.secretary');
     
     // Coordinator Routes

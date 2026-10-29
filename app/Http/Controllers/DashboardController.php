@@ -1389,8 +1389,10 @@ class DashboardController extends Controller
     }
 
     // ─── Coordinator (also: general_service) ─────────────────────────────────────
-    public function coordinator()
+    public function coordinator(?Request $request = null)
     {
+        $limit = ($request && ($request->routeIs('coordinator.emergency-requests*') || $request->has('emergency'))) ? 100 : 50;
+
         $approvedEmergencyRequests = $this->safe(fn() => \App\Models\MaterialRequest::with(['project', 'store', 'creator', 'items.product', 'purchaseRequests'])
             ->where(function($q) {
                 $q->where('status', 'planning_approved')
@@ -1398,7 +1400,7 @@ class DashboardController extends Controller
             })
             ->whereNotIn('status', ['sent_to_store_manager', 'approved', 'rejected', 'cancelled', 'completed'])
             ->latest()
-            ->take(10)
+            ->take($limit)
             ->get(), collect());
 
         $pendingCoordinatorPrs = $this->safe(fn() => \App\Models\PurchaseRequest::with(['project', 'store', 'materialRequest', 'items.product'])
@@ -1409,15 +1411,18 @@ class DashboardController extends Controller
                   ->orWhere('status', \App\Models\PurchaseRequest::STATUS_PENDING_HR_APPROVAL);
             })
             ->latest()
-            ->take(10)
+            ->take($limit)
             ->get(), collect());
+
+        $dedupedPrCount = $pendingCoordinatorPrs->reject(fn($pr) => $approvedEmergencyRequests->contains('id', $pr->material_request_id))->count();
+        $totalCoordEmergencyCount = $approvedEmergencyRequests->count() + $dedupedPrCount;
 
         $kpi = [
             'total_inventory_value'       => $this->safe(fn() => \App\Models\Inventory::sum('total_value')),
             'schedules_today'             => $this->safe(fn() => \App\Models\Schedule::whereDate('start_date', '<=', now())->whereDate('end_date', '>=', now())->count()),
             'daily_reports_today'         => $this->safe(fn() => \App\Models\DailyReport::whereDate('report_date', now())->count()),
             'material_requests'           => $this->safe(fn() => \App\Models\MaterialRequest::whereIn('status', ['pending', 'planning_approved'])->count()),
-            'approved_emergency_requests' => $approvedEmergencyRequests->count() + $pendingCoordinatorPrs->count(),
+            'approved_emergency_requests' => $totalCoordEmergencyCount,
             'pending_plans'               => $this->safe(fn() => \App\Models\ProjectPlanWorkflow::where('status', 'planning_manager_approved')->count()),
             'pending_office_reqs'         => $this->safe(fn() => \App\Models\PurchaseRequest::where(function($q) {
                 $q->where('is_office_request', true)

@@ -88,6 +88,12 @@
     </a>
 </li>
 <li class="sidebar-nav-item" style="padding: 0.1rem 0.75rem 0.1rem;">
+    <a href="{{ route('dashboard.coordinator') }}" class="sidebar-nav-link {{ request()->routeIs('dashboard.coordinator') && !request()->routeIs('coordinator.emergency-requests*') ? 'active' : '' }}" style="font-weight:600;">
+        <i class="fa-solid fa-users-viewfinder text-primary"></i>
+        <span>Coordinator Dashboard</span>
+    </a>
+</li>
+<li class="sidebar-nav-item" style="padding: 0.1rem 0.75rem 0.1rem;">
     <a href="{{ $manpowerMenuUrl }}" class="sidebar-nav-link {{ request()->routeIs('manpower-approval.*') ? 'active' : '' }}" style="font-weight:600;">
         <i class="fa-solid fa-users-viewfinder text-primary"></i>
         <span>Manpower Approval</span>
@@ -203,7 +209,7 @@
 
 {{-- ④ Procurement --}}
 @php
-    $procRoutes = ['dashboard.purchase','purchase-requests.*','procurement.*','material-requests.*','admin.scratch-material-requests.*'];
+    $procRoutes = ['dashboard.purchase','purchase-requests.*','procurement.*','material-requests.*','admin.scratch-material-requests.*','coordinator.emergency-requests*'];
     $procActive = collect($procRoutes)->contains(fn($p) => request()->routeIs($p));
 @endphp
 <li class="sidebar-nav-item group-item">
@@ -229,6 +235,7 @@
             <li><a href="{{ route('dashboard.purchase') }}" class="sidebar-nav-link {{ request()->routeIs('dashboard.purchase') ? 'active' : '' }}"><i class="fa-solid fa-chart-line text-info"></i><span>Purchase Dashboard</span></a></li>
             <li><a href="{{ route('procurement.my-queue') }}" class="sidebar-nav-link {{ request()->routeIs('procurement.*') || request()->routeIs('purchase-requests.*') ? 'active' : '' }}"><i class="fa-solid fa-tasks text-primary"></i><span>Procurement — My Queue</span></a></li>
             <li><a href="{{ route('material-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('material-requests.*') && !request()->routeIs('admin.scratch-material-requests.*') ? 'active' : '' }}"><i class="fa-solid fa-cart-flatbed text-danger"></i><span>Material Requests</span></a></li>
+            <li><a href="{{ route('coordinator.emergency-requests') }}" class="sidebar-nav-link {{ request()->routeIs('coordinator.emergency-requests*') ? 'active' : '' }}"><i class="fa-solid fa-bolt text-danger"></i><span>Emergency Material Requests</span></a></li>
             <li><a href="{{ route('admin.scratch-material-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('admin.scratch-material-requests.*') ? 'active' : '' }}"><i class="fa-solid fa-file-circle-question text-warning"></i><span>Scratch Material Requests</span><span class="badge bg-warning text-dark rounded-pill ms-auto" style="font-size:0.55rem;">Scratch</span></a></li>
             <li><a href="{{ route('delivery-receipts.index') }}" class="sidebar-nav-link {{ request()->routeIs('delivery-receipts.*') ? 'active' : '' }}"><i class="fa-solid fa-receipt text-success"></i><span>Delivery Receipts</span></a></li>
         </ul>
@@ -887,7 +894,7 @@
         @endphp
 
         <li class="sidebar-nav-item">
-            <a href="{{ $dashUrl }}" class="sidebar-nav-link {{ request()->routeIs('dashboard*') || request()->routeIs('hr-manager.dashboard') ? 'active' : '' }}">
+            <a href="{{ $dashUrl }}" class="sidebar-nav-link {{ (request()->routeIs('dashboard*') || request()->routeIs('hr-manager.dashboard')) && !request()->routeIs('coordinator.emergency-requests*') ? 'active' : '' }}">
                 <i class="fa-solid fa-gauge-high"></i>
                 <span>{{ $dashTitle }}</span>
             </a>
@@ -1791,25 +1798,58 @@
         @if(auth()->check() && (auth()->user()->hasAnyRole(['Coordinator', 'coordinator', 'admin', 'global_admin']) || in_array('coordinator', $rawUserRoles)))
         @if(!$isCoordinator)
         <li class="sidebar-nav-item">
-            <a href="{{ route('dashboard.coordinator') }}" class="sidebar-nav-link {{ request()->routeIs('dashboard.coordinator') ? 'active' : '' }}">
+            <a href="{{ route('dashboard.coordinator') }}" class="sidebar-nav-link {{ request()->routeIs('dashboard.coordinator') && !request()->routeIs('coordinator.emergency-requests*') ? 'active' : '' }}">
                 <i class="fa-solid fa-users-viewfinder text-primary"></i>
                 <span>Coordinator Dashboard</span>
             </a>
         </li>
         @endif
         <li class="sidebar-nav-item">
-            <a href="{{ route('procurement.my-queue') }}" class="sidebar-nav-link {{ request()->routeIs('procurement.*') || request()->routeIs('purchase-requests.*') ? 'active' : '' }}">
+            <a href="{{ route('coordinator.emergency-requests') }}" class="sidebar-nav-link {{ request()->routeIs('coordinator.emergency-requests*') ? 'active' : '' }}">
                 <i class="fa-solid fa-bolt text-danger"></i>
+                <span>Emergency Material Request</span>
+                @php
+                    $pendingCoordEmergencyBadge = 0;
+                    try {
+                        $emMrIds = \App\Models\MaterialRequest::where(function($q) {
+                                $q->where('status', 'planning_approved')
+                                  ->orWhere('planning_approval_status', 'approved');
+                            })
+                            ->whereNotIn('status', ['sent_to_store_manager', 'approved_for_petty_cash', 'sent_to_pr', 'transferred', 'transfer_created', 'approved', 'rejected', 'cancelled', 'completed'])
+                            ->pluck('id');
+
+                        $emPrCount = \App\Models\PurchaseRequest::whereHas('items')
+                            ->where('is_office_request', false)
+                            ->where(function($q) {
+                                $q->whereIn('current_owner_role', ['coordinator', 'project_coordinator', 'site_coordinator'])
+                                  ->orWhere('status', \App\Models\PurchaseRequest::STATUS_PENDING_HR_APPROVAL);
+                            })
+                            ->where(function($q) use ($emMrIds) {
+                                $q->whereNull('material_request_id')
+                                  ->orWhereNotIn('material_request_id', $emMrIds);
+                            })
+                            ->count();
+
+                        $pendingCoordEmergencyBadge = $emMrIds->count() + $emPrCount;
+                    } catch (\Throwable $e) {}
+                @endphp
+                @if($pendingCoordEmergencyBadge > 0)
+                    <span class="badge bg-danger rounded-pill ms-auto">{{ $pendingCoordEmergencyBadge }}</span>
+                @endif
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('procurement.my-queue') }}" class="sidebar-nav-link {{ request()->routeIs('procurement.*') || request()->routeIs('purchase-requests.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-tasks text-warning"></i>
                 <span>Procurement Queue</span>
                 @php
                     $pendingCoordPrCount = 0;
                     try {
-                        $pendingCoordPrCount = \App\Models\PurchaseRequest::where('current_owner_role', 'coordinator')->count()
-                            + \App\Models\MaterialRequest::where('is_emergency', true)->where('status', 'planning_approved')->count();
+                        $pendingCoordPrCount = \App\Models\PurchaseRequest::where('current_owner_role', 'coordinator')->count();
                     } catch (\Throwable $e) {}
                 @endphp
                 @if($pendingCoordPrCount > 0)
-                    <span class="badge bg-danger rounded-pill ms-auto">{{ $pendingCoordPrCount }}</span>
+                    <span class="badge bg-warning text-dark rounded-pill ms-auto">{{ $pendingCoordPrCount }}</span>
                 @endif
             </a>
         </li>
