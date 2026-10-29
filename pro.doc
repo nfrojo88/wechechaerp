@@ -1,26 +1,34 @@
-In the section "Scanned OCR Receipts (ERCA Cash Register Invoices)", add a duplicate check before building the matrix.
+:
 
-DUPLICATE RULE
-A receipt is a duplicate of another if BOTH of these are identical:
-1. FS No. (fiscal receipt number)
-2. Seller TIN
-
-If only one of the two matches, it is NOT a duplicate. Keep both receipts.
-
-HOW TO COMPARE
-- Normalize before comparing: trim spaces, remove dashes and special characters, ignore case, and remove leading zeros from the FS No. (OCR often adds or drops these).
-- Compare every receipt against all other receipts in this section only.
-
-WHICH ONE TO KEEP
-- When a duplicate group is found (same FS No. + same Seller TIN), keep only ONE receipt, the LATEST one.
-- "Latest" = the most recent receipt date and time. If the date and time are identical or missing, use the most recently scanned/uploaded one.
-- Exclude the older duplicates from the matrix and from all totals so nothing is double-counted.
-
-OUTPUT
-1. The cleaned matrix, with one row per unique receipt.
-2. A "Duplicates Removed" table with these columns:
-   FS No. | Seller TIN | Kept Receipt (date/ref) | Removed Receipt(s) (date/ref) | Reason
-3. A summary: total receipts scanned, duplicates removed, unique receipts used.
-
-FLAG, DON'T GUESS
-If an FS No. or Seller TIN is unreadable or missing from the OCR, do not treat the receipt as a duplicate. Keep it and flag it as "Needs manual review".
+1. applyMovement must also reject any change that makes quantity_on_hand fall
+   below quantity_reserved. Deduct and Set must never remove stock that is
+   assigned to employees. Show a clear message such as "Only 7 available,
+   3 are assigned."
+2. On a negative adjustment of a Fixed Asset product, do NOT delete units.
+   Pick unassigned (in_store) units and set status = 'disposed'. Keep the
+   records. On a positive adjustment, create the new units and flag them as
+   "details incomplete" so someone can add serial numbers later.
+3. Make balance_before and balance_after nullable. Old movement rows show "—"
+   instead of 0.
+4. Also fix these, which are in your report but not in your plan:
+   - voidSlip must reverse the inventory and write a reversal movement.
+   - the wrong sign in syncTransferInventory.
+   - issueMaterialRequest must block negative stock.
+   - InventoryController::adjust must not route 'adjustment' to stockIn.
+   - Tell me what a "send" slip should do to stock before you change it.
+5. Make inventory_movements append-only in code too: throw an exception on
+   update or delete in the model.
+6. inventory:reconcile must run as a dry run by default and print a report. It
+   only changes data with --repair, and only after I confirm. For any product
+   where inventory and unit counts differ, list it and ask me which number is
+   correct. Do not guess.
+7. Before any migration, tell me to back up the database. Run tests only on a
+   test database.
+8. Work in phases and stop after each one so I can test:
+   Phase 1: migration + applyMovement + remove the cyclic sync that overwrites
+            inventory.
+   Phase 2: manual adjustments + movements page signs and balance columns.
+   Phase 3: fixed assets on applyMovement.
+   Phase 4: slips, transfers, material requests, voids.
+   Phase 5: reconcile command and page + tests.
+Start with Phase 1 only.

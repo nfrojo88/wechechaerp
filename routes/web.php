@@ -2525,6 +2525,8 @@ Route::middleware(['auth'])->group(function () {
 
         // Inventory - All stores
         Route::get('inventory/all', [App\Http\Controllers\StoreManagerController::class, 'allInventory'])->name('inventory.all');
+        Route::get('inventory/reconciliation', [App\Http\Controllers\StoreManagerController::class, 'reconciliationIndex'])->name('inventory.reconciliation');
+        Route::post('inventory/reconciliation/repair', [App\Http\Controllers\StoreManagerController::class, 'reconciliationRepair'])->name('inventory.reconciliation.repair');
         Route::get('inventory/export-pdf', [App\Http\Controllers\StoreManagerController::class, 'exportInventoryPdf'])->name('inventory.export-pdf');
         Route::get('inventory/product-history/{product}', [App\Http\Controllers\StoreManagerController::class, 'productMovementHistory'])->name('inventory.product-history');
         

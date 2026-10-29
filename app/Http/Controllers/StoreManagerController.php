@@ -1163,6 +1163,8 @@ class StoreManagerController extends Controller
 
                 if ($qty <= 0) continue;
 
+                $inventoryService = app(\App\Services\InventoryService::class);
+
                 // 1. Restore to origin store if it was deducted
                 if ($wasDeducted) {
                     $alreadyReturned = InventoryMovement::where('reference_type', Transfer::class)
@@ -1175,26 +1177,20 @@ class StoreManagerController extends Controller
                         })->exists();
 
                     if (!$alreadyReturned) {
-                        $originInv = Inventory::withoutGlobalScopes()
-                            ->where('store_id', $transfer->from_store_id)
-                            ->where('product_id', $item->product_id)
-                            ->first();
-
-                        if ($originInv) {
-                            $originInv->increment('quantity_on_hand', $qty);
-                            $originInv->update(['last_movement_at' => now()]);
-
-                            InventoryMovement::create([
-                                'inventory_id'   => $originInv->id,
-                                'type'           => 'transfer_return',
-                                'quantity'       => $qty,
-                                'reference_type' => Transfer::class,
-                                'reference_id'   => $transfer->id,
-                                'performed_by'   => Auth::id() ?? 1,
-                                'remarks'        => 'Transfer #' . $transfer->transfer_no . ' rejected/reversed - items restored to origin store' . ($reason ? ": {$reason}" : ''),
-                            ]);
-
+                        try {
+                            $inventoryService->applyMovement(
+                                storeId: $transfer->from_store_id,
+                                productId: $item->product_id,
+                                quantityDelta: $qty,
+                                type: 'transfer_return',
+                                referenceType: Transfer::class,
+                                referenceId: $transfer->id,
+                                remarks: 'Transfer #' . $transfer->transfer_no . ' rejected/reversed - items restored to origin store' . ($reason ? ": {$reason}" : ''),
+                                performedBy: Auth::id() ?? 1
+                            );
                             $restoredOriginCount++;
+                        } catch (\Throwable $e) {
+                            Log::warning("reverseTransferInventory origin restore failed: " . $e->getMessage());
                         }
                     }
                 }
@@ -1211,26 +1207,20 @@ class StoreManagerController extends Controller
                         })->exists();
 
                     if (!$alreadyReversed) {
-                        $destInv = Inventory::withoutGlobalScopes()
-                            ->where('store_id', $transfer->to_store_id)
-                            ->where('product_id', $item->product_id)
-                            ->first();
-
-                        if ($destInv) {
-                            $destInv->decrement('quantity_on_hand', $qty);
-                            $destInv->update(['last_movement_at' => now()]);
-
-                            InventoryMovement::create([
-                                'inventory_id'   => $destInv->id,
-                                'type'           => 'transfer_reversal',
-                                'quantity'       => -$qty,
-                                'reference_type' => Transfer::class,
-                                'reference_id'   => $transfer->id,
-                                'performed_by'   => Auth::id() ?? 1,
-                                'remarks'        => 'Transfer #' . $transfer->transfer_no . ' rejected/reversed - items deducted from destination store' . ($reason ? ": {$reason}" : ''),
-                            ]);
-
+                        try {
+                            $inventoryService->applyMovement(
+                                storeId: $transfer->to_store_id,
+                                productId: $item->product_id,
+                                quantityDelta: -$qty,
+                                type: 'transfer_reversal',
+                                referenceType: Transfer::class,
+                                referenceId: $transfer->id,
+                                remarks: 'Transfer #' . $transfer->transfer_no . ' rejected/reversed - items deducted from destination store' . ($reason ? ": {$reason}" : ''),
+                                performedBy: Auth::id() ?? 1
+                            );
                             $reversedDestCount++;
+                        } catch (\Throwable $e) {
+                            Log::warning("reverseTransferInventory dest deduction failed: " . $e->getMessage());
                         }
                     }
                 }
@@ -1295,6 +1285,8 @@ class StoreManagerController extends Controller
                     ]
                 );
 
+                $inventoryService = app(\App\Services\InventoryService::class);
+
                 $rawOut = (float) InventoryMovement::where('reference_type', Transfer::class)
                     ->where('reference_id', $transfer->id)
                     ->where('inventory_id', $originInv->id)
@@ -1307,41 +1299,38 @@ class StoreManagerController extends Controller
                     ->where('type', 'transfer_return')
                     ->sum('quantity');
 
-                $netDeducted = abs($rawOut) - $rawReturn;
+                $netDeducted = abs($rawOut) - abs($rawReturn);
                 $diffOut = round($qty - $netDeducted, 4);
 
                 if ($diffOut > 0.0001) {
-                    $originInv->decrement('quantity_on_hand', $diffOut);
-                    $originInv->update(['last_movement_at' => now()]);
-
                     $slipNo = $transfer->outgoing_slip_no ?: $transfer->physical_slip_no ?: $transfer->transfer_no ?: 'N/A';
                     $remarksOut = 'Transfer #' . $transfer->transfer_no . ' transferred to ' . ($transfer->toStore->name ?? 'Destination Store') . ' (Slip: ' . $slipNo . ')';
 
-                    InventoryMovement::create([
-                        'inventory_id'   => $originInv->id,
-                        'type'           => 'transfer_out',
-                        'quantity'       => -$diffOut,
-                        'reference_type' => Transfer::class,
-                        'reference_id'   => $transfer->id,
-                        'performed_by'   => Auth::id() ?? $transfer->dispatched_by ?? $transfer->requested_by ?? 1,
-                        'remarks'        => $remarksOut,
-                    ]);
+                    $inventoryService->applyMovement(
+                        storeId: $transfer->from_store_id,
+                        productId: $item->product_id,
+                        quantityDelta: -$diffOut,
+                        type: 'transfer_out',
+                        referenceType: Transfer::class,
+                        referenceId: $transfer->id,
+                        remarks: $remarksOut,
+                        performedBy: Auth::id() ?? $transfer->dispatched_by ?? $transfer->requested_by ?? 1
+                    );
 
                     $deductedCount++;
                 } elseif ($diffOut < -0.0001) {
                     $excess = abs($diffOut);
-                    $originInv->increment('quantity_on_hand', $excess);
-                    $originInv->update(['last_movement_at' => now()]);
 
-                    InventoryMovement::create([
-                        'inventory_id'   => $originInv->id,
-                        'type'           => 'transfer_return',
-                        'quantity'       => $excess,
-                        'reference_type' => Transfer::class,
-                        'reference_id'   => $transfer->id,
-                        'performed_by'   => Auth::id() ?? $transfer->dispatched_by ?? $transfer->requested_by ?? 1,
-                        'remarks'        => 'Transfer #' . $transfer->transfer_no . ' excess stock returned to origin store',
-                    ]);
+                    $inventoryService->applyMovement(
+                        storeId: $transfer->from_store_id,
+                        productId: $item->product_id,
+                        quantityDelta: +$excess,
+                        type: 'transfer_return',
+                        referenceType: Transfer::class,
+                        referenceId: $transfer->id,
+                        remarks: 'Transfer #' . $transfer->transfer_no . ' excess stock returned to origin store',
+                        performedBy: Auth::id() ?? $transfer->dispatched_by ?? $transfer->requested_by ?? 1
+                    );
                 }
 
                 // 2. ADD TO DESTINATION STORE (immediately upon creation / check)
@@ -1370,48 +1359,39 @@ class StoreManagerController extends Controller
                     ->where('type', 'transfer_reversal')
                     ->sum('quantity');
 
-                $netAdded = $rawIn - $rawReversal;
+                $netAdded = abs($rawIn) - abs($rawReversal);
                 $diffIn = round($qty - $netAdded, 4);
 
                 if ($diffIn > 0.0001) {
-                    $oldQty = (float)$destInv->quantity_on_hand;
-                    $oldCost = (float)($destInv->unit_cost ?? 0);
-                    $newQty = $oldQty + $diffIn;
-                    $newCost = $newQty > 0 ? (($oldQty * $oldCost) + ($diffIn * $unitCost)) / $newQty : $unitCost;
-
-                    $destInv->quantity_on_hand = $newQty;
-                    $destInv->unit_cost = $newCost;
-                    $destInv->last_movement_at = now();
-                    $destInv->save();
-
                     $recSlipNo = $transfer->receiving_slip_no ?: $transfer->outgoing_slip_no ?: $transfer->physical_slip_no ?: $transfer->transfer_no ?: 'N/A';
                     $remarksIn = 'Transfer #' . $transfer->transfer_no . ' transferred from ' . ($transfer->fromStore->name ?? 'Origin Store') . ' into ' . ($transfer->toStore->name ?? 'Destination Store') . ' (Slip: ' . $recSlipNo . ')';
 
-                    InventoryMovement::create([
-                        'inventory_id'   => $destInv->id,
-                        'type'           => 'transfer_in',
-                        'quantity'       => $diffIn,
-                        'reference_type' => Transfer::class,
-                        'reference_id'   => $transfer->id,
-                        'performed_by'   => Auth::id() ?? $transfer->received_by ?? $transfer->requested_by ?? 1,
-                        'remarks'        => $remarksIn,
-                    ]);
+                    $inventoryService->applyMovement(
+                        storeId: $transfer->to_store_id,
+                        productId: $item->product_id,
+                        quantityDelta: +$diffIn,
+                        type: 'transfer_in',
+                        referenceType: Transfer::class,
+                        referenceId: $transfer->id,
+                        remarks: $remarksIn,
+                        performedBy: Auth::id() ?? $transfer->received_by ?? $transfer->requested_by ?? 1,
+                        unitCost: $unitCost
+                    );
 
                     $addedCount++;
                 } elseif ($diffIn < -0.0001) {
                     $excess = abs($diffIn);
-                    $destInv->decrement('quantity_on_hand', $excess);
-                    $destInv->update(['last_movement_at' => now()]);
 
-                    InventoryMovement::create([
-                        'inventory_id'   => $destInv->id,
-                        'type'           => 'transfer_reversal',
-                        'quantity'       => $excess,
-                        'reference_type' => Transfer::class,
-                        'reference_id'   => $transfer->id,
-                        'performed_by'   => Auth::id() ?? $transfer->received_by ?? $transfer->requested_by ?? 1,
-                        'remarks'        => 'Transfer #' . $transfer->transfer_no . ' excess stock reversed from destination store',
-                    ]);
+                    $inventoryService->applyMovement(
+                        storeId: $transfer->to_store_id,
+                        productId: $item->product_id,
+                        quantityDelta: -$excess,
+                        type: 'transfer_reversal',
+                        referenceType: Transfer::class,
+                        referenceId: $transfer->id,
+                        remarks: 'Transfer #' . $transfer->transfer_no . ' excess stock reversed from destination store',
+                        performedBy: Auth::id() ?? $transfer->received_by ?? $transfer->requested_by ?? 1
+                    );
                 }
 
                 // 3. IF FIXED ASSET: MOVE FIXED ASSET UNITS & SYNC FIXED ASSET CATALOG
@@ -2231,38 +2211,43 @@ class StoreManagerController extends Controller
             return back()->with('error', 'No store assigned to issue materials from.');
         }
 
-        DB::transaction(function () use ($materialRequest, $storeId) {
-            $materialRequest->load('items.product');
+        try {
+            DB::transaction(function () use ($materialRequest, $storeId) {
+                $materialRequest->load('items.product');
+                $inventoryService = app(\App\Services\InventoryService::class);
 
-            foreach ($materialRequest->items as $item) {
-                $inv = Inventory::where('store_id', $storeId)
-                    ->where('product_id', $item->product_id)
-                    ->first();
+                foreach ($materialRequest->items as $item) {
+                    $qty = (float) $item->quantity;
+                    if ($qty <= 0) continue;
 
-                if ($inv) {
-                    $inv->decrement('quantity_on_hand', $item->quantity);
+                    $remarks = 'Issued to Site Engineer for Material Request #' . ($materialRequest->reference_number ?? $materialRequest->id);
 
-                    $remarks3 = 'Issued to Site Engineer for Material Request #' . ($materialRequest->reference_number ?? $materialRequest->id);
-                    InventoryMovement::create([
-                        'inventory_id'   => $inv->id,
-                        'type'           => 'issue',
-                        'quantity'       => -$item->quantity,
-                        'reference_type' => MaterialRequest::class,
-                        'reference_id'   => $materialRequest->id,
-                        'performed_by'   => Auth::id() ?? 1,
-                        'remarks'        => $remarks3,
-                    ]);
+                    // applyMovement will block negative stock and protected reserved quantities
+                    $inventoryService->applyMovement(
+                        storeId: $storeId,
+                        productId: $item->product_id,
+                        quantityDelta: -$qty,
+                        type: 'issue',
+                        referenceType: MaterialRequest::class,
+                        referenceId: $materialRequest->id,
+                        remarks: $remarks,
+                        performedBy: Auth::id() ?? 1
+                    );
                 }
-            }
 
-            $materialRequest->update([
-                'status'      => 'issued',
-                'approved_by' => Auth::id(),
-                'approved_at' => now(),
-            ]);
-        });
+                $materialRequest->update([
+                    'status'      => 'issued',
+                    'approved_by' => Auth::id(),
+                    'approved_at' => now(),
+                ]);
+            });
 
-        return back()->with('success', 'Material successfully issued and handed over to the Site Engineer.');
+            return back()->with('success', 'Material successfully issued and handed over to the Site Engineer.');
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', 'Cannot issue materials: ' . $e->getMessage());
+        } catch (\Throwable $e) {
+            return back()->with('error', 'Failed to issue materials: ' . $e->getMessage());
+        }
     }
 
     /**
@@ -2558,16 +2543,76 @@ class StoreManagerController extends Controller
     }
 
     /**
-     * Mark Slip as Void
+     * Mark Slip as Void and reverse associated inventory movements.
      */
     public function voidSlip(DeliveryReceipt $slip)
     {
-        $slip->update([
-            'is_void' => true,
-            'status' => 'void',
-        ]);
+        if ($slip->is_void) {
+            return back()->with('error', 'Slip is already voided.');
+        }
 
-        return back()->with('success', 'Slip marked as void and flagged for audit.');
+        try {
+            DB::transaction(function () use ($slip) {
+                $slip->loadMissing(['items', 'store', 'toStore']);
+                $inventoryService = app(\App\Services\InventoryService::class);
+
+                foreach ($slip->items as $item) {
+                    $qty = (float) ($item->accepted_quantity ?: $item->quantity_received ?: 0);
+                    if ($qty <= 0) continue;
+
+                    if ($slip->slip_type === 'receive') {
+                        // Voiding a receive slip: reverse receipt by deducting stock
+                        $inventoryService->applyMovement(
+                            storeId: $slip->store_id,
+                            productId: $item->product_id,
+                            quantityDelta: -$qty,
+                            type: 'slip_void',
+                            referenceType: DeliveryReceipt::class,
+                            referenceId: $slip->id,
+                            remarks: "Reversal for voided receive slip {$slip->dr_no}",
+                            performedBy: Auth::id() ?? 1
+                        );
+                    } elseif ($slip->slip_type === 'send') {
+                        // Voiding a send slip: restore stock to issuing store
+                        $inventoryService->applyMovement(
+                            storeId: $slip->store_id,
+                            productId: $item->product_id,
+                            quantityDelta: +$qty,
+                            type: 'slip_void',
+                            referenceType: DeliveryReceipt::class,
+                            referenceId: $slip->id,
+                            remarks: "Reversal for voided send slip {$slip->dr_no} (restored to issuing store)",
+                            performedBy: Auth::id() ?? 1
+                        );
+
+                        // If it was transferred to another store, deduct from destination store
+                        if ($slip->to_store_id) {
+                            $inventoryService->applyMovement(
+                                storeId: $slip->to_store_id,
+                                productId: $item->product_id,
+                                quantityDelta: -$qty,
+                                type: 'slip_void',
+                                referenceType: DeliveryReceipt::class,
+                                referenceId: $slip->id,
+                                remarks: "Reversal for voided send slip {$slip->dr_no} (deducted from destination store)",
+                                performedBy: Auth::id() ?? 1
+                            );
+                        }
+                    }
+                }
+
+                $slip->update([
+                    'is_void' => true,
+                    'status'  => 'void',
+                ]);
+            });
+
+            return back()->with('success', "Slip {$slip->dr_no} marked as void and inventory movements reversed.");
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', 'Cannot void slip: ' . $e->getMessage());
+        } catch (\Throwable $e) {
+            return back()->with('error', 'Failed to void slip: ' . $e->getMessage());
+        }
     }
 
     /**
@@ -2605,87 +2650,130 @@ class StoreManagerController extends Controller
             ]);
         }
 
-        DB::transaction(function () use ($request) {
-            $slipType = $request->slip_type;
-            $storeId = $request->store_id;
-            
-            // Get slip number from sequence or manual entry
-            $slipNo = null;
-            
-            if (!empty($request->slip_no)) {
-                // Manual slip number provided
-                $slipNo = $request->slip_no;
-            } else {
-                // Auto-generate from slip sequence
-                $sequence = SlipSequence::where('store_id', $storeId)
-                    ->where('slip_type', $slipType)
-                    ->where('status', 'active')
-                    ->first();
+        try {
+            DB::transaction(function () use ($request) {
+                $slipType = $request->slip_type;
+                $storeId = (int) $request->store_id;
+                
+                // Get slip number from sequence or manual entry
+                $slipNo = null;
+                
+                if (!empty($request->slip_no)) {
+                    $slipNo = $request->slip_no;
+                } else {
+                    $sequence = SlipSequence::where('store_id', $storeId)
+                        ->where('slip_type', $slipType)
+                        ->where('status', 'active')
+                        ->first();
 
-                if (!$sequence) {
-                    throw new \Exception("No active slip sequence configured for this store and type. Please configure a sequence first.");
+                    if (!$sequence) {
+                        throw new \Exception("No active slip sequence configured for this store and type. Please configure a sequence first.");
+                    }
+
+                    $slipNo = $sequence->generateSlipNumber();
                 }
 
-                // Generate next slip number
-                $slipNo = $sequence->generateSlipNumber();
-            }
+                $refNumber = 'SYSTEM-' . time();
+                $dummyPo = \App\Models\PurchaseOrder::firstOrCreate(
+                    ['supplier_name' => $request->supplier_name ?: 'Internal Store'],
+                    [
+                        'reference_number' => $refNumber,
+                        'status'           => 'delivered',
+                        'total_amount'     => 0,
+                        'issued_date'      => now()->toDateString(),
+                        'created_by'       => Auth::id() ?? 1,
+                    ]
+                );
 
-            // Create dummy PO if not exists (required by table structure)
-            $refNumber = 'SYSTEM-' . time();
-            $dummyPo = \App\Models\PurchaseOrder::firstOrCreate(
-                ['supplier_name' => $request->supplier_name ?: 'Internal Store'],
-                [
-                    'reference_number' => $refNumber,
-                    'status'           => 'delivered',
-                    'total_amount'     => 0,
-                    'issued_date'      => now()->toDateString(),
-                    'created_by'       => Auth::id() ?? 1,
-                ]
-            );
-
-            $receipt = DeliveryReceipt::create([
-                'dr_no'          => $slipNo,
-                'slip_type'      => $slipType,
-                'store_id'       => $storeId,
-                'to_store_id'    => $request->to_store_id ?? null,
-                'received_date'  => $request->slip_date,
-                'receipt_date'   => $request->slip_date,
-                'supplier_name'  => $request->supplier_name,
-                'reference_no'   => $request->reference_no,
-                'purchase_order_id' => $dummyPo->id,
-                'received_by'    => Auth::id(),
-                'created_by'     => Auth::id(),
-                'status'         => 'draft',
-                'is_void'        => false,
-                'sequence_status' => 'pending',
-            ]);
-
-            foreach ($request->items as $item) {
-                $receipt->items()->create([
-                    'product_id' => $item['product_id'],
-                    'quantity_received' => $item['quantity'],
-                    'accepted_quantity' => $item['quantity'],
-                    'unit' => $item['unit'] ?? 'pcs',
+                $receipt = DeliveryReceipt::create([
+                    'dr_no'             => $slipNo,
+                    'slip_type'         => $slipType,
+                    'store_id'          => $storeId,
+                    'to_store_id'       => $request->to_store_id ?? null,
+                    'received_date'     => $request->slip_date,
+                    'receipt_date'      => $request->slip_date,
+                    'supplier_name'     => $request->supplier_name,
+                    'reference_no'      => $request->reference_no,
+                    'purchase_order_id' => $dummyPo->id,
+                    'received_by'       => Auth::id(),
+                    'created_by'        => Auth::id(),
+                    'status'            => 'draft',
+                    'is_void'           => false,
+                    'sequence_status'   => 'pending',
                 ]);
-            }
 
-            // Only update inventory if it's a receive slip
-            if ($slipType === 'receive') {
                 foreach ($request->items as $item) {
-                    $inventory = Inventory::firstOrCreate(
-                        ['store_id' => $storeId, 'product_id' => $item['product_id']],
-                        ['quantity_on_hand' => 0, 'unit_cost' => $item['unit_cost'] ?? 0]
-                    );
-                    $inventory->increment('quantity_on_hand', $item['quantity']);
-                    if (!empty($item['unit_cost'])) {
-                        $inventory->update(['unit_cost' => $item['unit_cost']]);
+                    $receipt->items()->create([
+                        'product_id'        => $item['product_id'],
+                        'quantity_received' => $item['quantity'],
+                        'accepted_quantity' => $item['quantity'],
+                        'unit'              => $item['unit'] ?? 'pcs',
+                    ]);
+                }
+
+                $inventoryService = app(\App\Services\InventoryService::class);
+
+                if ($slipType === 'receive') {
+                    foreach ($request->items as $item) {
+                        $qty = (float) $item['quantity'];
+                        $unitCost = !empty($item['unit_cost']) ? (float) $item['unit_cost'] : null;
+
+                        $inventoryService->applyMovement(
+                            storeId: $storeId,
+                            productId: $item['product_id'],
+                            quantityDelta: $qty,
+                            type: 'slip_receive',
+                            referenceType: DeliveryReceipt::class,
+                            referenceId: $receipt->id,
+                            remarks: "Received via slip {$slipNo}" . ($request->supplier_name ? " from {$request->supplier_name}" : ""),
+                            performedBy: Auth::id() ?? 1,
+                            unitCost: $unitCost
+                        );
+                    }
+                } elseif ($slipType === 'send') {
+                    $toStoreId = (int) $request->to_store_id;
+                    $toStore = Store::find($toStoreId);
+                    $destName = $toStore ? $toStore->name : "Store #{$toStoreId}";
+                    $originStore = Store::find($storeId);
+                    $originName = $originStore ? $originStore->name : "Store #{$storeId}";
+
+                    foreach ($request->items as $item) {
+                        $qty = (float) $item['quantity'];
+
+                        // 1. Deduct from issuing store
+                        $inventoryService->applyMovement(
+                            storeId: $storeId,
+                            productId: $item['product_id'],
+                            quantityDelta: -$qty,
+                            type: 'slip_send',
+                            referenceType: DeliveryReceipt::class,
+                            referenceId: $receipt->id,
+                            remarks: "Dispatched via send slip {$slipNo} to {$destName}",
+                            performedBy: Auth::id() ?? 1
+                        );
+
+                        // 2. Add to destination store
+                        $inventoryService->applyMovement(
+                            storeId: $toStoreId,
+                            productId: $item['product_id'],
+                            quantityDelta: $qty,
+                            type: 'slip_receive',
+                            referenceType: DeliveryReceipt::class,
+                            referenceId: $receipt->id,
+                            remarks: "Received via send slip {$slipNo} from {$originName}",
+                            performedBy: Auth::id() ?? 1
+                        );
                     }
                 }
-            }
-        });
+            });
 
-        $type = $request->slip_type === 'receive' ? 'Receive' : 'Send';
-        return redirect()->route('store-manager.slips.index')->with('success', "$type slip created successfully with auto-generated sequence number.");
+            $type = $request->slip_type === 'receive' ? 'Receive' : 'Send';
+            return redirect()->route('store-manager.slips.index')->with('success', "{$type} slip created successfully with auto-generated sequence number.");
+        } catch (\InvalidArgumentException $e) {
+            return back()->withInput()->with('error', 'Cannot create slip: ' . $e->getMessage());
+        } catch (\Throwable $e) {
+            return back()->withInput()->with('error', 'Failed to create slip: ' . $e->getMessage());
+        }
     }
 
     /**
@@ -3058,6 +3146,8 @@ class StoreManagerController extends Controller
                 'quantity'           => $qty,
                 'quantity_formatted' => ($isPositive ? '+' : '') . number_format($qty, 3) . ' ' . ($product->unit ?? 'pcs'),
                 'is_positive'        => $isPositive,
+                'balance_before'     => $m->balance_before !== null ? (float)$m->balance_before : null,
+                'balance_after'      => $m->balance_after !== null ? (float)$m->balance_after : null,
                 'reference_no'       => $refNo ?: '—',
                 'reference_type'     => class_basename($m->reference_type ?? ''),
                 'performed_by'       => $m->performer?->name ?? 'System',
@@ -3104,6 +3194,229 @@ class StoreManagerController extends Controller
             return $fn();
         } catch (\Throwable $e) {
             return $default;
+        }
+    }
+
+    /**
+     * Store Inventory Reconciliation & Consistency Audit View
+     */
+    public function reconciliationIndex(Request $request)
+    {
+        $search   = $request->input('search');
+        $storeId  = $request->input('store_id');
+        $filter   = $request->input('filter', 'all');
+
+        $stores = Store::where('is_active', true)->orderBy('name')->get();
+
+        $query = Inventory::with(['store', 'product']);
+
+        if ($storeId) {
+            $query->where('store_id', $storeId);
+        }
+
+        if ($search) {
+            $query->whereHas('product', function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                  ->orWhere('sku', 'like', "%{$search}%")
+                  ->orWhere('code', 'like', "%{$search}%");
+            });
+        }
+
+        $allInventories = $query->get();
+
+        $report = [];
+        $totalCount = 0;
+        $consistentCount = 0;
+        $ledgerDriftCount = 0;
+        $unitMismatchCount = 0;
+
+        foreach ($allInventories as $inv) {
+            $totalCount++;
+            $product = $inv->product;
+            $store = $inv->store;
+
+            $onHand   = (float) $inv->quantity_on_hand;
+            $reserved = (float) $inv->quantity_reserved;
+            $avail    = max(0.0, $onHand - $reserved);
+
+            $ledgerSum = (float) InventoryMovement::where('inventory_id', $inv->id)->sum('quantity');
+            $ledgerDiff = round($onHand - $ledgerSum, 3);
+
+            $cat = strtolower(trim($product?->category ?? ''));
+            $sku = strtoupper(trim($product?->sku ?? ''));
+            $isFixedAsset = str_contains($cat, 'fixed') || str_contains($cat, 'asset') || str_starts_with($sku, 'FA-');
+
+            $activeUnitsCount = null;
+            $unitDiff = null;
+
+            if ($isFixedAsset && $product) {
+                $prefix = str_starts_with($sku, 'FA-') ? substr($sku, 3) : null;
+                $fixedAsset = FixedAsset::where('store_id', $inv->store_id)
+                    ->where(function ($q) use ($product, $prefix) {
+                        if ($prefix) {
+                            $q->where('code_prefix', $prefix);
+                        }
+                        $q->orWhere('name', $product->name);
+                    })->first();
+
+                if ($fixedAsset) {
+                    $activeUnitsCount = FixedAssetUnit::where('fixed_asset_id', $fixedAsset->id)
+                        ->whereIn('status', [FixedAssetUnit::STATUS_IN_STORE, FixedAssetUnit::STATUS_ASSIGNED])
+                        ->count();
+                    $unitDiff = (int) round($onHand - $activeUnitsCount);
+                }
+            }
+
+            $hasLedgerDrift = abs($ledgerDiff) >= 0.001;
+            $hasUnitMismatch = $isFixedAsset && $unitDiff !== null && $unitDiff !== 0;
+
+            if ($hasLedgerDrift) $ledgerDriftCount++;
+            if ($hasUnitMismatch) $unitMismatchCount++;
+
+            if (!$hasLedgerDrift && !$hasUnitMismatch) {
+                $consistentCount++;
+                $status = 'OK';
+            } elseif ($hasLedgerDrift && $hasUnitMismatch) {
+                $status = 'DRIFT_AND_MISMATCH';
+            } elseif ($hasLedgerDrift) {
+                $status = 'LEDGER_DRIFT';
+            } else {
+                $status = 'UNIT_MISMATCH';
+            }
+
+            if ($filter === 'drift' && !$hasLedgerDrift) continue;
+            if ($filter === 'mismatch' && !$hasUnitMismatch) continue;
+            if ($filter === 'consistent' && ($hasLedgerDrift || $hasUnitMismatch)) continue;
+
+            $report[] = [
+                'inventory'         => $inv,
+                'store'             => $store,
+                'product'           => $product,
+                'on_hand'           => $onHand,
+                'reserved'          => $reserved,
+                'available'         => $avail,
+                'ledger_sum'        => $ledgerSum,
+                'ledger_diff'       => $ledgerDiff,
+                'is_fa'             => $isFixedAsset,
+                'active_units'      => $activeUnitsCount,
+                'unit_diff'         => $unitDiff,
+                'status'            => $status,
+                'has_ledger_drift'  => $hasLedgerDrift,
+                'has_unit_mismatch' => $hasUnitMismatch,
+            ];
+        }
+
+        $kpis = [
+            'total'          => $totalCount,
+            'consistent'     => $consistentCount,
+            'ledger_drift'   => $ledgerDriftCount,
+            'unit_mismatch'  => $unitMismatchCount,
+        ];
+
+        return view('store-manager.inventory.reconciliation', compact('report', 'stores', 'kpis', 'filter', 'storeId', 'search'));
+    }
+
+    /**
+     * Interactively repair an individual discrepancy from UI
+     */
+    public function reconciliationRepair(Request $request)
+    {
+        $validated = $request->validate([
+            'inventory_id' => 'required|exists:inventory,id',
+            'action'       => 'required|in:balance_ledger,sync_units,custom_stock',
+            'custom_count' => 'nullable|numeric|min:0',
+        ]);
+
+        $inv = Inventory::findOrFail($validated['inventory_id']);
+        $inventoryService = app(\App\Services\InventoryService::class);
+
+        try {
+            DB::transaction(function () use ($inv, $validated, $inventoryService) {
+                $onHand = (float) $inv->quantity_on_hand;
+                $ledgerSum = (float) InventoryMovement::where('inventory_id', $inv->id)->sum('quantity');
+                $ledgerDiff = round($onHand - $ledgerSum, 3);
+
+                if ($validated['action'] === 'balance_ledger') {
+                    if (abs($ledgerDiff) >= 0.001) {
+                        InventoryMovement::create([
+                            'inventory_id'   => $inv->id,
+                            'type'           => 'reconciliation',
+                            'quantity'       => $ledgerDiff,
+                            'balance_before' => $ledgerSum,
+                            'balance_after'  => $onHand,
+                            'performed_by'   => Auth::id() ?? 1,
+                            'remarks'        => "Audit reconciliation: balancing ledger row to match verified stock balance ({$onHand})",
+                        ]);
+                    }
+                } elseif ($validated['action'] === 'sync_units') {
+                    $product = $inv->product;
+                    $prefix = str_starts_with($product?->sku ?? '', 'FA-') ? substr($product->sku, 3) : null;
+                    $fixedAsset = FixedAsset::where('store_id', $inv->store_id)
+                        ->where(function ($q) use ($product, $prefix) {
+                            if ($prefix) $q->where('code_prefix', $prefix);
+                            $q->orWhere('name', $product->name);
+                        })->first();
+
+                    if ($fixedAsset) {
+                        $activeUnits = FixedAssetUnit::where('fixed_asset_id', $fixedAsset->id)
+                            ->whereIn('status', [FixedAssetUnit::STATUS_IN_STORE, FixedAssetUnit::STATUS_ASSIGNED])
+                            ->count();
+                        $diff = (int) round($onHand - $activeUnits);
+
+                        if ($diff > 0) {
+                            $maxSeq = (int) $fixedAsset->units()->max('sequence_number') ?: 0;
+                            $assetPrefix = strtoupper(trim($fixedAsset->code_prefix ?: 'AST'));
+                            for ($i = 0; $i < $diff; $i++) {
+                                $maxSeq++;
+                                $code = "{$assetPrefix}-{$maxSeq}";
+                                while (FixedAssetUnit::where('unit_code', $code)->exists()) {
+                                    $maxSeq++;
+                                    $code = "{$assetPrefix}-{$maxSeq}";
+                                }
+                                FixedAssetUnit::create([
+                                    'fixed_asset_id'   => $fixedAsset->id,
+                                    'unit_code'        => $code,
+                                    'sequence_number'  => $maxSeq,
+                                    'status'           => FixedAssetUnit::STATUS_IN_STORE,
+                                    'condition'        => 'good',
+                                    'notes'            => 'Details incomplete — automatically generated during inventory reconciliation.',
+                                    'created_by'       => Auth::id() ?? 1,
+                                ]);
+                            }
+                        } elseif ($diff < 0) {
+                            $toDispose = abs($diff);
+                            $unitsToDispose = $fixedAsset->units()
+                                ->where('status', FixedAssetUnit::STATUS_IN_STORE)
+                                ->take($toDispose)
+                                ->get();
+                            foreach ($unitsToDispose as $u) {
+                                $u->update([
+                                    'status' => FixedAssetUnit::STATUS_DISPOSED,
+                                    'notes'  => $u->notes ? $u->notes . "\n[Reconciliation] Marked as disposed" : "[Reconciliation] Marked as disposed",
+                                ]);
+                            }
+                        }
+
+                        $fixedAsset->total_quantity = max(0, (int) round($onHand));
+                        $fixedAsset->saveQuietly();
+                    }
+                } elseif ($validated['action'] === 'custom_stock') {
+                    $customCount = (float) $validated['custom_count'];
+                    $delta = round($customCount - $onHand, 3);
+                    $inventoryService->applyMovement(
+                        storeId: $inv->store_id,
+                        productId: $inv->product_id,
+                        quantityDelta: $delta,
+                        type: 'reconciliation',
+                        remarks: "Audit reconciliation: set verified physical stock count to {$customCount}",
+                        performedBy: Auth::id() ?? 1
+                    );
+                }
+            });
+
+            return back()->with('success', 'Item reconciled and balanced successfully!');
+        } catch (\Throwable $e) {
+            return back()->with('error', 'Reconciliation failed: ' . $e->getMessage());
         }
     }
 }

@@ -106,37 +106,44 @@
                             <tr>
                                 <th>Date</th>
                                 <th>Type</th>
-                                <th>Quantity</th>
+                                <th class="text-end">Quantity</th>
+                                <th class="text-end">Balance After</th>
                                 <th>Performed By</th>
                                 <th>Remarks</th>
                             </tr>
                         </thead>
                         <tbody>
                             @forelse($inventory->movements()->with('performer')->latest()->take(10)->get() as $mov)
+                            @php
+                                $badge = match($mov->type) {
+                                    'in' => 'success',
+                                    'out' => 'danger',
+                                    'transfer' => 'info',
+                                    'adjustment' => 'warning',
+                                    'reserve' => 'secondary',
+                                    'release' => 'secondary',
+                                    default => 'secondary'
+                                };
+                                $mQty = (float) $mov->quantity;
+                                $isPos = $mQty > 0;
+                                $isNeg = $mQty < 0;
+                            @endphp
                             <tr>
                                 <td>{{ $mov->created_at->format('d M Y H:i') }}</td>
                                 <td>
-                                    @php
-                                        $badge = match($mov->type) {
-                                            'in' => 'success',
-                                            'out' => 'danger',
-                                            'transfer' => 'info',
-                                            'adjustment' => 'warning',
-                                            'reserve' => 'secondary',
-                                            'release' => 'secondary',
-                                            default => 'secondary'
-                                        };
-                                    @endphp
                                     <span class="badge bg-{{ $badge }}">{{ strtoupper($mov->type) }}</span>
                                 </td>
-                                <td class="fw-bold {{ in_array($mov->type, ['in','adjustment','release']) ? 'text-success' : 'text-danger' }}">
-                                    {{ in_array($mov->type, ['in','adjustment','release']) ? '+' : '-' }}{{ number_format($mov->quantity, 3) }}
+                                <td class="text-end font-monospace fw-bold {{ $isPos ? 'text-success' : ($isNeg ? 'text-danger' : 'text-secondary') }}">
+                                    {{ $isPos ? '+' : ($isNeg ? '-' : '') }}{{ number_format(abs($mQty), 3) }}
                                 </td>
-                                <td>{{ $mov->performer->name }}</td>
+                                <td class="text-end font-monospace fw-semibold text-dark">
+                                    {{ $mov->balance_after !== null ? number_format((float)$mov->balance_after, 3) : '—' }}
+                                </td>
+                                <td>{{ $mov->performer?->name ?? 'System' }}</td>
                                 <td class="text-muted small text-truncate" style="max-width:200px;">{{ $mov->remarks }}</td>
                             </tr>
                             @empty
-                            <tr><td colspan="5" class="text-center text-muted py-4">No movements recorded yet.</td></tr>
+                            <tr><td colspan="6" class="text-center text-muted py-4">No movements recorded yet.</td></tr>
                             @endforelse
                         </tbody>
                     </table>
@@ -158,19 +165,24 @@
                 </div>
                 <div class="modal-body">
                     <div class="alert alert-info">
+                        <strong>Current On-Hand:</strong> {{ number_format($inventory->quantity_on_hand, 3) }} {{ $inventory->product->unit }}<br>
                         <strong>Current Available:</strong> {{ number_format($inventory->quantity_available, 3) }} {{ $inventory->product->unit }}
+                        @if($inventory->quantity_reserved > 0)
+                            <br><small class="text-muted">({{ number_format($inventory->quantity_reserved, 3) }} currently assigned/reserved to staff)</small>
+                        @endif
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Adjustment Type</label>
                         <select name="type" class="form-select" required>
-                            <option value="in">Stock In (Add)</option>
-                            <option value="out">Stock Out (Deduct)</option>
-                            <option value="adjustment">Correction</option>
+                            <option value="in">Stock In (+ Add)</option>
+                            <option value="out">Stock Out (- Deduct)</option>
+                            <option value="adjustment">Correction (Set exact count)</option>
                         </select>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Quantity to adjust ({{ $inventory->product->unit }})</label>
-                        <input type="number" step="0.001" min="0.001" name="quantity" class="form-control" required>
+                        <label class="form-label">Quantity ({{ $inventory->product->unit }})</label>
+                        <input type="number" step="0.001" min="0" name="quantity" class="form-control" required>
+                        <div class="form-text">For In/Out: amount to add or deduct. For Correction: new total on-hand count.</div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Unit Cost (ETB)</label>

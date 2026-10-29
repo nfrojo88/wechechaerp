@@ -13,15 +13,31 @@ class InventoryMovement extends Model
         'inventory_id',
         'type',
         'quantity',
+        'balance_before',
+        'balance_after',
         'reference_type',
         'reference_id',
         'performed_by',
         'remarks',
+        'notes',
     ];
 
     protected $casts = [
-        'quantity' => 'decimal:3',
+        'quantity'       => 'decimal:3',
+        'balance_before' => 'decimal:3',
+        'balance_after'  => 'decimal:3',
     ];
+
+    protected static function booted()
+    {
+        static::updating(function () {
+            throw new \RuntimeException("InventoryMovement ledger is append-only: updates are strictly prohibited.");
+        });
+
+        static::deleting(function () {
+            throw new \RuntimeException("InventoryMovement ledger is append-only: deletes are strictly prohibited.");
+        });
+    }
 
     public function inventory()
     {

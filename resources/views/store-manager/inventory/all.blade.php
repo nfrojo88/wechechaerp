@@ -40,6 +40,9 @@
             @endif
         </div>
         <div class="d-flex gap-2">
+            <a href="{{ route('store-manager.inventory.reconciliation') }}" class="btn btn-outline-warning fw-semibold shadow-xs">
+                <i class="fas fa-scale-balanced me-1"></i> Audit &amp; Reconciliation
+            </a>
             <div class="dropdown">
                 <button class="btn btn-outline-danger fw-semibold dropdown-toggle shadow-xs" type="button" id="exportPdfDropdown" data-bs-toggle="dropdown" aria-expanded="false">
                     <i class="fas fa-file-pdf me-1 text-danger"></i> Export to PDF

@@ -244,7 +244,7 @@ class FixedAsset extends Model
                 $product = Product::create($productData);
             }
 
-            // 2. Sync Store Inventory (Inventory)
+            // 2. Ensure Store Inventory (Inventory) record exists without overwriting master balance
             $storeId = $this->store_id;
             if (!$storeId) {
                 $defaultStore = Store::where('is_active', true)->first();
@@ -252,14 +252,14 @@ class FixedAsset extends Model
             }
 
             if ($storeId && $product) {
-                Inventory::updateOrCreate(
+                Inventory::firstOrCreate(
                     [
                         'store_id'   => $storeId,
                         'product_id' => $product->id,
                     ],
                     [
-                        'quantity_on_hand'  => $inStoreCount + $assignedCount,
-                        'quantity_reserved' => $assignedCount,
+                        'quantity_on_hand'  => 0,
+                        'quantity_reserved' => 0,
                         'unit_cost'         => $this->unit_cost ?? 0.00,
                         'min_stock'         => 1,
                         'last_movement_at'  => now(),
@@ -550,19 +550,17 @@ class FixedAsset extends Model
                             }
                         }
 
-                        // Ensure units count matches inventory quantity
+                        // Fixed assets total_quantity reflects inventory balance as master
+                        $fixedAsset->total_quantity = $storeStockQty;
+                        $fixedAsset->saveQuietly();
+
                         $currentUnitsCount = $fixedAsset->units()->count();
-                        if ($currentUnitsCount < $targetQty) {
-                            $fixedAsset->total_quantity = $targetQty;
-                            $fixedAsset->saveQuietly();
+                        if ($currentUnitsCount < $storeStockQty) {
                             $fixedAsset->generateUnitsToMatchQuantity([
                                 'purchase_price'   => $unitCost,
                                 'current_location' => $storeName,
                                 'condition'        => $prod->equipment_condition ?: 'good',
                             ]);
-                        } else {
-                            $fixedAsset->total_quantity = max($currentUnitsCount, $targetQty);
-                            $fixedAsset->saveQuietly();
                         }
 
                         // Keep in_store units current_location updated with this store's name

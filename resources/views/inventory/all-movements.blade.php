@@ -109,6 +109,8 @@
                         <th style="min-width: 200px;">Product</th>
                         <th>Type</th>
                         <th class="text-end" style="min-width: 120px;">Quantity</th>
+                        <th class="text-end" style="min-width: 120px;">Balance Before</th>
+                        <th class="text-end" style="min-width: 120px;">Balance After</th>
                         <th>Reference</th>
                         <th>Performed By</th>
                         <th style="min-width: 220px;">Remarks</th>
@@ -118,17 +120,18 @@
                     @forelse($movements as $mov)
                     @php
                         $badge = match(strtolower($mov->type ?? '')) {
-                            'in', 'purchase_intake', 'grn' => 'success',
-                            'out', 'dispatch', 'issue' => 'danger',
+                            'in', 'purchase_intake', 'grn', 'fa_register' => 'success',
+                            'out', 'dispatch', 'issue', 'fa_damaged' => 'danger',
                             'transfer', 'transfer_in', 'transfer_out' => 'info',
                             'adjustment' => 'warning',
-                            'reserve' => 'secondary',
-                            'release' => 'primary',
+                            'reserve', 'fa_assign' => 'secondary',
+                            'release', 'fa_return' => 'primary',
                             default => 'secondary'
                         };
 
-                        $isPositive = in_array(strtolower($mov->type ?? ''), ['in', 'purchase_intake', 'grn', 'adjustment', 'release']);
                         $qty = (float) $mov->quantity;
+                        $isPositive = $qty > 0;
+                        $isNegative = $qty < 0;
                         $storeName = $mov->inventory?->store?->name ?? 'N/A';
                         $productName = $mov->inventory?->product?->name ?? 'N/A';
                         $skuCode = $mov->inventory?->product?->sku ?: ($mov->inventory?->product?->code ?: null);
@@ -151,9 +154,15 @@
                         <td>
                             <span class="badge bg-{{ $badge }} text-uppercase">{{ $mov->type ?? 'MOVEMENT' }}</span>
                         </td>
-                        <td class="text-end font-monospace fw-bold fs-6 {{ $isPositive ? 'text-success' : 'text-danger' }}">
-                            {{ $isPositive ? '+' : '-' }}{{ number_format(abs($qty), 3) }}
+                        <td class="text-end font-monospace fw-bold fs-6 {{ $isPositive ? 'text-success' : ($isNegative ? 'text-danger' : 'text-secondary') }}">
+                            {{ $isPositive ? '+' : ($isNegative ? '-' : '') }}{{ number_format(abs($qty), 3) }}
                             <small class="text-muted fw-normal ms-1">{{ $unit }}</small>
+                        </td>
+                        <td class="text-end font-monospace text-muted">
+                            {{ $mov->balance_before !== null ? number_format((float)$mov->balance_before, 3) : '—' }}
+                        </td>
+                        <td class="text-end font-monospace fw-semibold text-dark">
+                            {{ $mov->balance_after !== null ? number_format((float)$mov->balance_after, 3) : '—' }}
                         </td>
                         <td>
                             @if($mov->reference_type && $mov->reference_id)
@@ -173,7 +182,7 @@
                     </tr>
                     @empty
                     <tr>
-                        <td colspan="8" class="text-center text-muted py-5">
+                        <td colspan="10" class="text-center text-muted py-5">
                             <i class="fa-solid fa-arrow-right-arrow-left fs-2 mb-2 d-block text-secondary"></i>
                             {{ !empty($isSiteEngineer) ? 'No stock movements recorded for your assigned site store(s).' : 'No stock movements found.' }}
                         </td>

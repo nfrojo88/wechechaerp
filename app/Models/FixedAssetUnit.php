@@ -5,6 +5,8 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\DB;
+use App\Services\InventoryService;
 
 class FixedAssetUnit extends Model
 {
@@ -122,24 +124,48 @@ class FixedAssetUnit extends Model
      */
     public function assignToEmployee(int $employeeId, ?int $assignedByUserId = null, ?string $notes = null): bool
     {
-        $this->update([
-            'status'                  => self::STATUS_ASSIGNED,
-            'assigned_to_employee_id' => $employeeId,
-            'assigned_date'           => now(),
-            'notes'                   => $notes ? ($this->notes ? $this->notes . "\n" . $notes : $notes) : $this->notes,
-        ]);
+        return DB::transaction(function () use ($employeeId, $assignedByUserId, $notes) {
+            $parent = $this->parentAsset;
+            if ($parent) {
+                $product = $parent->syncWithCatalogAndInventory();
+                $storeId = $parent->store_id ?: (\App\Models\Store::where('is_active', true)->first()?->id ?? 1);
 
-        FixedAssetAssignment::createSafely([
-            'fixed_asset_unit_id'    => $this->id,
-            'employee_id'            => $employeeId,
-            'action'                 => 'assigned',
-            'assigned_date'          => now(),
-            'condition_on_assignment'=> $this->condition ?: 'good',
-            'assigned_by'            => $assignedByUserId ?: auth()->id(),
-            'notes'                  => $notes,
-        ]);
+                if ($product && $storeId) {
+                    $inventoryService = app(InventoryService::class);
+                    $inventoryService->applyMovement(
+                        storeId: $storeId,
+                        productId: $product->id,
+                        quantityDelta: 0.0,
+                        type: 'fa_assign',
+                        referenceType: self::class,
+                        referenceId: $this->id,
+                        remarks: "Assigned unit {$this->unit_code} to employee #{$employeeId}" . ($notes ? " ({$notes})" : ""),
+                        performedBy: $assignedByUserId ?: auth()->id() ?: 1,
+                        unitCost: (float) ($this->purchase_price ?: $parent->unit_cost ?: 0),
+                        reservedDelta: 1.0
+                    );
+                }
+            }
 
-        return true;
+            $this->update([
+                'status'                  => self::STATUS_ASSIGNED,
+                'assigned_to_employee_id' => $employeeId,
+                'assigned_date'           => now(),
+                'notes'                   => $notes ? ($this->notes ? $this->notes . "\n" . $notes : $notes) : $this->notes,
+            ]);
+
+            FixedAssetAssignment::createSafely([
+                'fixed_asset_unit_id'    => $this->id,
+                'employee_id'            => $employeeId,
+                'action'                 => 'assigned',
+                'assigned_date'          => now(),
+                'condition_on_assignment'=> $this->condition ?: 'good',
+                'assigned_by'            => $assignedByUserId ?: auth()->id() ?: 1,
+                'notes'                  => $notes,
+            ]);
+
+            return true;
+        });
     }
 
     /**
@@ -147,31 +173,64 @@ class FixedAssetUnit extends Model
      */
     public function returnToStore(?int $receivedByUserId = null, ?string $notes = null, string $condition = 'good'): bool
     {
-        $previousEmployeeId = $this->assigned_to_employee_id;
+        return DB::transaction(function () use ($receivedByUserId, $notes, $condition) {
+            $previousEmployeeId = $this->assigned_to_employee_id;
+            $wasAssigned = ($this->status === self::STATUS_ASSIGNED || !empty($previousEmployeeId));
+            $isDamaged = in_array(strtolower($condition), ['damaged', 'needs_repair']);
+            $newStatus = $isDamaged ? self::STATUS_MAINTENANCE : self::STATUS_IN_STORE;
 
-        $this->update([
-            'status'                  => self::STATUS_IN_STORE,
-            'assigned_to_employee_id' => null,
-            'assigned_date'           => null,
-            'condition'               => $condition,
-            'current_location'        => $this->parentAsset->store->name ?? 'Main Store',
-            'notes'                   => $notes ? ($this->notes ? $this->notes . "\n" . $notes : $notes) : $this->notes,
-        ]);
+            $parent = $this->parentAsset;
+            if ($parent) {
+                $product = $parent->syncWithCatalogAndInventory();
+                $storeId = $parent->store_id ?: (\App\Models\Store::where('is_active', true)->first()?->id ?? 1);
 
-        if ($previousEmployeeId) {
-            FixedAssetAssignment::createSafely([
-                'fixed_asset_unit_id'    => $this->id,
-                'employee_id'            => $previousEmployeeId,
-                'action'                 => 'returned',
-                'assigned_date'          => $this->assigned_date ?: now(),
-                'returned_date'          => now(),
-                'condition_on_return'    => $condition,
-                'received_by'            => $receivedByUserId ?: auth()->id(),
-                'notes'                  => $notes,
+                if ($product && $storeId) {
+                    $inventoryService = app(InventoryService::class);
+                    $qtyDelta = $isDamaged ? -1.0 : 0.0;
+                    $resDelta = $wasAssigned ? -1.0 : 0.0;
+                    $movType  = $isDamaged ? 'fa_damaged' : 'fa_return';
+
+                    if ($qtyDelta != 0.0 || $resDelta != 0.0) {
+                        $inventoryService->applyMovement(
+                            storeId: $storeId,
+                            productId: $product->id,
+                            quantityDelta: $qtyDelta,
+                            type: $movType,
+                            referenceType: self::class,
+                            referenceId: $this->id,
+                            remarks: "Unit {$this->unit_code} returned (" . ucfirst($condition) . ")" . ($notes ? " - {$notes}" : ""),
+                            performedBy: $receivedByUserId ?: auth()->id() ?: 1,
+                            unitCost: (float) ($this->purchase_price ?: $parent->unit_cost ?: 0),
+                            reservedDelta: $resDelta
+                        );
+                    }
+                }
+            }
+
+            $this->update([
+                'status'                  => $newStatus,
+                'assigned_to_employee_id' => null,
+                'assigned_date'           => null,
+                'condition'               => $condition,
+                'current_location'        => $parent?->store?->name ?? 'Main Store',
+                'notes'                   => $notes ? ($this->notes ? $this->notes . "\n" . $notes : $notes) : $this->notes,
             ]);
-        }
 
-        return true;
+            if ($previousEmployeeId) {
+                FixedAssetAssignment::createSafely([
+                    'fixed_asset_unit_id'    => $this->id,
+                    'employee_id'            => $previousEmployeeId,
+                    'action'                 => 'returned',
+                    'assigned_date'          => $this->assigned_date ?: now(),
+                    'returned_date'          => now(),
+                    'condition_on_return'    => $condition,
+                    'received_by'            => $receivedByUserId ?: auth()->id() ?: 1,
+                    'notes'                  => $notes,
+                ]);
+            }
+
+            return true;
+        });
     }
 
     // ─── Accessors ────────────────────────────────────────────────────────────

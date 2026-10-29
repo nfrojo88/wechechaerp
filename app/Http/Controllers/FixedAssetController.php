@@ -217,9 +217,24 @@ class FixedAssetController extends Controller
                 ]);
             }
 
-            DB::commit();
+            $product = $fixedAsset->syncWithCatalogAndInventory();
+            $storeId = $fixedAsset->store_id ?: (Store::where('is_active', true)->first()?->id ?? 1);
 
-            $fixedAsset->syncWithCatalogAndInventory();
+            if ($product && $storeId) {
+                app(\App\Services\InventoryService::class)->applyMovement(
+                    storeId: $storeId,
+                    productId: $product->id,
+                    quantityDelta: (float) $qty,
+                    type: 'fa_register',
+                    referenceType: FixedAsset::class,
+                    referenceId: $fixedAsset->id,
+                    remarks: "Initial registration of {$qty} unit(s) for Fixed Asset '{$fixedAsset->name}'",
+                    performedBy: auth()->id() ?: 1,
+                    unitCost: (float) ($validated['unit_cost'] ?? 0.00)
+                );
+            }
+
+            DB::commit();
 
             return redirect()->route('store-manager.fixed-assets.index')
                 ->with('success', "Fixed Asset \"{$fixedAsset->name}\" created successfully with {$qty} unit codes ({$prefix}-1 to {$prefix}-{$qty}), and synced to Material Catalog & Store Inventory!");
@@ -302,6 +317,22 @@ class FixedAssetController extends Controller
                         'created_by'      => auth()->id(),
                     ]);
                 }
+
+                $product = $fixedAsset->syncWithCatalogAndInventory();
+                $storeId = $fixedAsset->store_id ?: (Store::where('is_active', true)->first()?->id ?? 1);
+                if ($product && $storeId) {
+                    app(\App\Services\InventoryService::class)->applyMovement(
+                        storeId: $storeId,
+                        productId: $product->id,
+                        quantityDelta: (float) $needed,
+                        type: 'fa_register',
+                        referenceType: FixedAsset::class,
+                        referenceId: $fixedAsset->id,
+                        remarks: "Asset quantity increased: added {$needed} unit(s)",
+                        performedBy: auth()->id() ?: 1,
+                        unitCost: (float) ($validated['unit_cost'] ?? $fixedAsset->unit_cost ?? 0.00)
+                    );
+                }
             }
             // Scenario 2: Quantity Decreased (e.g. 10 -> 8)
             elseif ($newQty < $currentUnitsCount) {
@@ -309,9 +340,18 @@ class FixedAssetController extends Controller
                 $removeIds = $request->input('remove_unit_ids', []);
 
                 if (count($removeIds) < $unitsToRemoveCount) {
-                    return back()->withInput()->withErrors([
-                        'total_quantity' => "To decrease quantity from {$currentUnitsCount} to {$newQty}, you must explicitly select {$unitsToRemoveCount} unassigned unit(s) to remove."
-                    ]);
+                    $availableUnitIds = $fixedAsset->units()
+                        ->where('status', FixedAssetUnit::STATUS_IN_STORE)
+                        ->limit($unitsToRemoveCount)
+                        ->pluck('id')
+                        ->toArray();
+
+                    if (count($availableUnitIds) < $unitsToRemoveCount) {
+                        return back()->withInput()->withErrors([
+                            'total_quantity' => "To decrease quantity from {$currentUnitsCount} to {$newQty}, there must be {$unitsToRemoveCount} unassigned unit(s) available in store."
+                        ]);
+                    }
+                    $removeIds = $availableUnitIds;
                 }
 
                 // Verify that none of the selected units are currently assigned
@@ -322,14 +362,38 @@ class FixedAssetController extends Controller
 
                 if ($assignedCheck) {
                     return back()->withInput()->withErrors([
-                        'total_quantity' => "Cannot remove unit {$assignedCheck->unit_code} because it is currently assigned to an employee. Return it first."
+                        'total_quantity' => "Cannot dispose unit {$assignedCheck->unit_code} because it is currently assigned to an employee. Return it first."
                     ]);
                 }
 
-                // Delete the selected units
-                FixedAssetUnit::whereIn('id', array_slice($removeIds, 0, $unitsToRemoveCount))
-                    ->where('fixed_asset_id', $fixedAsset->id)
-                    ->delete();
+                $targetIds = array_slice($removeIds, 0, $unitsToRemoveCount);
+
+                // DO NOT DELETE: mark as disposed, keep records!
+                foreach ($targetIds as $idToDispose) {
+                    $u = FixedAssetUnit::find($idToDispose);
+                    if ($u) {
+                        $historyNote = "[" . now()->format('Y-m-d H:i') . "] Marked as disposed due to asset quantity reduction from {$currentUnitsCount} to {$newQty}.";
+                        $u->update([
+                            'status' => FixedAssetUnit::STATUS_DISPOSED,
+                            'notes'  => $u->notes ? $u->notes . "\n" . $historyNote : $historyNote,
+                        ]);
+                    }
+                }
+
+                $product = $fixedAsset->syncWithCatalogAndInventory();
+                $storeId = $fixedAsset->store_id ?: (Store::where('is_active', true)->first()?->id ?? 1);
+                if ($product && $storeId) {
+                    app(\App\Services\InventoryService::class)->applyMovement(
+                        storeId: $storeId,
+                        productId: $product->id,
+                        quantityDelta: -(float) $unitsToRemoveCount,
+                        type: 'fa_disposed',
+                        referenceType: FixedAsset::class,
+                        referenceId: $fixedAsset->id,
+                        remarks: "Asset quantity decreased: disposed {$unitsToRemoveCount} unit(s)",
+                        performedBy: auth()->id() ?: 1
+                    );
+                }
             }
 
             $fixedAsset->update([
@@ -358,19 +422,10 @@ class FixedAssetController extends Controller
     }
 
     /**
-     * Add a single extra unit — Enforces Strict Quantity Lock Rule.
+     * Add a single extra unit — registers new unit into Store Inventory.
      */
     public function storeExtraUnit(Request $request, FixedAsset $fixedAsset)
     {
-        $currentCount = $fixedAsset->units()->count();
-
-        // ── STRICT RULE: Quantity Lock ───────────────────────────────────────
-        if ($currentCount >= $fixedAsset->total_quantity) {
-            return back()->withErrors([
-                'error' => "Cannot add unit — quantity limit reached ({$currentCount}/{$fixedAsset->total_quantity}). Please update the asset quantity first in order to generate more unit codes."
-            ]);
-        }
-
         $validated = $request->validate([
             'unit_code'      => 'nullable|string|max:50|unique:fixed_asset_units,unit_code',
             'brand'          => 'nullable|string|max:100',
@@ -385,45 +440,69 @@ class FixedAssetController extends Controller
             'notes'          => 'nullable|string',
         ]);
 
-        $maxSeq = (int) $fixedAsset->units()->max('sequence_number') + 1;
-        $unitCode = $validated['unit_code'] ?? $fixedAsset->generateUnitCode($maxSeq);
+        try {
+            return DB::transaction(function() use ($request, $fixedAsset, $validated) {
+                $maxSeq = (int) $fixedAsset->units()->max('sequence_number') + 1;
+                $unitCode = $validated['unit_code'] ?? $fixedAsset->generateUnitCode($maxSeq);
 
-        while (FixedAssetUnit::where('unit_code', $unitCode)->exists()) {
-            $maxSeq++;
-            $unitCode = $fixedAsset->generateUnitCode($maxSeq);
+                while (FixedAssetUnit::where('unit_code', $unitCode)->exists()) {
+                    $maxSeq++;
+                    $unitCode = $fixedAsset->generateUnitCode($maxSeq);
+                }
+
+                $specs = $validated['specifications'] ?? '';
+                $specParts = [];
+                if ($request->filled('cpu')) $specParts[] = 'CPU: ' . $request->input('cpu');
+                if ($request->filled('ram')) $specParts[] = 'RAM: ' . $request->input('ram');
+                if ($request->filled('storage')) $specParts[] = 'Storage: ' . $request->input('storage');
+                if ($request->filled('os')) $specParts[] = 'OS: ' . $request->input('os');
+                if (!empty($specParts)) {
+                    $specs = implode(', ', $specParts) . ($specs ? " | {$specs}" : '');
+                }
+
+                $unit = FixedAssetUnit::create([
+                    'fixed_asset_id'  => $fixedAsset->id,
+                    'unit_code'       => $unitCode,
+                    'sequence_number' => $maxSeq,
+                    'status'          => FixedAssetUnit::STATUS_IN_STORE,
+                    'condition'       => $validated['condition'],
+                    'brand'           => $validated['brand'] ?? null,
+                    'model'           => $validated['model'] ?? null,
+                    'serial_number'   => $validated['serial_number'] ?? null,
+                    'plate_number'    => $validated['plate_number'] ?? null,
+                    'chassis_number'  => $validated['chassis_number'] ?? null,
+                    'engine_number'   => $validated['engine_number'] ?? null,
+                    'year'            => $validated['year'] ?? null,
+                    'specifications'  => $specs ?: null,
+                    'current_location'=> $fixedAsset->store ? $fixedAsset->store->name : 'Main Store',
+                    'purchase_price'  => $fixedAsset->unit_cost,
+                    'notes'           => $validated['notes'] ?? null,
+                    'created_by'      => auth()->id(),
+                ]);
+
+                $fixedAsset->increment('total_quantity');
+
+                $product = $fixedAsset->syncWithCatalogAndInventory();
+                $storeId = $fixedAsset->store_id ?: (Store::where('is_active', true)->first()?->id ?? 1);
+                if ($product && $storeId) {
+                    app(\App\Services\InventoryService::class)->applyMovement(
+                        storeId: $storeId,
+                        productId: $product->id,
+                        quantityDelta: 1.0,
+                        type: 'fa_register',
+                        referenceType: FixedAssetUnit::class,
+                        referenceId: $unit->id,
+                        remarks: "Registered unit {$unitCode} for Fixed Asset '{$fixedAsset->name}'",
+                        performedBy: auth()->id() ?: 1,
+                        unitCost: (float) ($fixedAsset->unit_cost ?? 0.00)
+                    );
+                }
+
+                return back()->with('success', "Unit {$unitCode} created and registered to Store Inventory successfully!");
+            });
+        } catch (\Throwable $e) {
+            return back()->withInput()->withErrors(['error' => 'Failed to add unit: ' . $e->getMessage()]);
         }
-
-        $specs = $validated['specifications'] ?? '';
-        $specParts = [];
-        if ($request->filled('cpu')) $specParts[] = 'CPU: ' . $request->input('cpu');
-        if ($request->filled('ram')) $specParts[] = 'RAM: ' . $request->input('ram');
-        if ($request->filled('storage')) $specParts[] = 'Storage: ' . $request->input('storage');
-        if ($request->filled('os')) $specParts[] = 'OS: ' . $request->input('os');
-        if (!empty($specParts)) {
-            $specs = implode(', ', $specParts) . ($specs ? " | {$specs}" : '');
-        }
-
-        FixedAssetUnit::create([
-            'fixed_asset_id'  => $fixedAsset->id,
-            'unit_code'       => $unitCode,
-            'sequence_number' => $maxSeq,
-            'status'          => FixedAssetUnit::STATUS_IN_STORE,
-            'condition'       => $validated['condition'],
-            'brand'           => $validated['brand'] ?? null,
-            'model'           => $validated['model'] ?? null,
-            'serial_number'   => $validated['serial_number'] ?? null,
-            'plate_number'    => $validated['plate_number'] ?? null,
-            'chassis_number'  => $validated['chassis_number'] ?? null,
-            'engine_number'   => $validated['engine_number'] ?? null,
-            'year'            => $validated['year'] ?? null,
-            'specifications'  => $specs ?: null,
-            'current_location'=> $fixedAsset->store ? $fixedAsset->store->name : 'Main Store',
-            'purchase_price'  => $fixedAsset->unit_cost,
-            'notes'           => $validated['notes'] ?? null,
-            'created_by'      => auth()->id(),
-        ]);
-
-        return back()->with('success', "Unit {$unitCode} created successfully ({$fixedAsset->units()->count()}/{$fixedAsset->total_quantity})!");
     }
 
     /**
@@ -449,38 +528,110 @@ class FixedAssetController extends Controller
             'notes'           => 'nullable|string',
         ]);
 
-        // If status changed away from assigned, remove employee link
-        if ($validated['status'] !== FixedAssetUnit::STATUS_ASSIGNED && $unit->assigned_to_employee_id) {
-            $unit->returnToStore(auth()->id(), 'Status changed to ' . $validated['status'], $validated['condition']);
+        $oldStatus = $unit->status;
+        $newStatus = $validated['status'];
+
+        try {
+            DB::transaction(function() use ($unit, $validated, $oldStatus, $newStatus) {
+                // If status changed away from assigned, return to store first
+                if ($newStatus !== FixedAssetUnit::STATUS_ASSIGNED && $unit->assigned_to_employee_id) {
+                    $unit->returnToStore(auth()->id(), 'Status changed to ' . $newStatus, $validated['condition']);
+                }
+
+                // If in_store changed to maintenance or disposed, decrease available stock
+                if ($oldStatus === FixedAssetUnit::STATUS_IN_STORE && in_array($newStatus, [FixedAssetUnit::STATUS_DISPOSED, FixedAssetUnit::STATUS_MAINTENANCE])) {
+                    $parent = $unit->parentAsset;
+                    if ($parent) {
+                        $product = $parent->syncWithCatalogAndInventory();
+                        $storeId = $parent->store_id ?: (Store::where('is_active', true)->first()?->id ?? 1);
+                        if ($product && $storeId) {
+                            app(\App\Services\InventoryService::class)->applyMovement(
+                                storeId: $storeId,
+                                productId: $product->id,
+                                quantityDelta: -1.0,
+                                type: $newStatus === FixedAssetUnit::STATUS_DISPOSED ? 'fa_disposed' : 'fa_damaged',
+                                referenceType: FixedAssetUnit::class,
+                                referenceId: $unit->id,
+                                remarks: "Unit {$unit->unit_code} status updated to {$newStatus}",
+                                performedBy: auth()->id() ?: 1
+                            );
+                        }
+                    }
+                }
+                // If previously disposed or maintenance changed back to in_store, return to available stock
+                elseif (in_array($oldStatus, [FixedAssetUnit::STATUS_DISPOSED, FixedAssetUnit::STATUS_MAINTENANCE]) && $newStatus === FixedAssetUnit::STATUS_IN_STORE) {
+                    $parent = $unit->parentAsset;
+                    if ($parent) {
+                        $product = $parent->syncWithCatalogAndInventory();
+                        $storeId = $parent->store_id ?: (Store::where('is_active', true)->first()?->id ?? 1);
+                        if ($product && $storeId) {
+                            app(\App\Services\InventoryService::class)->applyMovement(
+                                storeId: $storeId,
+                                productId: $product->id,
+                                quantityDelta: 1.0,
+                                type: 'fa_repaired',
+                                referenceType: FixedAssetUnit::class,
+                                referenceId: $unit->id,
+                                remarks: "Unit {$unit->unit_code} returned to service (in store)",
+                                performedBy: auth()->id() ?: 1
+                            );
+                        }
+                    }
+                }
+
+                $unit->update($validated);
+            });
+
+            return back()->with('success', "Unit \"{$unit->unit_code}\" specifications updated successfully!");
+        } catch (\Throwable $e) {
+            return back()->withInput()->withErrors(['error' => 'Update failed: ' . $e->getMessage()]);
         }
-
-        $unit->update($validated);
-
-        return back()->with('success', "Unit \"{$unit->unit_code}\" specifications updated successfully!");
     }
 
     /**
-     * Delete an individual unit and decrement total_quantity.
+     * Mark an individual unit as disposed (Never delete records).
      */
     public function destroyUnit(FixedAssetUnit $unit)
     {
         if ($unit->status === FixedAssetUnit::STATUS_ASSIGNED) {
             return back()->withErrors([
-                'error' => "Cannot delete unit {$unit->unit_code} because it is currently assigned to an employee. Please return the unit to store first."
+                'error' => "Cannot dispose unit {$unit->unit_code} because it is currently assigned to an employee. Please return the unit to store first."
             ]);
         }
 
         $parent = $unit->parentAsset;
         $unitCode = $unit->unit_code;
 
-        DB::transaction(function() use ($unit, $parent) {
-            $unit->delete();
-            if ($parent && $parent->total_quantity > 1) {
-                $parent->decrement('total_quantity');
-            }
-        });
+        try {
+            DB::transaction(function() use ($unit, $parent, $unitCode) {
+                $historyNote = "[" . now()->format('Y-m-d H:i') . "] Marked as disposed.";
+                $unit->update([
+                    'status' => FixedAssetUnit::STATUS_DISPOSED,
+                    'notes'  => $unit->notes ? $unit->notes . "\n" . $historyNote : $historyNote,
+                ]);
 
-        return back()->with('success', "Unit {$unitCode} removed and total quantity adjusted to {$parent->total_quantity}.");
+                if ($parent) {
+                    $product = $parent->syncWithCatalogAndInventory();
+                    $storeId = $parent->store_id ?: (Store::where('is_active', true)->first()?->id ?? 1);
+                    if ($product && $storeId) {
+                        app(\App\Services\InventoryService::class)->applyMovement(
+                            storeId: $storeId,
+                            productId: $product->id,
+                            quantityDelta: -1.0,
+                            type: 'fa_disposed',
+                            referenceType: FixedAssetUnit::class,
+                            referenceId: $unit->id,
+                            remarks: "Unit {$unitCode} marked as disposed",
+                            performedBy: auth()->id() ?: 1
+                        );
+                    }
+                }
+            });
+
+            return back()->with('success', "Unit {$unitCode} marked as disposed and store stock updated.");
+        } catch (\Throwable $e) {
+            return back()->withErrors(['error' => 'Cannot dispose unit: ' . $e->getMessage()]);
+        }
     }
 
     /**
@@ -733,13 +884,13 @@ class FixedAssetController extends Controller
             'notes'     => 'nullable|string',
         ]);
 
-        $unit->returnToStore(auth()->id(), $validated['notes'] ?? null, $validated['condition']);
+        try {
+            $unit->returnToStore(auth()->id(), $validated['notes'] ?? null, $validated['condition']);
 
-        if ($validated['condition'] === 'damaged' || $validated['condition'] === 'needs_repair') {
-            $unit->update(['status' => FixedAssetUnit::STATUS_MAINTENANCE]);
+            return back()->with('success', "Asset {$unit->unit_code} successfully returned to store!");
+        } catch (\Throwable $e) {
+            return back()->withErrors(['error' => 'Failed to return unit: ' . $e->getMessage()]);
         }
-
-        return back()->with('success', "Asset {$unit->unit_code} successfully returned to store!");
     }
 
     /**
@@ -757,9 +908,14 @@ class FixedAssetController extends Controller
         }
 
         $employee = Employee::findOrFail($validated['employee_id']);
-        $unit->assignToEmployee($employee->id, auth()->id(), $validated['notes'] ?? null);
 
-        return back()->with('success', "Unit {$unit->unit_code} assigned to {$employee->full_name} successfully!");
+        try {
+            $unit->assignToEmployee($employee->id, auth()->id(), $validated['notes'] ?? null);
+
+            return back()->with('success', "Unit {$unit->unit_code} assigned to {$employee->full_name} successfully!");
+        } catch (\Throwable $e) {
+            return back()->withErrors(['error' => 'Cannot assign unit: ' . $e->getMessage()]);
+        }
     }
 
     /**

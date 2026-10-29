@@ -168,39 +168,50 @@ class InventoryController extends Controller
         $this->authorize('update', $inventory);
 
         $validated = $request->validate([
-            'type'     => ['required', 'in:in,out,adjustment'],
-            'quantity' => ['required', 'numeric', 'min:0.001'],
-            'unit_cost'=> ['nullable', 'numeric', 'min:0'],
-            'remarks'  => ['nullable', 'string', 'max:500'],
+            'type'      => ['required', 'in:in,out,adjustment'],
+            'quantity'  => ['required', 'numeric', 'min:0'],
+            'unit_cost' => ['nullable', 'numeric', 'min:0'],
+            'remarks'   => ['nullable', 'string', 'max:500'],
         ]);
 
+        $user = auth()->user();
+        if (!$user->isGlobalAdmin() && !$user->hasAnyRole(['admin', 'global_admin', 'super_admin', 'store_manager', 'Store Manager']) && $user->hasAnyRole(['store_keeper', 'Store Keeper'])) {
+            $assignedStoreId = $user->store_id ?? $user->store?->id ?? Store::where('manager_id', $user->id)->value('id');
+            if ($assignedStoreId && (int)$assignedStoreId !== (int)$inventory->store_id) {
+                return redirect()->back()->withInput()->withErrors(['quantity' => 'You are only authorized to adjust stock for your assigned store.']);
+            }
+        }
+
         try {
-            if ($validated['type'] === 'in' || $validated['type'] === 'adjustment') {
-                $this->inventoryService->stockIn(
-                    $inventory->store_id,
-                    $inventory->product_id,
-                    $validated['quantity'],
-                    $validated['unit_cost'] ?? $inventory->unit_cost ?? 0,
-                    'adjustment',
-                    auth()->id(),
-                    null, null,
-                    $validated['remarks'] ?? null
-                );
-            } else {
-                $this->inventoryService->stockOut(
-                    $inventory->store_id,
-                    $inventory->product_id,
-                    $validated['quantity'],
-                    'adjustment',
-                    auth()->id(),
-                    null, null,
-                    $validated['remarks'] ?? null
-                );
+            $qtyInput = (float) $validated['quantity'];
+            $type = $validated['type'];
+
+            if ($type === 'in') {
+                $delta = $qtyInput;
+                $remarks = $validated['remarks'] ?? "Manual stock addition (+{$qtyInput})";
+            } elseif ($type === 'out') {
+                $delta = -$qtyInput;
+                $remarks = $validated['remarks'] ?? "Manual stock deduction (-{$qtyInput})";
+            } else { // 'adjustment' (Set to target quantity)
+                $currentQty = (float) $inventory->quantity_on_hand;
+                $delta = $qtyInput - $currentQty;
+                $remarks = $validated['remarks'] ?? "Stock count adjustment — set to {$qtyInput}";
             }
 
+            $this->inventoryService->applyMovement(
+                $inventory->store_id,
+                $inventory->product_id,
+                $delta,
+                'adjustment',
+                referenceType: 'manual_adjustment',
+                remarks: $remarks,
+                performedBy: auth()->id(),
+                unitCost: isset($validated['unit_cost']) && $validated['unit_cost'] !== '' ? (float) $validated['unit_cost'] : null
+            );
+
             return redirect()->back()->with('success', 'Inventory adjusted successfully.');
-        } catch (\Exception $e) {
-            return redirect()->back()->withErrors(['quantity' => $e->getMessage()]);
+        } catch (\Throwable $e) {
+            return redirect()->back()->withInput()->withErrors(['quantity' => $e->getMessage()]);
         }
     }
 
@@ -277,62 +288,62 @@ class InventoryController extends Controller
         $count   = 0;
         $results = [];
 
-        \Illuminate\Support\Facades\DB::transaction(function () use ($request, $storeId, &$count, &$results) {
-            foreach ($request->items as $row) {
-                $productId = $row['product_id'];
-                $newQty    = (float) $row['quantity'];
-                $unitCost  = isset($row['unit_cost']) && $row['unit_cost'] !== '' ? (float) $row['unit_cost'] : null;
+        try {
+            \Illuminate\Support\Facades\DB::transaction(function () use ($request, $storeId, &$count, &$results) {
+                foreach ($request->items as $row) {
+                    $productId = (int) $row['product_id'];
+                    $newQty    = (float) $row['quantity'];
+                    $unitCost  = isset($row['unit_cost']) && $row['unit_cost'] !== '' ? (float) $row['unit_cost'] : null;
 
-                $inv = Inventory::firstOrCreate(
-                    ['store_id' => $storeId, 'product_id' => $productId],
-                    ['quantity_on_hand' => 0, 'quantity_reserved' => 0, 'unit_cost' => 0, 'min_stock' => 0]
-                );
+                    $inv = Inventory::where('store_id', $storeId)->where('product_id', $productId)->first();
+                    $currentQty = $inv ? (float) $inv->quantity_on_hand : 0.0;
+                    $diff       = $newQty - $currentQty;
 
-                $currentQty = (float) $inv->quantity_on_hand;
-                $diff       = $newQty - $currentQty;
+                    if (abs($diff) < 0.001) {
+                        $results[] = ['product_id' => $productId, 'status' => 'skipped'];
+                        continue;
+                    }
 
-                if (abs($diff) < 0.001) {
-                    $results[] = ['product_id' => $productId, 'status' => 'skipped'];
-                    continue;
+                    $this->inventoryService->applyMovement(
+                        $storeId,
+                        $productId,
+                        $diff,
+                        'adjustment',
+                        referenceType: 'manual_bulk',
+                        remarks: 'Manual stock count adjustment — set to ' . $newQty,
+                        performedBy: auth()->id(),
+                        unitCost: $unitCost
+                    );
+
+                    $results[] = ['product_id' => $productId, 'status' => 'saved', 'new_qty' => $newQty];
+                    $count++;
                 }
+            });
 
-                \App\Models\InventoryMovement::create([
-                    'inventory_id'   => $inv->id,
-                    'type'           => 'adjustment',
-                    'quantity'       => $diff,
-                    'reference_type' => 'manual_bulk',
-                    'reference_id'   => null,
-                    'performed_by'   => auth()->id(),
-                    'remarks'        => 'Manual stock count adjustment — set to ' . $newQty,
+            // AJAX request → return JSON
+            if ($request->wantsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => true,
+                    'count'   => $count,
+                    'results' => $results,
+                    'message' => $count > 0
+                        ? "$count item(s) updated."
+                        : 'No changes detected.',
                 ]);
-
-                $inv->quantity_on_hand = $newQty;
-                $inv->last_movement_at = now();
-                if ($unitCost !== null) {
-                    $inv->unit_cost = $unitCost;
-                }
-                $inv->save();
-
-                $results[] = ['product_id' => $productId, 'status' => 'saved', 'new_qty' => $newQty];
-                $count++;
             }
-        });
 
-        // AJAX request → return JSON
-        if ($request->wantsJson() || $request->ajax()) {
-            return response()->json([
-                'success' => true,
-                'count'   => $count,
-                'results' => $results,
-                'message' => $count > 0
-                    ? "$count item(s) updated."
-                    : 'No changes detected.',
-            ]);
+            // Regular form POST → redirect
+            return redirect()->back()
+                ->with('success', "Manual adjustment complete — $count product(s) updated.");
+        } catch (\Throwable $e) {
+            if ($request->wantsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $e->getMessage(),
+                ], 422);
+            }
+            return redirect()->back()->withInput()->withErrors(['error' => $e->getMessage()]);
         }
-
-        // Regular form POST → redirect
-        return redirect()->back()
-            ->with('success', "Manual adjustment complete — $count product(s) updated.");
     }
 
     /**
@@ -423,81 +434,55 @@ class InventoryController extends Controller
         }
 
         try {
-            $result = \Illuminate\Support\Facades\DB::transaction(function () use ($storeId, $productId, $qtyInput, $mode, $unitCost, $remarks) {
-                $inv = Inventory::with(['store', 'product'])->firstOrCreate(
-                    ['store_id' => $storeId, 'product_id' => $productId],
-                    ['quantity_on_hand' => 0, 'quantity_reserved' => 0, 'unit_cost' => 0, 'min_stock' => 0]
-                );
+            $inv = Inventory::where('store_id', $storeId)->where('product_id', $productId)->first();
+            $oldQty = $inv ? (float) $inv->quantity_on_hand : 0.0;
 
-                $oldQty = (float) $inv->quantity_on_hand;
+            if ($mode === 'add') {
+                $diff   = $qtyInput;
+                $autoNote = "Manual stock addition (+{$qtyInput})";
+            } elseif ($mode === 'deduct') {
+                $diff   = -$qtyInput;
+                $autoNote = "Manual stock deduction (-{$qtyInput})";
+            } else { // 'set'
+                $diff   = $qtyInput - $oldQty;
+                $autoNote = "Manual stock count adjustment — set to {$qtyInput}";
+            }
 
-                if ($mode === 'add') {
-                    $diff   = $qtyInput;
-                    $newQty = $oldQty + $diff;
-                    $autoNote = "Manual stock addition (+{$qtyInput})";
-                } elseif ($mode === 'deduct') {
-                    if ($qtyInput > $oldQty) {
-                        throw new \Exception("Cannot deduct {$qtyInput}. Only {$oldQty} currently on hand in this store.");
-                    }
-                    $diff   = -$qtyInput;
-                    $newQty = max(0, $oldQty - $qtyInput);
-                    $autoNote = "Manual stock deduction (-{$qtyInput})";
-                } else { // 'set'
-                    $newQty = $qtyInput;
-                    $diff   = $newQty - $oldQty;
-                    $autoNote = "Manual stock count adjustment — set to {$newQty}";
-                }
+            $finalRemarks = $remarks !== '' ? "{$autoNote}: {$remarks}" : $autoNote;
 
-                $finalRemarks = $remarks !== '' ? "{$autoNote}: {$remarks}" : $autoNote;
+            $applyRes = $this->inventoryService->applyMovement(
+                $storeId,
+                $productId,
+                $diff,
+                'adjustment',
+                referenceType: 'manual_adjustment',
+                remarks: $finalRemarks,
+                performedBy: auth()->id(),
+                unitCost: $unitCost
+            );
 
-                // Record movement in ledger if stock quantity changed
-                if (abs($diff) >= 0.0005) {
-                    \App\Models\InventoryMovement::create([
-                        'inventory_id'   => $inv->id,
-                        'type'           => 'adjustment',
-                        'quantity'       => $diff,
-                        'reference_type' => 'manual_adjustment',
-                        'reference_id'   => null,
-                        'performed_by'   => auth()->id(),
-                        'remarks'        => $finalRemarks,
-                    ]);
-                }
+            $inv = $applyRes['inventory']->load(['store', 'product']);
+            $productName = $inv->product?->name ?? 'Product';
+            $storeName = $inv->store?->name ?? 'Store';
+            $unit = $inv->product?->unit ?? 'pcs';
+            $newQty = (float) $inv->quantity_on_hand;
 
-                $inv->quantity_on_hand = $newQty;
-                $inv->last_movement_at = now();
-                if ($unitCost !== null) {
-                    $inv->unit_cost = $unitCost;
-                }
-                $inv->save();
-
-                return [
-                    'inv'          => $inv,
-                    'product_name' => $inv->product?->name ?? 'Product',
-                    'store_name'   => $inv->store?->name ?? 'Store',
-                    'unit'         => $inv->product?->unit ?? 'pcs',
-                    'old_qty'      => $oldQty,
-                    'new_qty'      => $newQty,
-                    'diff'         => $diff,
-                    'unit_cost'    => $inv->unit_cost,
-                ];
-            });
-
-            $formattedDiff = ($result['diff'] >= 0 ? '+' : '') . number_format($result['diff'], 3) . ' ' . $result['unit'];
-            $successMsg = "Manual adjustment complete: {$result['product_name']} in {$result['store_name']} updated ({$formattedDiff}, new on-hand: " . number_format($result['new_qty'], 3) . " {$result['unit']}).";
+            $formattedDiff = ($diff >= 0 ? '+' : '') . number_format($diff, 3) . ' ' . $unit;
+            $successMsg = "Manual adjustment complete: {$productName} in {$storeName} updated ({$formattedDiff}, new on-hand: " . number_format($newQty, 3) . " {$unit}).";
 
             if ($request->wantsJson() || $request->ajax()) {
                 return response()->json([
                     'success'      => true,
                     'message'      => $successMsg,
                     'product_id'   => $productId,
-                    'product_name' => $result['product_name'],
+                    'product_name' => $productName,
                     'store_id'     => $storeId,
-                    'store_name'   => $result['store_name'],
-                    'old_qty'      => $result['old_qty'],
-                    'new_qty'      => $result['new_qty'],
-                    'diff'         => $result['diff'],
-                    'unit_cost'    => $result['unit_cost'],
-                    'unit'         => $result['unit'],
+                    'store_name'   => $storeName,
+                    'old_qty'      => $oldQty,
+                    'new_qty'      => $newQty,
+                    'diff'         => $diff,
+                    'unit_cost'    => $inv->unit_cost,
+                    'unit'         => $unit,
                 ]);
             }
 
