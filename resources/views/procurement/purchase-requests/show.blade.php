@@ -46,8 +46,25 @@
     @if(session('success'))
         <div class="alert alert-success alert-dismissible fade show shadow-sm">{{ session('success') }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
     @endif
+    @if(session('warning'))
+        <div class="alert alert-warning alert-dismissible fade show shadow-sm">{{ session('warning') }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
+    @endif
     @if(session('error'))
         <div class="alert alert-danger alert-dismissible fade show shadow-sm">{{ session('error') }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
+    @endif
+    @if($errors->any())
+        <div class="alert alert-danger alert-dismissible fade show shadow-sm border-danger">
+            <div class="d-flex align-items-center mb-1">
+                <i class="fas fa-exclamation-triangle me-2 text-danger"></i>
+                <strong class="text-danger">Action Error: Please check the following issue(s):</strong>
+            </div>
+            <ul class="mb-0 ps-3 small text-danger">
+                @foreach($errors->all() as $err)
+                    <li>{{ $err }}</li>
+                @endforeach
+            </ul>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
     @endif
 
 @php
@@ -1833,15 +1850,15 @@
                             </p>
                         </div>
 
-                        <form action="{{ route('purchase-requests.store-intake', $purchaseRequest) }}" method="POST">
+                        <form action="{{ route('purchase-requests.store-intake', $purchaseRequest) }}" method="POST" onsubmit="const btn = this.querySelector('button[type=submit]'); if (btn) { btn.disabled = true; btn.innerHTML = '<i class=\'fas fa-spinner fa-spin me-1\'></i> Processing Intake...'; }">
                             @csrf
 
                             <div class="mb-2">
                                 <label class="form-label small fw-bold text-uppercase text-muted">Receiving Store <span class="text-danger">*</span></label>
-                                <select name="store_id" id="intakeStoreSelect" class="form-select form-select-sm" required onchange="fetchStoreSlipSequence(this.value)">
+                                <select name="store_id" id="intakeStoreSelect" class="form-select form-select-sm" required onchange="fetchStoreSlipSequence(this.value, true)">
                                     @foreach($stores as $st)
                                         <option value="{{ $st->id }}" {{ (($purchaseRequest->store_id ?? ($userStoreId ?? null)) == $st->id) ? 'selected' : '' }}>
-                                            {{ $st->name }} ({{ $st->location ?? 'Store' }})
+                                             {{ $st->name }} ({{ $st->location ?? 'Store' }})
                                         </option>
                                     @endforeach
                                 </select>
@@ -1852,13 +1869,18 @@
                                 <div class="input-group input-group-sm">
                                     <span class="input-group-text bg-light"><i class="fas fa-hashtag text-muted"></i></span>
                                     <input type="text" name="slip_no" id="intakeSlipNoInput" 
-                                           class="form-control form-control-sm font-monospace fw-bold" 
+                                           class="form-control form-control-sm font-monospace fw-bold @error('slip_no') is-invalid @enderror" 
                                            data-start="{{ $receiveSlipSequence?->book_start_no ?? '' }}"
                                            data-end="{{ $receiveSlipSequence?->book_end_no ?? '' }}"
                                            data-prefix="{{ $receiveSlipSequence?->prefix ?? '' }}"
                                            oninput="validateIntakeSlipRange()"
-                                           value="{{ $nextReceiveSlipNo ?? ('REC-' . date('Ymd') . '-' . str_pad($purchaseRequest->id, 4, '0', STR_PAD_LEFT)) }}" required>
+                                           value="{{ old('slip_no', $nextReceiveSlipNo ?? ('REC-' . date('Ymd') . '-' . str_pad($purchaseRequest->id, 4, '0', STR_PAD_LEFT))) }}" required>
                                 </div>
+                                @error('slip_no')
+                                    <div class="text-danger small fw-bold mt-1">
+                                        <i class="fas fa-exclamation-circle me-1"></i>{{ $message }}
+                                    </div>
+                                @enderror
                                 <div id="intakeSlipSequenceBadge">
                                     @if($receiveSlipSequence)
                                         <div class="alert alert-success py-1 px-2 small mb-0 mt-1 d-flex justify-content-between align-items-center border-success">
@@ -4747,7 +4769,7 @@ function handleCoaSelectionChange(selectEl) {
     }
 }
 
-function fetchStoreSlipSequence(storeId) {
+function fetchStoreSlipSequence(storeId, forceOverwrite = false) {
     if (!storeId) return;
     const slipInput = document.getElementById('intakeSlipNoInput');
     const badgeContainer = document.getElementById('intakeSlipSequenceBadge');
@@ -4764,7 +4786,9 @@ function fetchStoreSlipSequence(storeId) {
     .then(res => res.json())
     .then(data => {
         if (data.has_sequence && data.formatted_slip) {
-            slipInput.value = data.formatted_slip;
+            if (forceOverwrite || (!slipInput.classList.contains('is-invalid') && (!slipInput.value || slipInput.value.startsWith('REC-')))) {
+                slipInput.value = data.formatted_slip;
+            }
             slipInput.dataset.start = data.book_start_no || '';
             slipInput.dataset.end = data.book_end_no || '';
             slipInput.dataset.prefix = data.prefix || '';
@@ -4776,7 +4800,10 @@ function fetchStoreSlipSequence(storeId) {
                         Active Book: <strong>${data.label || 'Receiving (GRN)'}</strong> 
                         <span class="text-muted">(Range: ${data.book_start_no} - ${data.book_end_no})</span>
                     </div>
-                    <span class="badge bg-success">${data.remaining} slips left</span>
+                    <div class="d-flex align-items-center">
+                        <span class="badge bg-success">${data.remaining} slips left</span>
+                        ${slipInput.classList.contains('is-invalid') ? `<button type="button" class="btn btn-xs btn-outline-success ms-1 py-0 px-2 fw-bold" onclick="document.getElementById('intakeSlipNoInput').value='${data.formatted_slip}'; document.getElementById('intakeSlipNoInput').classList.remove('is-invalid');">Use Next: #${data.formatted_slip}</button>` : ''}
+                    </div>
                 </div>
             `;
             validateIntakeSlipRange();

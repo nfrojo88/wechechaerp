@@ -16,6 +16,8 @@ use App\Models\ChartOfAccount;
 use App\Models\Employee;
 use App\Models\User;
 use App\Models\Inventory;
+use App\Models\DeliveryReceipt;
+use App\Models\SlipSequence;
 use App\Models\ProformaInvoice;
 use App\Services\ProcurementLifecycleService;
 use Illuminate\Http\Request;
@@ -638,11 +640,28 @@ class PurchaseRequestController extends Controller
         $receiveSlipSequence = null;
         $nextReceiveSlipNo = null;
         if ($targetStoreId) {
-            $receiveSlipSequence = \App\Models\SlipSequence::where('store_id', $targetStoreId)
+            $receiveSlipSequence = SlipSequence::where('store_id', $targetStoreId)
                 ->where('slip_type', 'receive')
                 ->where('status', 'active')
                 ->first();
-            $nextReceiveSlipNo = $receiveSlipSequence ? $receiveSlipSequence->formatSlipNumber($receiveSlipSequence->current_slip_no) : null;
+            if ($receiveSlipSequence) {
+                // Advance current_slip_no past any numbers already recorded in delivery_receipts
+                $curr = (int)$receiveSlipSequence->current_slip_no;
+                while ($curr <= (int)$receiveSlipSequence->book_end_no) {
+                    $testFormatted = $receiveSlipSequence->formatSlipNumber($curr);
+                    if (!DeliveryReceipt::where('dr_no', $testFormatted)->orWhere('dr_no', (string)$curr)->exists()) {
+                        break;
+                    }
+                    $curr++;
+                }
+                if ($curr !== (int)$receiveSlipSequence->current_slip_no) {
+                    $receiveSlipSequence->update([
+                        'current_slip_no' => $curr,
+                        'used_count'      => max($receiveSlipSequence->used_count, $curr - $receiveSlipSequence->book_start_no),
+                    ]);
+                }
+                $nextReceiveSlipNo = $receiveSlipSequence->formatSlipNumber($curr);
+            }
         }
 
         $availableProducts = \App\Models\Product::where('is_active', true)->orderBy('name')->get();
@@ -2283,17 +2302,49 @@ class PurchaseRequestController extends Controller
             'notes'         => 'nullable|string',
         ]);
 
-        $result = $this->lifecycle->storeIntake(
-            $purchaseRequest,
-            $request->filled('store_id') ? (int)$request->store_id : null,
-            $request->input('slip_no'),
-            $request->input('received_date'),
-            $request->input('items', []),
-            $request->input('notes')
-        );
+        $slipNo = trim((string)$request->input('slip_no'));
+
+        // Pre-validate uniqueness of slip_no in delivery_receipts to avoid database integrity violation crash
+        if (!empty($slipNo)) {
+            $existingReceipt = DeliveryReceipt::where('dr_no', $slipNo)->first();
+            if ($existingReceipt) {
+                return back()->withInput()->withErrors([
+                    'slip_no' => "Duplicate Entry: Receiving Slip Number '{$slipNo}' has already been used and recorded (Receipt ID #{$existingReceipt->id}, recorded on {$existingReceipt->received_date}). Please specify a new, unused slip number.",
+                ])->with('error', "Duplicate Entry: Receiving Slip Number '{$slipNo}' has already been used in the system. Please verify and enter a unique slip number.");
+            }
+        }
+
+        try {
+            $result = $this->lifecycle->storeIntake(
+                $purchaseRequest,
+                $request->filled('store_id') ? (int)$request->store_id : null,
+                $slipNo ?: null,
+                $request->input('received_date'),
+                $request->input('items', []),
+                $request->input('notes')
+            );
+        } catch (\Illuminate\Database\QueryException $e) {
+            \Illuminate\Support\Facades\Log::error("Store Intake QueryException for PR #{$purchaseRequest->pr_no}: " . $e->getMessage());
+            
+            // Catch SQLSTATE 23000 / code 1062 duplicate key constraint
+            if ($e->getCode() == 23000 || str_contains($e->getMessage(), '1062') || str_contains($e->getMessage(), 'Duplicate entry')) {
+                return back()->withInput()->withErrors([
+                    'slip_no' => "Duplicate Entry: Slip Number '{$slipNo}' violates uniqueness constraints. It has already been recorded in the database.",
+                ])->with('error', "Duplicate Slip Number: The receiving slip '{$slipNo}' is already recorded in the system. Please enter the next unused slip number from the book.");
+            }
+
+            return back()->withInput()->with('error', 'Database Error during store intake: ' . $e->getMessage());
+        } catch (\InvalidArgumentException $e) {
+            return back()->withInput()->withErrors([
+                'slip_no' => $e->getMessage(),
+            ])->with('error', $e->getMessage());
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error("Store Intake Exception for PR #{$purchaseRequest->pr_no}: " . $e->getMessage());
+            return back()->withInput()->with('error', 'Error processing store intake: ' . $e->getMessage());
+        }
 
         if (is_array($result) && !($result['is_full'] ?? true)) {
-            $slip = $result['slip_no'] ?? $request->input('slip_no');
+            $slip = $result['slip_no'] ?? $slipNo;
             $rem = !empty($result['remaining']) ? implode(', ', $result['remaining']) : 'Remaining quantity pending.';
             return back()->with('warning', "Partial delivery accepted under Slip #{$slip}! PR remains active for remaining balance: {$rem}. Enter the next receiving slip (Model 19 / GRN) when subsequent delivery arrives.");
         }

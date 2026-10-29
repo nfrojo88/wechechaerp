@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Store;
 use App\Models\SlipSequence;
+use App\Models\DeliveryReceipt;
 use Illuminate\Http\Request;
 
 class SlipSequenceController extends Controller
@@ -281,6 +282,27 @@ class SlipSequenceController extends Controller
                 'has_sequence' => false,
                 'error'        => 'No active slip sequence configured for this store.',
             ], 200);
+        }
+
+        // Advance current_slip_no past any numbers already recorded in delivery_receipts
+        if ($slipType === 'receive') {
+            $curr = (int)$sequence->current_slip_no;
+            while ($curr <= (int)$sequence->book_end_no) {
+                $testFormatted = $sequence->formatSlipNumber($curr);
+                $exists = DeliveryReceipt::where('dr_no', $testFormatted)
+                    ->orWhere('dr_no', (string)$curr)
+                    ->exists();
+                if (!$exists) {
+                    break;
+                }
+                $curr++;
+            }
+            if ($curr !== (int)$sequence->current_slip_no) {
+                $sequence->update([
+                    'current_slip_no' => $curr,
+                    'used_count'      => max($sequence->used_count, $curr - $sequence->book_start_no),
+                ]);
+            }
         }
 
         return response()->json([

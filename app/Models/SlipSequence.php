@@ -61,6 +61,21 @@ class SlipSequence extends Model
      */
     public function generateSlipNumber(): string
     {
+        // For receive slips, ensure current_slip_no is advanced past any records already in delivery_receipts
+        if ($this->slip_type === 'receive') {
+            while ($this->current_slip_no <= $this->book_end_no) {
+                $testFormatted = $this->formatSlipNumber($this->current_slip_no);
+                $exists = \App\Models\DeliveryReceipt::where('dr_no', $testFormatted)
+                    ->orWhere('dr_no', (string)$this->current_slip_no)
+                    ->exists();
+                if (!$exists) {
+                    break;
+                }
+                $this->current_slip_no++;
+                $this->used_count++;
+            }
+        }
+
         // Check if book is full
         if ($this->current_slip_no > $this->book_end_no) {
             $this->update(['status' => 'full']);

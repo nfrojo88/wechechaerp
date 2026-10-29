@@ -1235,7 +1235,7 @@ class ProcurementLifecycleService
 
         $intakeResult = ['is_full' => true, 'remaining' => [], 'slip_no' => $slipNo];
 
-        DB::transaction(function () use ($pr, $storeId, $slipNo, $receivedDate, $receivedItems, $notes, $from, &$intakeResult) {
+        DB::transaction(function () use ($pr, $storeId, &$slipNo, $receivedDate, $receivedItems, $notes, $from, &$intakeResult) {
             // 1. Determine or auto-generate Slip Number if empty
             if (empty($slipNo)) {
                 $sequence = SlipSequence::where('store_id', $storeId)
@@ -1244,10 +1244,29 @@ class ProcurementLifecycleService
                     ->first();
                 if ($sequence) {
                     $slipNo = $sequence->generateSlipNumber();
+                    // Guarantee uniqueness against delivery_receipts
+                    while (DeliveryReceipt::where('dr_no', $slipNo)->exists()) {
+                        if ($sequence->current_slip_no > $sequence->book_end_no) {
+                            $slipNo = 'REC-' . date('Ymd') . '-' . str_pad($pr->id, 4, '0', STR_PAD_LEFT) . '-' . rand(100, 999);
+                            break;
+                        }
+                        $slipNo = $sequence->generateSlipNumber();
+                    }
                 } else {
-                    $slipNo = 'REC-' . date('Ymd') . '-' . str_pad($pr->id, 4, '0', STR_PAD_LEFT);
+                    $candidate = 'REC-' . date('Ymd') . '-' . str_pad($pr->id, 4, '0', STR_PAD_LEFT);
+                    $c = 1;
+                    while (DeliveryReceipt::where('dr_no', $candidate)->exists()) {
+                        $candidate = 'REC-' . date('Ymd') . '-' . str_pad($pr->id, 4, '0', STR_PAD_LEFT) . '-' . $c;
+                        $c++;
+                    }
+                    $slipNo = $candidate;
                 }
             } else {
+                // If manual/given slip number, verify uniqueness before proceeding
+                if (DeliveryReceipt::where('dr_no', $slipNo)->exists()) {
+                    throw new \InvalidArgumentException("Receiving slip number '{$slipNo}' has already been recorded in the database. Please provide a new, unused slip number.");
+                }
+
                 // If manual/given slip number, increment sequence counter if matched
                 try {
                     $numericPart = (int)preg_replace('/[^0-9]/', '', $slipNo);
@@ -1258,7 +1277,7 @@ class ProcurementLifecycleService
                     if ($seq && $numericPart >= $seq->current_slip_no) {
                         $seq->update([
                             'current_slip_no' => $numericPart + 1,
-                            'used_count'      => $seq->used_count + 1,
+                            'used_count'      => max($seq->used_count + 1, ($numericPart + 1) - $seq->book_start_no),
                         ]);
                     }
                 } catch (\Throwable $e) {}
