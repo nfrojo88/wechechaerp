@@ -90,6 +90,18 @@
                             <span>Export Excel</span>
                         </button>
                         <ul class="dropdown-menu dropdown-menu-end shadow-sm border rounded-3 p-2" aria-labelledby="movementsExcelDropdown" style="min-width: 300px;">
+                            <li class="dropdown-header small text-uppercase text-danger fw-bold px-2 py-1" style="font-size: 0.68rem; letter-spacing: 0.05em;">
+                                <i class="fa-solid fa-file-pdf me-1"></i>PDF Declarations
+                            </li>
+                            <li>
+                                <a class="dropdown-item rounded-2 py-1.5 px-2.5 d-flex align-items-center justify-content-between small text-danger fw-semibold" href="{{ route('finance.tax-deductions.movements-receipts-pdf', ['ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}" target="_blank">
+                                    <span><i class="fa-solid fa-file-pdf me-1.5"></i>Only Added Receipts (PDF)</span>
+                                    <span class="badge bg-danger text-white rounded-pill font-monospace" style="font-size: 0.65rem;">PDF</span>
+                                </a>
+                            </li>
+
+                            <li><hr class="dropdown-divider my-1"></li>
+
                             <li class="dropdown-header small text-uppercase text-muted fw-bold px-2 py-1" style="font-size: 0.68rem; letter-spacing: 0.05em;">ERCA Tax Declarations</li>
                             
                             {{-- Sales Excel --}}
@@ -164,6 +176,15 @@
                             </li>
                         </ul>
                     </div>
+
+                    {{-- Download Receipts PDF Button --}}
+                    <a href="{{ route('finance.tax-deductions.movements-receipts-pdf', ['ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth, 'download' => 1]) }}" 
+                       class="btn btn-sm btn-danger text-white rounded-pill px-3 py-1.5 fw-semibold shadow-xs d-inline-flex align-items-center gap-1.5" 
+                       target="_blank" 
+                       title="Download only added receipts in PDF format for {{ $movementsData['month']['title'] ?? 'this month' }}">
+                        <i class="fa-solid fa-file-pdf"></i>
+                        <span>Download Receipts (PDF)</span>
+                    </a>
 
                     {{-- Print Report Button --}}
                     <button type="button" class="btn btn-sm btn-light border text-dark rounded-pill px-3 py-1.5 fw-medium shadow-xs" onclick="window.print()">
@@ -551,6 +572,14 @@
                                class="btn btn-sm btn-outline-warning text-dark fw-semibold px-3 text-nowrap d-inline-flex align-items-center gap-1" title="Export Withholding Tax Deductions Report">
                                 <i class="fa-solid fa-file-excel text-success"></i>
                                 <span>Export WHT</span>
+                            </a>
+
+                            <a href="{{ route('finance.tax-deductions.movements-receipts-pdf', ['ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}" 
+                               class="btn btn-sm btn-outline-danger fw-semibold px-3 text-nowrap d-inline-flex align-items-center gap-1 shadow-xs" 
+                               target="_blank" 
+                               title="Download or Print only added receipts in PDF format">
+                                <i class="fa-solid fa-file-pdf text-danger"></i>
+                                <span>Receipts PDF</span>
                             </a>
                         </div>
                         <div class="position-relative" style="min-width: 200px;">
@@ -1640,6 +1669,14 @@
                                class="btn btn-sm btn-outline-warning text-dark fw-semibold px-3 text-nowrap d-inline-flex align-items-center gap-1" title="Export Withholding Tax Deductions Report">
                                 <i class="fa-solid fa-file-excel text-success"></i>
                                 <span>Export WHT</span>
+                            </a>
+
+                            <a href="{{ route('finance.tax-deductions.movements-receipts-pdf', ['ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}" 
+                               class="btn btn-sm btn-outline-danger fw-semibold px-3 text-nowrap d-inline-flex align-items-center gap-1 shadow-xs" 
+                               target="_blank" 
+                               title="Download or Print only added receipts in PDF format">
+                                <i class="fa-solid fa-file-pdf text-danger"></i>
+                                <span>Receipts PDF</span>
                             </a>
                         </div>
                         <button type="button" class="btn btn-sm btn-primary rounded-pill px-3 shadow-xs d-inline-flex align-items-center gap-1.5 fw-semibold" onclick="openNewManualReceiptModal()" title="Add a New Manual ERCA Cash Register Invoice / Fiscal Slip">

@@ -1424,6 +1424,190 @@ class FinanceTaxReportController extends Controller
     }
 
     /**
+     * Download or Print Only Added Receipts in PDF form for Financial Movements & Tax Audit.
+     * Includes all verified ERCA fiscal register invoices, scanned receipts, and expense vouchers with receipts on file.
+     */
+    public function movementsReceiptsPdf(Request $request)
+    {
+        $this->ensureSchema();
+
+        $curEth = EthiopianDate::toEthiopian(now());
+        $selectedEthYear  = (int)($request->input('ethiopian_year') ?: ($request->input('year') ?: $curEth['year']));
+        $selectedEthMonth = (int)($request->input('ethiopian_month') ?: ($request->input('month') ?: $curEth['month']));
+        if ($selectedEthMonth < 1 || $selectedEthMonth > 13) {
+            $selectedEthMonth = $curEth['month'];
+        }
+
+        $receiptFilter = strtolower($request->input('type', 'all')); // 'all', 'vat', 'tas'
+
+        // Compute movements data (retrieving all scanned receipts and expenses)
+        $movementsData = $this->calculateMonthMovementsData($selectedEthYear, $selectedEthMonth, false);
+
+        // Gather ONLY receipts that have been added
+        $addedReceipts = collect();
+        $seenKeys = [];
+
+        // 1. Process all OCR / Scanned / Manual Receipts
+        $allOcrList = $movementsData['all_ocr_items'] ?? ($movementsData['ocr_items'] ?? []);
+        foreach ($allOcrList as $ocr) {
+            $baseVal = (float)($ocr['base_value'] ?? 0);
+            $vatVal = (float)($ocr['vat_amount'] ?? 0);
+            $totalVal = (float)($ocr['total_value'] ?? ($ocr['value_after_vat'] ?? ($baseVal + $vatVal)));
+            $isVat = !empty($ocr['is_vat_receipt']) || $vatVal > 0;
+
+            if ($receiptFilter === 'vat' && !$isVat) {
+                continue;
+            }
+            if ($receiptFilter === 'tas' && $isVat) {
+                continue;
+            }
+
+            $fsNo = !empty($ocr['fs_no']) && $ocr['fs_no'] !== '-' ? trim($ocr['fs_no']) : '';
+            $sellerTin = !empty($ocr['seller_tin']) && $ocr['seller_tin'] !== '-' ? trim($ocr['seller_tin']) : (!empty($ocr['vendor_tin']) && $ocr['vendor_tin'] !== '-' ? trim($ocr['vendor_tin']) : '');
+            $recId = $ocr['receipt_id'] ?? $ocr['id'] ?? null;
+            $reqNo = $ocr['request_number'] ?? '';
+
+            // Unique deduplication key
+            $key = $fsNo && $sellerTin ? "{$sellerTin}_{$fsNo}" : ($recId ? "REC_{$recId}" : ($reqNo ?: "IDX_" . count($addedReceipts)));
+            if (isset($seenKeys[$key])) {
+                continue;
+            }
+            $seenKeys[$key] = true;
+
+            $fileUrl = $ocr['file_url'] ?? null;
+            $isPdf = !empty($ocr['is_pdf']);
+
+            $addedReceipts->push([
+                'id'                 => $ocr['id'] ?? null,
+                'receipt_id'         => $recId,
+                'request_number'     => $reqNo ?: ('REC-' . ($ocr['id'] ?? (count($addedReceipts) + 1))),
+                'fs_no'              => $fsNo ?: '-',
+                'mrc_no'             => !empty($ocr['mrc_no']) && $ocr['mrc_no'] !== '-' ? $ocr['mrc_no'] : '-',
+                'receipt_number'     => $ocr['receipt_number'] ?? '',
+                'vendor_name'        => $ocr['vendor_name'] ?? 'Vendor',
+                'vendor_tin'         => $sellerTin ?: '-',
+                'seller_tin'         => $sellerTin ?: '-',
+                'purchaser_tin'      => $ocr['purchaser_tin'] ?? '0054711385',
+                'date_ec'            => $ocr['date_ec'] ?? '-',
+                'date_gc'            => $ocr['date_gc'] ?? '-',
+                'project_name'       => $ocr['project_name'] ?? 'General',
+                'category'           => $ocr['category'] ?? 'materials',
+                'item_description'   => $ocr['item_description'] ?? 'Purchased Goods/Services',
+                'base_value'         => $baseVal,
+                'vat_amount'         => $vatVal,
+                'total_value'        => $totalVal,
+                'is_vat_receipt'     => $isVat,
+                'file_url'           => $fileUrl,
+                'file_type'          => $ocr['file_type'] ?? ($isPdf ? 'pdf' : 'image'),
+                'is_pdf'             => $isPdf,
+                'source'             => 'ocr_receipt',
+            ]);
+        }
+
+        // 2. Also check any expenses that have an attached receipt slip or verified FS No
+        $allExpenses = $movementsData['all_expenses'] ?? collect();
+        foreach ($allExpenses as $exp) {
+            // Must have a receipt added and must NOT be verified without receipt
+            if (!empty($exp['is_verified_without_receipt'])) {
+                continue;
+            }
+
+            $hasReceipt = (!empty($exp['fs_no']) && $exp['fs_no'] !== '-')
+                || !empty($exp['receipt_slip_url'])
+                || !empty($exp['attachment_url'])
+                || !empty($exp['receipt_id']);
+
+            if (!$hasReceipt) {
+                continue;
+            }
+
+            $baseVal = (float)($exp['base_amount'] ?? 0);
+            $vatVal = (float)($exp['vat_amount'] ?? 0);
+            $totalVal = (float)($exp['net_disbursed'] ?? ($baseVal + $vatVal));
+            $isVat = ($vatVal > 0);
+
+            if ($receiptFilter === 'vat' && !$isVat) {
+                continue;
+            }
+            if ($receiptFilter === 'tas' && $isVat) {
+                continue;
+            }
+
+            $fsNo = !empty($exp['fs_no']) && $exp['fs_no'] !== '-' ? trim($exp['fs_no']) : '';
+            $sellerTin = !empty($exp['seller_tin']) && $exp['seller_tin'] !== '-' ? trim($exp['seller_tin']) : '';
+            $recId = $exp['receipt_id'] ?? null;
+            $reqNo = $exp['request_number'] ?? '';
+
+            $key = $fsNo && $sellerTin ? "{$sellerTin}_{$fsNo}" : ($recId ? "REC_{$recId}" : ($reqNo ?: "EXP_" . ($exp['id'] ?? count($addedReceipts))));
+            if (isset($seenKeys[$key])) {
+                continue;
+            }
+            $seenKeys[$key] = true;
+
+            $fileUrl = $exp['receipt_slip_url'] ?? ($exp['attachment_url'] ?? null);
+            $isPdf = !empty($fileUrl) && (str_ends_with(strtolower($fileUrl), '.pdf') || str_contains(strtolower($fileUrl), '.pdf'));
+
+            $addedReceipts->push([
+                'id'                 => $exp['id'] ?? null,
+                'receipt_id'         => $recId,
+                'request_number'     => $reqNo ?: ('EXP-' . ($exp['id'] ?? (count($addedReceipts) + 1))),
+                'fs_no'              => $fsNo ?: '-',
+                'mrc_no'             => $exp['mrc_no'] ?? '-',
+                'receipt_number'     => $exp['payment_reference'] ?? '',
+                'vendor_name'        => $exp['payee'] ?? 'Vendor',
+                'vendor_tin'         => $sellerTin ?: '-',
+                'seller_tin'         => $sellerTin ?: '-',
+                'purchaser_tin'      => $exp['purchaser_tin'] ?? '0054711385',
+                'date_ec'            => $exp['date_ec'] ?? '-',
+                'date_gc'            => $exp['date_gc'] ?? '-',
+                'project_name'       => $exp['project_name'] ?? 'General',
+                'category'           => $exp['category'] ?? 'materials',
+                'item_description'   => $exp['description'] ?? ($exp['item_description'] ?? 'Purchased Goods/Services'),
+                'base_value'         => $baseVal,
+                'vat_amount'         => $vatVal,
+                'total_value'        => $totalVal,
+                'is_vat_receipt'     => $isVat,
+                'file_url'           => $fileUrl,
+                'file_type'          => $isPdf ? 'pdf' : 'image',
+                'is_pdf'             => $isPdf,
+                'source'             => 'expense_receipt',
+            ]);
+        }
+
+        // Summary metrics for the added receipts
+        $receiptsSummary = [
+            'total_count'       => $addedReceipts->count(),
+            'vat_count'         => $addedReceipts->where('is_vat_receipt', true)->count(),
+            'tas_count'         => $addedReceipts->where('is_vat_receipt', false)->count(),
+            'total_base'        => (float)$addedReceipts->sum('base_value'),
+            'total_vat'         => (float)$addedReceipts->sum('vat_amount'),
+            'total_gross'       => (float)$addedReceipts->sum('total_value'),
+            'with_file_count'   => $addedReceipts->filter(fn($r) => !empty($r['file_url']))->count(),
+        ];
+
+        $monthInfo = $movementsData['month'] ?? [
+            'title'            => "Month {$selectedEthMonth}, {$selectedEthYear} EC",
+            'month_name'       => "Month {$selectedEthMonth}",
+            'month_am'         => "ወር {$selectedEthMonth}",
+            'gregorian_window' => "GC Window",
+            'year'             => $selectedEthYear,
+            'month'            => $selectedEthMonth,
+        ];
+
+        $autoDownload = $request->boolean('download');
+
+        return view('finance.tax-deductions.receipts-pdf', compact(
+            'selectedEthYear',
+            'selectedEthMonth',
+            'monthInfo',
+            'addedReceipts',
+            'receiptsSummary',
+            'receiptFilter',
+            'autoDownload'
+        ));
+    }
+
+    /**
      * AJAX endpoint: Retrieve all itemized financial movements for a specific Ethiopian month.
      * Returns detailed transactions: Incomes (Sales), Expenses/Purchases, OCR Receipts, and Signed Net VAT reconciliation.
      */

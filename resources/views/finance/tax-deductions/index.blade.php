@@ -151,6 +151,10 @@
                             <i class="fa-solid fa-scale-balanced"></i>
                             <span>Movements &amp; Audit Page</span>
                         </a>
+                        <a href="{{ route('finance.tax-deductions.movements-receipts-pdf', ['ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}" class="btn btn-outline-danger btn-sm rounded-pill px-3 py-2 shadow-xs fw-semibold d-inline-flex align-items-center gap-1.5" target="_blank" title="Download only added receipts in PDF format">
+                            <i class="fa-solid fa-file-pdf text-danger"></i>
+                            <span>Receipts PDF</span>
+                        </a>
                         <button type="button" class="btn btn-primary btn-sm rounded-pill px-3 py-2 shadow-xs fw-semibold d-inline-flex align-items-center gap-1.5" data-bs-toggle="modal" data-bs-target="#addReceiptModal">
                             <i class="fa-solid fa-cloud-arrow-up"></i>
                             <span>+ Add Receipt (OCR)</span>
