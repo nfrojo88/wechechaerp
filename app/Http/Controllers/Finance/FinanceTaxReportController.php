@@ -1432,8 +1432,11 @@ class FinanceTaxReportController extends Controller
         $this->ensureSchema();
 
         $curEth = EthiopianDate::toEthiopian(now());
-        $selectedEthYear  = (int)($request->input('ethiopian_year') ?: ($request->input('year') ?: $curEth['year']));
-        $selectedEthMonth = (int)($request->input('ethiopian_month') ?: ($request->input('month') ?: $curEth['month']));
+        $selectedEthYear  = (int)($request->input('ethiopian_year') ?: ($request->query('ethiopian_year') ?: ($request->input('year') ?: ($request->query('year') ?: $curEth['year']))));
+        $selectedEthMonth = (int)($request->input('ethiopian_month') ?: ($request->query('ethiopian_month') ?: ($request->input('month') ?: ($request->query('month') ?: $curEth['month']))));
+        if ($selectedEthYear < 1900 || $selectedEthYear > 2200) {
+            $selectedEthYear = $curEth['year'];
+        }
         if ($selectedEthMonth < 1 || $selectedEthMonth > 13) {
             $selectedEthMonth = $curEth['month'];
         }
@@ -1449,10 +1452,17 @@ class FinanceTaxReportController extends Controller
         $nextYear  = ($selectedEthMonth === 13) ? $selectedEthYear + 1 : $selectedEthYear;
         $nextMonth = ($selectedEthMonth === 13) ? 1 : $selectedEthMonth + 1;
 
+        // Compute Ethiopian month date bounds
+        $mRange    = EthiopianDate::monthRange($selectedEthYear, $selectedEthMonth);
+        $startDate = $mRange['start_date'];
+        $endDate   = $mRange['end_date'];
+        $start     = $mRange['start'];
+        $end       = $mRange['end'];
+
         // Compute movements data (retrieving all scanned receipts and expenses)
         $movementsData = $this->calculateMonthMovementsData($selectedEthYear, $selectedEthMonth, false);
 
-        // Gather all candidate receipts from both OCR/Scanned items and verified Expense slips
+        // Gather all candidate receipts from both OCR/Scanned items, verified Expense slips, and direct Receipts
         $rawCandidateReceipts = collect();
 
         // 1. Process all OCR / Scanned / Manual Receipts
@@ -1484,6 +1494,9 @@ class FinanceTaxReportController extends Controller
                 'purchaser_tin'      => $ocr['purchaser_tin'] ?? '0054711385',
                 'date_ec'            => $ocr['date_ec'] ?? '-',
                 'date_gc'            => $ocr['date_gc'] ?? '-',
+                'raw_date'           => $ocr['raw_date'] ?? '',
+                'receipt_date_ymd'   => $ocr['receipt_date_ymd'] ?? '',
+                'receipt_date_ec'    => $ocr['receipt_date_ec'] ?? '',
                 'project_name'       => $ocr['project_name'] ?? 'General',
                 'category'           => $ocr['category'] ?? 'materials',
                 'item_description'   => $ocr['item_description'] ?? 'Purchased Goods/Services',
@@ -1541,6 +1554,9 @@ class FinanceTaxReportController extends Controller
                 'purchaser_tin'      => $exp['purchaser_tin'] ?? '0054711385',
                 'date_ec'            => $exp['date_ec'] ?? '-',
                 'date_gc'            => $exp['date_gc'] ?? '-',
+                'raw_date'           => $exp['raw_date'] ?? '',
+                'receipt_date_ymd'   => $exp['receipt_date_ymd'] ?? '',
+                'receipt_date_ec'    => $exp['receipt_date_ec'] ?? '',
                 'project_name'       => $exp['project_name'] ?? 'General',
                 'category'           => $exp['category'] ?? 'materials',
                 'item_description'   => $exp['description'] ?? ($exp['item_description'] ?? 'Purchased Goods/Services'),
@@ -1555,8 +1571,97 @@ class FinanceTaxReportController extends Controller
             ]);
         }
 
-        // Apply strict serious de-duplication rules: eliminate every duplicate receipt
-        $dedupResult = $this->deduplicateCandidateReceipts($rawCandidateReceipts);
+        // 3. Directly query Receipt records for this Ethiopian month window to guarantee no month receipts are missed
+        if (Schema::hasTable('receipts')) {
+            try {
+                $directReceipts = \App\Models\Receipt::with(['project', 'uploader', 'items'])
+                    ->where(function ($rq) use ($startDate, $endDate, $start, $end) {
+                        $rq->whereBetween('receipt_date', [$startDate, $endDate])
+                           ->orWhere(function ($sub) use ($start, $end) {
+                               $sub->whereNull('receipt_date')
+                                   ->where(function ($dt) use ($start, $end) {
+                                       $dt->whereBetween('created_at', [$start, $end])
+                                          ->orWhereBetween('updated_at', [$start, $end]);
+                                   });
+                           });
+                    })
+                    ->get();
+
+                foreach ($directReceipts as $dr) {
+                    $fileUrl = null;
+                    if (!empty($dr->file_path)) {
+                        try {
+                            $fileUrl = \App\Services\FileUploadService::url($dr->file_path);
+                        } catch (\Throwable $e) {
+                            $fileUrl = asset('storage/' . ltrim($dr->file_path, '/'));
+                        }
+                    }
+
+                    $isPdf = !empty($dr->file_path) && (str_ends_with(strtolower($dr->file_path), '.pdf') || str_contains(strtolower($dr->file_path), '.pdf'));
+                    $fsNo = !empty($dr->fs_no) && $dr->fs_no !== '-' ? trim($dr->fs_no) : (!empty($dr->fs_no_raw) && $dr->fs_no_raw !== '-' ? trim($dr->fs_no_raw) : '');
+                    $sellerTin = !empty($dr->vendor_tin) && $dr->vendor_tin !== '-' ? trim($dr->vendor_tin) : '';
+                    $recDate = $dr->receipt_date ?: $dr->created_at;
+
+                    $baseVal = (float)$dr->subtotal;
+                    $vatVal  = (float)$dr->vat_amount;
+                    $totalVal = (float)$dr->total_amount;
+                    if ($totalVal <= 0 && ($baseVal > 0 || $vatVal > 0)) {
+                        $totalVal = round($baseVal + $vatVal, 2);
+                    }
+                    if ($baseVal <= 0 && $totalVal > 0) {
+                        $baseVal = max(0.0, round($totalVal - $vatVal, 2));
+                    }
+                    $isVat = ($vatVal > 0 || strtolower((string)$dr->tax_type) === 'vat');
+
+                    $itemDesc = $dr->description ?: ($dr->items->first()?->item_description ?: 'Purchased Goods/Services');
+
+                    $rawCandidateReceipts->push([
+                        'id'                 => $dr->id,
+                        'receipt_id'         => $dr->id,
+                        'request_number'     => $dr->receipt_number ?: ('REC-' . $dr->id),
+                        'fs_no'              => $fsNo ?: '-',
+                        'mrc_no'             => $dr->mrc_no ?: '-',
+                        'receipt_number'     => $dr->receipt_number ?: '',
+                        'vendor_name'        => $dr->vendor_name ?: 'Vendor',
+                        'vendor_tin'         => $sellerTin ?: '-',
+                        'seller_tin'         => $sellerTin ?: '-',
+                        'purchaser_tin'      => $dr->buyer_tin ?: '0054711385',
+                        'date_ec'            => $recDate ? EthiopianDate::formatDateEc($recDate, 'DD/MM/YYYY EC') : '-',
+                        'date_gc'            => $recDate ? Carbon::parse($recDate)->format('M d, Y') : '-',
+                        'raw_date'           => $recDate ? Carbon::parse($recDate)->toDateTimeString() : '',
+                        'receipt_date_ymd'   => $dr->receipt_date ? Carbon::parse($dr->receipt_date)->toDateString() : '',
+                        'receipt_date_ec'    => $recDate ? EthiopianDate::formatDateEc($recDate, 'd-m-Y') : '-',
+                        'project_name'       => $dr->project?->name ?: 'General',
+                        'category'           => $dr->category ?: 'materials',
+                        'item_description'   => $itemDesc,
+                        'base_value'         => $baseVal,
+                        'vat_amount'         => $vatVal,
+                        'total_value'        => $totalVal,
+                        'is_vat_receipt'     => $isVat,
+                        'file_url'           => $fileUrl,
+                        'file_type'          => $isPdf ? 'pdf' : ($dr->file_type ?: 'image'),
+                        'is_pdf'             => $isPdf,
+                        'source'             => 'direct_receipt',
+                    ]);
+                }
+            } catch (\Throwable $e) {
+                Log::warning("movementsReceiptsPdf directReceipts query: " . $e->getMessage());
+            }
+        }
+
+        // Build receipts model lookup map to evaluate exact receipt dates with high efficiency
+        $receiptIds = $rawCandidateReceipts->pluck('receipt_id')->filter()->unique()->all();
+        $receiptsMap = (!empty($receiptIds) && Schema::hasTable('receipts'))
+            ? \App\Models\Receipt::whereIn('id', $receiptIds)->get()->keyBy('id')
+            : collect();
+
+        // 4. STRICT MONTH FILTER: Keep strictly and ONLY receipts belonging to the selected Ethiopian Month
+        $monthFilteredReceipts = $rawCandidateReceipts->filter(function ($rec) use ($selectedEthYear, $selectedEthMonth, $startDate, $endDate, $receiptsMap) {
+            return $this->receiptMatchesSelectedMonth($rec, $selectedEthYear, $selectedEthMonth, $startDate, $endDate, $receiptsMap);
+        })->values();
+
+        // 5. Apply strict serious de-duplication rules: eliminate every duplicate receipt
+        $dedupResult = $this->deduplicateCandidateReceipts($monthFilteredReceipts);
         $allCandidateReceipts = $dedupResult['receipts'];
         $duplicatesBlockedCount = $dedupResult['duplicates_blocked_count'];
 
@@ -1979,6 +2084,201 @@ class FinanceTaxReportController extends Controller
             'duplicates_blocked_count' => $blockedDuplicatesCount,
             'blocked_records'          => $blockedRecords,
         ];
+    }
+
+    /**
+     * Check if a candidate receipt strictly belongs to the selected Ethiopian Year and Month.
+     */
+    private function receiptMatchesSelectedMonth(
+        array $rec, 
+        int $targetYear, 
+        int $targetMonth, 
+        string $startDate, 
+        string $endDate,
+        $receiptsMap = null
+    ): bool {
+        // 1. Direct check on Receipt model if receipt_id is present
+        $recId = $rec['receipt_id'] ?? null;
+        if (!empty($recId)) {
+            $dbRec = null;
+            if ($receiptsMap && isset($receiptsMap[$recId])) {
+                $dbRec = $receiptsMap[$recId];
+            } elseif (Schema::hasTable('receipts')) {
+                $dbRec = \App\Models\Receipt::find($recId);
+            }
+
+            if ($dbRec) {
+                // If the receipt has a recorded receipt_date, that is the primary source of truth
+                if (!empty($dbRec->receipt_date)) {
+                    $recYmd = Carbon::parse($dbRec->receipt_date)->toDateString();
+                    if ($recYmd >= $startDate && $recYmd <= $endDate) {
+                        return true;
+                    }
+                    $eth = EthiopianDate::toEthiopian($recYmd);
+                    return ((int)$eth['year'] === $targetYear && (int)$eth['month'] === $targetMonth);
+                }
+
+                // If receipt_date is not set, check parsed_data in Receipt
+                if (!empty($dbRec->parsed_data)) {
+                    $parsed = is_string($dbRec->parsed_data) ? (json_decode($dbRec->parsed_data, true) ?: []) : (array)$dbRec->parsed_data;
+                    if (!empty($parsed['receipt_date'])) {
+                        $parsedEth = $this->parseEthiopianDateString($parsed['receipt_date']);
+                        if ($parsedEth) {
+                            return ($parsedEth['year'] === $targetYear && $parsedEth['month'] === $targetMonth);
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Check explicit Ethiopian date strings on candidate receipt
+        $ethFields = [
+            $rec['receipt_date_ec'] ?? null,
+            $rec['date_ec'] ?? null,
+        ];
+
+        foreach ($ethFields as $ethStr) {
+            if (empty($ethStr) || $ethStr === '-' || $ethStr === 'N/A') {
+                continue;
+            }
+
+            $parsedEth = $this->parseEthiopianDateString($ethStr);
+            if ($parsedEth) {
+                if ($parsedEth['month'] === $targetMonth && $parsedEth['year'] === $targetYear) {
+                    return true;
+                } else {
+                    // Explicitly stated an Ethiopian date from a different month/year
+                    return false;
+                }
+            }
+        }
+
+        // 3. Check Gregorian date strings (receipt_date_ymd, raw_date, date_gc)
+        $gregFields = [
+            $rec['receipt_date_ymd'] ?? null,
+            $rec['raw_date'] ?? null,
+            $rec['date_gc'] ?? null,
+        ];
+
+        foreach ($gregFields as $gregStr) {
+            if (empty($gregStr) || $gregStr === '-' || $gregStr === 'N/A') {
+                continue;
+            }
+
+            try {
+                $c = Carbon::parse($gregStr);
+                $ymd = $c->toDateString();
+
+                // Direct range check against Ethiopian month's Gregorian bounds
+                if ($ymd >= $startDate && $ymd <= $endDate) {
+                    return true;
+                }
+
+                // Ethiopian conversion check
+                $eth = EthiopianDate::toEthiopian($ymd);
+                if ((int)$eth['year'] === $targetYear && (int)$eth['month'] === $targetMonth) {
+                    return true;
+                }
+            } catch (\Throwable $e) {
+                // Not a parseable Gregorian string
+            }
+        }
+
+        // 4. Fallback check: If receipt_id has created_at
+        if (!empty($recId) && isset($dbRec) && $dbRec && !empty($dbRec->created_at)) {
+            $createdYmd = Carbon::parse($dbRec->created_at)->toDateString();
+            if ($createdYmd >= $startDate && $createdYmd <= $endDate) {
+                return true;
+            }
+            $eth = EthiopianDate::toEthiopian($createdYmd);
+            if ((int)$eth['year'] === $targetYear && (int)$eth['month'] === $targetMonth) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Parse an Ethiopian date string into an array of ['year' => int, 'month' => int, 'day' => int].
+     */
+    private function parseEthiopianDateString(?string $str): ?array
+    {
+        if (empty($str) || $str === '-' || $str === 'N/A' || $str === 'null') {
+            return null;
+        }
+
+        $clean = trim((string)$str);
+
+        // Pattern 1: Day/Month/Year (e.g. 15/07/2017 or 15-07-2017 with optional EC / E.C.)
+        if (preg_match('/(\d{1,2})\s*[\/\-]\s*(\d{1,2})\s*[\/\-]\s*(20\d{2}|19\d{2})/', $clean, $m)) {
+            $day   = (int)$m[1];
+            $month = (int)$m[2];
+            $year  = (int)$m[3];
+            if ($month >= 1 && $month <= 13) {
+                return [
+                    'day'   => $day,
+                    'month' => $month,
+                    'year'  => $year,
+                ];
+            }
+        }
+
+        // Pattern 2: Year/Month/Day (e.g. 2017/07/15 or 2017-07-15)
+        if (preg_match('/(20\d{2}|19\d{2})\s*[\/\-]\s*(\d{1,2})\s*[\/\-]\s*(\d{1,2})/', $clean, $m)) {
+            $year  = (int)$m[1];
+            $month = (int)$m[2];
+            $day   = (int)$m[3];
+            if ($month >= 1 && $month <= 13) {
+                return [
+                    'year'  => $year,
+                    'month' => $month,
+                    'day'   => $day,
+                ];
+            }
+        }
+
+        // Pattern 3: 2-digit Ethiopian year (e.g. 15/07/17 -> 2017)
+        if (preg_match('/(\d{1,2})\s*[\/\-]\s*(\d{1,2})\s*[\/\-]\s*(\d{2})\b/', $clean, $m)) {
+            $day   = (int)$m[1];
+            $month = (int)$m[2];
+            $shortYear = (int)$m[3];
+            $year  = ($shortYear < 50) ? (2000 + $shortYear) : (1900 + $shortYear);
+            if ($month >= 1 && $month <= 13) {
+                return [
+                    'day'   => $day,
+                    'month' => $month,
+                    'year'  => $year,
+                ];
+            }
+        }
+
+        // Pattern 4: Named Ethiopian Months (English or Amharic)
+        foreach (EthiopianDate::MONTHS_EN as $mNum => $nameEn) {
+            if (stripos($clean, $nameEn) !== false) {
+                if (preg_match('/\b(20\d{2}|19\d{2})\b/', $clean, $yMatch)) {
+                    return [
+                        'day'   => 1,
+                        'month' => $mNum,
+                        'year'  => (int)$yMatch[1],
+                    ];
+                }
+            }
+        }
+
+        foreach (EthiopianDate::MONTHS_AM as $mNum => $nameAm) {
+            if (str_contains($clean, $nameAm)) {
+                if (preg_match('/\b(20\d{2}|19\d{2})\b/', $clean, $yMatch)) {
+                    return [
+                        'day'   => 1,
+                        'month' => $mNum,
+                        'year'  => (int)$yMatch[1],
+                    ];
+                }
+            }
+        }
+
+        return null;
     }
 
     /**

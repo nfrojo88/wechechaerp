@@ -800,7 +800,7 @@
             </a>
 
             {{-- Quick Ethiopian Month & Year Selector --}}
-            <form method="GET" action="{{ route('finance.tax-deductions.movements-receipts-pdf') }}" class="month-selector-form">
+            <form method="GET" action="{{ route('finance.tax-deductions.movements-receipts-pdf') }}" class="month-selector-form" id="receiptsMonthForm">
                 <input type="hidden" name="type" value="{{ $receiptFilter }}">
                 <input type="hidden" name="format" value="{{ $formatFilter }}">
 
