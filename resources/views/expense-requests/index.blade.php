@@ -276,6 +276,21 @@
                                         @endif
                                     </div>
                                 @endif
+                                @if(!empty($req->send_back_reason))
+                                    <div class="mt-1 p-1 bg-warning bg-opacity-10 border border-warning border-opacity-25 rounded small text-dark" style="max-width: 220px; font-size: 0.76rem;">
+                                        <div class="fw-bold text-warning-emphasis">
+                                            <i class="fa-solid fa-arrow-left me-1"></i>Returned to Head:
+                                        </div>
+                                        <div class="text-muted text-truncate" title="{{ $req->send_back_reason }}">
+                                            <strong>Reason:</strong> {{ $req->send_back_reason }}
+                                        </div>
+                                        @if($req->sent_back_at)
+                                            <div class="text-muted" style="font-size: 0.70rem;">
+                                                <i class="fa-regular fa-clock me-1"></i>{{ $req->sent_back_at->format('d M Y, h:i A') }}
+                                            </div>
+                                        @endif
+                                    </div>
+                                @endif
                             </td>
                             <td>
                                 @if($req->attachment)
@@ -337,6 +352,12 @@
                                         <i class="fa-solid fa-money-bill-wave me-1"></i>Adjust &amp; Pay
                                     </button>
                                 @endif
+
+                                @can('sendBackToFinanceHead', $req)
+                                    <button type="button" class="btn btn-sm btn-outline-warning fw-bold py-1 px-2 ms-1" data-bs-toggle="modal" data-bs-target="#sendBackToFinanceHeadModal{{ $req->id }}" title="Send back to Finance Head">
+                                        <i class="fa-solid fa-arrow-left me-1"></i>Send Back
+                                    </button>
+                                @endcan
 
                                 {{-- Details Button --}}
                                 <button type="button" class="btn btn-sm btn-light border py-1 px-2 ms-1" data-bs-toggle="modal" data-bs-target="#detailsModal{{ $req->id }}">
@@ -1124,16 +1145,73 @@
                         </div>
                     </div>
                     <div class="modal-footer bg-light border-top-0 d-flex justify-content-between">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" class="btn btn-success fw-bold px-4" id="btnConfirmPaid{{ $req->id }}">
-                            <i class="fa-solid fa-check-circle me-1"></i> Confirm &amp; Mark as Paid (<span id="btnPayAmount{{ $req->id }}">ETB {{ number_format($req->net_amount ?? $req->amount, 2) }}</span>)
-                        </button>
+                        @can('sendBackToFinanceHead', $req)
+                            <button type="button" class="btn btn-outline-warning" data-bs-dismiss="modal" data-bs-toggle="modal" data-bs-target="#sendBackToFinanceHeadModal{{ $req->id }}">
+                                <i class="fa-solid fa-arrow-left me-1"></i> Send Back to Finance Head
+                            </button>
+                        @endcan
+                        <div class="d-flex gap-2 ms-auto">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-success fw-bold px-4" id="btnConfirmPaid{{ $req->id }}">
+                                <i class="fa-solid fa-check-circle me-1"></i> Confirm &amp; Mark as Paid (<span id="btnPayAmount{{ $req->id }}">ETB {{ number_format($req->net_amount ?? $req->amount, 2) }}</span>)
+                            </button>
+                        </div>
                     </div>
                 </form>
             </div>
         </div>
     </div>
     @endif
+
+    @can('sendBackToFinanceHead', $req)
+    <!-- Modal: Send Expense Request Back to Finance Head -->
+    <div class="modal fade" id="sendBackToFinanceHeadModal{{ $req->id }}" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content shadow border-0 rounded-4 overflow-hidden">
+                <form method="POST" action="{{ route('expense-requests.send-back-to-finance-head', $req->id) }}">
+                    @csrf
+                    <div class="modal-header bg-warning text-dark py-3 px-4">
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="badge bg-dark bg-opacity-10 text-dark p-2 rounded-3 fs-6">
+                                <i class="fa-solid fa-arrow-left"></i>
+                            </span>
+                            <h5 class="modal-title fw-bold mb-0">Send Back to Finance Head</h5>
+                        </div>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body p-4 bg-white">
+                        <div class="p-3 bg-light rounded-3 mb-3 border">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span class="text-muted small text-uppercase fw-bold">Request Number:</span>
+                                <strong class="text-dark font-monospace">#{{ $req->request_number }}</strong>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span class="text-muted small text-uppercase fw-bold">Requested Amount:</span>
+                                <strong class="text-success fs-6">ETB {{ number_format($req->amount, 2) }}</strong>
+                            </div>
+                            <div class="small text-muted"><i class="fa-solid fa-user me-1"></i> Requester: {{ $req->employee->full_name ?? ($req->user->name ?? 'N/A') }}</div>
+                        </div>
+
+                        <p class="text-muted small mb-3">
+                            Returning this request will revert its status to <strong>Approved - Assigned to Finance</strong>, clear assigned staff, and place it back on the <strong>Finance Head</strong> review queue.
+                        </p>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold small text-dark">Reason for Return <span class="text-danger">*</span></label>
+                            <textarea name="reason" class="form-control" rows="3" placeholder="Explain why this request is being returned to Finance Head (e.g. incorrect account, insufficient petty cash balance, missing approval docs, clarification needed)..." required></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light border-top-0 d-flex justify-content-between">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-warning fw-bold px-4">
+                            <i class="fa-solid fa-paper-plane me-1"></i> Send Back to Finance Head
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    @endcan
 
     {{-- Details Modal --}}
     @php $pcr = $req->linked_replenishment; @endphp
@@ -1175,7 +1253,36 @@
                     </div>
                     @endif
 
-                    <div class="row g-3 mb-3">
+                    @if($req->send_back_reason)
+                    <div class="alert alert-warning border-start border-4 border-warning shadow-sm mb-3">
+                        <div class="d-flex align-items-start gap-3">
+                            <div class="rounded-circle bg-warning bg-opacity-25 p-2 text-warning-emphasis flex-shrink-0">
+                                <i class="fa-solid fa-arrow-left fa-xl"></i>
+                            </div>
+                            <div class="flex-grow-1">
+                                <h6 class="fw-bold text-dark mb-1"><i class="fa-solid fa-rotate-left me-1 text-warning"></i>Returned to Finance Head</h6>
+                                <div class="p-2 bg-white rounded border mb-2">
+                                    <strong class="text-dark small d-block mb-1"><i class="fa-solid fa-comment-dots text-warning me-1"></i>Return Reason:</strong>
+                                    <span class="text-dark fw-semibold">{{ $req->send_back_reason }}</span>
+                                </div>
+                                <div class="small text-muted d-flex flex-wrap gap-3">
+                                    @if($req->sentBackBy)
+                                    <div>
+                                        <i class="fa-solid fa-user-tag text-warning me-1"></i><strong>Returned By:</strong>
+                                        <span class="text-dark fw-semibold">{{ $req->sentBackBy->name }}</span>
+                                    </div>
+                                    @endif
+                                    @if($req->sent_back_at)
+                                    <div>
+                                        <i class="fa-solid fa-calendar-xmark text-warning me-1"></i><strong>Date & Time:</strong>
+                                        <span class="text-dark">{{ $req->sent_back_at->format('d M Y \a\t h:i A') }}</span>
+                                    </div>
+                                    @endif
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    @endif
                         <div class="col-md-6">
                             <div class="p-3 bg-light rounded-3 border h-100">
                                 <div class="text-muted small mb-1"><i class="fa-solid fa-user-pen text-primary me-1"></i>Asker (Requested By):</div>
@@ -1574,6 +1681,21 @@
                             </li>
                             @endif
 
+                            @if($req->send_back_reason)
+                            <li class="list-group-item bg-warning bg-opacity-10 text-dark border-start border-4 border-warning">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <i class="fa-solid fa-arrow-left me-1 text-warning"></i>
+                                        <strong>Returned to Finance Head by {{ $req->sentBackBy->name ?? 'Finance Staff' }}</strong>
+                                        <div class="small text-dark mt-1"><strong>Reason:</strong> {{ $req->send_back_reason }}</div>
+                                    </div>
+                                    @if($req->sent_back_at)
+                                        <small class="text-muted text-nowrap ms-2">{{ $req->sent_back_at->format('M d, Y H:i') }}</small>
+                                    @endif
+                                </div>
+                            </li>
+                            @endif
+
                             @if($req->status === 'Rejected')
                             <li class="list-group-item bg-danger bg-opacity-10 text-danger border-start border-4 border-danger">
                                 <div class="d-flex justify-content-between align-items-start">
@@ -1745,8 +1867,13 @@
                     @endif
 
                 </div>
-                <div class="modal-footer bg-light border-top-0">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <div class="modal-footer bg-light border-top-0 d-flex justify-content-between">
+                    @can('sendBackToFinanceHead', $req)
+                        <button type="button" class="btn btn-outline-warning" data-bs-dismiss="modal" data-bs-toggle="modal" data-bs-target="#sendBackToFinanceHeadModal{{ $req->id }}">
+                            <i class="fa-solid fa-arrow-left me-1"></i> Send Back to Finance Head
+                        </button>
+                    @endcan
+                    <button type="button" class="btn btn-secondary ms-auto" data-bs-dismiss="modal">Close</button>
                 </div>
             </div>
         </div>

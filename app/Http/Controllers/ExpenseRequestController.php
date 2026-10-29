@@ -148,6 +148,15 @@ class ExpenseRequestController extends Controller
                     if (!\Illuminate\Support\Facades\Schema::hasColumn('expense_requests', 'account_name')) {
                         $table->string('account_name', 255)->nullable();
                     }
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('expense_requests', 'send_back_reason')) {
+                        $table->text('send_back_reason')->nullable();
+                    }
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('expense_requests', 'sent_back_at')) {
+                        $table->timestamp('sent_back_at')->nullable();
+                    }
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('expense_requests', 'sent_back_by_id')) {
+                        $table->unsignedBigInteger('sent_back_by_id')->nullable();
+                    }
                 });
             }
 
@@ -1033,6 +1042,64 @@ class ExpenseRequestController extends Controller
         $staffName = $assignedStaff ? $assignedStaff->name : 'Finance Staff';
 
         return back()->with('success', "Request #{$expenseRequest->request_number} assigned to finance staff member ({$staffName})!");
+    }
+
+    /**
+     * Send Back to Finance Head (from Assigned Finance Staff or review queue).
+     */
+    public function sendBackToFinanceHead(Request $request, ExpenseRequest $expenseRequest)
+    {
+        $this->ensureTableExists();
+        $this->authorize('sendBackToFinanceHead', $expenseRequest);
+
+        $validated = $request->validate([
+            'reason' => 'required|string|max:1000',
+        ]);
+
+        $user = auth()->user();
+        $reason = trim($validated['reason']);
+
+        // Revert status to Approved - Assigned to Finance (Finance Head Queue)
+        // and unassign finance staff so Finance Head can review / reassign
+        $expenseRequest->update([
+            'status'                     => ExpenseRequest::STATUS_APPROVED_ASSIGNED,
+            'assigned_finance_staff_id'  => null,
+            'finance_staff_id'           => null,
+            'rejection_reason'           => null,
+            'payment_notes'              => ($expenseRequest->payment_notes ? $expenseRequest->payment_notes . "\n" : '') . "[Sent back to Finance Head by {$user->name} on " . now()->format('M d, Y H:i') . "]: {$reason}",
+        ]);
+
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasColumn('expense_requests', 'send_back_reason')) {
+                $expenseRequest->update([
+                    'send_back_reason' => $reason,
+                    'sent_back_at'     => now(),
+                    'sent_back_by_id'  => $user->id,
+                ]);
+            }
+        } catch (\Throwable $e) {}
+
+        // If linked to a purchase request, clear payment assignment note as well
+        if ($expenseRequest->purchase_request_id) {
+            try {
+                $pr = \App\Models\PurchaseRequest::find($expenseRequest->purchase_request_id);
+                if ($pr && $pr->payment) {
+                    $pr->payment->update([
+                        'assigned_finance_staff_id' => null,
+                        'notes' => ($pr->payment->notes ? $pr->payment->notes . ' | ' : '') . "Sent back to Finance Head: {$reason}",
+                    ]);
+                }
+            } catch (\Throwable $e) {}
+        }
+
+        \App\Models\ActivityLog::log(
+            'returned',
+            "Expense Request #{$expenseRequest->request_number} sent back to Finance Head by {$user->name}. Reason: {$reason}",
+            'Expense Requests',
+            $expenseRequest
+        );
+
+        return back()->with('success', "Expense Request #{$expenseRequest->request_number} has been sent back to Finance Head successfully.");
     }
 
     /**

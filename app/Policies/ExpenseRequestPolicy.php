@@ -120,6 +120,38 @@ class ExpenseRequestPolicy
     }
 
     /**
+     * Determine whether the user can send back an expense request to the Finance Head.
+     */
+    public function sendBackToFinanceHead(User $user, ExpenseRequest $expenseRequest): bool
+    {
+        if ($user->hasAnyRole(['admin', 'global_admin'])) {
+            return true;
+        }
+
+        $roleNames = strtolower(implode(' ', $user->getRoleNames()->toArray()));
+        $isFinance = $user->hasAnyRole(['Finance head', 'finance_head', 'finance_manager', 'Finance staff', 'finance_staff', 'cashier', 'accountant'])
+            || str_contains($roleNames, 'finance')
+            || str_contains($roleNames, 'cashier')
+            || str_contains($roleNames, 'accountant');
+
+        $isAssignedStaff = (
+            (int)$expenseRequest->assigned_finance_staff_id === (int)$user->id || 
+            (int)$expenseRequest->finance_staff_id === (int)$user->id
+        );
+
+        $eligibleStatus = in_array($expenseRequest->status, [
+            ExpenseRequest::STATUS_ASSIGNED,
+            ExpenseRequest::STATUS_APPROVED_ASSIGNED,
+            'Assigned to Finance',
+            'Approved - Assigned to Finance',
+            ExpenseRequest::STATUS_REJECTED,
+            'Rejected',
+        ]);
+
+        return ($isAssignedStaff || $isFinance) && $eligibleStatus;
+    }
+
+    /**
      * Determine whether the user can attach or update fiscal receipts via OCR Studio.
      */
     public function attachReceipt(User $user, ExpenseRequest $expenseRequest): bool

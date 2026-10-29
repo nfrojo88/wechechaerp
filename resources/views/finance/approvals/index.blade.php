@@ -252,6 +252,11 @@
                                             <i class="fa-solid fa-triangle-exclamation me-1"></i>{{ Str::limit($item->rejection_reason, 45) }}
                                         </div>
                                     @endif
+                                    @if($item->type === 'expense_request' && !empty($item->raw_model->send_back_reason))
+                                        <div class="small text-warning-emphasis fw-semibold mt-1" style="font-size: .72rem;" title="{{ $item->raw_model->send_back_reason }}">
+                                            <i class="fa-solid fa-arrow-left me-1 text-warning"></i>Returned: {{ Str::limit($item->raw_model->send_back_reason, 40) }}
+                                        </div>
+                                    @endif
                                 </td>
                                 <td class="text-end">
                                     <div class="fw-bold text-success" style="font-size: .95rem;">ETB {{ number_format($item->net_amount, 2) }}</div>
@@ -323,6 +328,14 @@
                                                                 title="Pay this assigned expense">
                                                             <i class="fa-solid fa-money-bill-wave me-1"></i> Pay
                                                         </button>
+                                                        @can('sendBackToFinanceHead', $req)
+                                                            <button type="button" class="btn btn-outline-warning btn-sm fw-semibold ms-1" 
+                                                                    data-bs-toggle="modal" 
+                                                                    data-bs-target="#sendBackToFinanceHeadModal{{ $req->id }}"
+                                                                    title="Send back to Finance Head">
+                                                                <i class="fa-solid fa-arrow-left me-1"></i> Return
+                                                            </button>
+                                                        @endcan
                                                     @endif
                                                     @if($isFinHeadOrAdmin)
                                                         <button type="button" class="btn btn-primary btn-sm text-white fw-semibold ms-1" 
@@ -332,6 +345,17 @@
                                                             <i class="fa-solid fa-user-tag me-1"></i> Assign
                                                         </button>
                                                     @endif
+                                                @endif
+
+                                                @if(in_array($req->status, [\App\Models\ExpenseRequest::STATUS_REJECTED, 'Rejected']))
+                                                    @can('sendBackToFinanceHead', $req)
+                                                        <button type="button" class="btn btn-outline-warning btn-sm fw-semibold ms-1"
+                                                                data-bs-toggle="modal"
+                                                                data-bs-target="#sendBackToFinanceHeadModal{{ $req->id }}"
+                                                                title="Reopen and return to Finance Head">
+                                                            <i class="fa-solid fa-rotate-left me-1"></i> Return
+                                                        </button>
+                                                    @endcan
                                                 @endif
 
                                                 <!-- Paid Indicator Button -->
@@ -373,6 +397,12 @@
                                                                 title="Disburse payment for this Purchase Request">
                                                             <i class="fa-solid fa-money-bill-wave me-1"></i> Pay
                                                         </button>
+                                                        <button type="button" class="btn btn-outline-warning btn-sm fw-semibold ms-1"
+                                                                data-bs-toggle="modal" 
+                                                                data-bs-target="#prSendBackToFinanceHeadModal{{ $item->id_raw }}"
+                                                                title="Send PR payment task back to Finance Head">
+                                                            <i class="fa-solid fa-arrow-left me-1"></i> Return
+                                                        </button>
                                                     @endif
                                                     <a href="{{ $item->route_show }}" class="btn btn-outline-primary btn-sm" title="View Purchase Request details">
                                                         <i class="fa-solid fa-eye me-1"></i> PR
@@ -397,6 +427,12 @@
                                                                 data-bs-target="#payOfficeModal{{ $item->id_raw }}"
                                                                 title="Disburse payment for this Office Request">
                                                             <i class="fa-solid fa-money-bill-wave me-1"></i> Pay
+                                                        </button>
+                                                        <button type="button" class="btn btn-outline-warning btn-sm fw-semibold ms-1" 
+                                                                data-bs-toggle="modal" 
+                                                                data-bs-target="#officeSendBackToFinanceHeadModal{{ $item->id_raw }}"
+                                                                title="Send Office Request back to Finance Head">
+                                                            <i class="fa-solid fa-arrow-left me-1"></i> Return
                                                         </button>
                                                     @elseif($isFinHeadOrAdmin)
                                                         <button type="button" class="btn btn-sm text-white fw-bold shadow-sm" style="background:#7c3aed;" 
@@ -1086,6 +1122,9 @@
                                 @if($req->paid_at)
                                     <li class="mb-1 text-success"><i class="fa-solid fa-circle-check me-2"></i> <strong>Paid on {{ $req->paid_at->format('M d, Y H:i') }}</strong> by {{ $req->paidBy->name ?? 'Finance' }} | Ref: {{ $req->payment_reference ?? 'N/A' }}</li>
                                 @endif
+                                @if($req->send_back_reason)
+                                    <li class="mt-2 text-warning-emphasis fw-semibold"><i class="fa-solid fa-arrow-left me-2"></i> Sent Back to Finance Head: {{ $req->send_back_reason }} @if($req->sent_back_at) <span class="text-muted fw-normal">({{ $req->sent_back_at->format('M d, Y H:i') }})</span> @endif</li>
+                                @endif
                                 @if($req->rejection_reason)
                                     <li class="mt-2 text-danger fw-semibold"><i class="fa-solid fa-triangle-exclamation me-2"></i> Rejection Reason: {{ $req->rejection_reason }}</li>
                                 @endif
@@ -1093,8 +1132,23 @@
                         </div>
                     @endif
                 </div>
-                <div class="modal-footer bg-light border-0 py-3 px-4">
-                    <button type="button" class="btn btn-secondary rounded-3 px-4" data-bs-dismiss="modal">Close</button>
+                <div class="modal-footer bg-light border-0 py-3 px-4 d-flex justify-content-between">
+                    @if($item->type === 'expense_request')
+                        @can('sendBackToFinanceHead', $item->raw_model)
+                            <button type="button" class="btn btn-outline-warning rounded-pill px-3" data-bs-dismiss="modal" data-bs-toggle="modal" data-bs-target="#sendBackToFinanceHeadModal{{ $item->id_raw }}">
+                                <i class="fa-solid fa-arrow-left me-1"></i> Send Back to Finance Head
+                            </button>
+                        @endcan
+                    @elseif($item->type === 'purchase_request' && $item->status_key === 'finance_queue')
+                        <button type="button" class="btn btn-outline-warning rounded-pill px-3" data-bs-dismiss="modal" data-bs-toggle="modal" data-bs-target="#prSendBackToFinanceHeadModal{{ $item->id_raw }}">
+                            <i class="fa-solid fa-arrow-left me-1"></i> Send Back to Finance Head
+                        </button>
+                    @elseif($item->type === 'office_supply_request' && $item->status_key === 'finance_queue')
+                        <button type="button" class="btn btn-outline-warning rounded-pill px-3" data-bs-dismiss="modal" data-bs-toggle="modal" data-bs-target="#officeSendBackToFinanceHeadModal{{ $item->id_raw }}">
+                            <i class="fa-solid fa-arrow-left me-1"></i> Send Back to Finance Head
+                        </button>
+                    @endif
+                    <button type="button" class="btn btn-secondary rounded-3 px-4 ms-auto" data-bs-dismiss="modal">Close</button>
                 </div>
             </div>
         </div>
@@ -1920,16 +1974,63 @@
                                 <textarea name="payment_notes" class="form-control bg-light border-0" rows="2" placeholder="Enter any payment notes or disbursement remarks..."></textarea>
                             </div>
                         </div>
+                        <div class="modal-footer bg-light border-0 py-3 px-4 d-flex justify-content-between">
+                            @can('sendBackToFinanceHead', $req)
+                                <button type="button" class="btn btn-outline-warning rounded-pill px-3" data-bs-dismiss="modal" data-bs-toggle="modal" data-bs-target="#sendBackToFinanceHeadModal{{ $req->id }}">
+                                    <i class="fa-solid fa-arrow-left me-1"></i> Send Back to Finance Head
+                                </button>
+                            @endcan
+                            <div class="d-flex gap-2 ms-auto">
+                                <button type="button" class="btn btn-light rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
+                                <button type="submit" class="btn btn-success rounded-pill px-4 fw-bold shadow-sm" id="btnConfirmPaid{{ $req->id }}">
+                                    <i class="fa-solid fa-circle-check me-1"></i> Confirm Paid (<span id="btnPayAmount{{ $req->id }}">ETB {{ number_format($req->effective_payable_amount, 2) }}</span>)
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        @can('sendBackToFinanceHead', $req)
+        <!-- Modal: Send Expense Request Back to Finance Head -->
+        <div class="modal fade" id="sendBackToFinanceHeadModal{{ $req->id }}" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+                    <form method="POST" action="{{ route('expense-requests.send-back-to-finance-head', $req->id) }}">
+                        @csrf
+                        <div class="modal-header bg-warning text-dark border-0 py-3 px-4">
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="badge bg-dark bg-opacity-10 text-dark p-2 rounded-3 fs-6">
+                                    <i class="fa-solid fa-arrow-left"></i>
+                                </span>
+                                <div>
+                                    <h5 class="modal-title fw-bold mb-0">Send Back to Finance Head</h5>
+                                    <span class="text-muted small">Request #{{ $req->request_number }} &bull; ETB {{ number_format($req->amount, 2) }}</span>
+                                </div>
+                            </div>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body p-4 bg-white">
+                            <p class="text-muted small mb-3">
+                                This will return the request to the <strong>Finance Head</strong> queue for review or re-assignment. Assigned finance staff will be cleared.
+                            </p>
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold text-dark">Reason for Return <span class="text-danger">*</span></label>
+                                <textarea name="reason" class="form-control border-secondary-subtle" rows="3" placeholder="Please specify why this expense cannot be processed (e.g. wrong account, missing documentation, insufficient budget, reallocation needed)..." required></textarea>
+                            </div>
+                        </div>
                         <div class="modal-footer bg-light border-0 py-3 px-4">
                             <button type="button" class="btn btn-light rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
-                            <button type="submit" class="btn btn-success rounded-pill px-4 fw-bold shadow-sm" id="btnConfirmPaid{{ $req->id }}">
-                                <i class="fa-solid fa-circle-check me-1"></i> Confirm Paid (<span id="btnPayAmount{{ $req->id }}">ETB {{ number_format($req->effective_payable_amount, 2) }}</span>)
+                            <button type="submit" class="btn btn-warning rounded-pill px-4 fw-bold shadow-sm">
+                                <i class="fa-solid fa-paper-plane me-1"></i> Send Back to Finance Head
                             </button>
                         </div>
                     </form>
                 </div>
             </div>
         </div>
+        @endcan
 
     @endif
 
@@ -2122,10 +2223,53 @@
                             <i class="fa-solid fa-circle-info text-primary me-1"></i> Once disbursed, the double-entry journal will post automatically, and the Procurement Team will be prompted to upload the vendor receipt.
                         </div>
                     </div>
+                    <div class="modal-footer bg-light border-0 py-3 px-4 d-flex justify-content-between">
+                        <button type="button" class="btn btn-outline-warning rounded-pill px-3" data-bs-dismiss="modal" data-bs-toggle="modal" data-bs-target="#prSendBackToFinanceHeadModal{{ $item->id_raw }}">
+                            <i class="fa-solid fa-arrow-left me-1"></i> Send Back to Finance Head
+                        </button>
+                        <div class="d-flex gap-2 ms-auto">
+                            <button type="button" class="btn btn-light rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-success rounded-pill px-4 fw-bold shadow-sm">
+                                <i class="fa-solid fa-check-double me-1"></i> <span id="btnPrPayLabel{{ $item->id_raw }}">Confirm &amp; Execute Payment (<span id="btnPrPaySpan{{ $item->id_raw }}">ETB {{ number_format($item->net_amount, 2) }}</span>)</span>
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Send PR Back to Finance Head -->
+    <div class="modal fade" id="prSendBackToFinanceHeadModal{{ $item->id_raw }}" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+                <form method="POST" action="{{ route('expenses.pr-send-back-to-finance-head', $item->id_raw) }}">
+                    @csrf
+                    <div class="modal-header bg-warning text-dark border-0 py-3 px-4">
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="badge bg-dark bg-opacity-10 text-dark p-2 rounded-3 fs-6">
+                                <i class="fa-solid fa-arrow-left"></i>
+                            </span>
+                            <div>
+                                <h5 class="modal-title fw-bold mb-0">Send PR Payment Back to Finance Head</h5>
+                                <span class="text-muted small">PR #{{ $item->item_code }} &bull; ETB {{ number_format($item->net_amount, 2) }}</span>
+                            </div>
+                        </div>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body p-4 bg-white">
+                        <p class="text-muted small mb-3">
+                            This will unassign the payment task and send it back to the <strong>Finance Head</strong> for reassignment or review.
+                        </p>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-dark">Reason for Return <span class="text-danger">*</span></label>
+                            <textarea name="reason" class="form-control border-secondary-subtle" rows="3" placeholder="Please specify reason for sending back (e.g., funding discrepancy, incorrect COA, needs revision)..." required></textarea>
+                        </div>
+                    </div>
                     <div class="modal-footer bg-light border-0 py-3 px-4">
                         <button type="button" class="btn btn-light rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" class="btn btn-success rounded-pill px-4 fw-bold shadow-sm">
-                            <i class="fa-solid fa-check-double me-1"></i> <span id="btnPrPayLabel{{ $item->id_raw }}">Confirm &amp; Execute Payment (<span id="btnPrPaySpan{{ $item->id_raw }}">ETB {{ number_format($item->net_amount, 2) }}</span>)</span>
+                        <button type="submit" class="btn btn-warning rounded-pill px-4 fw-bold shadow-sm">
+                            <i class="fa-solid fa-paper-plane me-1"></i> Send Back to Finance Head
                         </button>
                     </div>
                 </form>
@@ -2338,10 +2482,53 @@
                             <textarea name="payment_notes" class="form-control bg-light border-0" rows="2" placeholder="e.g. Disbursed cash from Petty Cash to secretary..."></textarea>
                         </div>
                     </div>
+                    <div class="modal-footer bg-light border-0 py-3 px-4 d-flex justify-content-between">
+                        <button type="button" class="btn btn-outline-warning rounded-pill px-3" data-bs-dismiss="modal" data-bs-toggle="modal" data-bs-target="#officeSendBackToFinanceHeadModal{{ $item->id_raw }}">
+                            <i class="fa-solid fa-arrow-left me-1"></i> Send Back to Finance Head
+                        </button>
+                        <div class="d-flex gap-2 ms-auto">
+                            <button type="button" class="btn btn-light rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-success rounded-pill px-4 fw-bold shadow-sm">
+                                <i class="fa-solid fa-check-double me-1"></i> Confirm Paid &amp; Complete (ETB {{ number_format($item->net_amount, 2) }})
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Send Office Supply Request Back to Finance Head -->
+    <div class="modal fade" id="officeSendBackToFinanceHeadModal{{ $item->id_raw }}" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+                <form method="POST" action="{{ route('expenses.office-send-back-to-finance-head', $item->id_raw) }}">
+                    @csrf
+                    <div class="modal-header bg-warning text-dark border-0 py-3 px-4">
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="badge bg-dark bg-opacity-10 text-dark p-2 rounded-3 fs-6">
+                                <i class="fa-solid fa-arrow-left"></i>
+                            </span>
+                            <div>
+                                <h5 class="modal-title fw-bold mb-0">Send Office Request Back to Finance Head</h5>
+                                <span class="text-muted small">Req #{{ $item->id_formatted }} &bull; ETB {{ number_format($item->net_amount, 2) }}</span>
+                            </div>
+                        </div>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body p-4 bg-white">
+                        <p class="text-muted small mb-3">
+                            This will return the request to the <strong>Finance Head</strong> queue and unassign the staff handler.
+                        </p>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-dark">Reason for Return <span class="text-danger">*</span></label>
+                            <textarea name="reason" class="form-control border-secondary-subtle" rows="3" placeholder="Please specify why this office material expense cannot be paid..." required></textarea>
+                        </div>
+                    </div>
                     <div class="modal-footer bg-light border-0 py-3 px-4">
                         <button type="button" class="btn btn-light rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" class="btn btn-success rounded-pill px-4 fw-bold shadow-sm">
-                            <i class="fa-solid fa-check-double me-1"></i> Confirm Paid &amp; Complete (ETB {{ number_format($item->net_amount, 2) }})
+                        <button type="submit" class="btn btn-warning rounded-pill px-4 fw-bold shadow-sm">
+                            <i class="fa-solid fa-paper-plane me-1"></i> Send Back
                         </button>
                     </div>
                 </form>

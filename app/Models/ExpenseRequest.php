@@ -84,6 +84,9 @@ class ExpenseRequest extends Model
         'verified_without_receipt_at',
         'verified_without_receipt_by',
         'verified_without_receipt_notes',
+        'send_back_reason',
+        'sent_back_at',
+        'sent_back_by_id',
     ];
 
 
@@ -109,6 +112,7 @@ class ExpenseRequest extends Model
         'gm_approved_at' => 'datetime',
         'finance_assigned_at' => 'datetime',
         'paid_at' => 'datetime',
+        'sent_back_at' => 'datetime',
         'is_verified_without_receipt' => 'boolean',
         'verified_without_receipt_at' => 'datetime',
     ];
@@ -271,6 +275,14 @@ class ExpenseRequest extends Model
     public function gmReviewer()
     {
         return $this->belongsTo(User::class, 'gm_reviewer_id');
+    }
+
+    /**
+     * Staff member who returned / sent back the request to Finance Head.
+     */
+    public function sentBackBy()
+    {
+        return $this->belongsTo(User::class, 'sent_back_by_id');
     }
 
     /**

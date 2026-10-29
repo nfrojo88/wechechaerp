@@ -2396,6 +2396,8 @@ Route::middleware(['auth'])->group(function () {
     Route::post('expenses/{expense}/approve', [App\Http\Controllers\ExpenseController::class, 'approve'])->name('expenses.approve');
     Route::post('expenses/{expense}/reject',
         [App\Http\Controllers\ExpenseController::class, 'reject'])->name('expenses.reject');
+    Route::post('expenses/purchase-requests/{purchaseRequest}/send-back-to-finance-head', [App\Http\Controllers\ApprovalHubController::class, 'sendBackPrToFinanceHead'])->name('expenses.pr-send-back-to-finance-head');
+    Route::post('expenses/office-requests/{officeRequest}/send-back-to-finance-head', [App\Http\Controllers\ApprovalHubController::class, 'sendBackOfficeToFinanceHead'])->name('expenses.office-send-back-to-finance-head');
 
     // Central Approval Hub
     Route::get('approvals', [App\Http\Controllers\ApprovalHubController::class, 'index'])->name('approvals.index');
@@ -2683,6 +2685,7 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/{expenseRequest}/hr-review',      [App\Http\Controllers\ExpenseRequestController::class, 'hrReview'])->name('hr-review');
         Route::post('/{expenseRequest}/gm-review',      [App\Http\Controllers\ExpenseRequestController::class, 'gmReview'])->name('gm-review');
         Route::post('/{expenseRequest}/finance-assign', [App\Http\Controllers\ExpenseRequestController::class, 'financeAssign'])->name('finance-assign');
+        Route::post('/{expenseRequest}/send-back-to-finance-head', [App\Http\Controllers\ExpenseRequestController::class, 'sendBackToFinanceHead'])->name('send-back-to-finance-head');
         Route::post('/{expenseRequest}/mark-paid',      [App\Http\Controllers\ExpenseRequestController::class, 'markPaid'])->name('mark-paid');
         Route::post('/{expenseRequest}/attach-receipt', [App\Http\Controllers\ExpenseRequestController::class, 'attachReceipt'])->name('attach-receipt');
         Route::delete('/{expenseRequest}',              [App\Http\Controllers\ExpenseRequestController::class, 'destroy'])->name('destroy');

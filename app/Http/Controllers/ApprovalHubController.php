@@ -696,4 +696,71 @@ class ApprovalHubController extends Controller
             'isFinance'
         ));
     }
+
+    /**
+     * Send Purchase Request Payment task back to Finance Head.
+     */
+    public function sendBackPrToFinanceHead(Request $request, \App\Models\PurchaseRequest $purchaseRequest)
+    {
+        $request->validate([
+            'reason' => 'required|string|max:1000',
+        ]);
+
+        $user = auth()->user();
+        $reason = trim($request->reason);
+
+        if ($purchaseRequest->payment) {
+            $purchaseRequest->payment->update([
+                'assigned_finance_staff_id' => null,
+                'notes' => ($purchaseRequest->payment->notes ? $purchaseRequest->payment->notes . ' | ' : '') . "[Sent back to Finance Head by {$user->name} on " . now()->format('M d, Y H:i') . "]: {$reason}",
+            ]);
+        }
+
+        try {
+            $expReq = \App\Models\ExpenseRequest::where('purchase_request_id', $purchaseRequest->id)->first();
+            if ($expReq) {
+                $expReq->update([
+                    'status'                    => \App\Models\ExpenseRequest::STATUS_APPROVED_ASSIGNED,
+                    'assigned_finance_staff_id' => null,
+                    'finance_staff_id'          => null,
+                    'payment_notes'             => ($expReq->payment_notes ? $expReq->payment_notes . "\n" : '') . "[Sent back to Finance Head by {$user->name}]: {$reason}",
+                ]);
+            }
+        } catch (\Throwable $e) {}
+
+        try {
+            \App\Models\PrWorkflowLog::create([
+                'purchase_request_id' => $purchaseRequest->id,
+                'from_stage'          => $purchaseRequest->status,
+                'to_stage'            => $purchaseRequest->status,
+                'action'              => 'staff_send_back_to_finance_head',
+                'actor_role'          => 'finance_staff',
+                'actor_id'            => $user->id,
+                'notes'               => "Payment sent back to Finance Head: {$reason}",
+            ]);
+        } catch (\Throwable $e) {}
+
+        return back()->with('success', "Purchase Request #{$purchaseRequest->pr_no} payment has been sent back to Finance Head.");
+    }
+
+    /**
+     * Send Office Material Request payment task back to Finance Head.
+     */
+    public function sendBackOfficeToFinanceHead(Request $request, \App\Models\OfficeMaterialRequest $officeRequest)
+    {
+        $request->validate([
+            'reason' => 'required|string|max:1000',
+        ]);
+
+        $user = auth()->user();
+        $reason = trim($request->reason);
+
+        $officeRequest->update([
+            'assigned_finance_staff_id' => null,
+            'status'                    => \App\Models\OfficeMaterialRequest::STATUS_APPROVED_BY_HR,
+            'notes'                     => ($officeRequest->notes ? $officeRequest->notes . ' | ' : '') . "[Sent back to Finance Head by {$user->name} on " . now()->format('M d, Y H:i') . "]: {$reason}",
+        ]);
+
+        return back()->with('success', "Office Supply Request #{$officeRequest->id} has been sent back to Finance Head.");
+    }
 }
