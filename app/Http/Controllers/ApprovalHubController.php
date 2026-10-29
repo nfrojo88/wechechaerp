@@ -97,6 +97,7 @@ class ApprovalHubController extends Controller
             return (object) [
                 'id_raw'          => $req->id,
                 'id_formatted'    => $req->request_number ?? ('REQ-' . $req->id),
+                'item_code'       => $req->request_number ?? ('REQ-' . $req->id),
                 'type'            => 'expense_request',
                 'date'            => $req->paid_at ?? $req->created_at,
                 'project'         => $deptOrProject,
@@ -154,6 +155,7 @@ class ApprovalHubController extends Controller
             return (object) [
                 'id_raw'          => $exp->id,
                 'id_formatted'    => 'EXP-' . str_pad($exp->id, 5, '0', STR_PAD_LEFT),
+                'item_code'       => 'EXP-' . str_pad($exp->id, 5, '0', STR_PAD_LEFT),
                 'type'            => 'expense',
                 'date'            => $exp->expense_date ?? $exp->created_at,
                 'project'         => $exp->project ? $exp->project->name : 'General',
@@ -204,6 +206,7 @@ class ApprovalHubController extends Controller
             return (object) [
                 'id_raw'          => $po->id,
                 'id_formatted'    => $po->reference_number ?? ('PUR-' . str_pad($po->id, 5, '0', STR_PAD_LEFT)),
+                'item_code'       => $po->reference_number ?? ('PUR-' . str_pad($po->id, 5, '0', STR_PAD_LEFT)),
                 'type'            => 'purchase_order',
                 'date'            => $po->issued_date ?? $po->created_at,
                 'project'         => $po->project ? $po->project->name : 'Procurement',
@@ -253,6 +256,7 @@ class ApprovalHubController extends Controller
                 return (object) [
                     'id_raw'          => $ef->id,
                     'id_formatted'    => 'EMR-' . str_pad($ef->id, 5, '0', STR_PAD_LEFT),
+                    'item_code'       => 'EMR-' . str_pad($ef->id, 5, '0', STR_PAD_LEFT),
                     'type'            => 'emergency_fund',
                     'date'            => $ef->created_at,
                     'project'         => $ef->project ? $ef->project->name : 'Operations',
@@ -335,6 +339,7 @@ class ApprovalHubController extends Controller
                     return (object) [
                         'id_raw'           => $pr->id,
                         'id_formatted'     => str_starts_with((string)$pr->pr_no, 'PR-') ? $pr->pr_no : ('PR-' . ($pr->pr_no ?? $pr->id)),
+                        'item_code'        => str_starts_with((string)$pr->pr_no, 'PR-') ? $pr->pr_no : ('PR-' . ($pr->pr_no ?? $pr->id)),
                         'type'             => 'purchase_request',
                         'date'             => $payment?->paid_at ?? $pr->created_at,
                         'project'          => $pr->project ? $pr->project->name : 'Procurement',
@@ -401,6 +406,7 @@ class ApprovalHubController extends Controller
                     return (object) [
                         'id_raw'            => $req->id,
                         'id_formatted'      => $req->request_no,
+                        'item_code'         => $req->request_no,
                         'type'              => 'office_supply_request',
                         'date'              => $req->paid_at ?? $req->created_at,
                         'project'           => 'Head Office',

@@ -2252,7 +2252,7 @@
                             </span>
                             <div>
                                 <h5 class="modal-title fw-bold mb-0">Send PR Payment Back to Finance Head</h5>
-                                <span class="text-muted small">PR #{{ $item->item_code }} &bull; ETB {{ number_format($item->net_amount, 2) }}</span>
+                                <span class="text-muted small">{{ $item->id_formatted ?? ($item->item_code ?? ('PR #' . $item->id_raw)) }} &bull; ETB {{ number_format($item->net_amount, 2) }}</span>
                             </div>
                         </div>
                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
