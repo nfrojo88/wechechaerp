@@ -917,9 +917,14 @@
                     <span class="badge-pill badge-red">
                         <i class="fa-solid fa-receipt"></i> Only Added Receipts
                     </span>
-                    <span class="badge-pill badge-blue">
-                        <i class="fa-solid fa-shield-check"></i> 1 Full Page / Receipt Pic
+                    <span class="badge-pill badge-green">
+                        <i class="fa-solid fa-shield-halved"></i> Zero Duplicates Guaranteed
                     </span>
+                    @if(!empty($receiptsSummary['duplicates_blocked_count']))
+                        <span class="badge-pill badge-dark" title="{{ $receiptsSummary['duplicates_blocked_count'] }} duplicate copies blocked from PDF creation">
+                            <i class="fa-solid fa-ban" style="color: #ef4444;"></i> {{ $receiptsSummary['duplicates_blocked_count'] }} Duplicate(s) Blocked
+                        </span>
+                    @endif
                     <span style="font-size: 8.5px; color: #64748b; margin-top: 4px;">
                         Generated: {{ now()->format('d M Y, H:i') }} &bull; Page 1 of {{ $addedReceipts->count() + 1 }}
                     </span>
@@ -929,9 +934,14 @@
             {{-- ── Executive Summary KPI Cards ─────────────────────────────────── --}}
             <div class="kpi-strip">
                 <div class="kpi-card">
-                    <div class="kpi-label"><i class="fa-solid fa-file-invoice" style="color:#1e3a8a;"></i> Filtered Receipts</div>
+                    <div class="kpi-label"><i class="fa-solid fa-file-invoice" style="color:#1e3a8a;"></i> Unique Receipts</div>
                     <div class="kpi-value">{{ $addedReceipts->count() }} <span style="font-size: 8.5px; color: var(--text-muted); font-weight: 500;">/ {{ $receiptsSummary['total_count'] }}</span></div>
-                    <div class="kpi-sub">{{ $receiptsSummary['vat_count'] }} VAT &bull; {{ $receiptsSummary['tas_count'] }} TAS</div>
+                    <div class="kpi-sub">
+                        {{ $receiptsSummary['vat_count'] }} VAT &bull; {{ $receiptsSummary['tas_count'] }} TAS
+                        @if(!empty($receiptsSummary['duplicates_blocked_count']))
+                            &bull; <span style="color: #b91c1c; font-weight: 700;">{{ $receiptsSummary['duplicates_blocked_count'] }} dup blocked</span>
+                        @endif
+                    </div>
                 </div>
                 <div class="kpi-card">
                     <div class="kpi-label"><i class="fa-solid fa-coins" style="color:#0284c7;"></i> Total Base Value</div>
@@ -1100,11 +1110,16 @@
                                 <strong>Purchaser TIN:</strong> {{ $rec['purchaser_tin'] ?? '0054711385' }}
                             </div>
                         </div>
-                        <div style="text-align: right;">
+                        <div style="text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 3px;">
                             <span class="badge-pill {{ $rec['is_vat_receipt'] ? 'badge-green' : 'badge-blue' }}" style="font-size: 10px; padding: 4px 10px;">
                                 <i class="fa-solid {{ $rec['is_vat_receipt'] ? 'fa-percent' : 'fa-receipt' }}"></i>
                                 {{ $rec['is_vat_receipt'] ? '15% VAT Invoiced' : '0% TAS Exempt' }}
                             </span>
+                            @if(!empty($rec['duplicates_blocked']))
+                                <span class="badge-pill badge-dark" style="font-size: 8px; padding: 2px 7px;" title="{{ $rec['duplicates_blocked'] }} duplicate copy(ies) blocked and consolidated">
+                                    <i class="fa-solid fa-clone" style="color: #f59e0b;"></i> {{ $rec['duplicates_blocked'] }} Duplicate Blocked
+                                </span>
+                            @endif
                         </div>
                     </div>
 

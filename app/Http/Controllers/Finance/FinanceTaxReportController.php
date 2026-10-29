@@ -1452,9 +1452,8 @@ class FinanceTaxReportController extends Controller
         // Compute movements data (retrieving all scanned receipts and expenses)
         $movementsData = $this->calculateMonthMovementsData($selectedEthYear, $selectedEthMonth, false);
 
-        // Gather all verified added receipts for this Ethiopian month
-        $allCandidateReceipts = collect();
-        $seenKeys = [];
+        // Gather all candidate receipts from both OCR/Scanned items and verified Expense slips
+        $rawCandidateReceipts = collect();
 
         // 1. Process all OCR / Scanned / Manual Receipts
         $allOcrList = $movementsData['all_ocr_items'] ?? ($movementsData['ocr_items'] ?? []);
@@ -1472,17 +1471,10 @@ class FinanceTaxReportController extends Controller
             $recId = $ocr['receipt_id'] ?? $ocr['id'] ?? null;
             $reqNo = $ocr['request_number'] ?? '';
 
-            // Unique deduplication key
-            $key = $fsNo && $sellerTin ? "{$sellerTin}_{$fsNo}" : ($recId ? "REC_{$recId}" : ($reqNo ?: "IDX_" . count($allCandidateReceipts)));
-            if (isset($seenKeys[$key])) {
-                continue;
-            }
-            $seenKeys[$key] = true;
-
-            $allCandidateReceipts->push([
+            $rawCandidateReceipts->push([
                 'id'                 => $ocr['id'] ?? null,
                 'receipt_id'         => $recId,
-                'request_number'     => $reqNo ?: ('REC-' . ($ocr['id'] ?? (count($allCandidateReceipts) + 1))),
+                'request_number'     => $reqNo ?: ('REC-' . ($ocr['id'] ?? (count($rawCandidateReceipts) + 1))),
                 'fs_no'              => $fsNo ?: '-',
                 'mrc_no'             => !empty($ocr['mrc_no']) && $ocr['mrc_no'] !== '-' ? $ocr['mrc_no'] : '-',
                 'receipt_number'     => $ocr['receipt_number'] ?? '',
@@ -1536,16 +1528,10 @@ class FinanceTaxReportController extends Controller
             $recId = $exp['receipt_id'] ?? null;
             $reqNo = $exp['request_number'] ?? '';
 
-            $key = $fsNo && $sellerTin ? "{$sellerTin}_{$fsNo}" : ($recId ? "REC_{$recId}" : ($reqNo ?: "EXP_" . ($exp['id'] ?? count($allCandidateReceipts))));
-            if (isset($seenKeys[$key])) {
-                continue;
-            }
-            $seenKeys[$key] = true;
-
-            $allCandidateReceipts->push([
+            $rawCandidateReceipts->push([
                 'id'                 => $exp['id'] ?? null,
                 'receipt_id'         => $recId,
-                'request_number'     => $reqNo ?: ('EXP-' . ($exp['id'] ?? (count($allCandidateReceipts) + 1))),
+                'request_number'     => $reqNo ?: ('EXP-' . ($exp['id'] ?? (count($rawCandidateReceipts) + 1))),
                 'fs_no'              => $fsNo ?: '-',
                 'mrc_no'             => $exp['mrc_no'] ?? '-',
                 'receipt_number'     => $exp['payment_reference'] ?? '',
@@ -1568,6 +1554,11 @@ class FinanceTaxReportController extends Controller
                 'source'             => 'expense_receipt',
             ]);
         }
+
+        // Apply strict serious de-duplication rules: eliminate every duplicate receipt
+        $dedupResult = $this->deduplicateCandidateReceipts($rawCandidateReceipts);
+        $allCandidateReceipts = $dedupResult['receipts'];
+        $duplicatesBlockedCount = $dedupResult['duplicates_blocked_count'];
 
         // Summary counts before format & type filters for UI badges
         $totalCandidateCount = $allCandidateReceipts->count();
@@ -1607,16 +1598,17 @@ class FinanceTaxReportController extends Controller
 
         // Summary metrics for the filtered view and full month
         $receiptsSummary = [
-            'total_count'       => $totalCandidateCount,
-            'vat_count'         => $vatCandidateCount,
-            'tas_count'         => $tasCandidateCount,
-            'pdf_count'         => $pdfCandidateCount,
-            'image_count'       => $imageCandidateCount,
-            'active_count'      => $addedReceipts->count(),
-            'total_base'        => (float)$addedReceipts->sum('base_value'),
-            'total_vat'         => (float)$addedReceipts->sum('vat_amount'),
-            'total_gross'       => (float)$addedReceipts->sum('total_value'),
-            'with_file_count'   => $addedReceipts->filter(fn($r) => !empty($r['file_url']))->count(),
+            'total_count'              => $totalCandidateCount,
+            'vat_count'                => $vatCandidateCount,
+            'tas_count'                => $tasCandidateCount,
+            'pdf_count'                => $pdfCandidateCount,
+            'image_count'              => $imageCandidateCount,
+            'active_count'             => $addedReceipts->count(),
+            'duplicates_blocked_count' => $duplicatesBlockedCount,
+            'total_base'               => (float)$addedReceipts->sum('base_value'),
+            'total_vat'                => (float)$addedReceipts->sum('vat_amount'),
+            'total_gross'              => (float)$addedReceipts->sum('total_value'),
+            'with_file_count'          => $addedReceipts->filter(fn($r) => !empty($r['file_url']))->count(),
         ];
 
         $monthInfo = $movementsData['month'] ?? [
@@ -1704,6 +1696,289 @@ class FinanceTaxReportController extends Controller
     private function resolveLocalImageBase64(?string $fileUrl): ?string
     {
         return $this->resolveLocalFileBase64($fileUrl);
+    }
+
+    /**
+     * Strict Serious Deduplication Engine for Receipts PDF export.
+     * Guarantees that every physical receipt slip appears EXACTLY ONCE.
+     * Evaluates multiple serious equivalence criteria:
+     * 1. Same normalized file URL or same non-generic file basename
+     * 2. Same Receipt database ID
+     * 3. Same Expense Request / Voucher Number
+     * 4. Same Fiscal FS Number + Same Seller TIN (normalized)
+     * 5. Same Fiscal FS Number (4+ digits)
+     * 6. Same Financial Fingerprint (identical base, VAT, total on same date)
+     */
+    private function deduplicateCandidateReceipts(\Illuminate\Support\Collection $candidates): array
+    {
+        if ($candidates->isEmpty()) {
+            return [
+                'receipts'                 => collect(),
+                'duplicates_blocked_count' => 0,
+                'blocked_records'          => [],
+            ];
+        }
+
+        $normalizeFs = function (?string $rawFs): string {
+            if (empty($rawFs)) return '';
+            $raw = trim($rawFs);
+            $stripped = preg_replace('/^FS[:\s_#-]*\s*/i', '', $raw);
+            $alphanumeric = strtoupper(preg_replace('/[^0-9A-Z]/i', '', $stripped));
+            $normalized = ltrim($alphanumeric, '0');
+            if ($normalized === '' && $alphanumeric !== '') {
+                $normalized = '0';
+            }
+            return in_array($normalized, ['', '0', 'NA', 'NULL', 'NONE', 'UNKNOWN', '-']) ? '' : $normalized;
+        };
+
+        $normalizeTin = function (?string $rawTin): string {
+            if (empty($rawTin)) return '';
+            $raw = trim($rawTin);
+            $alphanumeric = strtoupper(preg_replace('/[^0-9A-Z]/i', '', $raw));
+            $normalized = ltrim($alphanumeric, '0');
+            return (strlen($normalized) < 4 || in_array($normalized, ['', 'NA', 'NULL', 'NONE', 'UNKNOWN'])) ? '' : $normalized;
+        };
+
+        $normalizeFile = function (?string $fileUrl): string {
+            if (empty($fileUrl)) return '';
+            $path = parse_url($fileUrl, PHP_URL_PATH) ?: $fileUrl;
+            $trimmed = strtolower(trim(ltrim($path, '/')));
+            $trimmed = preg_replace('/^(public\/|storage\/|uploads\/)+/', '', $trimmed);
+            return $trimmed;
+        };
+
+        $normalizeFileName = function (?string $fileUrl): string {
+            if (empty($fileUrl)) return '';
+            $base = strtolower(basename(parse_url($fileUrl, PHP_URL_PATH) ?: $fileUrl));
+            if (in_array($base, ['receipt.pdf', 'receipt.jpg', 'receipt.jpeg', 'receipt.png', 'image.jpg', 'image.png', 'document.pdf', 'file.pdf', ''])) {
+                return '';
+            }
+            return $base;
+        };
+
+        $normalizeRef = function (?string $ref): string {
+            if (empty($ref)) return '';
+            $trimmed = strtoupper(trim(preg_replace('/[^0-9A-Z]/i', '', $ref)));
+            return in_array($trimmed, ['', '0', 'NA', 'NULL', 'NONE', '-']) ? '' : $trimmed;
+        };
+
+        $normalizeVendor = function (?string $v): string {
+            if (empty($v)) return '';
+            $trimmed = strtolower(trim(preg_replace('/[^0-9a-z]/i', '', $v)));
+            return in_array($trimmed, ['vendor', 'unknownvendor', 'general', 'generalmerchant', '']) ? '' : $trimmed;
+        };
+
+        // Prepare enriched items for matching
+        $items = $candidates->values()->map(function ($rec, $idx) use (
+            $normalizeFs, $normalizeTin, $normalizeFile, $normalizeFileName, $normalizeRef, $normalizeVendor
+        ) {
+            $rawFs  = $rec['fs_no'] ?? '';
+            $rawTin = $rec['seller_tin'] ?: ($rec['vendor_tin'] ?? '');
+            $rawRef = $rec['request_number'] ?? '';
+            $fileUrl = $rec['file_url'] ?? '';
+
+            $rec['_idx']          = $idx;
+            $rec['_norm_fs']      = $normalizeFs($rawFs);
+            $rec['_norm_tin']     = $normalizeTin($rawTin);
+            $rec['_norm_file']    = $normalizeFile($fileUrl);
+            $rec['_file_base']    = $normalizeFileName($fileUrl);
+            $rec['_norm_req']     = $normalizeRef($rawRef);
+            $rec['_norm_vendor']  = $normalizeVendor($rec['vendor_name'] ?? '');
+            $rec['_norm_mrc']     = strtoupper(trim(preg_replace('/[^0-9A-Z]/i', '', $rec['mrc_no'] ?? '')));
+            if (in_array($rec['_norm_mrc'], ['-', '', 'NONE', 'UNKNOWN'])) {
+                $rec['_norm_mrc'] = '';
+            }
+            return $rec;
+        });
+
+        $count = $items->count();
+
+        // Disjoint Set Union (Union-Find)
+        $parent = range(0, $count - 1);
+        $find = function ($i) use (&$parent, &$find) {
+            if ($parent[$i] === $i) return $i;
+            return $parent[$i] = $find($parent[$i]);
+        };
+        $union = function ($i, $j) use (&$parent, &$find) {
+            $rootI = $find($i);
+            $rootJ = $find($j);
+            if ($rootI !== $rootJ) {
+                $parent[$rootI] = $rootJ;
+            }
+        };
+
+        // Compare all pairs and merge matching clusters
+        for ($i = 0; $i < $count; $i++) {
+            $a = $items[$i];
+            for ($j = $i + 1; $j < $count; $j++) {
+                $b = $items[$j];
+                $isMatch = false;
+
+                // Rule 1: Same normalized file attachment
+                if ($a['_norm_file'] !== '' && $a['_norm_file'] === $b['_norm_file']) {
+                    $isMatch = true;
+                }
+                // Rule 1b: Same non-generic file basename
+                elseif ($a['_file_base'] !== '' && $a['_file_base'] === $b['_file_base']) {
+                    $isMatch = true;
+                }
+                // Rule 2: Same Receipt model database ID
+                elseif (!empty($a['receipt_id']) && !empty($b['receipt_id']) && $a['receipt_id'] == $b['receipt_id']) {
+                    $isMatch = true;
+                }
+                // Rule 3: Same Request / Voucher Number
+                elseif ($a['_norm_req'] !== '' && $a['_norm_req'] === $b['_norm_req']) {
+                    $isMatch = true;
+                }
+                // Rule 4: Fiscal Match: Same normalized FS No + Same normalized Seller TIN
+                elseif ($a['_norm_fs'] !== '' && $a['_norm_tin'] !== '' && $a['_norm_fs'] === $b['_norm_fs'] && $a['_norm_tin'] === $b['_norm_tin']) {
+                    $isMatch = true;
+                }
+                // Rule 5: Same Fiscal FS Number (4+ digits)
+                elseif ($a['_norm_fs'] !== '' && strlen($a['_norm_fs']) >= 4 && $a['_norm_fs'] === $b['_norm_fs']) {
+                    // Match if TIN is identical, or either lacks TIN, or dates/amounts match
+                    if (empty($a['_norm_tin']) || empty($b['_norm_tin']) || $a['_norm_tin'] === $b['_norm_tin']) {
+                        $isMatch = true;
+                    }
+                }
+                // Rule 6: Same Financial Fingerprint on same date: exact base, vat, total + (same vendor or MRC)
+                elseif ($a['total_value'] > 0 && abs($a['total_value'] - $b['total_value']) < 0.02) {
+                    if (abs($a['vat_amount'] - $b['vat_amount']) < 0.02 && abs($a['base_value'] - $b['base_value']) < 0.02) {
+                        $sameDate = ($a['date_ec'] !== '-' && $a['date_ec'] === $b['date_ec'])
+                                 || ($a['date_gc'] !== '-' && $a['date_gc'] === $b['date_gc']);
+                        if ($sameDate) {
+                            $sameVendor = ($a['_norm_vendor'] !== '' && $a['_norm_vendor'] === $b['_norm_vendor'])
+                                       || ($a['_norm_mrc'] !== '' && $a['_norm_mrc'] === $b['_norm_mrc']);
+                            if ($sameVendor || empty($a['_norm_vendor']) || empty($b['_norm_vendor'])) {
+                                $isMatch = true;
+                            }
+                        }
+                    }
+                }
+
+                if ($isMatch) {
+                    $union($i, $j);
+                }
+            }
+        }
+
+        // Group into clusters by root
+        $clusters = [];
+        for ($i = 0; $i < $count; $i++) {
+            $root = $find($i);
+            $clusters[$root][] = $items[$i];
+        }
+
+        $uniqueReceipts = collect();
+        $blockedDuplicatesCount = 0;
+        $blockedRecords = [];
+
+        foreach ($clusters as $root => $members) {
+            if (count($members) === 1) {
+                $clean = $members[0];
+                unset($clean['_idx'], $clean['_norm_fs'], $clean['_norm_tin'], $clean['_norm_file'], $clean['_file_base'], $clean['_norm_req'], $clean['_norm_vendor'], $clean['_norm_mrc']);
+                $clean['duplicates_blocked'] = 0;
+                $uniqueReceipts->push($clean);
+                continue;
+            }
+
+            // Multiple duplicate items found in this cluster!
+            $blockedDuplicatesCount += (count($members) - 1);
+
+            // Sort members to pick the absolute richest/best record as leader
+            usort($members, function ($a, $b) {
+                $scoreA = 0;
+                $scoreB = 0;
+
+                // Priority 1: Has valid picture/PDF file attachment
+                if (!empty($a['file_url'])) $scoreA += 100;
+                if (!empty($b['file_url'])) $scoreB += 100;
+
+                // Priority 2: Has valid FS No
+                if (!empty($a['fs_no']) && $a['fs_no'] !== '-') $scoreA += 40;
+                if (!empty($b['fs_no']) && $b['fs_no'] !== '-') $scoreB += 40;
+
+                // Priority 3: Has valid Seller TIN
+                if (!empty($a['vendor_tin']) && $a['vendor_tin'] !== '-') $scoreA += 30;
+                if (!empty($b['vendor_tin']) && $b['vendor_tin'] !== '-') $scoreB += 30;
+
+                // Priority 4: Has machine MRC
+                if (!empty($a['mrc_no']) && $a['mrc_no'] !== '-') $scoreA += 20;
+                if (!empty($b['mrc_no']) && $b['mrc_no'] !== '-') $scoreB += 20;
+
+                // Priority 5: Has actual vendor name
+                if (!empty($a['vendor_name']) && !in_array(strtolower($a['vendor_name']), ['vendor', 'general', 'unknown vendor', ''])) $scoreA += 15;
+                if (!empty($b['vendor_name']) && !in_array(strtolower($b['vendor_name']), ['vendor', 'general', 'unknown vendor', ''])) $scoreB += 15;
+
+                // Priority 6: Prefer OCR receipt over raw expense
+                if (($a['source'] ?? '') === 'ocr_receipt') $scoreA += 10;
+                if (($b['source'] ?? '') === 'ocr_receipt') $scoreB += 10;
+
+                // Priority 7: Non-zero VAT
+                if ($a['vat_amount'] > 0) $scoreA += 5;
+                if ($b['vat_amount'] > 0) $scoreB += 5;
+
+                return $scoreB <=> $scoreA;
+            });
+
+            $leader = $members[0];
+            $duplicates = array_slice($members, 1);
+
+            // Merge any missing fields into leader from the duplicates
+            foreach ($duplicates as $dup) {
+                $blockedRecords[] = [
+                    'fs_no'          => $dup['fs_no'] ?? '-',
+                    'vendor_name'    => $dup['vendor_name'] ?? 'Vendor',
+                    'vendor_tin'     => $dup['vendor_tin'] ?? '-',
+                    'request_number' => $dup['request_number'] ?? '',
+                    'total_value'    => $dup['total_value'] ?? 0,
+                    'file_url'       => $dup['file_url'] ?? null,
+                    'merged_into'    => $leader['fs_no'] . ' (' . $leader['vendor_name'] . ')',
+                ];
+
+                if (empty($leader['file_url']) && !empty($dup['file_url'])) {
+                    $leader['file_url']  = $dup['file_url'];
+                    $leader['file_type'] = $dup['file_type'];
+                    $leader['is_pdf']    = $dup['is_pdf'];
+                }
+                if ((empty($leader['fs_no']) || $leader['fs_no'] === '-') && (!empty($dup['fs_no']) && $dup['fs_no'] !== '-')) {
+                    $leader['fs_no'] = $dup['fs_no'];
+                }
+                if ((empty($leader['vendor_tin']) || $leader['vendor_tin'] === '-') && (!empty($dup['vendor_tin']) && $dup['vendor_tin'] !== '-')) {
+                    $leader['vendor_tin'] = $dup['vendor_tin'];
+                    $leader['seller_tin'] = $dup['seller_tin'] ?? $dup['vendor_tin'];
+                }
+                if ((empty($leader['mrc_no']) || $leader['mrc_no'] === '-') && (!empty($dup['mrc_no']) && $dup['mrc_no'] !== '-')) {
+                    $leader['mrc_no'] = $dup['mrc_no'];
+                }
+                if ((empty($leader['vendor_name']) || in_array(strtolower($leader['vendor_name']), ['vendor', 'general', ''])) && !empty($dup['vendor_name']) && !in_array(strtolower($dup['vendor_name']), ['vendor', 'general', ''])) {
+                    $leader['vendor_name'] = $dup['vendor_name'];
+                }
+                if ((empty($leader['project_name']) || $leader['project_name'] === 'General') && !empty($dup['project_name']) && $dup['project_name'] !== 'General') {
+                    $leader['project_name'] = $dup['project_name'];
+                }
+                if ((empty($leader['item_description']) || $leader['item_description'] === 'Purchased Goods/Services') && !empty($dup['item_description'])) {
+                    $leader['item_description'] = $dup['item_description'];
+                }
+                if ($leader['vat_amount'] <= 0 && $dup['vat_amount'] > 0) {
+                    $leader['vat_amount']     = $dup['vat_amount'];
+                    $leader['base_value']     = $dup['base_value'];
+                    $leader['total_value']    = $dup['total_value'];
+                    $leader['is_vat_receipt'] = true;
+                }
+            }
+
+            unset($leader['_idx'], $leader['_norm_fs'], $leader['_norm_tin'], $leader['_norm_file'], $leader['_file_base'], $leader['_norm_req'], $leader['_norm_vendor'], $leader['_norm_mrc']);
+            $leader['duplicates_blocked'] = count($duplicates);
+
+            $uniqueReceipts->push($leader);
+        }
+
+        return [
+            'receipts'                 => $uniqueReceipts,
+            'duplicates_blocked_count' => $blockedDuplicatesCount,
+            'blocked_records'          => $blockedRecords,
+        ];
     }
 
     /**
