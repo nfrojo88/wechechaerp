@@ -11,6 +11,8 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <!-- html2pdf.js for client-side PDF export -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <!-- Mozilla PDF.js for rendering uploaded PDF receipts to high-DPI canvas -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
     <style>
         :root {
@@ -43,10 +45,11 @@
 
         /* ── Top Floating Action Toolbar (Hidden in Print & PDF) ─────── */
         .no-print-toolbar {
-            max-width: 860px;
+            max-width: 1080px;
+            width: calc(100% - 32px);
             margin: 0 auto 20px auto;
             background: #ffffff;
-            padding: 12px 20px;
+            padding: 10px 18px;
             border-radius: 12px;
             box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
             display: flex;
@@ -65,6 +68,53 @@
             align-items: center;
             gap: 8px;
             flex-wrap: wrap;
+        }
+
+        .month-selector-form {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: #f1f5f9;
+            border: 1px solid #cbd5e1;
+            border-radius: 24px;
+            padding: 3px 6px;
+        }
+
+        .month-nav-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            background: #ffffff;
+            border: 1px solid #cbd5e1;
+            color: #475569;
+            text-decoration: none;
+            transition: all 0.15s ease;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+            font-size: 11px;
+        }
+
+        .month-nav-btn:hover {
+            background: #1e3a8a;
+            color: #ffffff;
+            border-color: #1e3a8a;
+        }
+
+        .month-select-input {
+            border: none;
+            background: transparent;
+            font-size: 11.5px;
+            color: #0f172a;
+            font-weight: 700;
+            padding: 3px 6px;
+            cursor: pointer;
+            outline: none;
+        }
+
+        .month-select-input:focus {
+            outline: none;
         }
 
         .btn {
@@ -93,7 +143,7 @@
 
         .btn-pill {
             border-radius: 20px;
-            padding: 5px 12px;
+            padding: 4px 11px;
             font-size: 11px;
         }
 
@@ -493,6 +543,85 @@
             background: #ffffff;
         }
 
+        /* ── High-DPI Uploaded PDF Canvas Stage ───────────────────── */
+        .pdf-canvas-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .pdf-rendered-canvas {
+            max-width: 100%;
+            max-height: 720px;
+            width: auto;
+            height: auto;
+            object-fit: contain;
+            border-radius: 4px;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.16);
+            background: #ffffff;
+            display: none; /* Shown after render */
+        }
+
+        .pdf-loading-indicator {
+            text-align: center;
+            padding: 30px;
+            color: #64748b;
+        }
+
+        .pdf-loading-indicator i {
+            font-size: 36px;
+            color: #1e3a8a;
+            margin-bottom: 12px;
+            display: block;
+        }
+
+        .pdf-loading-indicator div {
+            font-size: 11.5px;
+            font-weight: 600;
+            color: #0f172a;
+        }
+
+        .pdf-loading-indicator .sub-meta {
+            font-size: 9px;
+            color: #94a3b8;
+            margin-top: 4px;
+            font-family: 'Inter', monospace;
+        }
+
+        .pdf-info-floating-bar {
+            position: absolute;
+            bottom: 8px;
+            display: none; /* Shown after render */
+            align-items: center;
+            gap: 12px;
+            background: rgba(15, 23, 42, 0.90);
+            backdrop-filter: blur(4px);
+            color: #ffffff;
+            padding: 5px 14px;
+            border-radius: 20px;
+            font-size: 9.5px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+            z-index: 5;
+        }
+
+        .pdf-info-floating-bar a.pdf-open-link {
+            color: #60a5fa;
+            text-decoration: underline;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .pdf-info-floating-bar a.pdf-open-link:hover {
+            color: #93c5fd;
+        }
+
         .receipt-pdf-placeholder {
             text-align: center;
             padding: 40px 20px;
@@ -619,6 +748,10 @@
                 display: none !important;
             }
 
+            .pdf-info-floating-bar {
+                display: none !important;
+            }
+
             #receiptsPdfDocument {
                 width: 100% !important;
                 margin: 0 !important;
@@ -647,6 +780,11 @@
             .receipt-picture-stage img {
                 max-height: 770px !important;
             }
+
+            .pdf-rendered-canvas {
+                max-height: 770px !important;
+                box-shadow: none !important;
+            }
         }
     </style>
 </head>
@@ -654,32 +792,93 @@
 
     {{-- ── Floating Action Toolbar (Hidden in Print & PDF export) ──────────────── --}}
     <div class="no-print-toolbar">
+        {{-- Left: Back Button & Month/Year Selector Form --}}
         <div class="toolbar-group">
             <a href="{{ route('finance.tax-deductions.movements', ['ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}" class="btn btn-light" title="Return to Financial Movements & Tax Audit">
                 <i class="fa-solid fa-arrow-left"></i>
-                <span>Back to Movements</span>
+                <span>Movements</span>
             </a>
-            <div class="toolbar-group" style="margin-left: 6px;">
-                <span style="font-size: 11px; font-weight: 700; color: #64748b;">Filter:</span>
-                <a href="{{ route('finance.tax-deductions.movements-receipts-pdf', ['ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth, 'type' => 'all']) }}" 
-                   class="btn btn-light btn-pill {{ $receiptFilter === 'all' ? 'active' : '' }}">
-                    All Added ({{ $receiptsSummary['total_count'] }})
+
+            {{-- Quick Ethiopian Month & Year Selector --}}
+            <form method="GET" action="{{ route('finance.tax-deductions.movements-receipts-pdf') }}" class="month-selector-form">
+                <input type="hidden" name="type" value="{{ $receiptFilter }}">
+                <input type="hidden" name="format" value="{{ $formatFilter }}">
+
+                {{-- Previous Month Button --}}
+                <a href="{{ route('finance.tax-deductions.movements-receipts-pdf', ['ethiopian_year' => $prevYear, 'ethiopian_month' => $prevMonth, 'type' => $receiptFilter, 'format' => $formatFilter]) }}" 
+                   class="month-nav-btn" 
+                   title="Previous Month">
+                    <i class="fa-solid fa-chevron-left"></i>
                 </a>
-                <a href="{{ route('finance.tax-deductions.movements-receipts-pdf', ['ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth, 'type' => 'vat']) }}" 
-                   class="btn btn-light btn-pill {{ $receiptFilter === 'vat' ? 'active' : '' }}">
-                    15% VAT Only ({{ $receiptsSummary['vat_count'] }})
+
+                {{-- Year Dropdown --}}
+                <select name="ethiopian_year" class="month-select-input" onchange="this.form.submit()" title="Select Ethiopian Year">
+                    @foreach($availableEthYears as $y)
+                        <option value="{{ $y }}" {{ $selectedEthYear == $y ? 'selected' : '' }}>{{ $y }} ዓ.ም.</option>
+                    @endforeach
+                </select>
+
+                {{-- Month Dropdown --}}
+                <select name="ethiopian_month" class="month-select-input" style="color: #1e3a8a;" onchange="this.form.submit()" title="Select Ethiopian Month">
+                    @foreach($availableEthMonths as $mNum => $m)
+                        @php
+                            $monthText = is_array($m) ? ($m['label'] ?? (($m['name_en'] ?? '') . ' (' . ($m['name_am'] ?? '') . ')')) : "{$mNum}. {$m}";
+                        @endphp
+                        <option value="{{ $mNum }}" {{ $selectedEthMonth == $mNum ? 'selected' : '' }}>
+                            {{ $monthText }}
+                        </option>
+                    @endforeach
+                </select>
+
+                {{-- Next Month Button --}}
+                <a href="{{ route('finance.tax-deductions.movements-receipts-pdf', ['ethiopian_year' => $nextYear, 'ethiopian_month' => $nextMonth, 'type' => $receiptFilter, 'format' => $formatFilter]) }}" 
+                   class="month-nav-btn" 
+                   title="Next Month">
+                    <i class="fa-solid fa-chevron-right"></i>
                 </a>
-                <a href="{{ route('finance.tax-deductions.movements-receipts-pdf', ['ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth, 'type' => 'tas']) }}" 
-                   class="btn btn-light btn-pill {{ $receiptFilter === 'tas' ? 'active' : '' }}">
-                    0% TAS Only ({{ $receiptsSummary['tas_count'] }})
-                </a>
-            </div>
+            </form>
         </div>
 
+        {{-- Center: Tax Type & Format Filter Pills --}}
+        <div class="toolbar-group">
+            <span style="font-size: 11px; font-weight: 700; color: #64748b;">Tax:</span>
+            <a href="{{ route('finance.tax-deductions.movements-receipts-pdf', ['ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth, 'type' => 'all', 'format' => $formatFilter]) }}" 
+               class="btn btn-light btn-pill {{ $receiptFilter === 'all' ? 'active' : '' }}">
+                All ({{ $receiptsSummary['total_count'] }})
+            </a>
+            <a href="{{ route('finance.tax-deductions.movements-receipts-pdf', ['ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth, 'type' => 'vat', 'format' => $formatFilter]) }}" 
+               class="btn btn-light btn-pill {{ $receiptFilter === 'vat' ? 'active' : '' }}">
+                15% VAT ({{ $receiptsSummary['vat_count'] }})
+            </a>
+            <a href="{{ route('finance.tax-deductions.movements-receipts-pdf', ['ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth, 'type' => 'tas', 'format' => $formatFilter]) }}" 
+               class="btn btn-light btn-pill {{ $receiptFilter === 'tas' ? 'active' : '' }}">
+                0% TAS ({{ $receiptsSummary['tas_count'] }})
+            </a>
+
+            <span style="color: #cbd5e1; margin: 0 2px;">|</span>
+
+            <span style="font-size: 11px; font-weight: 700; color: #64748b;">Format:</span>
+            <a href="{{ route('finance.tax-deductions.movements-receipts-pdf', ['ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth, 'type' => $receiptFilter, 'format' => 'all']) }}" 
+               class="btn btn-light btn-pill {{ $formatFilter === 'all' ? 'active' : '' }}">
+                All
+            </a>
+            <a href="{{ route('finance.tax-deductions.movements-receipts-pdf', ['ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth, 'type' => $receiptFilter, 'format' => 'image']) }}" 
+               class="btn btn-light btn-pill {{ $formatFilter === 'image' ? 'active' : '' }}" title="Show receipts uploaded as photos/images">
+                <i class="fa-solid fa-image" style="font-size: 10px;"></i>
+                <span>Pics ({{ $receiptsSummary['image_count'] }})</span>
+            </a>
+            <a href="{{ route('finance.tax-deductions.movements-receipts-pdf', ['ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth, 'type' => $receiptFilter, 'format' => 'pdf']) }}" 
+               class="btn btn-light btn-pill {{ $formatFilter === 'pdf' ? 'active' : '' }}" title="Show receipts uploaded as PDF documents">
+                <i class="fa-solid fa-file-pdf" style="font-size: 10px; color: #ef4444;"></i>
+                <span>PDFs ({{ $receiptsSummary['pdf_count'] }})</span>
+            </a>
+        </div>
+
+        {{-- Right: Print & PDF Download Actions --}}
         <div class="toolbar-group">
             <button type="button" class="btn btn-primary" onclick="window.print()" title="Print via Browser / Save as PDF">
                 <i class="fa-solid fa-print"></i>
-                <span>Print / Save PDF</span>
+                <span>Print</span>
             </button>
             <button type="button" class="btn btn-danger" id="btnDownloadPdf" onclick="downloadReceiptsPdf()" title="Download full PDF file with one receipt picture per page">
                 <i class="fa-solid fa-file-arrow-down"></i>
@@ -730,8 +929,8 @@
             {{-- ── Executive Summary KPI Cards ─────────────────────────────────── --}}
             <div class="kpi-strip">
                 <div class="kpi-card">
-                    <div class="kpi-label"><i class="fa-solid fa-file-invoice" style="color:#1e3a8a;"></i> Receipts Count</div>
-                    <div class="kpi-value">{{ $receiptsSummary['total_count'] }}</div>
+                    <div class="kpi-label"><i class="fa-solid fa-file-invoice" style="color:#1e3a8a;"></i> Filtered Receipts</div>
+                    <div class="kpi-value">{{ $addedReceipts->count() }} <span style="font-size: 8.5px; color: var(--text-muted); font-weight: 500;">/ {{ $receiptsSummary['total_count'] }}</span></div>
                     <div class="kpi-sub">{{ $receiptsSummary['vat_count'] }} VAT &bull; {{ $receiptsSummary['tas_count'] }} TAS</div>
                 </div>
                 <div class="kpi-card">
@@ -750,9 +949,9 @@
                     <div class="kpi-sub">Total with VAT / Settlement</div>
                 </div>
                 <div class="kpi-card">
-                    <div class="kpi-label"><i class="fa-solid fa-camera-retro" style="color:#b45309;"></i> Full Pic Pages</div>
+                    <div class="kpi-label"><i class="fa-solid fa-paperclip" style="color:#b45309;"></i> Evidence Files</div>
                     <div class="kpi-value text-right" style="color:#b45309;">{{ $receiptsSummary['with_file_count'] }} Slips</div>
-                    <div class="kpi-sub">High-Resolution Evidence</div>
+                    <div class="kpi-sub">{{ $receiptsSummary['image_count'] }} Pics &bull; {{ $receiptsSummary['pdf_count'] }} PDFs</div>
                 </div>
             </div>
 
@@ -788,6 +987,11 @@
                                 </td>
                                 <td>
                                     <span class="font-mono" style="font-weight: 700; color: #1e3a8a;">{{ $rec['fs_no'] }}</span>
+                                    @if(!empty($rec['is_pdf']))
+                                        <span class="badge-pill badge-red" style="font-size: 7.5px; padding: 1px 5px; margin-left: 2px;">PDF</span>
+                                    @elseif(!empty($rec['file_url']))
+                                        <span class="badge-pill badge-blue" style="font-size: 7.5px; padding: 1px 5px; margin-left: 2px;">PIC</span>
+                                    @endif
                                     @if(!empty($rec['mrc_no']) && $rec['mrc_no'] !== '-')
                                         <div style="font-size: 7.5px; color: #64748b;">MRC: {{ $rec['mrc_no'] }}</div>
                                     @endif
@@ -959,16 +1163,27 @@
                 <div class="receipt-picture-stage">
                     @php
                         $imageSrc = $rec['image_base64'] ?? $rec['file_url'];
+                        $pdfSrc   = $rec['pdf_base64'] ?? $rec['file_url'];
                     @endphp
 
-                    @if(!empty($imageSrc))
-                        @if(!empty($rec['is_pdf']))
-                            {{-- Attached PDF Document Card --}}
-                            <div class="receipt-pdf-placeholder">
+                    @if(!empty($rec['is_pdf']) && !empty($pdfSrc))
+                        {{-- ── VISUALLY RENDERED PDF RECEIPT DOCUMENT ON CANVAS ── --}}
+                        <div class="pdf-canvas-container" id="pdfContainer_{{ $idx }}" data-idx="{{ $idx }}" data-pdf-src="{{ $pdfSrc }}">
+                            {{-- Canvas where Page 1 of the PDF is rendered crisp and clean --}}
+                            <canvas id="pdfCanvas_{{ $idx }}" class="pdf-rendered-canvas"></canvas>
+
+                            {{-- Loading Spinner indicator --}}
+                            <div id="pdfLoading_{{ $idx }}" class="pdf-loading-indicator">
+                                <i class="fa-solid fa-spinner fa-spin"></i>
+                                <div>Rendering Scanned PDF Receipt Document...</div>
+                                <div class="sub-meta">{{ basename($rec['file_url'] ?? 'receipt.pdf') }}</div>
+                            </div>
+
+                            {{-- Fallback Card if JS is disabled or PDF cannot load --}}
+                            <div id="pdfFallback_{{ $idx }}" class="receipt-pdf-placeholder" style="display: none;">
                                 <i class="fa-solid fa-file-pdf"></i>
                                 <h4>Official Scanned PDF Document Attached</h4>
                                 <p>
-                                    This receipt was archived as a multi-page PDF document on file.<br>
                                     Voucher Reference: <strong>{{ $rec['request_number'] }}</strong> &bull; FS No: <strong>{{ $rec['fs_no'] }}</strong>
                                 </p>
                                 <a href="{{ $rec['file_url'] }}" target="_blank" class="doc-link">
@@ -976,13 +1191,25 @@
                                     <span>Open / View High-Resolution PDF Document</span>
                                 </a>
                             </div>
-                        @else
-                            {{-- Uploaded Picture Focus: Large, Crisp, Centered --}}
-                            <img src="{{ $imageSrc }}" 
-                                 alt="Receipt Slip - FS #{{ $rec['fs_no'] }} - {{ $rec['vendor_name'] }}" 
-                                 loading="lazy" 
-                                 crossorigin="anonymous">
-                        @endif
+
+                            {{-- Floating Info Pill at bottom of picture stage --}}
+                            <div class="pdf-info-floating-bar" id="pdfBar_{{ $idx }}">
+                                <span>
+                                    <i class="fa-solid fa-file-pdf" style="color: #ef4444; margin-right: 4px;"></i>
+                                    Scanned PDF Receipt <strong id="pdfPageInfo_{{ $idx }}">(Page 1)</strong>
+                                </span>
+                                <a href="{{ $rec['file_url'] }}" target="_blank" class="pdf-open-link" title="Open multi-page original PDF in separate tab">
+                                    <span>Open Raw PDF</span>
+                                    <i class="fa-solid fa-arrow-up-right-from-square" style="font-size: 8px;"></i>
+                                </a>
+                            </div>
+                        </div>
+                    @elseif(!empty($imageSrc))
+                        {{-- Uploaded Picture Focus: Large, Crisp, Centered --}}
+                        <img src="{{ $imageSrc }}" 
+                             alt="Receipt Slip - FS #{{ $rec['fs_no'] }} - {{ $rec['vendor_name'] }}" 
+                             loading="lazy" 
+                             crossorigin="anonymous">
                     @else
                         {{-- No Picture Attached Placeholder --}}
                         <div class="receipt-voucher-placeholder">
@@ -1017,11 +1244,106 @@
 
     {{-- ── Client-side PDF Generation Script ───────────────────────────────────── --}}
     <script>
-        function downloadReceiptsPdf() {
+        // Configure Mozilla PDF.js
+        if (typeof pdfjsLib !== 'undefined') {
+            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        }
+
+        let pdfRenderPromises = [];
+
+        function renderPdfPage(container) {
+            const idx = container.getAttribute('data-idx');
+            const pdfSource = container.getAttribute('data-pdf-src');
+            const canvas = document.getElementById('pdfCanvas_' + idx);
+            const loading = document.getElementById('pdfLoading_' + idx);
+            const fallback = document.getElementById('pdfFallback_' + idx);
+            const bar = document.getElementById('pdfBar_' + idx);
+            const pageInfo = document.getElementById('pdfPageInfo_' + idx);
+
+            if (!pdfSource || !canvas || typeof pdfjsLib === 'undefined') {
+                if (loading) loading.style.display = 'none';
+                if (fallback) fallback.style.display = 'block';
+                return Promise.resolve();
+            }
+
+            let docParams;
+            try {
+                if (pdfSource.startsWith('data:application/pdf;base64,')) {
+                    const base64Data = pdfSource.replace('data:application/pdf;base64,', '');
+                    const rawBytes = atob(base64Data);
+                    const uint8Array = new Uint8Array(rawBytes.length);
+                    for (let i = 0; i < rawBytes.length; i++) {
+                        uint8Array[i] = rawBytes.charCodeAt(i);
+                    }
+                    docParams = { data: uint8Array };
+                } else {
+                    docParams = { url: pdfSource };
+                }
+            } catch (e) {
+                console.error('Error preparing PDF data for idx ' + idx, e);
+                docParams = { url: pdfSource };
+            }
+
+            const loadingTask = pdfjsLib.getDocument(docParams);
+            return loadingTask.promise.then(function(pdfDoc) {
+                return pdfDoc.getPage(1).then(function(page) {
+                    const unscaledViewport = page.getViewport({ scale: 1.0 });
+                    const targetWidth = 760;
+                    const targetHeight = 700;
+                    const scaleX = targetWidth / unscaledViewport.width;
+                    const scaleY = targetHeight / unscaledViewport.height;
+                    const fitScale = Math.min(scaleX, scaleY, 2.0);
+
+                    // High-DPI render (crisp print & html2canvas)
+                    const renderScale = Math.max(fitScale * 1.5, 1.2);
+                    const viewport = page.getViewport({ scale: renderScale });
+
+                    canvas.height = viewport.height;
+                    canvas.width = viewport.width;
+
+                    const ctx = canvas.getContext('2d');
+                    const renderContext = {
+                        canvasContext: ctx,
+                        viewport: viewport
+                    };
+
+                    return page.render(renderContext).promise.then(function() {
+                        if (loading) loading.style.display = 'none';
+                        canvas.style.display = 'block';
+                        if (bar) bar.style.display = 'inline-flex';
+                        if (pageInfo) pageInfo.textContent = '(Page 1 of ' + pdfDoc.numPages + ')';
+                    });
+                });
+            }).catch(function(err) {
+                console.warn('PDF.js render error for idx ' + idx + ':', err);
+                if (loading) loading.style.display = 'none';
+                if (fallback) fallback.style.display = 'block';
+            });
+        }
+
+        function initAllPdfs() {
+            const containers = document.querySelectorAll('.pdf-canvas-container');
+            pdfRenderPromises = Array.from(containers).map(renderPdfPage);
+            return Promise.all(pdfRenderPromises);
+        }
+
+        window.addEventListener('DOMContentLoaded', function() {
+            initAllPdfs();
+        });
+
+        async function downloadReceiptsPdf() {
             const btn = document.getElementById('btnDownloadPdf');
             const originalHtml = btn.innerHTML;
-            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Generating Full PDF...';
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Rendering Documents &amp; Generating...';
             btn.disabled = true;
+
+            try {
+                await Promise.all(pdfRenderPromises);
+            } catch (e) {
+                console.warn('Wait for PDFs error:', e);
+            }
+
+            await new Promise(r => setTimeout(r, 250));
 
             const element = document.getElementById('receiptsPdfDocument');
             const filename = 'Wechecha-Receipts-Audit-{{ Str::slug($monthInfo["title"] ?? "period") }}-{{ date("Y-m-d") }}.pdf';
@@ -1049,9 +1371,11 @@
         // Auto download trigger if query string ?download=1 is present
         @if(!empty($autoDownload))
             window.addEventListener('DOMContentLoaded', function() {
-                setTimeout(function() {
-                    downloadReceiptsPdf();
-                }, 800);
+                Promise.all(pdfRenderPromises).then(function() {
+                    setTimeout(downloadReceiptsPdf, 600);
+                }).catch(function() {
+                    setTimeout(downloadReceiptsPdf, 800);
+                });
             });
         @endif
     </script>

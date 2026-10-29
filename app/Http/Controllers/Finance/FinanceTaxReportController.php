@@ -1439,12 +1439,21 @@ class FinanceTaxReportController extends Controller
         }
 
         $receiptFilter = strtolower($request->input('type', 'all')); // 'all', 'vat', 'tas'
+        $formatFilter  = strtolower($request->input('format', 'all')); // 'all', 'pdf', 'image'
+
+        $availableEthYears  = EthiopianDate::getYears();
+        $availableEthMonths = EthiopianDate::getMonths();
+
+        $prevYear  = ($selectedEthMonth === 1) ? $selectedEthYear - 1 : $selectedEthYear;
+        $prevMonth = ($selectedEthMonth === 1) ? 13 : $selectedEthMonth - 1;
+        $nextYear  = ($selectedEthMonth === 13) ? $selectedEthYear + 1 : $selectedEthYear;
+        $nextMonth = ($selectedEthMonth === 13) ? 1 : $selectedEthMonth + 1;
 
         // Compute movements data (retrieving all scanned receipts and expenses)
         $movementsData = $this->calculateMonthMovementsData($selectedEthYear, $selectedEthMonth, false);
 
-        // Gather ONLY receipts that have been added
-        $addedReceipts = collect();
+        // Gather all verified added receipts for this Ethiopian month
+        $allCandidateReceipts = collect();
         $seenKeys = [];
 
         // 1. Process all OCR / Scanned / Manual Receipts
@@ -1455,12 +1464,8 @@ class FinanceTaxReportController extends Controller
             $totalVal = (float)($ocr['total_value'] ?? ($ocr['value_after_vat'] ?? ($baseVal + $vatVal)));
             $isVat = !empty($ocr['is_vat_receipt']) || $vatVal > 0;
 
-            if ($receiptFilter === 'vat' && !$isVat) {
-                continue;
-            }
-            if ($receiptFilter === 'tas' && $isVat) {
-                continue;
-            }
+            $fileUrl = $ocr['file_url'] ?? null;
+            $isPdf = !empty($ocr['is_pdf']) || (!empty($fileUrl) && (str_ends_with(strtolower($fileUrl), '.pdf') || str_contains(strtolower($fileUrl), '.pdf')));
 
             $fsNo = !empty($ocr['fs_no']) && $ocr['fs_no'] !== '-' ? trim($ocr['fs_no']) : '';
             $sellerTin = !empty($ocr['seller_tin']) && $ocr['seller_tin'] !== '-' ? trim($ocr['seller_tin']) : (!empty($ocr['vendor_tin']) && $ocr['vendor_tin'] !== '-' ? trim($ocr['vendor_tin']) : '');
@@ -1468,19 +1473,16 @@ class FinanceTaxReportController extends Controller
             $reqNo = $ocr['request_number'] ?? '';
 
             // Unique deduplication key
-            $key = $fsNo && $sellerTin ? "{$sellerTin}_{$fsNo}" : ($recId ? "REC_{$recId}" : ($reqNo ?: "IDX_" . count($addedReceipts)));
+            $key = $fsNo && $sellerTin ? "{$sellerTin}_{$fsNo}" : ($recId ? "REC_{$recId}" : ($reqNo ?: "IDX_" . count($allCandidateReceipts)));
             if (isset($seenKeys[$key])) {
                 continue;
             }
             $seenKeys[$key] = true;
 
-            $fileUrl = $ocr['file_url'] ?? null;
-            $isPdf = !empty($ocr['is_pdf']);
-
-            $addedReceipts->push([
+            $allCandidateReceipts->push([
                 'id'                 => $ocr['id'] ?? null,
                 'receipt_id'         => $recId,
-                'request_number'     => $reqNo ?: ('REC-' . ($ocr['id'] ?? (count($addedReceipts) + 1))),
+                'request_number'     => $reqNo ?: ('REC-' . ($ocr['id'] ?? (count($allCandidateReceipts) + 1))),
                 'fs_no'              => $fsNo ?: '-',
                 'mrc_no'             => !empty($ocr['mrc_no']) && $ocr['mrc_no'] !== '-' ? $ocr['mrc_no'] : '-',
                 'receipt_number'     => $ocr['receipt_number'] ?? '',
@@ -1526,31 +1528,24 @@ class FinanceTaxReportController extends Controller
             $totalVal = (float)($exp['net_disbursed'] ?? ($baseVal + $vatVal));
             $isVat = ($vatVal > 0);
 
-            if ($receiptFilter === 'vat' && !$isVat) {
-                continue;
-            }
-            if ($receiptFilter === 'tas' && $isVat) {
-                continue;
-            }
+            $fileUrl = $exp['receipt_slip_url'] ?? ($exp['attachment_url'] ?? null);
+            $isPdf = !empty($fileUrl) && (str_ends_with(strtolower($fileUrl), '.pdf') || str_contains(strtolower($fileUrl), '.pdf'));
 
             $fsNo = !empty($exp['fs_no']) && $exp['fs_no'] !== '-' ? trim($exp['fs_no']) : '';
             $sellerTin = !empty($exp['seller_tin']) && $exp['seller_tin'] !== '-' ? trim($exp['seller_tin']) : '';
             $recId = $exp['receipt_id'] ?? null;
             $reqNo = $exp['request_number'] ?? '';
 
-            $key = $fsNo && $sellerTin ? "{$sellerTin}_{$fsNo}" : ($recId ? "REC_{$recId}" : ($reqNo ?: "EXP_" . ($exp['id'] ?? count($addedReceipts))));
+            $key = $fsNo && $sellerTin ? "{$sellerTin}_{$fsNo}" : ($recId ? "REC_{$recId}" : ($reqNo ?: "EXP_" . ($exp['id'] ?? count($allCandidateReceipts))));
             if (isset($seenKeys[$key])) {
                 continue;
             }
             $seenKeys[$key] = true;
 
-            $fileUrl = $exp['receipt_slip_url'] ?? ($exp['attachment_url'] ?? null);
-            $isPdf = !empty($fileUrl) && (str_ends_with(strtolower($fileUrl), '.pdf') || str_contains(strtolower($fileUrl), '.pdf'));
-
-            $addedReceipts->push([
+            $allCandidateReceipts->push([
                 'id'                 => $exp['id'] ?? null,
                 'receipt_id'         => $recId,
-                'request_number'     => $reqNo ?: ('EXP-' . ($exp['id'] ?? (count($addedReceipts) + 1))),
+                'request_number'     => $reqNo ?: ('EXP-' . ($exp['id'] ?? (count($allCandidateReceipts) + 1))),
                 'fs_no'              => $fsNo ?: '-',
                 'mrc_no'             => $exp['mrc_no'] ?? '-',
                 'receipt_number'     => $exp['payment_reference'] ?? '',
@@ -1574,20 +1569,50 @@ class FinanceTaxReportController extends Controller
             ]);
         }
 
-        // Resolve base64 data URI for each image so html2canvas renders full images with 100% fidelity without CORS issues
+        // Summary counts before format & type filters for UI badges
+        $totalCandidateCount = $allCandidateReceipts->count();
+        $vatCandidateCount   = $allCandidateReceipts->where('is_vat_receipt', true)->count();
+        $tasCandidateCount   = $allCandidateReceipts->where('is_vat_receipt', false)->count();
+        $pdfCandidateCount   = $allCandidateReceipts->where('is_pdf', true)->count();
+        $imageCandidateCount = $allCandidateReceipts->where('is_pdf', false)->filter(fn($r) => !empty($r['file_url']))->count();
+
+        // Apply filters
+        $addedReceipts = $allCandidateReceipts;
+
+        if ($receiptFilter === 'vat') {
+            $addedReceipts = $addedReceipts->where('is_vat_receipt', true)->values();
+        } elseif ($receiptFilter === 'tas') {
+            $addedReceipts = $addedReceipts->where('is_vat_receipt', false)->values();
+        }
+
+        if ($formatFilter === 'pdf') {
+            $addedReceipts = $addedReceipts->where('is_pdf', true)->values();
+        } elseif ($formatFilter === 'image') {
+            $addedReceipts = $addedReceipts->where('is_pdf', false)->filter(fn($r) => !empty($r['file_url']))->values();
+        }
+
+        // Resolve base64 data URI for both images and PDFs so html2canvas and PDF.js render with 100% fidelity without CORS issues
         $addedReceipts = $addedReceipts->map(function ($rec) {
             $rec['image_base64'] = null;
-            if (!empty($rec['file_url']) && empty($rec['is_pdf'])) {
-                $rec['image_base64'] = $this->resolveLocalImageBase64($rec['file_url']);
+            $rec['pdf_base64']   = null;
+            if (!empty($rec['file_url'])) {
+                if (empty($rec['is_pdf'])) {
+                    $rec['image_base64'] = $this->resolveLocalFileBase64($rec['file_url']);
+                } else {
+                    $rec['pdf_base64'] = $this->resolveLocalFileBase64($rec['file_url']);
+                }
             }
             return $rec;
         });
 
-        // Summary metrics for the added receipts
+        // Summary metrics for the filtered view and full month
         $receiptsSummary = [
-            'total_count'       => $addedReceipts->count(),
-            'vat_count'         => $addedReceipts->where('is_vat_receipt', true)->count(),
-            'tas_count'         => $addedReceipts->where('is_vat_receipt', false)->count(),
+            'total_count'       => $totalCandidateCount,
+            'vat_count'         => $vatCandidateCount,
+            'tas_count'         => $tasCandidateCount,
+            'pdf_count'         => $pdfCandidateCount,
+            'image_count'       => $imageCandidateCount,
+            'active_count'      => $addedReceipts->count(),
             'total_base'        => (float)$addedReceipts->sum('base_value'),
             'total_vat'         => (float)$addedReceipts->sum('vat_amount'),
             'total_gross'       => (float)$addedReceipts->sum('total_value'),
@@ -1612,14 +1637,21 @@ class FinanceTaxReportController extends Controller
             'addedReceipts',
             'receiptsSummary',
             'receiptFilter',
+            'formatFilter',
+            'availableEthYears',
+            'availableEthMonths',
+            'prevYear',
+            'prevMonth',
+            'nextYear',
+            'nextMonth',
             'autoDownload'
         ));
     }
 
     /**
-     * Convert a local receipt file URL or relative path into a base64 Data URI for seamless PDF export.
+     * Convert a local receipt file URL or relative path into a base64 Data URI for seamless PDF export and canvas rendering.
      */
-    private function resolveLocalImageBase64(?string $fileUrl): ?string
+    private function resolveLocalFileBase64(?string $fileUrl): ?string
     {
         if (empty($fileUrl)) {
             return null;
@@ -1627,7 +1659,7 @@ class FinanceTaxReportController extends Controller
 
         try {
             $parsed = parse_url($fileUrl, PHP_URL_PATH);
-            $trimmed = ltrim($parsed, '/');
+            $trimmed = ltrim($parsed ?: $fileUrl, '/');
 
             $candidates = [
                 public_path($trimmed),
@@ -1635,17 +1667,24 @@ class FinanceTaxReportController extends Controller
                 public_path('storage/' . $trimmed),
                 public_path(str_replace('storage/', '', $trimmed)),
                 storage_path('app/public/' . ltrim(str_replace(['storage/', 'public/'], '', $trimmed), '/')),
+                storage_path('app/' . ltrim($trimmed, '/')),
                 base_path($trimmed),
             ];
 
             foreach ($candidates as $candidate) {
                 if (!empty($candidate) && file_exists($candidate) && is_file($candidate)) {
+                    // Skip files larger than 8MB to protect memory
+                    if (filesize($candidate) > 8 * 1024 * 1024) {
+                        return $fileUrl;
+                    }
+
                     $ext = strtolower(pathinfo($candidate, PATHINFO_EXTENSION));
-                    if (in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp'])) {
+                    if (in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'pdf'])) {
                         $mime = match ($ext) {
                             'png'  => 'image/png',
                             'webp' => 'image/webp',
                             'gif'  => 'image/gif',
+                            'pdf'  => 'application/pdf',
                             default => 'image/jpeg',
                         };
                         $data = file_get_contents($candidate);
@@ -1656,10 +1695,15 @@ class FinanceTaxReportController extends Controller
                 }
             }
         } catch (\Throwable $e) {
-            Log::warning("resolveLocalImageBase64 error: " . $e->getMessage());
+            \Log::warning("resolveLocalFileBase64 error: " . $e->getMessage());
         }
 
         return $fileUrl;
+    }
+
+    private function resolveLocalImageBase64(?string $fileUrl): ?string
+    {
+        return $this->resolveLocalFileBase64($fileUrl);
     }
 
     /**
