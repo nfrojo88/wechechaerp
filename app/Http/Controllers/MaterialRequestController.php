@@ -948,16 +948,37 @@ class MaterialRequestController extends Controller
         Gate::authorize('actionStoreManager', $materialRequest);
         $materialRequest->update(['status' => 'transferred']);
 
+        // When routed to transfer, lock companion Purchase Requests in procurement
+        foreach ($materialRequest->purchaseRequests as $cPr) {
+            $cPr->update([
+                'status'             => \App\Models\PurchaseRequest::STATUS_TRANSFERRED,
+                'current_owner_role' => null,
+            ]);
+            try {
+                \App\Models\PrWorkflowLog::create([
+                    'purchase_request_id' => $cPr->id,
+                    'from_stage'          => $cPr->status,
+                    'to_stage'            => \App\Models\PurchaseRequest::STATUS_TRANSFERRED,
+                    'action'              => 'transferred_to_store_transfer',
+                    'actor_role'          => 'store_manager',
+                    'notes'               => "MR #{$materialRequest->reference_number} converted to Store Transfer. PR locked in Procurement.",
+                    'actor_id'            => auth()->id(),
+                    'created_at'          => now(),
+                ]);
+            } catch (\Throwable $e) {}
+        }
+
         return redirect()->route('transfers.create', [
             'material_request_id' => $materialRequest->id,
             'project_id' => $materialRequest->project_id,
             'destination_store_id' => $materialRequest->destination_store_id,
-        ])->with('success', 'Material Request routed to Store Transfer creation.');
+        ])->with('success', 'Material Request routed to Store Transfer creation and locked in Procurement.');
     }
 
     /**
      * Delete an existing Material Request.
      * STRICT RULE: Locked after creation. Only Global Admin is permitted to delete.
+     * When deleted by Admin, it is moved to the "Deleted & Cancelled" category and locked.
      */
     public function destroy(Request $request, MaterialRequest $materialRequest)
     {
@@ -983,21 +1004,36 @@ class MaterialRequestController extends Controller
         }
 
         try {
-            \Illuminate\Support\Facades\DB::transaction(function() use ($materialRequest, $user, $refNo) {
+            \Illuminate\Support\Facades\DB::transaction(function() use ($materialRequest, $user, $refNo, $request) {
+                $reason = $request->input('reason') ?: ("Deleted by Global Admin {$user->name} on " . now()->format('M d, Y H:i'));
+
                 \App\Models\ActivityLog::log(
                     'admin_deleted_material_request',
-                    "Global Admin '{$user->name}' deleted Material Request {$refNo} and all associated items.",
+                    "Global Admin '{$user->name}' moved Material Request {$refNo} to Deleted category (Locked). Reason: {$reason}",
                     'Procurement',
-                    null,
-                    ['deleted_mr_id' => $materialRequest->id, 'ref_no' => $refNo]
+                    $materialRequest,
+                    ['deleted_mr_id' => $materialRequest->id, 'ref_no' => $refNo, 'reason' => $reason]
                 );
 
-                $materialRequest->items()->delete();
-                $materialRequest->delete();
+                // Preserve line items and mark status as cancelled/deleted (locked)
+                $materialRequest->update([
+                    'status' => 'cancelled',
+                    'notes'  => trim(($materialRequest->notes ? $materialRequest->notes . "\n" : '') . "[DELETED & LOCKED] Moved to Deleted category by Global Admin {$user->name}. Reason: {$reason}"),
+                ]);
+
+                // Also soft-delete companion PRs so they appear in Deleted category & locked
+                foreach ($materialRequest->purchaseRequests as $cPr) {
+                    $cPr->update([
+                        'status'             => \App\Models\PurchaseRequest::STATUS_CANCELLED,
+                        'current_owner_role' => null,
+                        'rejection_reason'   => "Companion Material Request {$refNo} was deleted by Global Admin.",
+                    ]);
+                    $cPr->delete();
+                }
             });
 
-            return redirect()->route('procurement.my-queue')
-                ->with('success', "Material Request {$refNo} has been deleted by Global Admin.");
+            return redirect()->route('procurement.my-queue', ['tab' => 'deleted'])
+                ->with('success', "Material Request {$refNo} has been moved to the Deleted category and permanently locked.");
         } catch (\Throwable $e) {
             return back()->with('error', 'Failed to delete Material Request: ' . $e->getMessage());
         }

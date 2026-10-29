@@ -19,8 +19,9 @@
             'pending_planning', 'submitted' => 'warning',
             'planning_approved' => 'info',
             'sent_to_store_manager' => 'primary',
-            'sent_to_pr', 'transfer_created', 'fulfilled', 'approved' => 'success',
-            'rejected' => 'danger',
+            'transferred', 'transfer_created' => 'info',
+            'sent_to_pr', 'fulfilled', 'approved' => 'success',
+            'rejected', 'cancelled' => 'danger',
             default => 'secondary'
         };
         $statusLabel = match($materialRequest->status) {
@@ -29,10 +30,11 @@
             'planning_approved' => 'PLANNING APPROVED',
             'sent_to_store_manager' => 'SENT TO STORE MANAGER',
             'sent_to_pr' => 'SENT TO PR',
-            'transfer_created' => 'TRANSFER CREATED',
+            'transferred', 'transfer_created' => 'TRANSFERRED (LOCKED IN PROCUREMENT)',
             'fulfilled' => 'FULFILLED',
             'approved' => 'APPROVED',
             'rejected' => 'REJECTED',
+            'cancelled' => 'DELETED & LOCKED',
             default => strtoupper($materialRequest->status)
         };
     @endphp
@@ -42,7 +44,15 @@
     </span>
     
     <div class="ms-auto d-flex align-items-center gap-2 flex-wrap">
-        @if($isGlobalAdmin)
+        @if($materialRequest->status === 'cancelled')
+        <span class="badge bg-danger text-white py-2 px-3 fw-semibold">
+            <i class="fa-solid fa-lock me-1"></i> Deleted &amp; Locked
+        </span>
+        @elseif(in_array($materialRequest->status, ['transferred', 'transfer_created']))
+        <span class="badge bg-info text-white py-2 px-3 fw-semibold">
+            <i class="fa-solid fa-lock me-1"></i> Transferred &amp; Locked
+        </span>
+        @elseif($isGlobalAdmin)
         <button type="button" class="btn btn-outline-danger shadow-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#deleteMrModal">
             <i class="fa-solid fa-trash-can me-1"></i> Delete MR (Admin Only)
         </button>
@@ -112,23 +122,58 @@
             @endif
         @endif
 
-        @php
-            $linkedPr = $materialRequest->purchaseRequests->first();
-        @endphp
-        @if($linkedPr)
-            <a href="{{ route('purchase-requests.show', $linkedPr->id) }}" class="btn btn-primary shadow-sm fw-semibold">
-                <i class="fas fa-route me-1"></i> Track PR Flow ({{ $linkedPr->pr_no }})
-            </a>
-        @else
-            <form action="{{ route('material-requests.convert-to-pr', $materialRequest) }}" method="POST" class="d-inline">
-                @csrf
-                <button type="submit" class="btn btn-primary shadow-sm fw-semibold">
-                    <i class="fas fa-play me-1"></i> Launch PR Procurement Flow
-                </button>
-            </form>
+        @if(!in_array($materialRequest->status, ['transferred', 'transfer_created', 'cancelled']))
+            @php
+                $linkedPr = $materialRequest->purchaseRequests->first();
+            @endphp
+            @if($linkedPr)
+                <a href="{{ route('purchase-requests.show', $linkedPr->id) }}" class="btn btn-primary shadow-sm fw-semibold">
+                    <i class="fas fa-route me-1"></i> Track PR Flow ({{ $linkedPr->pr_no }})
+                </a>
+            @else
+                <form action="{{ route('material-requests.convert-to-pr', $materialRequest) }}" method="POST" class="d-inline">
+                    @csrf
+                    <button type="submit" class="btn btn-primary shadow-sm fw-semibold">
+                        <i class="fas fa-play me-1"></i> Launch PR Procurement Flow
+                    </button>
+                </form>
+            @endif
         @endif
     </div>
 </div>
+
+{{-- Top Alerts for Transferred or Deleted Records (Locked in Procurement) --}}
+@if(in_array($materialRequest->status, ['transferred', 'transfer_created']))
+    <div class="alert alert-info border-start border-4 border-info shadow-sm mb-4 d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <div class="d-flex align-items-center gap-3">
+            <div class="p-3 bg-info bg-opacity-25 rounded-circle text-info">
+                <i class="fa-solid fa-truck-moving fa-2x"></i>
+            </div>
+            <div>
+                <h5 class="fw-bold mb-0 text-dark">Fulfilled via Store Transfer — Locked in Procurement</h5>
+                <p class="text-muted small mb-0">This Material Request was routed to and fulfilled via Store Transfer. It is completed and permanently locked in Procurement.</p>
+            </div>
+        </div>
+        <span class="badge bg-info text-white px-3 py-2 fs-6 rounded-pill">
+            <i class="fa-solid fa-lock me-1"></i> Transferred &amp; Locked
+        </span>
+    </div>
+@elseif($materialRequest->status === 'cancelled')
+    <div class="alert alert-danger border-start border-4 border-danger shadow-sm mb-4 d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <div class="d-flex align-items-center gap-3">
+            <div class="p-3 bg-danger bg-opacity-25 rounded-circle text-danger">
+                <i class="fa-solid fa-trash-can fa-2x"></i>
+            </div>
+            <div>
+                <h5 class="fw-bold mb-0 text-danger">Record Deleted &amp; Locked</h5>
+                <p class="text-muted small mb-0">This Material Request was removed and moved to the Deleted category. All stages, edits, and actions are permanently locked.</p>
+            </div>
+        </div>
+        <span class="badge bg-danger text-white px-3 py-2 fs-6 rounded-pill">
+            <i class="fa-solid fa-lock me-1"></i> Deleted &amp; Locked
+        </span>
+    </div>
+@endif
 
 {{-- Rejection Modal --}}
 @if(in_array($materialRequest->status, ['pending_planning', 'submitted']))
@@ -406,19 +451,21 @@
                 @method('DELETE')
                 <div class="modal-header bg-danger text-white">
                     <h5 class="modal-title fs-6 fw-bold" id="deleteMrModalLabel">
-                        <i class="fa-solid fa-triangle-exclamation me-2"></i>Permanently Delete Material Request
+                        <i class="fa-solid fa-lock me-2"></i>Move Material Request to Deleted &amp; Lock
                     </h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body p-4 text-start">
-                    <p class="mb-2">Are you sure you want to permanently delete <strong>MR: {{ $materialRequest->reference_number }}</strong>?</p>
-                    <div class="alert alert-warning small mb-0">
-                        <i class="fa-solid fa-shield-halved me-1"></i> <strong>Strict Lock Policy:</strong> Non-admin users cannot delete records or add materials after creation. As Global Admin, this action will remove this Material Request and all associated line items.
+                    <p class="mb-2">Are you sure you want to delete <strong>MR: {{ $materialRequest->reference_number }}</strong>?</p>
+                    <div class="alert alert-warning small mb-3">
+                        <i class="fa-solid fa-shield-halved me-1"></i> <strong>Strict Lock Policy:</strong> Non-admin users cannot delete records. As Global Admin, this action will move this Material Request to the <strong>Deleted &amp; Cancelled</strong> category with all requested materials preserved and permanently locked.
                     </div>
+                    <label class="form-label small fw-bold text-muted text-uppercase">Deletion Reason / Remarks</label>
+                    <textarea name="reason" class="form-control form-control-sm" rows="2" placeholder="Explain why this requisition is being removed..."></textarea>
                 </div>
                 <div class="modal-footer bg-light">
                     <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-danger btn-sm fw-bold"><i class="fa-solid fa-trash-can me-1"></i> Confirm Delete</button>
+                    <button type="submit" class="btn btn-danger btn-sm fw-bold"><i class="fa-solid fa-trash-can me-1"></i> Move to Deleted &amp; Lock</button>
                 </div>
             </form>
         </div>

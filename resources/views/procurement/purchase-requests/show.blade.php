@@ -34,7 +34,15 @@
             <p class="text-muted small mb-0 mt-1">Project: <strong>{{ $purchaseRequest->project?->name ?? 'N/A' }}</strong> | Channel: <strong>{{ $purchaseRequest->materialRequest?->source ?? 'Direct PR' }}</strong></p>
         </div>
         <div class="d-flex align-items-center gap-2 flex-wrap">
-            @if($isGlobalAdmin)
+            @if($purchaseRequest->trashed() || $purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_CANCELLED)
+            <span class="badge bg-danger text-white py-2 px-3 fw-semibold">
+                <i class="fas fa-lock me-1"></i> Deleted &amp; Locked
+            </span>
+            @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_TRANSFERRED)
+            <span class="badge bg-info text-white py-2 px-3 fw-semibold">
+                <i class="fas fa-lock me-1"></i> Transferred &amp; Locked
+            </span>
+            @elseif($isGlobalAdmin)
             <button type="button" class="btn btn-outline-danger shadow-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#deletePrModal">
                 <i class="fas fa-trash-can me-1"></i> Delete PR (Admin Only)
             </button>
@@ -67,10 +75,48 @@
         </div>
     @endif
 
+    {{-- Top Status Alerts for Transferred or Deleted Records (Locked in Procurement) --}}
+    @if($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_TRANSFERRED)
+        <div class="alert alert-info border-start border-4 border-info shadow-sm mb-4 d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-3">
+                <div class="p-3 bg-info bg-opacity-25 rounded-circle text-info">
+                    <i class="fa-solid fa-truck-moving fa-2x"></i>
+                </div>
+                <div>
+                    <h5 class="fw-bold mb-0 text-dark">Fulfilled via Store Transfer — Locked in Procurement</h5>
+                    <p class="text-muted small mb-0">All requested materials have been transferred and fulfilled via Store Transfer. This request is completed and permanently locked in Procurement.</p>
+                </div>
+            </div>
+            <span class="badge bg-info text-white px-3 py-2 fs-6 rounded-pill">
+                <i class="fa-solid fa-lock me-1"></i> Transferred &amp; Locked
+            </span>
+        </div>
+    @elseif($purchaseRequest->trashed() || $purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_CANCELLED)
+        <div class="alert alert-danger border-start border-4 border-danger shadow-sm mb-4 d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-3">
+                <div class="p-3 bg-danger bg-opacity-25 rounded-circle text-danger">
+                    <i class="fa-solid fa-trash-can fa-2x"></i>
+                </div>
+                <div>
+                    <h5 class="fw-bold mb-0 text-danger">Record Deleted &amp; Locked</h5>
+                    <p class="text-muted small mb-0">This purchase request was removed and moved to the Deleted category. All stages, edits, and workflow actions are permanently locked.</p>
+                    @if($purchaseRequest->rejection_reason)
+                        <small class="text-danger fst-italic"><i class="fas fa-info-circle me-1"></i>{{ $purchaseRequest->rejection_reason }}</small>
+                    @endif
+                </div>
+            </div>
+            <span class="badge bg-danger text-white px-3 py-2 fs-6 rounded-pill">
+                <i class="fa-solid fa-lock me-1"></i> Deleted &amp; Locked
+            </span>
+        </div>
+    @endif
+
 @php
     $currentRoleName = $purchaseRequest->current_owner_role;
 
-    if (!$isAuditorUser) {
+    if ($purchaseRequest->trashed() || in_array($purchaseRequest->status, [\App\Models\PurchaseRequest::STATUS_CANCELLED, \App\Models\PurchaseRequest::STATUS_TRANSFERRED])) {
+        $canActOnCurrentStage = false;
+    } elseif (!$isAuditorUser) {
         switch ($purchaseRequest->status) {
             case \App\Models\PurchaseRequest::STATUS_DRAFT:
                 $canActOnCurrentStage = $isGlobalAdmin || ($authUser && $purchaseRequest->requested_by === $authUser->id) || in_array('coordinator', $rawUserRoles) || in_array('site_engineer', $rawUserRoles);
@@ -2045,7 +2091,13 @@
                             <i class="fas fa-lock fa-2x text-muted"></i>
                         </span>
                     </div>
-                    @if(in_array($purchaseRequest->status, [\App\Models\PurchaseRequest::STATUS_INTAKE_COMPLETE, \App\Models\PurchaseRequest::STATUS_COMPLETED, \App\Models\PurchaseRequest::STATUS_TRANSFERRED]))
+                    @if($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_TRANSFERRED)
+                        <h6 class="fw-bold text-primary mb-1"><i class="fas fa-truck-moving me-1"></i>Fulfilled via Store Transfer</h6>
+                        <p class="small text-muted mb-0">This purchase request was fulfilled via store transfer and all lifecycle actions are locked in Procurement.</p>
+                    @elseif($purchaseRequest->trashed() || $purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_CANCELLED)
+                        <h6 class="fw-bold text-danger mb-1"><i class="fas fa-trash-can me-1"></i>Request Deleted &amp; Locked</h6>
+                        <p class="small text-muted mb-0">This purchase request was moved to the Deleted category and all workflow actions are permanently locked.</p>
+                    @elseif(in_array($purchaseRequest->status, [\App\Models\PurchaseRequest::STATUS_INTAKE_COMPLETE, \App\Models\PurchaseRequest::STATUS_COMPLETED]))
                         <h6 class="fw-bold text-success mb-1"><i class="fas fa-check-circle me-1"></i>Lifecycle Completed</h6>
                         <p class="small text-muted mb-0">This purchase request has completed all workflow stages.</p>
                     @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_REJECTED)
@@ -2144,17 +2196,17 @@
                     </div>
 
                     <div class="d-flex align-items-center gap-2 flex-wrap">
-                        @if($isGlobalAdmin && !in_array($purchaseRequest->status, [\App\Models\PurchaseRequest::STATUS_COMPLETED, \App\Models\PurchaseRequest::STATUS_CANCELLED, \App\Models\PurchaseRequest::STATUS_REJECTED]))
+                        @if($isGlobalAdmin && !$purchaseRequest->trashed() && !in_array($purchaseRequest->status, [\App\Models\PurchaseRequest::STATUS_COMPLETED, \App\Models\PurchaseRequest::STATUS_CANCELLED, \App\Models\PurchaseRequest::STATUS_REJECTED, \App\Models\PurchaseRequest::STATUS_TRANSFERRED]))
                         <button type="button" class="btn btn-sm btn-primary shadow-sm fw-bold" data-bs-toggle="modal" data-bs-target="#addPrItemModal">
                             <i class="fas fa-plus-circle me-1"></i> Add More Items (Admin Only)
                         </button>
-                        @elseif(!$isGlobalAdmin)
-                        <span class="badge bg-light text-muted border py-2 px-3 fw-normal" title="Records are locked after creation. No new materials can be added. Only Global Admin can add or edit materials.">
+                        @elseif(!$isGlobalAdmin || $purchaseRequest->trashed() || in_array($purchaseRequest->status, [\App\Models\PurchaseRequest::STATUS_TRANSFERRED, \App\Models\PurchaseRequest::STATUS_CANCELLED]))
+                        <span class="badge bg-light text-muted border py-2 px-3 fw-normal" title="Records are locked after creation. No new materials can be added.">
                             <i class="fas fa-lock me-1 text-secondary"></i> Materials Locked
                         </span>
                         @endif
 
-                        @if($isSelectableStage)
+                        @if($isSelectableStage && !$purchaseRequest->trashed() && !in_array($purchaseRequest->status, [\App\Models\PurchaseRequest::STATUS_TRANSFERRED, \App\Models\PurchaseRequest::STATUS_CANCELLED]))
                             @if($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW)
                             <div class="d-flex align-items-center gap-2 flex-wrap">
                                 <span class="small text-muted me-1"><span class="selected-items-count fw-bold text-primary">0</span> selected</span>
@@ -5878,19 +5930,21 @@ document.addEventListener('DOMContentLoaded', function () {
                 @method('DELETE')
                 <div class="modal-header bg-danger text-white">
                     <h5 class="modal-title fs-6 fw-bold" id="deletePrModalLabel">
-                        <i class="fas fa-triangle-exclamation me-2"></i>Permanently Delete Purchase Request
+                        <i class="fas fa-lock me-2"></i>Move Purchase Request to Deleted &amp; Lock
                     </h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body p-4 text-start">
-                    <p class="mb-2">Are you sure you want to permanently delete <strong>PR #{{ $purchaseRequest->pr_no }}</strong>?</p>
-                    <div class="alert alert-warning small mb-0">
-                        <i class="fas fa-shield-halved me-1"></i> <strong>Strict Lock Policy:</strong> Non-admin users cannot delete records or add materials after creation. As Global Admin, this action will remove this PR and all associated line items permanently.
+                    <p class="mb-2">Are you sure you want to delete <strong>PR #{{ $purchaseRequest->pr_no }}</strong>?</p>
+                    <div class="alert alert-warning small mb-3">
+                        <i class="fas fa-shield-halved me-1"></i> <strong>Strict Lock Policy:</strong> Non-admin users cannot delete records or alter materials. As Global Admin, this action will move this PR to the <strong>Deleted &amp; Cancelled</strong> category with all requested materials preserved and permanently locked.
                     </div>
+                    <label class="form-label small fw-bold text-muted text-uppercase">Deletion Reason / Remarks</label>
+                    <textarea name="reason" class="form-control form-control-sm" rows="2" placeholder="Explain why this purchase request is being removed..."></textarea>
                 </div>
                 <div class="modal-footer bg-light">
                     <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-danger btn-sm fw-bold"><i class="fas fa-trash-can me-1"></i> Confirm Delete</button>
+                    <button type="submit" class="btn btn-danger btn-sm fw-bold"><i class="fas fa-trash-can me-1"></i> Move to Deleted &amp; Lock</button>
                 </div>
             </form>
         </div>

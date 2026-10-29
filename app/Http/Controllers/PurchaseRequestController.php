@@ -267,8 +267,11 @@ class PurchaseRequestController extends Controller
     }
 
     // ─── Show ────────────────────────────────────────────────────────────────
-    public function show(PurchaseRequest $purchaseRequest)
+    public function show($purchaseRequest)
     {
+        if (!$purchaseRequest instanceof PurchaseRequest) {
+            $purchaseRequest = PurchaseRequest::withTrashed()->findOrFail($purchaseRequest);
+        }
         $user = Auth::user();
         $roles = $user ? $user->getRoleNames()->toArray() : [];
         $isStoreKeeper = $user && ($user->hasAnyRole(['store_keeper', 'Store Keeper', 'storekeeper', 'Storekeeper']) || in_array('store_keeper', $roles) || in_array('storekeeper', $roles));
@@ -687,6 +690,14 @@ class PurchaseRequestController extends Controller
      */
     private function authorizeStageRole(PurchaseRequest $pr, array $allowedRoles): void
     {
+        if ($pr->trashed() || $pr->status === PurchaseRequest::STATUS_CANCELLED) {
+            abort(403, 'Action blocked: This Purchase Request has been deleted and is permanently locked.');
+        }
+
+        if ($pr->status === PurchaseRequest::STATUS_TRANSFERRED) {
+            abort(403, 'Action blocked: This Purchase Request was fulfilled via Store Transfer and is locked in Procurement.');
+        }
+
         $user = Auth::user();
         if (!$user) {
             abort(401, 'Unauthenticated');
@@ -773,6 +784,19 @@ class PurchaseRequestController extends Controller
                 'status'        => 'draft',
             ]);
 
+            // Check whether all items on the PR are being fully transferred
+            $totalPrItemsCount = $purchaseRequest->items()->count();
+            $fullyTransferredCount = 0;
+            foreach ($request->items as $itemData) {
+                $prItem = PurchaseRequestItem::where('purchase_request_id', $purchaseRequest->id)
+                    ->where('id', $itemData['item_id'])
+                    ->first();
+                if ($prItem && (float)$itemData['quantity'] >= (float)$prItem->quantity) {
+                    $fullyTransferredCount++;
+                }
+            }
+            $isFullPrTransfer = ($fullyTransferredCount >= $totalPrItemsCount && $totalPrItemsCount > 0);
+
             foreach ($request->items as $itemData) {
                 $prItem = PurchaseRequestItem::where('purchase_request_id', $purchaseRequest->id)
                     ->where('id', $itemData['item_id'])
@@ -791,22 +815,20 @@ class PurchaseRequestController extends Controller
 
                 $transferredCount++;
 
-                // If full quantity transferred, delete PR item
-                if ($transferQty >= (float)$prItem->quantity) {
-                    $prItem->delete();
-                } else {
-                    // Partial transfer: reduce remaining quantity on PR item
-                    $prItem->decrement('quantity', $transferQty);
+                if (!$isFullPrTransfer) {
+                    // For partial transfers only: remove or reduce transferred items so remaining items route to purchase
+                    if ($transferQty >= (float)$prItem->quantity) {
+                        $prItem->delete();
+                    } else {
+                        $prItem->decrement('quantity', $transferQty);
+                    }
                 }
             }
 
             $createdTransfer = $transfer;
             \App\Http\Controllers\StoreManagerController::syncTransferInventory($transfer);
 
-            // Check if any items remain on the PR
-            $remainingCount = $purchaseRequest->items()->count();
-
-            if ($remainingCount === 0) {
+            if ($isFullPrTransfer) {
                 $from = $purchaseRequest->status;
                 $purchaseRequest->update([
                     'status'             => PurchaseRequest::STATUS_TRANSFERRED,
@@ -818,11 +840,12 @@ class PurchaseRequestController extends Controller
                     'to_stage'            => PurchaseRequest::STATUS_TRANSFERRED,
                     'action'              => 'full_store_transfer_created',
                     'actor_role'          => 'store_manager',
-                    'notes'               => "All items transferred via Store Transfer #{$transfer->transfer_no}",
+                    'notes'               => "All items fulfilled via Store Transfer #{$transfer->transfer_no}. PR locked in Procurement.",
                     'actor_id'            => Auth::id(),
                     'created_at'          => now(),
                 ]);
             } else {
+                $remainingCount = $purchaseRequest->items()->count();
                 PrWorkflowLog::create([
                     'purchase_request_id' => $purchaseRequest->id,
                     'from_stage'          => $purchaseRequest->status,
@@ -994,10 +1017,14 @@ class PurchaseRequestController extends Controller
                     ]);
                     $transferItemsCount++;
 
-                    if ($qty >= (float)$prItem->quantity && !in_array($prItem->id, $purchaseItemIds)) {
-                        $prItem->delete();
-                    } else if ($qty < (float)$prItem->quantity) {
-                        $prItem->decrement('quantity', $qty);
+                    if (empty($purchaseItemIds)) {
+                        // Full PR transfer: preserve all items on PR for audit trail
+                    } else {
+                        if ($qty >= (float)$prItem->quantity && !in_array($prItem->id, $purchaseItemIds)) {
+                            $prItem->delete();
+                        } else if ($qty < (float)$prItem->quantity) {
+                            $prItem->decrement('quantity', $qty);
+                        }
                     }
                 }
 
@@ -1011,7 +1038,7 @@ class PurchaseRequestController extends Controller
             if ($remainingPrItemsCount > 0 && !empty($purchaseItemIds)) {
                 $this->lifecycle->sendToProcurementManager($purchaseRequest, $request->notes ?: "Routed to Procurement for {$remainingPrItemsCount} items.");
                 $purchaseItemsCount = $remainingPrItemsCount;
-            } elseif ($remainingPrItemsCount === 0) {
+            } elseif ($remainingPrItemsCount === 0 || empty($purchaseItemIds)) {
                 $purchaseRequest->update([
                     'status'             => PurchaseRequest::STATUS_TRANSFERRED,
                     'current_owner_role' => null,
@@ -1022,7 +1049,7 @@ class PurchaseRequestController extends Controller
                     'to_stage'            => PurchaseRequest::STATUS_TRANSFERRED,
                     'action'              => 'full_store_transfer_created',
                     'actor_role'          => 'store_manager',
-                    'notes'               => "All items fulfilled via Store Transfer(s).",
+                    'notes'               => "All items fulfilled via Store Transfer(s). PR locked in Procurement.",
                     'actor_id'            => Auth::id(),
                     'created_at'          => now(),
                 ]);
@@ -2282,6 +2309,13 @@ class PurchaseRequestController extends Controller
     // ─── STAGE 9 Final: Store Intake (Store Keeper Action) ────────────────────
     public function storeIntake(Request $request, PurchaseRequest $purchaseRequest)
     {
+        if ($purchaseRequest->trashed() || $purchaseRequest->status === PurchaseRequest::STATUS_CANCELLED) {
+            abort(403, 'Action blocked: This Purchase Request has been deleted and is permanently locked.');
+        }
+        if ($purchaseRequest->status === PurchaseRequest::STATUS_TRANSFERRED) {
+            abort(403, 'Action blocked: This Purchase Request was fulfilled via Store Transfer and is locked in Procurement.');
+        }
+
         $user = Auth::user();
         $userRoles = $user ? $user->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray() : [];
         $isStoreKeeper = in_array('store_keeper', $userRoles) || in_array('storekeeper', $userRoles) || in_array('store_clerk', $userRoles);
@@ -2355,11 +2389,7 @@ class PurchaseRequestController extends Controller
     // ─── STAGE: Planning Manager Review & Approval ─────────────────────────────
     public function planningApprove(Request $request, PurchaseRequest $purchaseRequest)
     {
-        $user = Auth::user();
-        $roles = $user ? $user->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray() : [];
-        if (!in_array('planning_manager', $roles)) {
-            abort(403, 'Unauthorized: Requests in planning approval stage can only be approved by the Planning Manager.');
-        }
+        $this->authorizeStageRole($purchaseRequest, ['planning_manager', 'planning']);
 
         $targetRole = $this->lifecycle->resolveOwnerRole('coordinator', $purchaseRequest);
         $purchaseRequest->update([
@@ -2406,11 +2436,7 @@ class PurchaseRequestController extends Controller
 
     public function planningReject(Request $request, PurchaseRequest $purchaseRequest)
     {
-        $user = Auth::user();
-        $roles = $user ? $user->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray() : [];
-        if (!in_array('planning_manager', $roles)) {
-            abort(403, 'Unauthorized: Requests in planning approval stage can only be rejected by the Planning Manager.');
-        }
+        $this->authorizeStageRole($purchaseRequest, ['planning_manager', 'planning']);
 
         $request->validate(['rejection_reason' => 'required|string|max:1000']);
 
@@ -2829,81 +2855,45 @@ class PurchaseRequestController extends Controller
             return back()->with('error', 'Access Denied: Records are locked after creation and cannot be deleted. Only the Global Admin role is permitted to delete existing entries.');
         }
 
-        // Global Admin permitted deletion
+        // Global Admin permitted deletion: move to Deleted category & lock
         try {
-            DB::transaction(function() use ($purchaseRequest, $user, $prIdentifier) {
+            DB::transaction(function() use ($purchaseRequest, $user, $prIdentifier, $request) {
+                $reason = $request->input('reason') ?: ("Deleted by Global Admin {$user->name} on " . now()->format('M d, Y H:i'));
+
                 \App\Models\ActivityLog::log(
                     'admin_deleted_purchase_request',
-                    "Global Admin '{$user->name}' deleted Purchase Request {$prIdentifier} and all associated items.",
+                    "Global Admin '{$user->name}' moved Purchase Request {$prIdentifier} to Deleted category (Locked). Reason: {$reason}",
                     'Procurement',
-                    null,
-                    ['deleted_pr_id' => $purchaseRequest->id, 'pr_no' => $prIdentifier]
+                    $purchaseRequest,
+                    ['deleted_pr_id' => $purchaseRequest->id, 'pr_no' => $prIdentifier, 'reason' => $reason]
                 );
 
-                // 1. Delete associated line items
-                $purchaseRequest->items()->delete();
+                try {
+                    PrWorkflowLog::create([
+                        'purchase_request_id' => $purchaseRequest->id,
+                        'from_stage'          => $purchaseRequest->status,
+                        'to_stage'            => PurchaseRequest::STATUS_CANCELLED,
+                        'action'              => 'admin_delete_pr_locked',
+                        'actor_role'          => 'global_admin',
+                        'actor_id'            => $user->id,
+                        'notes'               => "PR deleted by Global Admin {$user->name} and locked. Reason: {$reason}",
+                        'created_at'          => now(),
+                    ]);
+                } catch (\Throwable $e) {}
 
-                // 2. Delete workflow audit logs
-                $purchaseRequest->workflowLogs()->delete();
+                // Soft-delete and mark as cancelled, preserving line items and audit trail
+                $purchaseRequest->update([
+                    'status'             => PurchaseRequest::STATUS_CANCELLED,
+                    'current_owner_role' => null,
+                    'rejection_reason'   => $reason,
+                ]);
 
-                // 3. Delete proformas and remove any stored attachment files
-                foreach ($purchaseRequest->proformaInvoices as $prof) {
-                    if (!empty($prof->file_path)) {
-                        try {
-                            \App\Services\FileUploadService::delete($prof->file_path);
-                        } catch (\Throwable $ignored) {}
-                    }
-                    $prof->delete();
-                }
-
-                // 4. Delete market research records
-                $purchaseRequest->marketResearch()->delete();
-
-                // 5. Delete GM decisions
-                $purchaseRequest->gmDecisions()->delete();
-
-                // 6. Delete marketing variance
-                $purchaseRequest->marketingVariance()->delete();
-
-                // 7. Delete procurement payments
-                $purchaseRequest->payments()->delete();
-
-                // 8. Delete procurement receipt and attached files
-                if ($purchaseRequest->receipt) {
-                    if (!empty($purchaseRequest->receipt->file_path)) {
-                        try {
-                            \App\Services\FileUploadService::delete($purchaseRequest->receipt->file_path);
-                        } catch (\Throwable $ignored) {}
-                    }
-                    $purchaseRequest->receipt()->delete();
-                }
-
-                // 9. Delete driver booking
-                $purchaseRequest->driverBooking()->delete();
-
-                // 10. Clean up references in other tables
-                \App\Models\DeliveryReceipt::where('purchase_request_id', $purchaseRequest->id)->update(['purchase_request_id' => null]);
-                \App\Models\PurchaseOrder::where('purchase_request_id', $purchaseRequest->id)->update(['purchase_request_id' => null]);
-                \App\Models\PurchaseRequest::where('merged_into_pr_id', $purchaseRequest->id)->update(['merged_into_pr_id' => null]);
-
-                if (\Illuminate\Support\Facades\Schema::hasTable('expense_requests')) {
-                    \App\Models\ExpenseRequest::where('purchase_request_id', $purchaseRequest->id)->update(['purchase_request_id' => null]);
-                }
-
-                if (\Illuminate\Support\Facades\Schema::hasTable('credit_store_ledgers')) {
-                    \App\Models\CreditStoreLedger::where('purchase_request_id', $purchaseRequest->id)->update(['purchase_request_id' => null]);
-                }
-
-                if (\Illuminate\Support\Facades\Schema::hasTable('support_tickets') && \Illuminate\Support\Facades\Schema::hasColumn('support_tickets', 'mr_purchase_request_id')) {
-                    \Illuminate\Support\Facades\DB::table('support_tickets')->where('mr_purchase_request_id', $purchaseRequest->id)->update(['mr_purchase_request_id' => null]);
-                }
-
-                // 11. Permanently delete the purchase request record
-                $purchaseRequest->forceDelete();
+                // Soft-delete sets deleted_at so it is safely archived in the "Deleted & Cancelled" category
+                $purchaseRequest->delete();
             });
 
-            return redirect()->route('procurement.my-queue')
-                ->with('success', "Purchase Request {$prIdentifier} has been permanently deleted by Global Admin.");
+            return redirect()->route('procurement.my-queue', ['tab' => 'deleted'])
+                ->with('success', "Purchase Request {$prIdentifier} has been moved to the Deleted category and permanently locked.");
         } catch (\Throwable $e) {
             return back()->with('error', 'Failed to delete Purchase Request: ' . $e->getMessage());
         }

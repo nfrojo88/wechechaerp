@@ -73,6 +73,7 @@ class ProcurementLifecycleController extends Controller
         }
 
         // Auto-clean / Purge: Automatically delete empty PRs and MRs that have ZERO items and no financial/intake activity
+        // STRICT RULE: Never delete requests that are transferred, cancelled, or rejected!
         try {
             $zeroItemPrs = PurchaseRequest::whereDoesntHave('items')
                 ->whereDoesntHave('payment')
@@ -80,6 +81,7 @@ class ProcurementLifecycleController extends Controller
                 ->whereDoesntHave('deliveryReceipts')
                 ->whereDoesntHave('driverBooking')
                 ->whereDoesntHave('creditLedger')
+                ->whereNotIn('status', [PurchaseRequest::STATUS_TRANSFERRED, PurchaseRequest::STATUS_CANCELLED, PurchaseRequest::STATUS_REJECTED])
                 ->get();
             foreach ($zeroItemPrs as $zPr) {
                 $zPr->forceDelete();
@@ -87,6 +89,7 @@ class ProcurementLifecycleController extends Controller
 
             $zeroItemMrs = MaterialRequest::whereDoesntHave('items')
                 ->whereDoesntHave('purchaseRequests')
+                ->whereNotIn('status', ['transferred', 'transfer_created', 'cancelled', 'rejected'])
                 ->get();
             foreach ($zeroItemMrs as $zMr) {
                 $zMr->delete();
@@ -420,13 +423,19 @@ class ProcurementLifecycleController extends Controller
         $pendingStoreOfficeCount = 0;
         $pendingFinanceOfficeCount = 0;
 
-        // 5. User's Created Requisitions & Purchase Requests History (must have items)
+        // 5. User's Created Requisitions & Purchase Requests History (must have items OR be fulfilled via transfer)
         $createdPrQuery = PurchaseRequest::with(['project', 'requestedBy', 'store', 'materialRequest', 'items.product', 'deliveryReceipts'])
-            ->whereHas('items')
+            ->where(function($q) {
+                $q->whereHas('items')
+                  ->orWhere('status', PurchaseRequest::STATUS_TRANSFERRED);
+            })
             ->latest();
 
         $createdMrQuery = MaterialRequest::with(['project', 'store', 'creator', 'requestedBy', 'items.product', 'purchaseRequests'])
-            ->whereHas('items')
+            ->where(function($q) {
+                $q->whereHas('items')
+                  ->orWhere('status', 'transferred');
+            })
             ->latest();
 
         if (!$isAdmin && !$isAuditor) {
@@ -449,13 +458,20 @@ class ProcurementLifecycleController extends Controller
         $myCreatedMrs = $createdMrQuery->take(50)->get();
 
         $myCreatedCount = ($isAdmin || $isAuditor)
-            ? (PurchaseRequest::whereHas('items')->count() + MaterialRequest::whereHas('items')->whereDoesntHave('purchaseRequests')->count())
-            : (PurchaseRequest::whereHas('items')->where('requested_by', $user->id)->count() + MaterialRequest::whereHas('items')->whereDoesntHave('purchaseRequests')->where('created_by', $user->id)->count());
+            ? (PurchaseRequest::where(function($q) { $q->whereHas('items')->orWhere('status', PurchaseRequest::STATUS_TRANSFERRED); })->count() + MaterialRequest::where(function($q) { $q->whereHas('items')->orWhere('status', 'transferred'); })->whereDoesntHave('purchaseRequests')->count())
+            : (PurchaseRequest::where(function($q) { $q->whereHas('items')->orWhere('status', PurchaseRequest::STATUS_TRANSFERRED); })->where('requested_by', $user->id)->count() + MaterialRequest::where(function($q) { $q->whereHas('items')->orWhere('status', 'transferred'); })->whereDoesntHave('purchaseRequests')->where('created_by', $user->id)->count());
 
-        // 6. Completed History (must have items)
+        // 6. Completed History (must have items or be transferred to store transfer)
         $completedPrQuery = PurchaseRequest::with(['project', 'requestedBy', 'store', 'materialRequest', 'items.product', 'deliveryReceipts'])
-            ->whereHas('items')
-            ->where('status', PurchaseRequest::STATUS_INTAKE_COMPLETE)
+            ->where(function($q) {
+                $q->where('status', PurchaseRequest::STATUS_INTAKE_COMPLETE)
+                  ->orWhere('status', PurchaseRequest::STATUS_TRANSFERRED)
+                  ->orWhere('status', PurchaseRequest::STATUS_COMPLETED);
+            })
+            ->where(function($q) {
+                $q->whereHas('items')
+                  ->orWhere('status', PurchaseRequest::STATUS_TRANSFERRED);
+            })
             ->latest();
 
         $applyPrStoreScope($completedPrQuery);
@@ -466,9 +482,12 @@ class ProcurementLifecycleController extends Controller
         }
         $completedPrs = $completedPrQuery->paginate(15, ['*'], 'completed_page')->withQueryString();
 
-        // 7. All Company PR History (Oversight - must have items)
+        // 7. All Company PR History (Oversight - must have items or be transferred)
         $allPrQuery = PurchaseRequest::with(['project', 'requestedBy', 'store', 'materialRequest', 'items.product'])
-            ->whereHas('items')
+            ->where(function($q) {
+                $q->whereHas('items')
+                  ->orWhere('status', PurchaseRequest::STATUS_TRANSFERRED);
+            })
             ->latest();
 
         $applyPrStoreScope($allPrQuery);
@@ -529,11 +548,21 @@ class ProcurementLifecycleController extends Controller
             ? PurchaseRequest::whereHas('items')->where('status', '!=', PurchaseRequest::STATUS_INTAKE_COMPLETE)->count()
             : ($myPrs->total() + $materialRequestsQueue->count() + $coordinatorEmergencyMrs->count());
 
-        $completedCountQuery = PurchaseRequest::whereHas('items')->where('status', PurchaseRequest::STATUS_INTAKE_COMPLETE);
+        $completedCountQuery = PurchaseRequest::where(function($q) {
+            $q->where('status', PurchaseRequest::STATUS_INTAKE_COMPLETE)
+              ->orWhere('status', PurchaseRequest::STATUS_TRANSFERRED)
+              ->orWhere('status', PurchaseRequest::STATUS_COMPLETED);
+        })->where(function($q) {
+            $q->whereHas('items')
+              ->orWhere('status', PurchaseRequest::STATUS_TRANSFERRED);
+        });
         $applyPrStoreScope($completedCountQuery);
         $applyTypeFilter($completedCountQuery);
 
-        $allPrCountQuery = PurchaseRequest::whereHas('items');
+        $allPrCountQuery = PurchaseRequest::where(function($q) {
+            $q->whereHas('items')
+              ->orWhere('status', PurchaseRequest::STATUS_TRANSFERRED);
+        });
         $applyPrStoreScope($allPrCountQuery);
         $applyTypeFilter($allPrCountQuery);
 
@@ -596,7 +625,8 @@ class ProcurementLifecycleController extends Controller
                 ->whereDoesntHave('receipt')
                 ->whereDoesntHave('deliveryReceipts')
                 ->whereDoesntHave('driverBooking')
-                ->whereDoesntHave('creditLedger');
+                ->whereDoesntHave('creditLedger')
+                ->whereNotIn('status', [PurchaseRequest::STATUS_TRANSFERRED, PurchaseRequest::STATUS_CANCELLED, PurchaseRequest::STATUS_REJECTED]);
 
             if (!$isAdmin) {
                 $zeroPrsQuery->where('requested_by', $user->id);
@@ -609,7 +639,8 @@ class ProcurementLifecycleController extends Controller
             }
 
             $zeroMrsQuery = MaterialRequest::whereDoesntHave('items')
-                ->whereDoesntHave('purchaseRequests');
+                ->whereDoesntHave('purchaseRequests')
+                ->whereNotIn('status', ['transferred', 'transfer_created', 'cancelled', 'rejected']);
 
             if (!$isAdmin) {
                 $zeroMrsQuery->where('created_by', $user->id);

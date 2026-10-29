@@ -1265,10 +1265,16 @@
                             @forelse($completedPrs as $compPr)
                             <tr>
                                 <td>
-                                    <a href="{{ route('purchase-requests.show', $compPr->id) }}" class="fw-bold text-success font-monospace text-decoration-none">
+                                    <a href="{{ route('purchase-requests.show', $compPr->id) }}" class="fw-bold {{ $compPr->status === \App\Models\PurchaseRequest::STATUS_TRANSFERRED ? 'text-primary' : 'text-success' }} font-monospace text-decoration-none">
                                         {{ $compPr->pr_no }}
                                     </a>
-                                    <div class="small"><span class="badge bg-success text-white" style="font-size:9px;">Intake Complete</span></div>
+                                    <div class="small">
+                                        @if($compPr->status === \App\Models\PurchaseRequest::STATUS_TRANSFERRED)
+                                            <span class="badge bg-info text-white" style="font-size:9px;"><i class="fas fa-truck-moving me-1"></i>Transferred (Locked)</span>
+                                        @else
+                                            <span class="badge bg-success text-white" style="font-size:9px;">Intake Complete</span>
+                                        @endif
+                                    </div>
                                 </td>
                                 <td>
                                     <div class="fw-bold text-dark">{{ $compPr->project?->name ?? 'N/A' }}</div>
@@ -1319,7 +1325,11 @@
                                     @php
                                         $drSlips = $compPr->deliveryReceipts;
                                     @endphp
-                                    @if($drSlips->count() > 0)
+                                    @if($compPr->status === \App\Models\PurchaseRequest::STATUS_TRANSFERRED)
+                                        <span class="badge bg-info bg-opacity-10 text-primary border border-info border-opacity-25 small">
+                                            <i class="fas fa-truck-moving me-1"></i>Store Transfer (Locked)
+                                        </span>
+                                    @elseif($drSlips->count() > 0)
                                         @foreach($drSlips as $dr)
                                             <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 font-monospace me-1 mb-1">
                                                 <i class="fas fa-hashtag me-1"></i>{{ $dr->dr_no }}
@@ -1651,17 +1661,15 @@
                                                 data-ref="{{ $dPr->pr_no }}"
                                                 data-project="{{ $dPr->project?->name ?? 'Head Office / Unassigned' }}"
                                                 data-store="{{ $dPr->store?->name ?? 'Store Unassigned' }}"
-                                                data-url="{{ !$dPr->trashed() ? route('purchase-requests.show', $dPr->id) : '' }}"
+                                                data-url="{{ route('purchase-requests.show', $dPr->id) }}"
                                                 data-items="{{ json_encode($dPrMaterialsJson) }}"
                                                 onclick="openQuickMaterialsModalFromBtn(this)"
                                                 title="View full materials without saying See Details">
                                             <i class="fa-solid fa-boxes-stacked me-1"></i>Materials ({{ $dPr->items->count() }})
                                         </button>
-                                        @if(!$dPr->trashed())
-                                        <a href="{{ route('purchase-requests.show', $dPr->id) }}" class="btn btn-sm btn-outline-info shadow-xs fw-semibold">
-                                            <i class="fas fa-eye me-1"></i> Details
+                                        <a href="{{ route('purchase-requests.show', $dPr->id) }}" class="btn btn-sm {{ $dPr->trashed() ? 'btn-outline-danger' : 'btn-outline-info' }} shadow-xs fw-semibold">
+                                            <i class="fas {{ $dPr->trashed() ? 'fa-lock' : 'fa-eye' }} me-1"></i> {{ $dPr->trashed() ? 'View Locked Record' : 'Details' }}
                                         </a>
-                                        @endif
 
                                         @if($dPr->trashed() && ($isGlobalAdmin || $isAdmin))
                                         <form action="{{ route('purchase-requests.restore', $dPr->id) }}" method="POST" class="d-inline" onsubmit="return confirm('Restore Purchase Request {{ $dPr->pr_no }} back to active queue?');">
@@ -1811,19 +1819,21 @@
                 @method('DELETE')
                 <div class="modal-header bg-danger text-white">
                     <h5 class="modal-title fs-6 fw-bold" id="deleteQueuePrModalLabel">
-                        <i class="fas fa-triangle-exclamation me-2"></i>Permanently Delete Purchase Request
+                        <i class="fas fa-lock me-2"></i>Move Purchase Request to Deleted &amp; Lock
                     </h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body p-4 text-start">
-                    <p class="mb-2">Are you sure you want to permanently delete <strong id="deleteQueuePrNo"></strong>?</p>
-                    <div class="alert alert-warning small mb-0">
-                        <i class="fas fa-shield-halved me-1"></i> <strong>Strict Lock Policy:</strong> Non-admin users cannot delete records or add materials after creation. As Global Admin, this action will remove this PR and all associated line items permanently.
+                    <p class="mb-2">Are you sure you want to delete <strong id="deleteQueuePrNo"></strong>?</p>
+                    <div class="alert alert-warning small mb-3">
+                        <i class="fas fa-shield-halved me-1"></i> <strong>Strict Lock Policy:</strong> Non-admin users cannot delete records or alter materials. As Global Admin, this action will move this PR to the <strong>Deleted &amp; Cancelled</strong> category with all requested materials preserved and permanently locked.
                     </div>
+                    <label class="form-label small fw-bold text-muted text-uppercase">Deletion Reason / Remarks</label>
+                    <textarea name="reason" class="form-control form-control-sm" rows="2" placeholder="Explain why this request is being removed..."></textarea>
                 </div>
                 <div class="modal-footer bg-light">
                     <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-danger btn-sm fw-bold"><i class="fas fa-trash-can me-1"></i> Confirm Delete</button>
+                    <button type="submit" class="btn btn-danger btn-sm fw-bold"><i class="fas fa-trash-can me-1"></i> Move to Deleted &amp; Lock</button>
                 </div>
             </form>
         </div>
@@ -1839,19 +1849,21 @@
                 @method('DELETE')
                 <div class="modal-header bg-danger text-white">
                     <h5 class="modal-title fs-6 fw-bold" id="deleteQueueMrModalLabel">
-                        <i class="fas fa-triangle-exclamation me-2"></i>Permanently Delete Material Request
+                        <i class="fas fa-lock me-2"></i>Move Material Request to Deleted &amp; Lock
                     </h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body p-4 text-start">
-                    <p class="mb-2">Are you sure you want to permanently delete <strong id="deleteQueueMrNo"></strong>?</p>
-                    <div class="alert alert-warning small mb-0">
-                        <i class="fas fa-shield-halved me-1"></i> <strong>Strict Lock Policy:</strong> Non-admin users cannot delete records or add materials after creation. As Global Admin, this action will remove this Material Request and all associated line items permanently.
+                    <p class="mb-2">Are you sure you want to delete <strong id="deleteQueueMrNo"></strong>?</p>
+                    <div class="alert alert-warning small mb-3">
+                        <i class="fas fa-shield-halved me-1"></i> <strong>Strict Lock Policy:</strong> Non-admin users cannot delete records. As Global Admin, this action will move this Material Request to the <strong>Deleted &amp; Cancelled</strong> category with all requested materials preserved and permanently locked.
                     </div>
+                    <label class="form-label small fw-bold text-muted text-uppercase">Deletion Reason / Remarks</label>
+                    <textarea name="reason" class="form-control form-control-sm" rows="2" placeholder="Explain why this requisition is being removed..."></textarea>
                 </div>
                 <div class="modal-footer bg-light">
                     <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-danger btn-sm fw-bold"><i class="fas fa-trash-can me-1"></i> Confirm Delete</button>
+                    <button type="submit" class="btn btn-danger btn-sm fw-bold"><i class="fas fa-trash-can me-1"></i> Move to Deleted &amp; Lock</button>
                 </div>
             </form>
         </div>

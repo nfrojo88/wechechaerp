@@ -1906,7 +1906,8 @@ Route::middleware(['auth'])->group(function () {
         ->name('purchases.receipt-scan');
 
     // Procurement & Purchasing
-    Route::resource('purchase-requests', App\Http\Controllers\PurchaseRequestController::class)->except(['edit', 'update', 'destroy']);
+    Route::get('purchase-requests/{purchaseRequest}', [App\Http\Controllers\PurchaseRequestController::class, 'show'])->name('purchase-requests.show')->withTrashed();
+    Route::resource('purchase-requests', App\Http\Controllers\PurchaseRequestController::class)->except(['show', 'edit', 'update', 'destroy']);
     Route::delete('purchase-requests/{purchaseRequest}', [App\Http\Controllers\PurchaseRequestController::class, 'destroy'])->name('purchase-requests.destroy');
     Route::post('purchase-requests/{purchaseRequest}/submit', [App\Http\Controllers\PurchaseRequestController::class, 'submit'])->name('purchase-requests.submit');
     Route::post('purchase-requests/{purchaseRequest}/approve', [App\Http\Controllers\PurchaseRequestController::class, 'approve'])->name('purchase-requests.approve');
