@@ -19,12 +19,12 @@
             ['label' => 'Site Operations', 'url' => route('dashboard.site-engineer')],
             ['label' => 'Weekly Reports']
         ]">
-        <x-slot:actions>
+        <x-slot name="actions">
             <x-export-menu :print="true" label="Print" />
             <a href="{{ route('weekly-reports.create') }}" class="btn btn-primary btn-sm rounded-pill px-3 py-2 shadow-xs fw-semibold">
                 <i class="fa-solid fa-plus me-1.5"></i>New Weekly Report
             </a>
-        </x-slot:actions>
+        </x-slot>
     </x-page-header>
 
     {{-- Executive Summary KPI Cards --}}

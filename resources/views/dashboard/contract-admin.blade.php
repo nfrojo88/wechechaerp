@@ -11,7 +11,7 @@
         subtitle="BOQ tracking, interim payment certificates (IPC), client billing &amp; earned value"
         badge="Contracts &amp; Commercial"
     >
-        <x-slot:actions>
+        <x-slot name="actions">
             <div class="d-flex gap-2 flex-wrap align-items-center">
                 <a href="{{ route('client-ipcs.create') }}" class="btn btn-primary btn-sm shadow-xs" style="min-height: 38px; display: inline-flex; align-items: center;">
                     <i class="fa-solid fa-file-invoice-dollar me-1"></i> New Payment Certificate (IPC)
@@ -20,7 +20,7 @@
                     <i class="fa-solid fa-table-list me-1"></i> All BOQs
                 </a>
             </div>
-        </x-slot:actions>
+        </x-slot>
     </x-page-header>
 
     {{-- ── KPI CARDS ──────────────────────────────────────────────────────── --}}

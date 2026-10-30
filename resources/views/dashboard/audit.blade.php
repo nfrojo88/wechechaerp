@@ -49,7 +49,7 @@
         subtitle="Real-time oversight of petty cash replenishment cycles, money movements, expense vouchers, and system audit trails"
         badge="Audit &amp; Compliance"
     >
-        <x-slot:actions>
+        <x-slot name="actions">
             <div class="d-flex gap-2 flex-wrap align-items-center">
                 <a href="{{ route('expense-requests.index') }}" class="btn btn-outline-success btn-sm rounded-pill px-3 shadow-xs fw-semibold" style="min-height: 38px; display: inline-flex; align-items: center;">
                     <i class="fa-solid fa-hand-holding-dollar me-1"></i> Ask Money
@@ -64,7 +64,7 @@
                     <i class="fa-solid fa-list-ol me-1"></i> Full Activity Trail
                 </a>
             </div>
-        </x-slot:actions>
+        </x-slot>
     </x-page-header>
 
     <!-- Quick Employee Self-Service & Navigation Bar -->

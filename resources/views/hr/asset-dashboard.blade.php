@@ -9,7 +9,7 @@
     <x-page-header 
         title="Asset Management Dashboard" 
         subtitle="Track company equipment, tools, electronics, and custody assignments across all departments">
-        <x-slot:actions>
+        <x-slot name="actions">
             <div class="dropdown d-inline-block">
                 <button class="btn btn-sm btn-outline-info rounded-pill px-3 shadow-xs dropdown-toggle" type="button" id="reportsDropdown" data-bs-toggle="dropdown" aria-expanded="false">
                     <i class="fa-solid fa-chart-pie me-1"></i>Asset Reports
@@ -26,7 +26,7 @@
             <button class="btn btn-outline-secondary btn-sm rounded-pill px-3 shadow-xs" onclick="window.print()">
                 <i class="fa-solid fa-print me-1"></i>Print
             </button>
-        </x-slot:actions>
+        </x-slot>
     </x-page-header>
 
     {{-- KPI Cards --}}

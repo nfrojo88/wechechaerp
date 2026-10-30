@@ -13,14 +13,14 @@
             ['label' => 'HR Reports', 'url' => route('reports.attendance')],
             ['label' => 'Payroll Cost Analysis']
         ]">
-        <x-slot:actions>
+        <x-slot name="actions">
             <a href="{{ route('reports.attendance') }}" class="btn btn-outline-secondary btn-sm rounded-pill px-3 py-2 shadow-xs fw-semibold">
                 <i class="fa-solid fa-arrow-left me-1.5"></i>All HR Reports
             </a>
             <a href="{{ route('finance.payroll.index') }}" class="btn btn-primary btn-sm rounded-pill px-3 py-2 shadow-xs fw-semibold">
                 <i class="fa-solid fa-money-bill-wave me-1.5"></i>Payroll Ledger
             </a>
-        </x-slot:actions>
+        </x-slot>
     </x-page-header>
 
     {{-- Unified HR Reports Navigation Pill Bar --}}

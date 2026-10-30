@@ -20,7 +20,7 @@
         subtitle="Executive management, strategic decisions, financial oversight &amp; approvals"
         badge="Executive Management"
     >
-        <x-slot:actions>
+        <x-slot name="actions">
             <div class="d-flex gap-2 flex-wrap align-items-center">
                 <span class="badge bg-light text-muted border px-2 py-1 rounded-pill d-none d-sm-inline-flex align-items-center" style="font-size:0.75rem;">
                     <i class="fa-regular fa-clock me-1"></i>{{ now()->format('l, F j, Y') }}
@@ -59,7 +59,7 @@
                     <i class="fa-solid fa-receipt me-1"></i>VAT / WHT
                 </a>
             </div>
-        </x-slot:actions>
+        </x-slot>
     </x-page-header>
 
     @if(($gmPendingMaintApprovals ?? 0) > 0)

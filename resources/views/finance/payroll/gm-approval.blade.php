@@ -13,14 +13,14 @@
             ['label' => 'Executive Office', 'url' => route('dashboard.gm')],
             ['label' => 'Payroll Approval']
         ]">
-        <x-slot:actions>
+        <x-slot name="actions">
             <a href="{{ route('dashboard.gm') }}" class="btn btn-outline-secondary btn-sm rounded-pill px-3 py-2 shadow-xs fw-semibold">
                 <i class="fa-solid fa-arrow-left me-1.5"></i>GM Dashboard
             </a>
             <a href="{{ route('finance.payroll.index') }}" class="btn btn-outline-primary btn-sm rounded-pill px-3 py-2 shadow-xs fw-semibold">
                 <i class="fa-solid fa-money-bill-wave me-1.5"></i>Payroll Register
             </a>
-        </x-slot:actions>
+        </x-slot>
     </x-page-header>
 
     {{-- System Alerts --}}

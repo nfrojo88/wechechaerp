@@ -12,14 +12,14 @@
             ['label' => 'HR Management', 'url' => route('dashboard.hr')],
             ['label' => 'Payroll Analytics']
         ]">
-        <x-slot:actions>
+        <x-slot name="actions">
             <span class="badge bg-light text-dark border px-3 py-2 fw-semibold">
                 <i class="fa-solid fa-users-gear text-primary me-1.5"></i>Roster Managed by HR
             </span>
             <a href="{{ route('finance.payroll.index') }}" class="btn btn-primary btn-sm rounded-pill px-3 py-2 shadow-xs fw-semibold">
                 <i class="fa-solid fa-money-bill-wave me-1.5"></i>Full Payroll Ledger
             </a>
-        </x-slot:actions>
+        </x-slot>
     </x-page-header>
 
     {{-- Executive Summary KPI Cards --}}

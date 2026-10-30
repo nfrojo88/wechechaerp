@@ -10,7 +10,7 @@
         :subtitle="'Welcome, ' . auth()->user()->name . ' — Official Letter Registry, Office Logistics & Administration'"
         badge="Administration"
     >
-        <x-slot:actions>
+        <x-slot name="actions">
             <div class="d-flex gap-2 flex-wrap align-items-center">
                 <span class="badge bg-white text-secondary border px-3 py-2 shadow-xs rounded-pill d-none d-sm-inline-flex align-items-center">
                     <i class="fa-regular fa-calendar text-primary me-2"></i>{{ now()->format('l, F j, Y') }}
@@ -25,7 +25,7 @@
                     <i class="fa-solid fa-clock-rotate-left me-1"></i> Registry
                 </a>
             </div>
-        </x-slot:actions>
+        </x-slot>
     </x-page-header>
 
     {{-- ── KPI Summary Cards ─────────────────────────────────────────────────── --}}

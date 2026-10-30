@@ -9,7 +9,7 @@
     <x-page-header 
         title="Vehicle Reminders Dashboard" 
         subtitle="Track Bolo safety inspections, KM-based service schedules, and third-party/comprehensive insurance policies">
-        <x-slot:actions>
+        <x-slot name="actions">
             <a href="{{ route('general-service.vehicle-reminders.create') }}" class="btn btn-primary btn-sm rounded-pill px-3 shadow-xs fw-bold">
                 <i class="fa-solid fa-plus me-1"></i>New Reminder
             </a>
@@ -17,7 +17,7 @@
                 <i class="fa-solid fa-list me-1"></i>All Reminders
             </a>
             <x-export-menu :csvUrl="route('general-service.vehicle-reminders.export')" :print="true" label="Export / Print" />
-        </x-slot:actions>
+        </x-slot>
     </x-page-header>
 
     @if(session('success'))

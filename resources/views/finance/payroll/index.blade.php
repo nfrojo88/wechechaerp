@@ -20,7 +20,7 @@
             ['label' => 'Finance', 'url' => route('dashboard.finance')],
             ['label' => 'Payroll Management']
         ]">
-        <x-slot:actions>
+        <x-slot name="actions">
             {{-- Ethiopian Attendance Payroll Period Selector --}}
             <form method="GET" action="{{ route('finance.payroll.index') }}" class="d-flex flex-wrap gap-2 align-items-center">
                 <div class="input-group input-group-sm" style="min-width: 260px;" title="Ethiopian Attendance Payroll Period (26th–25th)">
@@ -47,7 +47,7 @@
             <a href="{{ route('attendance.export-pdf', ['period' => $selectedPeriodKey]) }}" target="_blank" class="btn btn-sm btn-outline-danger shadow-xs rounded-pill px-2.5" title="Export Clock In/Out matrix as PDF">
                 <i class="fa-solid fa-file-pdf me-1"></i>PDF
             </a>
-        </x-slot:actions>
+        </x-slot>
     </x-page-header>
 
     {{-- System Flash Alerts --}}

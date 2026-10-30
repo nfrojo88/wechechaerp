@@ -7,7 +7,7 @@
         subtitle="Site crew attendance, material requisition, daily reports &amp; obstacle logs"
         badge="Field Operations"
     >
-        <x-slot:actions>
+        <x-slot name="actions">
             <div class="d-flex align-items-center gap-2 flex-wrap">
                 <span class="badge bg-white text-secondary border px-3 py-2 shadow-xs rounded-pill d-none d-sm-inline-flex align-items-center">
                     <i class="fa-regular fa-calendar text-primary me-2"></i>{{ now()->format('l, F j, Y') }}
@@ -16,7 +16,7 @@
                     <i class="fas fa-plus me-1"></i> New Material Request
                 </a>
             </div>
-        </x-slot:actions>
+        </x-slot>
     </x-page-header>
 
     {{-- KPI Cards --}}

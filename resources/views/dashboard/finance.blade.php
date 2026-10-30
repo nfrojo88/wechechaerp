@@ -9,7 +9,7 @@
         :title="$isFinanceHead ? 'Finance Head Command Center' : 'Finance Activity Dashboard'" 
         :subtitle="$isFinanceHead ? 'Corporate cash positions, bank account ledgers, plan vs actual budgets, and live revenue & expenditure flows.' : 'Your assigned chart of account balances and daily financial journal logs.'"
         :breadcrumbs="['Dashboard' => url('/dashboard'), 'Finance' => '']">
-        <x-slot:actions>
+        <x-slot name="actions">
             <a href="{{ route('reports.index') }}" class="wc-btn-touch wc-btn-outline" title="Financial Statements Hub">
                 <i class="fa-solid fa-file-invoice-dollar text-primary"></i>
                 <span class="d-none d-sm-inline">Financial Reports</span>
@@ -18,7 +18,7 @@
                 <i class="fa-solid fa-rotate"></i>
                 <span class="d-none d-sm-inline">Refresh</span>
             </a>
-        </x-slot:actions>
+        </x-slot>
     </x-page-header>
 
     {{-- KPI Cards Row (Finance Head Only) --}}
@@ -281,9 +281,9 @@
                     chartId="liveIncomeExpenseChart" 
                     subtitle="12-Month historical trend across all active projects"
                     height="280px">
-                    <x-slot:actions>
+                    <x-slot name="actions">
                         <span class="badge bg-light text-dark border">Live Ledger</span>
-                    </x-slot:actions>
+                    </x-slot>
                 </x-chart-card>
             </div>
 

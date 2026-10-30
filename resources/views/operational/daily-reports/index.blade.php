@@ -12,7 +12,7 @@
             ['label' => 'Site Operations', 'url' => route('dashboard.site-engineer')],
             ['label' => 'Daily Reports']
         ]">
-        <x-slot:actions>
+        <x-slot name="actions">
             @can('approve', \App\Models\DailyReport::class)
                 <a href="{{ route('daily-reports.approval') }}" class="btn btn-outline-warning btn-sm rounded-pill px-3 py-2 shadow-xs fw-semibold">
                     <i class="fa-solid fa-clipboard-check me-1.5"></i>Approval Center
@@ -25,7 +25,7 @@
             <a href="{{ route('daily-reports.create') }}" class="btn btn-primary btn-sm rounded-pill px-3 py-2 shadow-xs fw-semibold">
                 <i class="fa-solid fa-plus me-1.5"></i>New Daily Log
             </a>
-        </x-slot:actions>
+        </x-slot>
     </x-page-header>
 
     {{-- Executive Summary KPI Cards --}}

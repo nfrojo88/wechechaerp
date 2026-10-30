@@ -8,11 +8,11 @@
     <x-page-header 
         title="Price Intelligence & Market Trends" 
         subtitle="Benchmark supplier quotation rates and track commodity price trends across active procurement categories">
-        <x-slot:actions>
+        <x-slot name="actions">
             <button class="btn btn-outline-secondary btn-sm rounded-pill px-3 shadow-xs" onclick="window.print()">
                 <i class="fa-solid fa-print me-1"></i>Print Report
             </button>
-        </x-slot:actions>
+        </x-slot>
     </x-page-header>
 
     @php

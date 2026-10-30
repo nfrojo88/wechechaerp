@@ -8,7 +8,7 @@
         subtitle="Central hub for project master schedules, ERP plans, quantity takeoffs and budget tracking"
         badge="Project Planning"
     >
-        <x-slot:actions>
+        <x-slot name="actions">
             <div class="d-flex align-items-center gap-2 flex-wrap">
                 <a href="{{ route('schedules.create') }}" class="btn btn-outline-primary btn-sm shadow-xs" style="min-height: 38px; display: inline-flex; align-items: center;">
                     <i class="fa-solid fa-calendar-plus me-1"></i> New Schedule
@@ -17,7 +17,7 @@
                     <i class="fa-solid fa-plus me-1"></i> New ERP Plan
                 </a>
             </div>
-        </x-slot:actions>
+        </x-slot>
     </x-page-header>
 
     {{-- Quick Stats Row --}}

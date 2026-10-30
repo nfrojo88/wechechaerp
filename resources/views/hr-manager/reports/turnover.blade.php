@@ -13,14 +13,14 @@
             ['label' => 'HR Reports', 'url' => route('reports.attendance')],
             ['label' => 'Turnover & Retention']
         ]">
-        <x-slot:actions>
+        <x-slot name="actions">
             <a href="{{ route('reports.attendance') }}" class="btn btn-outline-secondary btn-sm rounded-pill px-3 py-2 shadow-xs fw-semibold">
                 <i class="fa-solid fa-arrow-left me-1.5"></i>All HR Reports
             </a>
             <a href="{{ route('employees.index') }}" class="btn btn-primary btn-sm rounded-pill px-3 py-2 shadow-xs fw-semibold">
                 <i class="fa-solid fa-users me-1.5"></i>Employee Registry
             </a>
-        </x-slot:actions>
+        </x-slot>
     </x-page-header>
 
     {{-- Unified HR Reports Navigation Pill Bar --}}

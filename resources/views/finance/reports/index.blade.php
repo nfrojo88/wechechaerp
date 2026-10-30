@@ -12,7 +12,7 @@
             ['label' => 'Finance', 'url' => route('dashboard.finance')],
             ['label' => 'Financial Reports']
         ]">
-        <x-slot:actions>
+        <x-slot name="actions">
             <a href="{{ route('dashboard.finance') }}" class="btn btn-outline-secondary btn-sm rounded-pill px-3 py-2 shadow-xs fw-semibold">
                 <i class="fa-solid fa-arrow-left me-1.5"></i>Finance Dashboard
             </a>
@@ -22,7 +22,7 @@
             <a href="{{ route('finance.expense-hub.index') }}" class="btn btn-primary btn-sm rounded-pill px-3 py-2 shadow-xs fw-semibold">
                 <i class="fa-solid fa-receipt me-1.5"></i>Expense Hub
             </a>
-        </x-slot:actions>
+        </x-slot>
     </x-page-header>
 
     {{-- ── 1. CORE STATUTORY FINANCIAL STATEMENTS ── --}}

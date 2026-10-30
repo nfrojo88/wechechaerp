@@ -9,7 +9,7 @@
         title="Store &amp; Warehouse Command Center" 
         subtitle="Real-time stock valuations, inventory movements, replenishment alerts, and multi-warehouse balances."
         :breadcrumbs="['Dashboard' => url('/dashboard'), 'Store Management' => '']">
-        <x-slot:actions>
+        <x-slot name="actions">
             @if(auth()->user()->can('inventory.edit') || auth()->user()->hasAnyRole(['admin', 'global_admin', 'store_manager', 'store_keeper']))
                 <a href="{{ route('inventory.bulk-adjust') }}" class="wc-btn-touch wc-btn-outline">
                     <i class="fa-solid fa-sliders text-warning"></i>
@@ -20,7 +20,7 @@
                 <i class="fa-solid fa-boxes-stacked"></i>
                 <span>All Inventory</span>
             </a>
-        </x-slot:actions>
+        </x-slot>
     </x-page-header>
 
     {{-- 4 Primary KPI Cards --}}

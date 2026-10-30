@@ -20,7 +20,7 @@
             ['label' => 'Payroll Approval', 'url' => route('finance.payroll.gm')],
             ['label' => $periodLabel]
         ]">
-        <x-slot:actions>
+        <x-slot name="actions">
             <a href="{{ route('finance.payroll.gm') }}" class="btn btn-outline-secondary btn-sm rounded-pill px-3 py-2 shadow-xs fw-semibold">
                 <i class="fa-solid fa-arrow-left me-1.5"></i>Back to Inbox
             </a>
@@ -30,7 +30,7 @@
             <button type="button" class="btn btn-outline-dark btn-sm rounded-pill px-3 py-2 shadow-xs fw-semibold" onclick="window.print()">
                 <i class="fa-solid fa-print me-1.5"></i>Print Batch
             </button>
-        </x-slot:actions>
+        </x-slot>
     </x-page-header>
 
     {{-- Executive Summary KPI Metrics --}}

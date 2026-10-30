@@ -11,7 +11,7 @@
         subtitle="Enterprise management, cross-departmental operations, approvals &amp; strategic command"
         badge="Command Center"
     >
-        <x-slot:actions>
+        <x-slot name="actions">
             <div class="d-flex gap-2 flex-wrap align-items-center">
                 @if(!empty($ethiopianDateStr))
                     <span class="badge bg-warning bg-opacity-10 text-dark border border-warning border-opacity-50 px-2 py-1 rounded-pill fw-semibold d-none d-sm-inline-flex align-items-center" style="font-size:0.75rem;">
@@ -46,7 +46,7 @@
                     <i class="fa-solid fa-receipt me-1"></i>Tax &amp; ERCA
                 </a>
             </div>
-        </x-slot:actions>
+        </x-slot>
     </x-page-header>
 
     {{-- ══════════════════════════════════════════════════════════════════════════

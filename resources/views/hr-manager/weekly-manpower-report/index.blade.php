@@ -14,12 +14,12 @@
             ['label' => 'HR Management', 'url' => route('dashboard.hr')],
             ['label' => 'Weekly Manpower']
         ]">
-        <x-slot:actions>
+        <x-slot name="actions">
             <x-export-menu :csvUrl="route('weekly-manpower.export', ['start_date' => $startDate, 'end_date' => $endDate])" :print="true" />
             <button type="button" class="btn btn-primary btn-sm rounded-pill px-3 py-2 shadow-xs fw-semibold" data-bs-toggle="modal" data-bs-target="#sendGMModal">
                 <i class="fa-solid fa-paper-plane me-1.5"></i>Send to GM
             </button>
-        </x-slot:actions>
+        </x-slot>
     </x-page-header>
 
     {{-- Date Range & Project Filter Bar --}}

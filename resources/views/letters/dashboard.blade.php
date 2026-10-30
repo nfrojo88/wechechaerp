@@ -18,7 +18,7 @@
     <x-page-header 
         title="Correspondence & Letter Management" 
         subtitle="Manage incoming & outgoing official letters, routing, attachments, and departmental forwarding workflows">
-        <x-slot:actions>
+        <x-slot name="actions">
             @if(auth()->user()->hasAnyRole(['admin', 'global_admin', 'secretary']))
             <a href="{{ route('letters.create') }}" class="btn btn-primary btn-sm rounded-pill px-3 shadow-xs fw-bold">
                 <i class="fa-solid fa-plus me-1"></i>New Letter
@@ -33,7 +33,7 @@
             <button class="btn btn-outline-secondary btn-sm rounded-pill px-3 shadow-xs wc-no-print" onclick="window.print()">
                 <i class="fa-solid fa-print me-1"></i>Print
             </button>
-        </x-slot:actions>
+        </x-slot>
     </x-page-header>
 
     {{-- Metric Cards --}}

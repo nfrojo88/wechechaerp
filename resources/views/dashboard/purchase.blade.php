@@ -8,7 +8,7 @@
         subtitle="Procurement workflow, vendor management, purchase orders &amp; spend intelligence"
         badge="Procurement"
     >
-        <x-slot:actions>
+        <x-slot name="actions">
             <div class="d-flex align-items-center gap-2 flex-wrap">
                 <a href="{{ route('procurement.my-queue') }}" class="btn btn-outline-primary btn-sm shadow-xs" style="min-height: 38px; display: inline-flex; align-items: center;">
                     <i class="fa-solid fa-list-check me-1"></i> My Sourcing Queue
@@ -17,7 +17,7 @@
                     <i class="fas fa-plus me-1"></i> New Request
                 </a>
             </div>
-        </x-slot:actions>
+        </x-slot>
     </x-page-header>
 
     <!-- KPI Cards -->

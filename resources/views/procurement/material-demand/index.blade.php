@@ -8,14 +8,14 @@
     <x-page-header 
         title="Material Demand & Forecast" 
         subtitle="30-day forward demand requirements aggregated across active project schedules and Bill of Quantities">
-        <x-slot:actions>
+        <x-slot name="actions">
             <a href="{{ route('purchase-requests.create') }}" class="btn btn-primary btn-sm rounded-pill px-3 shadow-xs">
                 <i class="fa-solid fa-plus me-1"></i>Create Purchase Request
             </a>
             <button class="btn btn-outline-secondary btn-sm rounded-pill px-3 shadow-xs" onclick="window.print()">
                 <i class="fa-solid fa-file-export me-1"></i>Export Forecast
             </button>
-        </x-slot:actions>
+        </x-slot>
     </x-page-header>
 
     @php

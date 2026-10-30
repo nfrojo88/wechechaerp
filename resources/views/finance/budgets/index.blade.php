@@ -20,7 +20,7 @@
             ['label' => 'Finance', 'url' => route('dashboard.finance')],
             ['label' => 'Project Budgets']
         ]">
-        <x-slot:actions>
+        <x-slot name="actions">
             <a href="{{ route('reports.index') }}" class="btn btn-outline-secondary btn-sm rounded-pill px-3 py-2 shadow-xs fw-semibold">
                 <i class="fa-solid fa-arrow-left me-1.5"></i>Reports Hub
             </a>
@@ -29,7 +29,7 @@
                     <i class="fa-solid fa-plus me-1.5"></i>New Budget Cap
                 </a>
             @endhasanyrole
-        </x-slot:actions>
+        </x-slot>
     </x-page-header>
 
     {{-- Executive KPI Metrics --}}

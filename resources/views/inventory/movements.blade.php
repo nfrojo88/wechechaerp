@@ -9,14 +9,14 @@
     <x-page-header 
         title="Stock Movement Ledger" 
         subtitle="Chronological audit trail of material receipts, dispatches, jobsite transfers, and inventory adjustments">
-        <x-slot:actions>
+        <x-slot name="actions">
             <a href="{{ route('inventory.show', $inventory) }}" class="btn btn-outline-secondary btn-sm rounded-pill px-3 shadow-xs">
                 <i class="fa-solid fa-arrow-left me-1"></i>Back to Inventory Card
             </a>
             <button class="btn btn-outline-secondary btn-sm rounded-pill px-3 shadow-xs" onclick="window.print()">
                 <i class="fa-solid fa-print me-1"></i>Print Ledger
             </button>
-        </x-slot:actions>
+        </x-slot>
     </x-page-header>
 
     {{-- Product & Stock Summary Banner --}}

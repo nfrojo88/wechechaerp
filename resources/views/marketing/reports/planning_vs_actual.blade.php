@@ -18,14 +18,14 @@
     <x-page-header 
         title="Planning vs Actual Cost Comparison" 
         subtitle="Two-mode variance audit: Planning Mode (Market Rates) vs. Actual Cost Mode (Purchase Invoices & Store Issues)">
-        <x-slot:actions>
+        <x-slot name="actions">
             <a href="{{ route('marketing.dashboard') }}" class="btn btn-outline-secondary btn-sm rounded-pill px-3 shadow-xs">
                 <i class="fa-solid fa-arrow-left me-1"></i>Back to Intelligence
             </a>
             <button class="btn btn-outline-secondary btn-sm rounded-pill px-3 shadow-xs wc-no-print" onclick="window.print()">
                 <i class="fa-solid fa-print me-1"></i>Print Report
             </button>
-        </x-slot:actions>
+        </x-slot>
     </x-page-header>
 
     @php

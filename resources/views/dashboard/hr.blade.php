@@ -9,7 +9,7 @@
         title="Human Resources Command Center" 
         subtitle="Workforce headcount, biometric daily presence, payroll disbursement status, and official notices."
         :breadcrumbs="['Dashboard' => url('/dashboard'), 'Human Resources' => '']">
-        <x-slot:actions>
+        <x-slot name="actions">
             <a href="{{ route('reports.attendance') }}" class="wc-btn-touch wc-btn-outline" title="HR Analytics & Attendance Reports">
                 <i class="fa-solid fa-chart-line text-primary"></i>
                 <span class="d-none d-sm-inline">HR Reports</span>
@@ -18,7 +18,7 @@
                 <i class="fa-solid fa-user-plus"></i>
                 <span>Add Employee</span>
             </a>
-        </x-slot:actions>
+        </x-slot>
     </x-page-header>
 
     {{-- 4 KPI Cards Row --}}

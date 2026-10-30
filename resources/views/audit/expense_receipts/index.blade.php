@@ -18,7 +18,7 @@
     <x-page-header 
         title="Expense Receipt Audit Center" 
         subtitle="Single-pane audit compliance: inspect all paid company expenses, verify receipts, issue inquiries, or waive non-receiptable costs">
-        <x-slot:actions>
+        <x-slot name="actions">
             <a href="{{ \Illuminate\Support\Facades\Route::has('dashboard.audit') ? route('dashboard.audit') : url('/dashboard/audit') }}" class="btn btn-outline-secondary btn-sm rounded-pill px-3 shadow-xs">
                 <i class="fa-solid fa-chart-pie me-1"></i>Audit Dashboard
             </a>
@@ -28,7 +28,7 @@
             <button class="btn btn-outline-secondary btn-sm rounded-pill px-3 shadow-xs wc-no-print" onclick="window.print()">
                 <i class="fa-solid fa-print me-1"></i>Print
             </button>
-        </x-slot:actions>
+        </x-slot>
     </x-page-header>
 
     {{-- Alerts --}}

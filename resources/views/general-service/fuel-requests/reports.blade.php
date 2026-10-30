@@ -17,7 +17,7 @@
     <x-page-header 
         title="Fleet Fuel Consumption & Control Reports" 
         subtitle="Vehicle efficiency metrics: KM per Liter, cost per KM, monthly consumption, and abnormal consumption anomaly flags">
-        <x-slot:actions>
+        <x-slot name="actions">
             <a href="{{ route('vehicle-fuel-requests.create') }}" class="btn btn-warning text-dark btn-sm rounded-pill px-3 shadow-xs fw-bold">
                 <i class="fa-solid fa-plus me-1"></i>New Fuel Request
             </a>
@@ -27,7 +27,7 @@
             <button class="btn btn-outline-secondary btn-sm rounded-pill px-3 shadow-xs wc-no-print" onclick="window.print()">
                 <i class="fa-solid fa-print me-1"></i>Print
             </button>
-        </x-slot:actions>
+        </x-slot>
     </x-page-header>
 
     {{-- KPI Cards Row --}}

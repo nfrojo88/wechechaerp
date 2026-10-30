@@ -12,7 +12,7 @@
             ['label' => 'HR Management', 'url' => route('dashboard.hr')],
             ['label' => 'Performance Reviews']
         ]">
-        <x-slot:actions>
+        <x-slot name="actions">
             <a href="{{ route('performance-dashboard.create-review') }}" class="btn btn-primary btn-sm rounded-pill px-3 py-2 shadow-xs fw-semibold">
                 <i class="fa-solid fa-plus me-1.5"></i>New Review
             </a>
@@ -22,7 +22,7 @@
             <a href="{{ route('performance-dashboard.export') }}" class="btn btn-outline-secondary btn-sm rounded-pill px-3 py-2 shadow-xs fw-semibold">
                 <i class="fa-solid fa-download me-1.5"></i>Export CSV
             </a>
-        </x-slot:actions>
+        </x-slot>
     </x-page-header>
 
     {{-- Executive Summary KPI Cards --}}

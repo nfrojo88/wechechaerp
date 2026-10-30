@@ -15,7 +15,7 @@
             ['label' => 'HR Reports', 'url' => route('reports.attendance')],
             ['label' => 'Attendance']
         ]">
-        <x-slot:actions>
+        <x-slot name="actions">
             <a href="{{ route('attendance.index') }}" class="btn btn-outline-secondary btn-sm rounded-pill px-3 py-2 shadow-xs fw-semibold">
                 <i class="fa-solid fa-fingerprint me-1.5 text-primary"></i>Attendance Logs
             </a>
@@ -23,7 +23,7 @@
             <button type="button" class="btn btn-primary btn-sm rounded-pill px-3 py-2 shadow-xs fw-semibold" data-bs-toggle="modal" data-bs-target="#sendToGmModal">
                 <i class="fa-solid fa-paper-plane me-1.5"></i>Send to GM
             </button>
-        </x-slot:actions>
+        </x-slot>
     </x-page-header>
 
     {{-- Unified HR Reports Navigation Pill Bar --}}

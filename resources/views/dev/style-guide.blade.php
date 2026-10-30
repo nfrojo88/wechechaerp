@@ -11,7 +11,7 @@
         subtitle="Minimalist, mobile-first design system for all Wechecha ERP reports, dashboards, and export views."
         :breadcrumbs="['Developer Hub' => url('/dev/roles'), 'Style Guide' => '']"
         :backUrl="url('/dashboard')">
-        <x-slot:actions>
+        <x-slot name="actions">
             <x-export-menu 
                 excelUrl="#excel" 
                 csvUrl="#csv" 
@@ -21,7 +21,7 @@
                 <i class="fa-solid fa-plus"></i>
                 <span>Add Record</span>
             </button>
-        </x-slot:actions>
+        </x-slot>
     </x-page-header>
 
     {{-- System Flash / Toast Component Preview --}}

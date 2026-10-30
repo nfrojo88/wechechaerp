@@ -9,7 +9,7 @@
     <x-page-header 
         title="Marketing & Price Intelligence Dashboard" 
         subtitle="Track construction commodity market price trends, monthly inflation metrics, and cost intelligence">
-        <x-slot:actions>
+        <x-slot name="actions">
             @if(auth()->check() && (auth()->user()->hasRole('marketing') || auth()->user()->hasRole('admin') || auth()->user()->hasRole('global_admin')))
             <a href="{{ route('marketing.prices.create') }}" class="btn btn-primary btn-sm rounded-pill px-3 shadow-xs fw-bold">
                 <i class="fa-solid fa-plus-circle me-1"></i>New Price Update
@@ -21,7 +21,7 @@
             <button class="btn btn-outline-secondary btn-sm rounded-pill px-3 shadow-xs" onclick="window.print()">
                 <i class="fa-solid fa-print me-1"></i>Print
             </button>
-        </x-slot:actions>
+        </x-slot>
     </x-page-header>
 
     {{-- Summary KPIs --}}

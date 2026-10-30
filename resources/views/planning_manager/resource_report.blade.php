@@ -19,9 +19,9 @@
     <x-page-header 
         title="Project Resource Report" 
         subtitle="Live resource allocation overview across all active construction projects">
-        <x-slot:actions>
+        <x-slot name="actions">
             <x-export-menu :print="true" label="Print / Export" />
-        </x-slot:actions>
+        </x-slot>
     </x-page-header>
 
     @if(count($reportData) === 0)

@@ -17,11 +17,11 @@
     <x-page-header 
         title="System Activity Logs" 
         subtitle="Immutable administrator audit trail of system events, role modifications, authorization changes, and user transactions">
-        <x-slot:actions>
+        <x-slot name="actions">
             <button class="btn btn-outline-secondary btn-sm rounded-pill px-3 shadow-xs wc-no-print" onclick="window.print()">
                 <i class="fa-solid fa-print me-1"></i>Print Audit Log
             </button>
-        </x-slot:actions>
+        </x-slot>
     </x-page-header>
 
     {{-- KPI Cards --}}

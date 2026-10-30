@@ -19,11 +19,11 @@
             ['label' => 'Site Operations', 'url' => route('dashboard.site-engineer')],
             ['label' => 'Damage Reports']
         ]">
-        <x-slot:actions>
+        <x-slot name="actions">
             <a href="{{ route('material-damage-reports.create') }}" class="btn btn-primary btn-sm rounded-pill px-3 py-2 shadow-xs fw-semibold">
                 <i class="fa-solid fa-plus me-1.5"></i>Create Damage Log
             </a>
-        </x-slot:actions>
+        </x-slot>
     </x-page-header>
 
     {{-- System Alerts --}}

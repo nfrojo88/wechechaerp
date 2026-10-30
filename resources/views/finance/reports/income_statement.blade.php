@@ -21,7 +21,7 @@
             ['label' => 'Reports', 'url' => route('reports.index')],
             ['label' => 'Income Statement']
         ]">
-        <x-slot:actions>
+        <x-slot name="actions">
             <a href="{{ route('reports.index') }}" class="btn btn-outline-secondary btn-sm rounded-pill px-3 py-2 shadow-xs fw-semibold">
                 <i class="fa-solid fa-arrow-left me-1.5"></i>Reports Hub
             </a>
@@ -29,7 +29,7 @@
             <a href="{{ route('reports.balance-sheet') }}" class="btn btn-primary btn-sm rounded-pill px-3 py-2 shadow-xs fw-semibold">
                 <i class="fa-solid fa-building-columns me-1.5"></i>Balance Sheet
             </a>
-        </x-slot:actions>
+        </x-slot>
     </x-page-header>
 
     {{-- Filter Bar --}}

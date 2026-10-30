@@ -10,7 +10,7 @@
         subtitle="Site operations, morning workforce reporting, schedules, and material requests"
         badge="Site Operations"
     >
-        <x-slot:actions>
+        <x-slot name="actions">
             <div class="d-flex align-items-center gap-2 flex-wrap">
                 <span class="badge bg-white text-secondary border px-3 py-2 shadow-sm rounded-pill d-none d-sm-inline-flex align-items-center">
                     <i class="fa-solid fa-calendar-day text-primary me-2"></i>{{ now()->format('l, F j, Y') }}
@@ -22,7 +22,7 @@
                     <i class="fa-solid fa-bolt me-1"></i> Emergency MR
                 </a>
             </div>
-        </x-slot:actions>
+        </x-slot>
     </x-page-header>
 
     {{-- Morning Manpower Report Status Hero Banner --}}

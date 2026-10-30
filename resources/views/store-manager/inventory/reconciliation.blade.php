@@ -20,7 +20,7 @@
     <x-page-header 
         title="Store Inventory Reconciliation & Audit" 
         subtitle="Three-way consistency check across Physical Store Inventory, Movement Ledger, and Fixed Asset Unit records">
-        <x-slot:actions>
+        <x-slot name="actions">
             <a href="{{ route('store-manager.inventory.all') }}" class="btn btn-outline-secondary btn-sm rounded-pill px-3 shadow-xs">
                 <i class="fa-solid fa-arrow-left me-1"></i>Back to Inventory
             </a>
@@ -28,7 +28,7 @@
                 <i class="fa-solid fa-list-check me-1"></i>Movement Ledger
             </a>
             <x-export-menu :pdfUrl="Route::has('store-manager.inventory.export-pdf') ? route('store-manager.inventory.export-pdf', request()->query()) : null" :print="true" label="Print / Export" />
-        </x-slot:actions>
+        </x-slot>
     </x-page-header>
 
     @if(session('success'))
