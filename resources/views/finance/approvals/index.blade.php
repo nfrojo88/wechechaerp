@@ -552,20 +552,22 @@
 
                     @php
                         $rawReq = ($item->type === 'expense_request') ? $item->raw_model : null;
-                        $mReq = $rawReq->maintenanceRequest ?? null;
+                        $mReq = ($rawReq && is_object($rawReq)) ? ($rawReq->maintenanceRequest ?? null) : null;
 
                         // 1. Identify Approved Person / Petty Cash Custodian (to exclude their bank account)
-                        $custodian = $mReq->pettyCashOwner ?? $rawReq->pettyCashOwner ?? null;
-                        $custodianUserId = $custodian->id ?? $rawReq->petty_cash_owner_id;
-                        $custodianEmpId = $custodian->employee->id;
-                        $custodianName = $custodian->name;
+                        $custodian = ($mReq ? ($mReq->pettyCashOwner ?? null) : null)
+                                  ?? ($rawReq ? ($rawReq->pettyCashOwner ?? null) : null)
+                                  ?? null;
+                        $custodianUserId = $custodian ? ($custodian->id ?? null) : ($rawReq ? ($rawReq->petty_cash_owner_id ?? null) : null);
+                        $custodianEmpId  = ($custodian && $custodian->employee) ? ($custodian->employee->id ?? null) : null;
+                        $custodianName   = $custodian ? ($custodian->name ?? null) : null;
                         if (!$custodianName && preg_match('/Petty Cash Custodian:\s*([^\.]+?)(?:\.|$)/i', $item->description ?? '', $custM)) {
                             $custodianName = trim($custM[1]);
                         }
 
                         // 2. Identify Beneficiary / Approvee Employee (e.g. Nebeyu Engedashet)
-                        $beneficiaryEmployee = $rawReq->employee;
-                        $beneficiaryEmpId = $beneficiaryEmployee->id;
+                        $beneficiaryEmployee = $rawReq ? ($rawReq->employee ?? null) : null;
+                        $beneficiaryEmpId = $beneficiaryEmployee ? ($beneficiaryEmployee->id ?? null) : null;
 
                         // 3. Identify Asking Person (Requester - ጥያቄ አቅራቢ)
                         // STRICT RULE: Show the person who ASKED / SUBMITTED the request, NOT the approved person!
@@ -574,7 +576,7 @@
 
                         if ($rawReq) {
                             // In ExpenseRequest, user_id is the person who asked (e.g. General Admin)
-                            $askingUser = $rawReq->user;
+                            $askingUser = $rawReq->user ?? null;
                             if ($askingUser) {
                                 $askingEmployee = $askingUser->employee 
                                     ?? \App\Models\Employee::withoutGlobalScope(\App\Scopes\NotDeadFileScope::class)->where('user_id', $askingUser->id)->first()
@@ -582,24 +584,24 @@
                             }
 
                             // Only fallback to rawReq->employee if rawReq has no user
-                            if (!$askingUser && !$askingEmployee && $rawReq->employee && (!$custodianEmpId || $rawReq->employee->id !== $custodianEmpId)) {
+                            if (!$askingUser && !$askingEmployee && ($rawReq->employee ?? null) && (!$custodianEmpId || $rawReq->employee->id !== $custodianEmpId)) {
                                 $askingEmployee = $rawReq->employee;
                             }
                         } elseif ($mReq) {
                             // In MaintenanceRequest, reportedBy is the person who reported/asked
-                            $askingUser = $mReq->reportedBy;
+                            $askingUser = $mReq->reportedBy ?? null;
                             if ($askingUser) {
                                 $askingEmployee = $askingUser->employee 
                                     ?? \App\Models\Employee::withoutGlobalScope(\App\Scopes\NotDeadFileScope::class)->where('user_id', $askingUser->id)->first()
                                     ?? ($askingUser->email ? \App\Models\Employee::withoutGlobalScope(\App\Scopes\NotDeadFileScope::class)->where('email', $askingUser->email)->first() : null);
                             }
 
-                            if (!$askingUser && !$askingEmployee && $mReq->employee && (!$custodianEmpId || $mReq->employee->id !== $custodianEmpId)) {
+                            if (!$askingUser && !$askingEmployee && ($mReq->employee ?? null) && (!$custodianEmpId || $mReq->employee->id !== $custodianEmpId)) {
                                 $askingEmployee = $mReq->employee;
                             }
                         } elseif ($item->type === 'purchase_request') {
-                            $pr = $item->raw_model;
-                            $askingUser = $pr->requestedBy;
+                            $pr = $item->raw_model ?? null;
+                            $askingUser = $pr ? ($pr->requestedBy ?? null) : null;
                             if ($askingUser) {
                                 $askingEmployee = $askingUser->employee 
                                     ?? \App\Models\Employee::withoutGlobalScope(\App\Scopes\NotDeadFileScope::class)->where('user_id', $askingUser->id)->first()
@@ -608,14 +610,14 @@
                         }
 
                         // Asking Person Details (ጥያቄ አቅራቢ)
-                        $requesterName = $askingUser->name 
-                            ?? $askingEmployee->full_name 
+                        $requesterName = ($askingUser ? ($askingUser->name ?? null) : null)
+                            ?? ($askingEmployee ? ($askingEmployee->full_name ?? null) : null)
                             ?? 'Requester';
 
-                        $requesterEmail = $askingUser->email ?? $askingEmployee->email ?? null;
-                        $requesterAcc = $askingEmployee->account_number ?? null;
-                        $requesterBank = $askingEmployee->bank_name ?? null;
-                        $requesterPhone = $askingEmployee->phone ?? null;
+                        $requesterEmail = ($askingUser ? ($askingUser->email ?? null) : null) ?? ($askingEmployee ? ($askingEmployee->email ?? null) : null);
+                        $requesterAcc   = $askingEmployee ? ($askingEmployee->account_number ?? null) : null;
+                        $requesterBank  = $askingEmployee ? ($askingEmployee->bank_name ?? null) : null;
+                        $requesterPhone = $askingEmployee ? ($askingEmployee->phone ?? null) : null;
 
                         // Priority: If specific bank account details were specified on this Expense Request ("Ask Money")
                         if ($rawReq && (!empty($rawReq->account_number) || !empty($rawReq->bank_name) || !empty($rawReq->account_name))) {
@@ -626,7 +628,7 @@
                                 $requesterBank = $rawReq->bank_name;
                             }
                             if (!empty($rawReq->account_name)) {
-                                $requesterName = $rawReq->account_name . ' (For: ' . ($askingUser->name ?? $askingEmployee->full_name ?? 'Requester') . ')';
+                                $requesterName = $rawReq->account_name . ' (For: ' . (($askingUser ? ($askingUser->name ?? null) : null) ?? ($askingEmployee ? ($askingEmployee->full_name ?? null) : null) ?? 'Requester') . ')';
                             }
                         }
 
@@ -1518,7 +1520,7 @@
                                                     @php
                                                         $isSelected = ($req->coa_id == $coa->id || $req->chart_of_account_id == $coa->id);
                                                         $assignedStaffId = $coa->assigned_to ?? '';
-                                                        $assignedStaffName = $coa->manager->name ?? '';
+                                                        $assignedStaffName = ($coa->manager ? ($coa->manager->name ?? '') : '');
                                                     @endphp
                                                     <option value="{{ $coa->id }}" 
                                                             data-staff-id="{{ $assignedStaffId }}" 
@@ -1595,7 +1597,7 @@
                                             @php
                                                 $isSelected = ($req->coa_id == $coa->id || $req->chart_of_account_id == $coa->id);
                                                 $assignedStaffId = $coa->assigned_to ?? '';
-                                                $assignedStaffName = $coa->manager->name ?? '';
+                                                $assignedStaffName = ($coa->manager ? ($coa->manager->name ?? '') : '');
                                             @endphp
                                             <option value="{{ $coa->id }}" 
                                                     data-staff-id="{{ $assignedStaffId }}" 
@@ -1661,12 +1663,14 @@
                             </div>
 
                             @php
-                                $payMReq = $req->maintenanceRequest ?? null;
+                                $payMReq = ($req && is_object($req)) ? ($req->maintenanceRequest ?? null) : null;
 
                                 // 1. Identify Approved Person / Petty Cash Custodian
-                                $payCustodian = $payMReq->pettyCashOwner ?? $req->pettyCashOwner ?? null;
-                                $payCustodianUserId = $payCustodian->id ?? $req->petty_cash_owner_id;
-                                $payCustodianEmpId = $payCustodian->employee->id;
+                                $payCustodian = ($payMReq ? ($payMReq->pettyCashOwner ?? null) : null)
+                                             ?? ($req ? ($req->pettyCashOwner ?? null) : null)
+                                             ?? null;
+                                $payCustodianUserId = $payCustodian ? ($payCustodian->id ?? null) : ($req ? ($req->petty_cash_owner_id ?? null) : null);
+                                $payCustodianEmpId  = ($payCustodian && $payCustodian->employee) ? ($payCustodian->employee->id ?? null) : null;
 
                                 // 2. Identify Asking Question Person (Requester - ጥያቄ አቅራቢ)
                                 $payAskingEmp = null;
@@ -1704,13 +1708,20 @@
                                     }
                                 }
 
-                                $payRequesterName = $payAskingEmp->full_name 
-                                    ?? $payAskingUser->name 
-                                    ?? ($payMReq->employee->full_name ?? ($payMReq->reportedBy->name ?? 'Requester'));
+                                $payRequesterName = ($payAskingEmp ? ($payAskingEmp->full_name ?? null) : null)
+                                    ?? ($payAskingUser ? ($payAskingUser->name ?? null) : null)
+                                    ?? ($payMReq ? (($payMReq->employee ? ($payMReq->employee->full_name ?? null) : null) ?? ($payMReq->reportedBy ? ($payMReq->reportedBy->name ?? null) : null)) : null)
+                                    ?? 'Requester';
 
-                                $payRequesterAcc = $payAskingEmp->account_number ?? $payAskingUser->employee->account_number ?? null;
-                                $payRequesterBank = $payAskingEmp->bank_name ?? $payAskingUser->employee->bank_name ?? 'Commercial Bank of Ethiopia (CBE)';
-                                $payRequesterPhone = $payAskingEmp->phone ?? $payAskingUser->employee->phone ?? null;
+                                $payRequesterAcc   = ($payAskingEmp ? ($payAskingEmp->account_number ?? null) : null)
+                                                  ?? ($payAskingUser && $payAskingUser->employee ? ($payAskingUser->employee->account_number ?? null) : null)
+                                                  ?? null;
+                                $payRequesterBank  = ($payAskingEmp ? ($payAskingEmp->bank_name ?? null) : null)
+                                                  ?? ($payAskingUser && $payAskingUser->employee ? ($payAskingUser->employee->bank_name ?? null) : null)
+                                                  ?? 'Commercial Bank of Ethiopia (CBE)';
+                                $payRequesterPhone = ($payAskingEmp ? ($payAskingEmp->phone ?? null) : null)
+                                                  ?? ($payAskingUser && $payAskingUser->employee ? ($payAskingUser->employee->phone ?? null) : null)
+                                                  ?? null;
 
                                 // Priority: If specific bank account details were specified on this Expense Request ("Ask Money")
                                 if ($req && (!empty($req->account_number) || !empty($req->bank_name) || !empty($req->account_name))) {
@@ -2318,7 +2329,7 @@
                                             @foreach($chartOfAccounts as $coa)
                                                 <option value="{{ $coa->id }}" 
                                                         data-staff-id="{{ $coa->assigned_to }}"
-                                                        data-staff-name="{{ $coa->manager->name }}"
+                                                        data-staff-name="{{ $coa->manager ? ($coa->manager->name ?? '') : '' }}"
                                                         {{ $officeReq->coa_id == $coa->id ? 'selected' : '' }}>
                                                     [{{ $coa->code }}] {{ $coa->name }}
                                                 </option>
@@ -2331,7 +2342,7 @@
                                             <option value="">-- Assign Staff / Self --</option>
                                             @foreach($financeStaff as $staff)
                                                 <option value="{{ $staff->id }}" {{ $officeReq->assigned_finance_staff_id == $staff->id ? 'selected' : '' }}>
-                                                    {{ $staff->name }} ({{ ucfirst(str_replace('_', ' ', $staff->roles->first()->name ?? 'Staff')) }})
+                                                    {{ $staff->name }} ({{ ucfirst(str_replace('_', ' ', optional($staff->roles->first())->name ?? 'Staff')) }})
                                                 </option>
                                             @endforeach
                                         </select>
@@ -2383,7 +2394,7 @@
                                     @foreach($chartOfAccounts as $coa)
                                         <option value="{{ $coa->id }}" 
                                                 data-staff-id="{{ $coa->assigned_to }}"
-                                                data-staff-name="{{ $coa->manager->name }}"
+                                                data-staff-name="{{ $coa->manager ? ($coa->manager->name ?? '') : '' }}"
                                                 {{ $officeReq->coa_id == $coa->id ? 'selected' : '' }}>
                                             [{{ $coa->code }}] {{ $coa->name }}
                                         </option>
@@ -2396,7 +2407,7 @@
                                     <option value="">-- Assign Staff / Self --</option>
                                     @foreach($financeStaff as $staff)
                                         <option value="{{ $staff->id }}" {{ $officeReq->assigned_finance_staff_id == $staff->id ? 'selected' : '' }}>
-                                            {{ $staff->name }} ({{ ucfirst(str_replace('_', ' ', $staff->roles->first()->name ?? 'Staff')) }})
+                                            {{ $staff->name }} ({{ ucfirst(str_replace('_', ' ', optional($staff->roles->first())->name ?? 'Staff')) }})
                                         </option>
                                     @endforeach
                                 </select>
