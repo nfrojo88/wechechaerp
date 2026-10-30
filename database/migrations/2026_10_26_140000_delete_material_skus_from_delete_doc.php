@@ -121,7 +121,7 @@ return new class extends Migration
                     if (Schema::hasTable('fixed_asset_units')) {
                         DB::table('fixed_asset_units')->where('fixed_asset_id', $fa->id)->delete();
                     }
-                    if (Schema::hasTable('fixed_asset_assignments')) {
+                    if (Schema::hasTable('fixed_asset_assignments') && Schema::hasColumn('fixed_asset_assignments', 'fixed_asset_id')) {
                         DB::table('fixed_asset_assignments')->where('fixed_asset_id', $fa->id)->delete();
                     }
                     try {
