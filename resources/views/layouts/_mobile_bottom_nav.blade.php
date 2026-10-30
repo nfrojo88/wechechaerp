@@ -1,60 +1,58 @@
 @auth
 @php
-    use Illuminate\Support\Facades\Route;
-
     $user = auth()->user();
     $activeRole = $user ? $user->getActiveRole() : null;
     
     // Determine dynamic dashboard route based on role with safe fallbacks
-    $dashboardRoute = Route::has('dashboard.admin') ? route('dashboard.admin') : url('/dashboard');
+    $dashboardRoute = \Illuminate\Support\Facades\Route::has('dashboard.admin') ? route('dashboard.admin') : url('/dashboard');
     if ($user) {
-        if ($user->hasRole('gm') && Route::has('dashboard.gm')) {
+        if ($user->hasRole('gm') && \Illuminate\Support\Facades\Route::has('dashboard.gm')) {
             $dashboardRoute = route('dashboard.gm');
-        } elseif (($user->hasRole('finance') || $user->hasRole('finance_manager')) && Route::has('dashboard.finance')) {
+        } elseif (($user->hasRole('finance') || $user->hasRole('finance_manager')) && \Illuminate\Support\Facades\Route::has('dashboard.finance')) {
             $dashboardRoute = route('dashboard.finance');
-        } elseif (($user->hasRole('hr') || $user->hasRole('hr_manager')) && Route::has('dashboard.hr')) {
+        } elseif (($user->hasRole('hr') || $user->hasRole('hr_manager')) && \Illuminate\Support\Facades\Route::has('dashboard.hr')) {
             $dashboardRoute = route('dashboard.hr');
-        } elseif ($user->hasRole('store_manager') && Route::has('dashboard.store-manager')) {
+        } elseif ($user->hasRole('store_manager') && \Illuminate\Support\Facades\Route::has('dashboard.store-manager')) {
             $dashboardRoute = route('dashboard.store-manager');
-        } elseif ($user->hasRole('store_keeper') && Route::has('dashboard.store-keeper')) {
+        } elseif ($user->hasRole('store_keeper') && \Illuminate\Support\Facades\Route::has('dashboard.store-keeper')) {
             $dashboardRoute = route('dashboard.store-keeper');
-        } elseif ($user->hasRole('site_engineer') && Route::has('dashboard.site-engineer')) {
+        } elseif ($user->hasRole('site_engineer') && \Illuminate\Support\Facades\Route::has('dashboard.site-engineer')) {
             $dashboardRoute = route('dashboard.site-engineer');
-        } elseif (($user->hasRole('planning_manager') || $user->hasRole('planning')) && Route::has('dashboard.planning')) {
+        } elseif (($user->hasRole('planning_manager') || $user->hasRole('planning')) && \Illuminate\Support\Facades\Route::has('dashboard.planning')) {
             $dashboardRoute = route('dashboard.planning');
-        } elseif ($user->hasRole('general_service') && Route::has('dashboard.general_service')) {
+        } elseif ($user->hasRole('general_service') && \Illuminate\Support\Facades\Route::has('dashboard.general_service')) {
             $dashboardRoute = route('dashboard.general_service');
         }
     }
 
     // Reports link with safe fallbacks
-    $reportsRoute = Route::has('reports.index') ? route('reports.index') : url('/reports');
+    $reportsRoute = \Illuminate\Support\Facades\Route::has('reports.index') ? route('reports.index') : url('/reports');
     if ($user) {
-        if ($user->hasAnyRole(['hr', 'hr_manager', 'hr_officer']) && Route::has('reports.attendance')) {
+        if ($user->hasAnyRole(['hr', 'hr_manager', 'hr_officer']) && \Illuminate\Support\Facades\Route::has('reports.attendance')) {
             $reportsRoute = route('reports.attendance');
-        } elseif ($user->hasRole('general_service') && Route::has('fuel-requests.reports')) {
+        } elseif ($user->hasRole('general_service') && \Illuminate\Support\Facades\Route::has('fuel-requests.reports')) {
             $reportsRoute = route('fuel-requests.reports');
-        } elseif ($user->hasRole('store_manager') && Route::has('store-manager.inventory.all')) {
+        } elseif ($user->hasRole('store_manager') && \Illuminate\Support\Facades\Route::has('store-manager.inventory.all')) {
             $reportsRoute = route('store-manager.inventory.all');
-        } elseif ($user->hasRole('marketing') && Route::has('marketing.reports.inflation')) {
+        } elseif ($user->hasRole('marketing') && \Illuminate\Support\Facades\Route::has('marketing.reports.inflation')) {
             $reportsRoute = route('marketing.reports.inflation');
-        } elseif ($user->hasRole('planning_manager') && Route::has('planning-manager.resource-report')) {
+        } elseif ($user->hasRole('planning_manager') && \Illuminate\Support\Facades\Route::has('planning-manager.resource-report')) {
             $reportsRoute = route('planning-manager.resource-report');
         }
     }
 
     // Approvals link with safe fallbacks (approvals.index)
-    $approvalsRoute = Route::has('approvals.index') ? route('approvals.index') : url('/approvals');
+    $approvalsRoute = \Illuminate\Support\Facades\Route::has('approvals.index') ? route('approvals.index') : url('/approvals');
     if ($user) {
-        if ($user->hasRole('gm') && Route::has('gm.hr-reports')) {
+        if ($user->hasRole('gm') && \Illuminate\Support\Facades\Route::has('gm.hr-reports')) {
             $approvalsRoute = route('gm.hr-reports');
-        } elseif ($user->hasAnyRole(['hr_manager', 'hr']) && Route::has('daily-reports.approval')) {
+        } elseif ($user->hasAnyRole(['hr_manager', 'hr']) && \Illuminate\Support\Facades\Route::has('daily-reports.approval')) {
             $approvalsRoute = route('daily-reports.approval');
         }
     }
 
     // Profile link
-    $profileRoute = Route::has('profile.edit') ? route('profile.edit') : url('/profile');
+    $profileRoute = \Illuminate\Support\Facades\Route::has('profile.edit') ? route('profile.edit') : url('/profile');
 @endphp
 
 <nav class="wc-mobile-bottom-nav" aria-label="Mobile Navigation">
