@@ -865,17 +865,24 @@ body.sidebar-open { overflow-y: hidden !important; }
                         $isHrOrGm = auth()->check() && (auth()->user()->hasAnyRole(['hr_officer', 'hr_manager', 'hr', 'gm', 'general_manager', 'admin', 'global_admin']));
                         if ($isHrOrGm) {
                             try {
-                                $probationAlertEmployees = \App\Models\Employee::where('status', 'active')
+                                // Select only lightweight columns — avoids loading file-blob columns
+                                // (profile_picture, national_id_card, guarantee_letter, etc.) for every employee.
+                                // Filter days_since_joining >= 20 in SQL (date_of_joining <= today - 20 days).
+                                $probationAlertEmployees = \App\Models\Employee::select(
+                                        'id', 'full_name', 'status', 'probation_completed',
+                                        'date_of_joining', 'guarantee_letter', 'tin_number'
+                                    )
+                                    ->where('status', 'active')
                                     ->where('probation_completed', false)
                                     ->whereNotNull('date_of_joining')
+                                    ->where('date_of_joining', '<=', now()->subDays(20)->toDateString())
                                     ->where(function($q) {
                                         $q->whereNull('guarantee_letter')
                                           ->orWhere('guarantee_letter', '')
                                           ->orWhereNull('tin_number')
                                           ->orWhere('tin_number', '');
                                     })
-                                    ->get()
-                                    ->filter(fn($e) => $e->days_since_joining >= 20);
+                                    ->get();
                                 $probationAlertCount = $probationAlertEmployees->count();
                             } catch (\Throwable $e) {}
                         }
