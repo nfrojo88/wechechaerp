@@ -46,15 +46,15 @@
                     <div class="row g-3">
                         <div class="col-sm-6 col-md-3">
                             <span class="text-xs text-muted text-uppercase d-block font-weight-bold">Submitter</span>
-                            <span class="font-weight-bold text-dark">{{ $ticket->submitter_name ?: ($ticket->user->name ?? 'Staff') }}</span>
+                            <span class="font-weight-bold text-dark">{{ $ticket->submitter_name ?: (optional($ticket->user)->name ?? 'Staff') }}</span>
                         </div>
                         <div class="col-sm-6 col-md-3">
                             <span class="text-xs text-muted text-uppercase d-block font-weight-bold">Employee ID</span>
-                            <span>{{ $ticket->employee_code ?: ($ticket->user->employee->employee_code ?? '—') }}</span>
+                            <span>{{ $ticket->employee_code ?: (optional(optional($ticket->user)->employee)->employee_code ?? '—') }}</span>
                         </div>
                         <div class="col-sm-6 col-md-3">
                             <span class="text-xs text-muted text-uppercase d-block font-weight-bold">Department</span>
-                            <span>{{ $ticket->department ?: ($ticket->user->employee->department ?? 'General') }}</span>
+                            <span>{{ $ticket->department ?: (optional(optional($ticket->user)->employee)->department ?? 'General') }}</span>
                         </div>
                         <div class="col-sm-6 col-md-3">
                             <span class="text-xs text-muted text-uppercase d-block font-weight-bold">Contact</span>

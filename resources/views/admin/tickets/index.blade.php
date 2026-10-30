@@ -157,8 +157,8 @@
                                 {!! $ticket->submission_type_badge !!}
                             </td>
                             <td>
-                                <div class="font-weight-bold text-dark">{{ $ticket->submitter_name ?: ($ticket->user->name ?? 'Staff') }}</div>
-                                <div class="text-xs text-muted">{{ $ticket->department ?: ($ticket->user->employee->department ?? 'General') }}</div>
+                                <div class="font-weight-bold text-dark">{{ $ticket->submitter_name ?: (optional($ticket->user)->name ?? 'Staff') }}</div>
+                                <div class="text-xs text-muted">{{ $ticket->department ?: (optional(optional($ticket->user)->employee)->department ?? 'General') }}</div>
                             </td>
                             <td>
                                 <a href="{{ route('admin.tickets.show', $ticket) }}" class="text-decoration-none font-weight-bold text-dark d-block">

@@ -58,19 +58,19 @@
                     <div class="row g-3">
                         <div class="col-md-3">
                             <span class="text-xs text-muted text-uppercase d-block font-weight-bold">Full Name</span>
-                            <strong class="text-dark">{{ $ticket->submitter_name ?: ($ticket->user->name ?? 'Staff') }}</strong>
+                            <strong class="text-dark">{{ $ticket->submitter_name ?: (optional($ticket->user)->name ?? 'Staff') }}</strong>
                         </div>
                         <div class="col-md-3">
                             <span class="text-xs text-muted text-uppercase d-block font-weight-bold">Employee ID</span>
-                            <span>{{ $ticket->employee_code ?: ($ticket->user->employee->employee_code ?? 'N/A') }}</span>
+                            <span>{{ $ticket->employee_code ?: (optional(optional($ticket->user)->employee)->employee_code ?? 'N/A') }}</span>
                         </div>
                         <div class="col-md-3">
                             <span class="text-xs text-muted text-uppercase d-block font-weight-bold">Department</span>
-                            <span class="badge bg-secondary">{{ $ticket->department ?: ($ticket->user->employee->department ?? 'General') }}</span>
+                            <span class="badge bg-secondary">{{ $ticket->department ?: (optional(optional($ticket->user)->employee)->department ?? 'General') }}</span>
                         </div>
                         <div class="col-md-3">
                             <span class="text-xs text-muted text-uppercase d-block font-weight-bold">Contact Phone / Email</span>
-                            <span class="text-dark">{{ $ticket->contact_phone ?: ($ticket->user->employee->phone ?? $ticket->user->email) }}</span>
+                            <span class="text-dark">{{ $ticket->contact_phone ?: (optional(optional($ticket->user)->employee)->phone ?? optional($ticket->user)->email) }}</span>
                         </div>
                     </div>
                 </div>

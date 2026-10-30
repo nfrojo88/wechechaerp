@@ -232,12 +232,12 @@
                                         @php 
                                             $tReq = $item->raw_model;
                                             $tAppr = (is_array($tReq->approver_info ?? null) ? $tReq->approver_info : (method_exists($tReq, 'getApproverInfoAttribute') ? $tReq->getApproverInfoAttribute() : []));
-                                            $tName = $tAppr['name'] ?? ($tReq->gmApprover->name ?? $tReq->gmReviewer->name ?? $tReq->hrReviewer->name ?? null);
+                                            $tName = $tAppr['name'] ?? (optional($tReq->gmApprover)->name ?? (optional($tReq->gmReviewer)->name ?? (optional($tReq->hrReviewer)->name ?? null)));
                                             $tApproved = !empty($tAppr['is_approved']) || !empty($tName);
                                             $tText = $tAppr['text'] ?? ($tName ? $tName : ($tReq->status ?? 'Pending'));
                                         @endphp
                                         <div class="mt-1 small" style="font-size: 0.70rem; line-height: 1.35;">
-                                            <div class="text-truncate text-muted"><i class="fa-solid fa-user-pen text-primary me-1"></i>Asked: <strong class="text-dark">{{ $tReq->user->name ?? 'N/A' }}</strong></div>
+                                            <div class="text-truncate text-muted"><i class="fa-solid fa-user-pen text-primary me-1"></i>Asked: <strong class="text-dark">{{ optional($tReq->user)->name ?? 'N/A' }}</strong></div>
                                             <div class="text-truncate text-muted"><i class="fa-solid {{ $tApproved ? 'fa-circle-check text-success' : 'fa-hourglass-half text-warning' }} me-1"></i>Approved: <strong class="{{ $tApproved ? 'text-success' : 'text-warning-emphasis' }}">{{ $tName ?? $tText }}</strong></div>
                                         </div>
                                     @endif
@@ -384,7 +384,7 @@
                                                             || str_contains($prAuthRoleNames, 'finance_head') 
                                                             || str_contains($prAuthRoleNames, 'finance_manager') 
                                                             || str_contains($prAuthRoleNames, 'admin'));
-                                                        $prPayment = $item->raw_model->payment;
+                                                        $prPayment = optional($item->raw_model)->payment;
                                                         $isAssignedToMe = (
                                                             $prPayment && (int)$prPayment->assigned_finance_staff_id === (int)auth()->id()
                                                         );
@@ -514,9 +514,11 @@
                                 <div class="fw-bold text-success fs-5">ETB {{ number_format($item->net_amount, 2) }}</div>
                                 <div class="small text-muted"><i class="fa-solid fa-tag me-1"></i>Category: <strong>{{ $item->category }}</strong></div>
                                 @php
-                                    $itemVat = (float)($item->vat_amount ?? ($item->raw_model->vat_amount ?? ($item->raw_model->payment->vat_amount ?? 0)));
-                                    $itemWht = (float)($item->raw_model->withholding_amount ?? ($item->raw_model->payment->withholding_amount ?? 0));
-                                    $itemGross = (float)($item->base_amount ?? ($item->raw_model->gross_amount ?? $item->net_amount));
+                                    $rawModel = $item->raw_model ?? null;
+                                    $rawPayment = optional($rawModel)->payment;
+                                    $itemVat = (float)($item->vat_amount ?? (optional($rawModel)->vat_amount ?? (optional($rawPayment)->vat_amount ?? 0)));
+                                    $itemWht = (float)(optional($rawModel)->withholding_amount ?? (optional($rawPayment)->withholding_amount ?? 0));
+                                    $itemGross = (float)($item->base_amount ?? (optional($rawModel)->gross_amount ?? $item->net_amount));
                                 @endphp
                                 @if($itemVat > 0 || $itemWht > 0 || ($itemGross > 0 && abs($itemGross - $item->net_amount) > 0.01))
                                     <div class="mt-2 pt-2 border-top small">
@@ -526,13 +528,13 @@
                                         </div>
                                         @if($itemVat > 0)
                                         <div class="d-flex justify-content-between text-info">
-                                            <span>VAT ({{ ($item->vat_type ?? ($item->raw_model->vat_type ?? '')) === 'vat_b' ? 'VAT B Incl.' : '15%' }}):</span>
+                                            <span>VAT ({{ ($item->vat_type ?? (optional($item->raw_model)->vat_type ?? '')) === 'vat_b' ? 'VAT B Incl.' : '15%' }}):</span>
                                             <span>+ ETB {{ number_format($itemVat, 2) }}</span>
                                         </div>
                                         @endif
                                         @if($itemWht > 0)
                                         <div class="d-flex justify-content-between text-danger">
-                                            <span>Withholding Tax ({{ $item->raw_model->withholding_rate ?? ($item->raw_model->payment->withholding_rate ?? 3) }}%):</span>
+                                            <span>Withholding Tax ({{ optional($item->raw_model)->withholding_rate ?? (optional(optional($item->raw_model)->payment)->withholding_rate ?? 3) }}%):</span>
                                             <span>- ETB {{ number_format($itemWht, 2) }}</span>
                                         </div>
                                         @endif
@@ -578,7 +580,7 @@
                             // In ExpenseRequest, user_id is the person who asked (e.g. General Admin)
                             $askingUser = $rawReq->user ?? null;
                             if ($askingUser) {
-                                $askingEmployee = $askingUser->employee 
+                                $askingEmployee = optional($askingUser)->employee 
                                     ?? \App\Models\Employee::withoutGlobalScope(\App\Scopes\NotDeadFileScope::class)->where('user_id', $askingUser->id)->first()
                                     ?? ($askingUser->email ? \App\Models\Employee::withoutGlobalScope(\App\Scopes\NotDeadFileScope::class)->where('email', $askingUser->email)->first() : null);
                             }
@@ -591,7 +593,7 @@
                             // In MaintenanceRequest, reportedBy is the person who reported/asked
                             $askingUser = $mReq->reportedBy ?? null;
                             if ($askingUser) {
-                                $askingEmployee = $askingUser->employee 
+                                $askingEmployee = optional($askingUser)->employee 
                                     ?? \App\Models\Employee::withoutGlobalScope(\App\Scopes\NotDeadFileScope::class)->where('user_id', $askingUser->id)->first()
                                     ?? ($askingUser->email ? \App\Models\Employee::withoutGlobalScope(\App\Scopes\NotDeadFileScope::class)->where('email', $askingUser->email)->first() : null);
                             }
@@ -603,7 +605,7 @@
                             $pr = $item->raw_model ?? null;
                             $askingUser = $pr ? ($pr->requestedBy ?? null) : null;
                             if ($askingUser) {
-                                $askingEmployee = $askingUser->employee 
+                                $askingEmployee = optional($askingUser)->employee 
                                     ?? \App\Models\Employee::withoutGlobalScope(\App\Scopes\NotDeadFileScope::class)->where('user_id', $askingUser->id)->first()
                                     ?? ($askingUser->email ? \App\Models\Employee::withoutGlobalScope(\App\Scopes\NotDeadFileScope::class)->where('email', $askingUser->email)->first() : null);
                             }
@@ -633,7 +635,7 @@
                         }
 
                         // Ensure we NEVER display the approved person / custodian's bank account
-                        if ($custodian->employee && $requesterAcc === $custodian->employee->account_number) {
+                        if ($custodian && $custodian->employee && $requesterAcc === $custodian->employee->account_number) {
                             $requesterAcc = null;
                         }
 
@@ -645,10 +647,10 @@
                         }
 
                         // Optional external technician info (if recorded on maintenance ticket)
-                        $techName = $mReq->maintenance_person_name;
-                        $techAcc = $mReq->maintenance_person_account;
-                        $techPhone = $mReq->maintenance_person_phone;
-                        if ($custodian->employee && $techAcc === $custodian->employee->account_number) {
+                        $techName = $mReq ? ($mReq->maintenance_person_name ?? null) : null;
+                        $techAcc = $mReq ? ($mReq->maintenance_person_account ?? null) : null;
+                        $techPhone = $mReq ? ($mReq->maintenance_person_phone ?? null) : null;
+                        if ($custodian && $custodian->employee && $techAcc === $custodian->employee->account_number) {
                             $techAcc = null;
                         }
                         if ($custodian && $techName === $custodian->name) {
@@ -766,7 +768,7 @@
                             <div class="row g-2 small text-dark">
                                 <div class="col-md-6">
                                     <span class="text-muted d-block">Assigned Finance Staff:</span>
-                                    <strong>{{ $item->raw_model->assignedFinanceStaff->name ?? ($item->raw_model->assignedStaff->name ?? ($item->raw_model->financeStaff->name ?? 'Finance Department Pool')) }}</strong>
+                                    <strong>{{ optional(optional($item->raw_model)->assignedFinanceStaff)->name ?? (optional(optional($item->raw_model)->assignedStaff)->name ?? (optional(optional($item->raw_model)->financeStaff)->name ?? 'Finance Department Pool')) }}</strong>
                                 </div>
                                 <div class="col-md-6">
                                     <span class="text-muted d-block">Funding Source / Account:</span>
@@ -798,7 +800,7 @@
                                         <i class="fa-solid fa-receipt text-primary fs-5"></i>
                                         <div>
                                             <h6 class="mb-0 fw-bold text-dark">Petty Cash Replenishment Breakdown (#{{ $pcr->request_no }})</h6>
-                                            <small class="text-muted">Account: <strong>[{{ $pcr->chartOfAccount->code ?? '1010' }}] {{ $pcr->chartOfAccount->name ?? 'Petty Cash' }}</strong> &bull; Custodian: <strong>{{ $pcr->requester->name ?? 'Custodian' }}</strong></small>
+                                            <small class="text-muted">Account: <strong>[{{ optional($pcr->chartOfAccount)->code ?? '1010' }}] {{ optional($pcr->chartOfAccount)->name ?? 'Petty Cash' }}</strong> &bull; Custodian: <strong>{{ optional($pcr->requester)->name ?? 'Custodian' }}</strong></small>
                                         </div>
                                     </div>
                                     <div class="d-flex align-items-center gap-2">
@@ -818,7 +820,7 @@
                                                 <i class="fa-solid fa-circle-check text-success fs-5"></i>
                                                 <div>
                                                     <strong class="text-dark">Audited &amp; Cleared by Internal Auditor:</strong>
-                                                    <span class="text-muted small ms-1">{{ $pcr->auditor->name ?? 'Internal Auditor' }} on {{ optional($pcr->audited_at)->format('d M Y, H:i') }}</span>
+                                                    <span class="text-muted small ms-1">{{ optional($pcr->auditor)->name ?? 'Internal Auditor' }} on {{ optional($pcr->audited_at)->format('d M Y, H:i') }}</span>
                                                     @if($pcr->audit_notes)
                                                         <div class="text-dark small mt-1"><em>"{{ $pcr->audit_notes }}"</em></div>
                                                     @endif
@@ -844,7 +846,7 @@
                                         </div>
                                         <div class="col-md-3 p-3">
                                             <div class="text-muted small text-uppercase fw-bold" style="font-size:0.72rem;">Receipts / Vouchers</div>
-                                            <div class="fw-bold text-primary fs-6">{{ $pcr->items->count() }} Attached</div>
+                                            <div class="fw-bold text-primary fs-6">{{ optional($pcr->items)->count() ?? 0 }} Attached</div>
                                         </div>
                                     </div>
 
@@ -889,7 +891,7 @@
                                                 <tr class="fw-bold">
                                                     <td colspan="5" class="text-end pe-2">Total Verified Receipts:</td>
                                                     <td class="pe-3 text-end font-monospace text-success fs-6">
-                                                        ETB {{ number_format($pcr->items->sum('amount') ?: $pcr->requested_amount, 2) }}
+                                                        ETB {{ number_format(optional($pcr->items)->sum('amount') ?: ($pcr->requested_amount ?? 0), 2) }}
                                                     </td>
                                                 </tr>
                                             </tfoot>
@@ -1114,18 +1116,18 @@
                         <div class="p-3 border rounded-3 bg-light">
                             <div class="fw-bold text-dark mb-2"><i class="fa-solid fa-timeline me-1 text-primary"></i> Review & Payment Timeline</div>
                             <ul class="list-unstyled mb-0 small text-muted">
-                                <li class="mb-1"><i class="fa-solid fa-circle-dot me-2 text-secondary"></i> Submitted on: <strong class="text-dark">{{ $req->created_at->format('M d, Y H:i') }}</strong></li>
+                                <li class="mb-1"><i class="fa-solid fa-circle-dot me-2 text-secondary"></i> Submitted on: <strong class="text-dark">{{ optional($req->created_at)->format('M d, Y H:i') }}</strong></li>
                                 @if($req->hr_reviewed_at)
-                                    <li class="mb-1"><i class="fa-solid fa-circle-check me-2 text-warning"></i> HR Review by <strong class="text-dark">{{ $req->hrReviewer->name ?? 'HR' }}</strong> on {{ $req->hr_reviewed_at->format('M d, Y H:i') }}</li>
+                                    <li class="mb-1"><i class="fa-solid fa-circle-check me-2 text-warning"></i> HR Review by <strong class="text-dark">{{ optional($req->hrReviewer)->name ?? 'HR' }}</strong> on {{ optional($req->hr_reviewed_at)->format('M d, Y H:i') }}</li>
                                 @endif
                                 @if($req->gm_approved_at)
-                                    <li class="mb-1"><i class="fa-solid fa-circle-check me-2 text-info"></i> GM Approval by <strong class="text-dark">{{ $req->gmApprover->name ?? 'GM' }}</strong> on {{ $req->gm_approved_at->format('M d, Y H:i') }}</li>
+                                    <li class="mb-1"><i class="fa-solid fa-circle-check me-2 text-info"></i> GM Approval by <strong class="text-dark">{{ optional($req->gmApprover)->name ?? 'GM' }}</strong> on {{ optional($req->gm_approved_at)->format('M d, Y H:i') }}</li>
                                 @endif
                                 @if($req->paid_at)
-                                    <li class="mb-1 text-success"><i class="fa-solid fa-circle-check me-2"></i> <strong>Paid on {{ $req->paid_at->format('M d, Y H:i') }}</strong> by {{ $req->paidBy->name ?? 'Finance' }} | Ref: {{ $req->payment_reference ?? 'N/A' }}</li>
+                                    <li class="mb-1 text-success"><i class="fa-solid fa-circle-check me-2"></i> <strong>Paid on {{ optional($req->paid_at)->format('M d, Y H:i') }}</strong> by {{ optional($req->paidBy)->name ?? 'Finance' }} | Ref: {{ $req->payment_reference ?? 'N/A' }}</li>
                                 @endif
                                 @if($req->send_back_reason)
-                                    <li class="mt-2 text-warning-emphasis fw-semibold"><i class="fa-solid fa-arrow-left me-2"></i> Sent Back to Finance Head: {{ $req->send_back_reason }} @if($req->sent_back_at) <span class="text-muted fw-normal">({{ $req->sent_back_at->format('M d, Y H:i') }})</span> @endif</li>
+                                    <li class="mt-2 text-warning-emphasis fw-semibold"><i class="fa-solid fa-arrow-left me-2"></i> Sent Back to Finance Head: {{ $req->send_back_reason }} @if($req->sent_back_at) <span class="text-muted fw-normal">({{ optional($req->sent_back_at)->format('M d, Y H:i') }})</span> @endif</li>
                                 @endif
                                 @if($req->rejection_reason)
                                     <li class="mt-2 text-danger fw-semibold"><i class="fa-solid fa-triangle-exclamation me-2"></i> Rejection Reason: {{ $req->rejection_reason }}</li>
@@ -1184,7 +1186,7 @@
                             <div class="p-3 bg-light rounded-3 mb-3 border">
                                 <div class="d-flex justify-content-between">
                                     <span class="text-muted small">Employee / Beneficiary:</span>
-                                    <span class="fw-bold text-dark">{{ $req->employee->full_name ?? $item->applicant_name }}</span>
+                                    <span class="fw-bold text-dark">{{ optional($req->employee)->full_name ?? ($item->applicant_name ?? 'N/A') }}</span>
                                 </div>
                                 @if($req->category)
                                 <div class="d-flex justify-content-between mt-1">
@@ -1263,7 +1265,7 @@
                                             <i class="fa-solid fa-receipt text-primary fs-5"></i>
                                             <div>
                                                 <h6 class="mb-0 fw-bold text-dark">Petty Cash Statement &amp; Verified Receipts (#{{ $pcr->request_no }})</h6>
-                                                <small class="text-muted">Account: <strong>[{{ $pcr->chartOfAccount->code ?? '1010' }}] {{ $pcr->chartOfAccount->name ?? 'Petty Cash' }}</strong> &bull; Custodian: <strong>{{ $pcr->requester->name ?? 'Custodian' }}</strong></small>
+                                                <small class="text-muted">Account: <strong>[{{ optional($pcr->chartOfAccount)->code ?? '1010' }}] {{ optional($pcr->chartOfAccount)->name ?? 'Petty Cash' }}</strong> &bull; Custodian: <strong>{{ optional($pcr->requester)->name ?? 'Custodian' }}</strong></small>
                                             </div>
                                         </div>
                                         @if($pcr->attachment_url)
@@ -1280,7 +1282,7 @@
                                                     <i class="fa-solid fa-circle-check text-success fs-5"></i>
                                                     <div>
                                                         <strong class="text-dark">Internal Audit Verified &amp; Cleared:</strong>
-                                                        <span class="text-muted small ms-1">{{ $pcr->auditor->name ?? 'Internal Auditor' }} on {{ optional($pcr->audited_at)->format('d M Y, H:i') }}</span>
+                                                        <span class="text-muted small ms-1">{{ optional($pcr->auditor)->name ?? 'Internal Auditor' }} on {{ optional($pcr->audited_at)->format('d M Y, H:i') }}</span>
                                                         @if($pcr->audit_notes)
                                                             <div class="text-dark small mt-1"><em>"{{ $pcr->audit_notes }}"</em></div>
                                                         @endif
@@ -1305,7 +1307,7 @@
                                             </div>
                                             <div class="col-md-3 p-3">
                                                 <div class="text-muted small text-uppercase fw-bold" style="font-size:0.72rem;">Receipts / Vouchers</div>
-                                                <div class="fw-bold text-primary fs-6">{{ $pcr->items->count() }} Attached</div>
+                                                <div class="fw-bold text-primary fs-6">{{ optional($pcr->items)->count() ?? 0 }} Attached</div>
                                             </div>
                                         </div>
 
@@ -1349,7 +1351,7 @@
                                                     <tr class="fw-bold">
                                                         <td colspan="5" class="text-end pe-2">Total Verified Receipts:</td>
                                                         <td class="pe-3 text-end font-monospace text-success fs-6">
-                                                            ETB {{ number_format($pcr->items->sum('amount') ?: $pcr->requested_amount, 2) }}
+                                                            ETB {{ number_format(optional($pcr->items)->sum('amount') ?: ($pcr->requested_amount ?? 0), 2) }}
                                                         </td>
                                                     </tr>
                                                 </tfoot>
@@ -1658,7 +1660,7 @@
                                     <span class="text-muted small text-uppercase fw-bold">Approved Request Budget:</span>
                                     <strong class="text-success fs-5">ETB {{ number_format($req->amount, 2) }}</strong>
                                 </div>
-                                <div class="small text-muted mb-1"><i class="fa-solid fa-sitemap me-1"></i> Paying Account: <strong>{{ $req->chartOfAccount->name ?? ($req->coa->name ?? 'Default Petty Cash') }}</strong></div>
+                                <div class="small text-muted mb-1"><i class="fa-solid fa-sitemap me-1"></i> Paying Account: <strong>{{ optional($req->chartOfAccount)->name ?? (optional($req->coa)->name ?? 'Default Petty Cash') }}</strong></div>
                                 <div class="small text-muted"><i class="fa-solid fa-list me-1"></i> Description: {{ $req->description }}</div>
                             </div>
 
@@ -1682,7 +1684,7 @@
                                     }
                                     if (!$payAskingEmp && $payMReq->reportedBy && (!$payCustodianUserId || $payMReq->reportedBy->id !== $payCustodianUserId)) {
                                         $payAskingUser = $payMReq->reportedBy;
-                                        $payAskingEmp = $payMReq->reportedBy->employee;
+                                        $payAskingEmp = optional($payMReq->reportedBy)->employee;
                                     }
                                     if (!$payAskingEmp && $payMReq->employee) {
                                         $payAskingEmp = $payMReq->employee;
@@ -1698,7 +1700,7 @@
                                     }
                                     if (!$payAskingUser && $req->user && (!$payCustodianUserId || $req->user->id !== $payCustodianUserId)) {
                                         $payAskingUser = $req->user;
-                                        $payAskingEmp = $payAskingEmp ?: $req->user->employee;
+                                        $payAskingEmp = $payAskingEmp ?: optional($req->user)->employee;
                                     }
                                     if (!$payAskingEmp && $req->employee) {
                                         $payAskingEmp = $req->employee;
@@ -1710,7 +1712,7 @@
 
                                 $payRequesterName = ($payAskingEmp ? ($payAskingEmp->full_name ?? null) : null)
                                     ?? ($payAskingUser ? ($payAskingUser->name ?? null) : null)
-                                    ?? ($payMReq ? (($payMReq->employee ? ($payMReq->employee->full_name ?? null) : null) ?? ($payMReq->reportedBy ? ($payMReq->reportedBy->name ?? null) : null)) : null)
+                                    ?? ($payMReq ? ((optional($payMReq->employee)->full_name ?? null) ?? (optional($payMReq->reportedBy)->name ?? null)) : null)
                                     ?? 'Requester';
 
                                 $payRequesterAcc   = ($payAskingEmp ? ($payAskingEmp->account_number ?? null) : null)
@@ -1732,18 +1734,18 @@
                                         $payRequesterBank = $req->bank_name;
                                     }
                                     if (!empty($req->account_name)) {
-                                        $payRequesterName = $req->account_name . ' (For: ' . ($payAskingEmp->full_name ?? $payAskingUser->name ?? 'Requester') . ')';
+                                        $payRequesterName = $req->account_name . ' (For: ' . (optional($payAskingEmp)->full_name ?? (optional($payAskingUser)->name ?? 'Requester')) . ')';
                                     }
                                 }
 
-                                if ($payCustodian->employee && $payRequesterAcc === $payCustodian->employee->account_number) {
+                                if ($payCustodian && $payCustodian->employee && $payRequesterAcc === $payCustodian->employee->account_number) {
                                     $payRequesterAcc = null;
                                 }
 
-                                $payTechName = $payMReq->maintenance_person_name;
-                                $payTechAcc = $payMReq->maintenance_person_account;
-                                $payTechPhone = $payMReq->maintenance_person_phone;
-                                if ($payCustodian->employee && $payTechAcc === $payCustodian->employee->account_number) {
+                                $payTechName = $payMReq ? ($payMReq->maintenance_person_name ?? null) : null;
+                                $payTechAcc = $payMReq ? ($payMReq->maintenance_person_account ?? null) : null;
+                                $payTechPhone = $payMReq ? ($payMReq->maintenance_person_phone ?? null) : null;
+                                if ($payCustodian && $payCustodian->employee && $payTechAcc === $payCustodian->employee->account_number) {
                                     $payTechAcc = null;
                                 }
 
@@ -2292,7 +2294,7 @@
     @if($item->type === 'office_supply_request' && $item->status_key === 'finance_queue')
     @php 
         $officeReq = $item->raw_model; 
-        $isOfficeAssignedToMe = (int)$item->assigned_staff_id === (int)auth()->id() || ($officeReq->coa && (int)$officeReq->coa->assigned_to === (int)auth()->id());
+        $isOfficeAssignedToMe = (int)$item->assigned_staff_id === (int)auth()->id() || ($officeReq && $officeReq->coa && (int)$officeReq->coa->assigned_to === (int)auth()->id());
     @endphp
 
     <!-- 1. Finance Head Assign & Decision Modal -->
@@ -2330,7 +2332,7 @@
                                                 <option value="{{ $coa->id }}" 
                                                         data-staff-id="{{ $coa->assigned_to }}"
                                                         data-staff-name="{{ $coa->manager ? ($coa->manager->name ?? '') : '' }}"
-                                                        {{ $officeReq->coa_id == $coa->id ? 'selected' : '' }}>
+                                                        {{ optional($officeReq)->coa_id == $coa->id ? 'selected' : '' }}>
                                                     [{{ $coa->code }}] {{ $coa->name }}
                                                 </option>
                                             @endforeach
@@ -2341,8 +2343,8 @@
                                         <select name="assigned_finance_staff_id" id="modalStaffSelect{{ $item->id_raw }}" class="form-select form-select-sm bg-light border-0">
                                             <option value="">-- Assign Staff / Self --</option>
                                             @foreach($financeStaff as $staff)
-                                                <option value="{{ $staff->id }}" {{ $officeReq->assigned_finance_staff_id == $staff->id ? 'selected' : '' }}>
-                                                    {{ $staff->name }} ({{ ucfirst(str_replace('_', ' ', optional($staff->roles->first())->name ?? 'Staff')) }})
+                                                <option value="{{ $staff->id }}" {{ optional($officeReq)->assigned_finance_staff_id == $staff->id ? 'selected' : '' }}>
+                                                    {{ $staff->name }} ({{ ucfirst(str_replace('_', ' ', optional(optional($staff->roles)->first())->name ?? 'Staff')) }})
                                                 </option>
                                             @endforeach
                                         </select>
@@ -2406,8 +2408,8 @@
                                 <select name="assigned_finance_staff_id" id="modalStaffSelect{{ $item->id_raw }}" class="form-select form-select-sm bg-light border-0">
                                     <option value="">-- Assign Staff / Self --</option>
                                     @foreach($financeStaff as $staff)
-                                        <option value="{{ $staff->id }}" {{ $officeReq->assigned_finance_staff_id == $staff->id ? 'selected' : '' }}>
-                                            {{ $staff->name }} ({{ ucfirst(str_replace('_', ' ', optional($staff->roles->first())->name ?? 'Staff')) }})
+                                        <option value="{{ $staff->id }}" {{ optional($officeReq)->assigned_finance_staff_id == $staff->id ? 'selected' : '' }}>
+                                            {{ $staff->name }} ({{ ucfirst(str_replace('_', ' ', optional(optional($staff->roles)->first())->name ?? 'Staff')) }})
                                         </option>
                                     @endforeach
                                 </select>
@@ -2447,7 +2449,7 @@
                                 <span class="text-muted small text-uppercase fw-bold">Approved Budget:</span>
                                 <strong class="text-success fs-5">ETB {{ number_format($item->net_amount, 2) }}</strong>
                             </div>
-                            <div class="small text-muted mb-1"><i class="fa-solid fa-sitemap me-1"></i> Funding Account: <strong>{{ $officeReq->coa->name ?? 'Head Office Expense' }}</strong></div>
+                            <div class="small text-muted mb-1"><i class="fa-solid fa-sitemap me-1"></i> Funding Account: <strong>{{ optional(optional($officeReq)->coa)->name ?? 'Head Office Expense' }}</strong></div>
                             <div class="small text-muted"><i class="fa-solid fa-list me-1"></i> Purpose: {{ $item->description }}</div>
                         </div>
 

@@ -176,19 +176,19 @@
     <table class="form-grid">
         <tr>
             <th>Full name</th>
-            <td style="width: 35%;">{{ $ticket->submitter_name ?: ($ticket->user->name ?? '') }}</td>
+            <td style="width: 35%;">{{ $ticket->submitter_name ?: (optional($ticket->user)->name ?? '') }}</td>
             <th>Employee ID</th>
-            <td style="width: 25%;">{{ $ticket->employee_code ?: ($ticket->user->employee->employee_code ?? 'N/A') }}</td>
+            <td style="width: 25%;">{{ $ticket->employee_code ?: (optional(optional($ticket->user)->employee)->employee_code ?? 'N/A') }}</td>
         </tr>
         <tr>
             <th>Department</th>
-            <td>{{ $ticket->department ?: ($ticket->user->employee->department ?? 'General') }}</td>
+            <td>{{ $ticket->department ?: (optional(optional($ticket->user)->employee)->department ?? 'General') }}</td>
             <th>Email / phone</th>
-            <td>{{ $ticket->contact_phone ?: ($ticket->user->employee->phone ?? $ticket->user->email) }}</td>
+            <td>{{ $ticket->contact_phone ?: (optional(optional($ticket->user)->employee)->phone ?? optional($ticket->user)->email) }}</td>
         </tr>
         <tr>
             <th>Date submitted</th>
-            <td colspan="3">{{ $ticket->submitted_date ? $ticket->submitted_date->format('d/m/Y') : $ticket->created_at->format('d/m/Y') }}</td>
+            <td colspan="3">{{ $ticket->submitted_date ? optional($ticket->submitted_date)->format('d/m/Y') : optional($ticket->created_at)->format('d/m/Y') }}</td>
         </tr>
     </table>
 
