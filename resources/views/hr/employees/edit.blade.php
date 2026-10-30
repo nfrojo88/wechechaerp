@@ -668,6 +668,14 @@
                     <span class="badge bg-warning text-dark">Step 4 of 8</span>
                 </div>
 
+                @php $inStoreCapped = $fixedAssetUnits->where('assigned_to_employee_id', null)->where('status', \App\Models\FixedAssetUnit::STATUS_IN_STORE)->count() >= 400; @endphp
+                @if($inStoreCapped)
+                <div class="alert alert-info d-flex align-items-center gap-2 py-2 mb-3">
+                    <i class="fa-solid fa-circle-info"></i>
+                    <span class="small">Showing the first <strong>400 in-store units</strong> to save memory. Use the search box on each row to find any unit not shown in the list.</span>
+                </div>
+                @endif
+
                 {{-- Category Filter Pills --}}
                 @php
                     $availableCategories = $fixedAssetUnits->map(function($u) {

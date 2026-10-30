@@ -2164,6 +2164,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('employees/{employee}/update-device-id', [App\Http\Controllers\EmployeeController::class, 'updateDeviceId'])->name('employees.update-device-id');
     Route::post('employees/{employee}/sync-device-attendance', [App\Http\Controllers\EmployeeController::class, 'syncDeviceAttendance'])->name('employees.sync-device-attendance');
     Route::post('employees/salary/update-with-letter', [App\Http\Controllers\EmployeeController::class, 'updateSalaryWithLetter'])->name('employees.salary.update-with-letter');
+    Route::get('employees/fixed-asset-units/search', [App\Http\Controllers\EmployeeController::class, 'searchFixedAssetUnits'])->name('employees.fixed-asset-units.search');
     Route::resource('employees', App\Http\Controllers\EmployeeController::class);
     Route::get('employee-letters/{employeeLetter}/print', [App\Http\Controllers\EmployeeLetterController::class, 'print'])->name('employee-letters.print');
     Route::resource('employee-letters', App\Http\Controllers\EmployeeLetterController::class);

@@ -949,16 +949,27 @@ class EmployeeController extends Controller
         ]);
         $projects     = Project::where('status', '!=', 'cancelled')->select('id', 'name', 'status')->get();
         $departments  = \App\Models\Department::where('is_active', true)->select('id', 'name')->get();
-        
-        // Available Centralized Fixed Asset Units (In Store OR currently assigned to this employee)
-        $fixedAssetUnits = \App\Models\FixedAssetUnit::select('id', 'fixed_asset_id', 'unit_code', 'status', 'condition', 'brand', 'model', 'serial_number', 'plate_number', 'assigned_to_employee_id')
+
+        // Always include all units currently assigned to this employee
+        $assignedUnits = \App\Models\FixedAssetUnit::select('id', 'fixed_asset_id', 'unit_code', 'status', 'condition', 'brand', 'model', 'serial_number', 'plate_number', 'assigned_to_employee_id')
             ->with(['parentAsset' => fn($q) => $q->select('id', 'name', 'category')])
-            ->where(function($q) use ($employee) {
-                $q->where('status', \App\Models\FixedAssetUnit::STATUS_IN_STORE)
-                  ->orWhere('assigned_to_employee_id', $employee->id);
-            })
+            ->where('assigned_to_employee_id', $employee->id)
             ->orderBy('unit_code')
             ->get();
+
+        // Load available (in-store) units with a cap to prevent memory exhaustion on large inventories
+        $inStoreUnits = \App\Models\FixedAssetUnit::select('id', 'fixed_asset_id', 'unit_code', 'status', 'condition', 'brand', 'model', 'serial_number', 'plate_number', 'assigned_to_employee_id')
+            ->with(['parentAsset' => fn($q) => $q->select('id', 'name', 'category')])
+            ->where('status', \App\Models\FixedAssetUnit::STATUS_IN_STORE)
+            ->orderBy('unit_code')
+            ->limit(400)
+            ->get();
+
+        // Merge: assigned units first, then in-store units (exclude duplicates)
+        $assignedIds     = $assignedUnits->pluck('id')->toArray();
+        $fixedAssetUnits = $assignedUnits->merge(
+            $inStoreUnits->filter(fn($u) => !in_array($u->id, $assignedIds))
+        )->values();
 
         $fixedAssetsJson = $fixedAssetUnits->map(fn($u) => [
             'id'           => $u->id,
@@ -975,6 +986,49 @@ class EmployeeController extends Controller
         $roles = \Spatie\Permission\Models\Role::orderBy('name')->get();
 
         return view('hr.employees.edit', compact('employee', 'projects', 'departments', 'fixedAssetUnits', 'fixedAssetsJson', 'roles'));
+    }
+
+    /**
+     * AJAX: Search available fixed asset units (in_store) for employee edit form.
+     * Used to support large inventories without loading all units on page load.
+     */
+    public function searchFixedAssetUnits(Request $request)
+    {
+        $q       = $request->get('q', '');
+        $exclude = array_filter(array_map('intval', (array) $request->get('exclude', [])));
+
+        $query = \App\Models\FixedAssetUnit::select('id', 'fixed_asset_id', 'unit_code', 'status', 'condition', 'brand', 'model', 'serial_number', 'plate_number', 'assigned_to_employee_id')
+            ->with(['parentAsset' => fn($pq) => $pq->select('id', 'name', 'category')])
+            ->where('status', \App\Models\FixedAssetUnit::STATUS_IN_STORE);
+
+        if (!empty($exclude)) {
+            $query->whereNotIn('id', $exclude);
+        }
+
+        if (!empty($q)) {
+            $query->where(function ($sq) use ($q) {
+                $sq->where('unit_code', 'like', "%{$q}%")
+                   ->orWhere('serial_number', 'like', "%{$q}%")
+                   ->orWhere('plate_number', 'like', "%{$q}%")
+                   ->orWhere('brand', 'like', "%{$q}%")
+                   ->orWhere('model', 'like', "%{$q}%")
+                   ->orWhereHas('parentAsset', fn($pa) => $pa->where('name', 'like', "%{$q}%")->orWhere('category', 'like', "%{$q}%"));
+            });
+        }
+
+        $units = $query->orderBy('unit_code')->limit(100)->get();
+
+        return response()->json($units->map(fn($u) => [
+            'id'           => $u->id,
+            'unit_code'    => $u->unit_code,
+            'name'         => $u->parentAsset->name ?? 'Asset',
+            'category'     => $u->parentAsset->category ?? 'General',
+            'plate_number' => $u->plate_number,
+            'serial_number'=> $u->serial_number,
+            'brand'        => $u->brand,
+            'model'        => $u->model,
+            'assigned_to'  => $u->assigned_to_employee_id,
+        ])->values());
     }
 
     public function update(Request $request, Employee $employee)
