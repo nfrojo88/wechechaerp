@@ -31,7 +31,9 @@ class EmployeeAdvance extends Model
 
     public function employee()
     {
-        return $this->belongsTo(Employee::class);
+        // withoutGlobalScope: historical advance records must still show the employee name
+        // even after they move to Dead File. The scope only affects live lookups (forms/dropdowns).
+        return $this->belongsTo(Employee::class)->withoutGlobalScope(\App\Scopes\NotDeadFileScope::class);
     }
 
     public function approvedByUser()

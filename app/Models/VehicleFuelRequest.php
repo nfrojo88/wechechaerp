@@ -104,12 +104,12 @@ class VehicleFuelRequest extends Model
 
     public function driver(): BelongsTo
     {
-        return $this->belongsTo(Employee::class, 'driver_employee_id');
+        return $this->belongsTo(Employee::class, 'driver_employee_id')->withoutGlobalScope(\App\Scopes\NotDeadFileScope::class);
     }
 
     public function driverEmployee(): BelongsTo
     {
-        return $this->belongsTo(Employee::class, 'driver_employee_id');
+        return $this->belongsTo(Employee::class, 'driver_employee_id')->withoutGlobalScope(\App\Scopes\NotDeadFileScope::class);
     }
 
     public function requestedBy(): BelongsTo

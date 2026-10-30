@@ -23,7 +23,7 @@ class LeaveBalance extends Model
 
     public function employee()
     {
-        return $this->belongsTo(Employee::class);
+        return $this->belongsTo(Employee::class)->withoutGlobalScope(\App\Scopes\NotDeadFileScope::class);
     }
 
     public function leaveType()

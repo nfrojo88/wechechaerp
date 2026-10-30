@@ -26,7 +26,7 @@ class UserAccessAudit extends Model
 
     public function employee(): BelongsTo
     {
-        return $this->belongsTo(Employee::class, 'employee_id');
+        return $this->belongsTo(Employee::class, 'employee_id')->withoutGlobalScope(\App\Scopes\NotDeadFileScope::class);
     }
 
     public function performedBy(): BelongsTo

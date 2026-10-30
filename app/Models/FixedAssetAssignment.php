@@ -113,9 +113,13 @@ class FixedAssetAssignment extends Model
 
     public function employee()
     {
-        return $this->belongsTo(Employee::class, 'employee_id')->withDefault([
-            'full_name' => 'N/A',
-        ]);
+        // withoutGlobalScope: asset assignment history must still show dead file employee names
+        // for audit trail integrity. The global scope is only for active/live lookups.
+        return $this->belongsTo(Employee::class, 'employee_id')
+            ->withoutGlobalScope(\App\Scopes\NotDeadFileScope::class)
+            ->withDefault([
+                'full_name' => 'N/A',
+            ]);
     }
 
     public function assigner()

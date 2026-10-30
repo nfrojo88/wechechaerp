@@ -18,6 +18,14 @@ class ProjectTeamController extends Controller
         $projects = Project::with('team')->get();
 
         // Fetch users eligible to be assigned — try role filter, fallback to all users
+        // Dead File employees must NEVER appear in team assignment dropdowns.
+        $deadFileFilter = function ($eq) {
+            $eq->withoutGlobalScope(\App\Scopes\NotDeadFileScope::class)
+               ->where(function ($dq) {
+                   $dq->where('is_dead_file', true)->orWhere('status', 'dead_file');
+               });
+        };
+
         try {
             $planners = User::role([
                 'planning',
@@ -25,14 +33,24 @@ class ProjectTeamController extends Controller
                 'technical_manager',
                 'site_engineer',
                 'coordinator',
-            ])->with('employee')->get();
+            ])
+            ->whereDoesntHave('employee', $deadFileFilter)
+            ->with('employee')
+            ->orderBy('name')
+            ->get();
 
-            // If empty, fall back to all users
+            // If empty, fall back to all non-dead-file users
             if ($planners->isEmpty()) {
-                $planners = User::with('employee')->orderBy('name')->get();
+                $planners = User::whereDoesntHave('employee', $deadFileFilter)
+                    ->with('employee')
+                    ->orderBy('name')
+                    ->get();
             }
         } catch (\Throwable $e) {
-            $planners = User::with('employee')->orderBy('name')->get();
+            $planners = User::whereDoesntHave('employee', $deadFileFilter)
+                ->with('employee')
+                ->orderBy('name')
+                ->get();
         }
 
         return view('planning.team-assignment', compact('projects', 'planners'));

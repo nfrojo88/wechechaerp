@@ -42,7 +42,7 @@ class NotificationLog extends Model
 
     public function recipientEmployee(): BelongsTo
     {
-        return $this->belongsTo(Employee::class, 'recipient_employee_id');
+        return $this->belongsTo(Employee::class, 'recipient_employee_id')->withoutGlobalScope(\App\Scopes\NotDeadFileScope::class);
     }
 
     /**

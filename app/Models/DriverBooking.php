@@ -16,7 +16,7 @@ class DriverBooking extends Model
     public function purchaseRequest() { return $this->belongsTo(PurchaseRequest::class); }
 
     /** The driver is an Employee record from the HR module */
-    public function driver()          { return $this->belongsTo(Employee::class, 'driver_employee_id'); }
+    public function driver()          { return $this->belongsTo(Employee::class, 'driver_employee_id')->withoutGlobalScope(\App\Scopes\NotDeadFileScope::class); }
 
     public function bookedBy()        { return $this->belongsTo(User::class, 'booked_by'); }
 }
