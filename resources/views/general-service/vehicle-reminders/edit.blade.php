@@ -57,12 +57,12 @@
                         <div class="bg-light rounded-4 p-3 mb-4 d-flex justify-content-between align-items-center">
                             <div>
                                 <span class="text-muted small text-uppercase fw-semibold d-block">Vehicle</span>
-                                <span class="fw-bold fs-5 text-dark">{{ $vehicleReminder->fixedAsset?->name }}</span>
+                                <span class="fw-bold fs-5 text-dark">{{ $vehicleReminder->fixedAsset->name }}</span>
                                 <div class="d-flex gap-2 align-items-center mt-1">
                                     <span class="badge bg-dark text-white rounded-pill px-2">
-                                        Plate: {{ $vehicleReminder->assetUnit?->plate_number ?: 'N/A' }}
+                                        Plate: {{ $vehicleReminder->assetUnit->plate_number ?: 'N/A' }}
                                     </span>
-                                    <span class="text-muted small">{{ $vehicleReminder->assetUnit?->unit_code }}</span>
+                                    <span class="text-muted small">{{ $vehicleReminder->assetUnit->unit_code }}</span>
                                 </div>
                             </div>
                             <span class="badge bg-primary rounded-pill px-3 py-2 fw-semibold fs-6">
@@ -77,12 +77,12 @@
                                 <div class="col-md-6">
                                     <label for="bolo_last_date" class="form-label">Last Bolo Inspection Date</label>
                                     <input type="date" id="bolo_last_date" name="bolo_last_date" class="form-control rounded-3"
-                                           value="{{ old('bolo_last_date', $vehicleReminder->bolo_last_date?->format('Y-m-d')) }}">
+                                           value="{{ old('bolo_last_date', $vehicleReminder->bolo_last_date->format('Y-m-d')) }}">
                                 </div>
                                 <div class="col-md-6">
                                     <label for="bolo_expiry_date" class="form-label fw-bold">Bolo Expiry Date <span class="text-danger">*</span></label>
                                     <input type="date" id="bolo_expiry_date" name="bolo_expiry_date" class="form-control rounded-3"
-                                           value="{{ old('bolo_expiry_date', $vehicleReminder->bolo_expiry_date?->format('Y-m-d')) }}" required>
+                                           value="{{ old('bolo_expiry_date', $vehicleReminder->bolo_expiry_date->format('Y-m-d')) }}" required>
                                 </div>
                             </div>
 
@@ -124,7 +124,7 @@
                                 <div class="col-md-6">
                                     <label for="last_service_date" class="form-label">Last Service Date</label>
                                     <input type="date" id="last_service_date" name="last_service_date" class="form-control rounded-3"
-                                           value="{{ old('last_service_date', $vehicleReminder->last_service_date?->format('Y-m-d')) }}">
+                                           value="{{ old('last_service_date', $vehicleReminder->last_service_date->format('Y-m-d')) }}">
                                 </div>
                             </div>
 
@@ -145,12 +145,12 @@
                                 <div class="col-md-6">
                                     <label for="insurance_start_date" class="form-label fw-bold">Policy Start Date <span class="text-danger">*</span></label>
                                     <input type="date" id="insurance_start_date" name="insurance_start_date" class="form-control rounded-3"
-                                           value="{{ old('insurance_start_date', $vehicleReminder->insurance_start_date?->format('Y-m-d')) }}" required>
+                                           value="{{ old('insurance_start_date', $vehicleReminder->insurance_start_date->format('Y-m-d')) }}" required>
                                 </div>
                                 <div class="col-md-6">
                                     <label for="insurance_expiry_date" class="form-label fw-bold">Policy Expiry Date <span class="text-danger">*</span></label>
                                     <input type="date" id="insurance_expiry_date" name="insurance_expiry_date" class="form-control rounded-3"
-                                           value="{{ old('insurance_expiry_date', $vehicleReminder->insurance_expiry_date?->format('Y-m-d')) }}" required>
+                                           value="{{ old('insurance_expiry_date', $vehicleReminder->insurance_expiry_date->format('Y-m-d')) }}" required>
                                 </div>
                                 <div class="col-md-6">
                                     <label for="premium_amount" class="form-label">Premium Amount (ETB)</label>
@@ -282,15 +282,15 @@
                     <ul class="list-group list-group-flush small">
                         <li class="list-group-item d-flex justify-content-between px-0 py-2">
                             <span class="text-muted">Created Date:</span>
-                            <span class="fw-bold text-dark">{{ $vehicleReminder->created_at?->format('d M Y H:i') }}</span>
+                            <span class="fw-bold text-dark">{{ $vehicleReminder->created_at->format('d M Y H:i') }}</span>
                         </li>
                         <li class="list-group-item d-flex justify-content-between px-0 py-2">
                             <span class="text-muted">Created By:</span>
-                            <span class="fw-bold text-dark">{{ $vehicleReminder->creator?->name ?? 'System' }}</span>
+                            <span class="fw-bold text-dark">{{ $vehicleReminder->creator->name ?? 'System' }}</span>
                         </li>
                         <li class="list-group-item d-flex justify-content-between px-0 py-2">
                             <span class="text-muted">Last Updated:</span>
-                            <span class="fw-bold text-dark">{{ $vehicleReminder->updated_at?->format('d M Y H:i') }}</span>
+                            <span class="fw-bold text-dark">{{ $vehicleReminder->updated_at->format('d M Y H:i') }}</span>
                         </li>
                     </ul>
                 </div>

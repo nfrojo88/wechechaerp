@@ -92,7 +92,7 @@
                             @foreach($requests as $mr)
                             @php
                                 $unit = $mr->fixedAssetUnit;
-                                $asset = $unit?->parentAsset;
+                                $asset = $unit->parentAsset;
                                 $conditionLabel = match($mr->replacement_condition) {
                                     'in_maintenance'       => '🔧 In Maintenance',
                                     'unrepairable_damage'  => '💥 Unrepairable Damage',
@@ -109,7 +109,7 @@
                                     @if($mr->asset_code)
                                         <div class="small text-muted font-monospace">{{ $mr->asset_code }}</div>
                                     @endif
-                                    @if($asset?->store)
+                                    @if($asset->store)
                                         <div class="small text-muted">
                                             <i class="fa-solid fa-location-dot me-1"></i>{{ $asset->store->name }}
                                         </div>

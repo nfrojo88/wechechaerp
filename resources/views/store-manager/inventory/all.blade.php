@@ -297,7 +297,7 @@
                             $unitStr = $item->product->unit ?? 'pcs';
                         @endphp
                         @php
-                            $rowSku = $item->product?->sku ?: ($item->product?->code ?: '');
+                            $rowSku = $item->product->sku ?: ($item->product->code ?: '');
                         @endphp
                         <tr class="single-product-row" style="cursor:pointer;"
                             data-product-id="{{ $item->product_id }}"

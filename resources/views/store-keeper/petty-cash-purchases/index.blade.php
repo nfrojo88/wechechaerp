@@ -146,21 +146,21 @@
                                 <span class="badge bg-danger-subtle text-danger border ms-1" style="font-size:0.7rem;">Emergency</span>
                             </td>
                             <td>
-                                <div class="fw-semibold text-dark">{{ $emr->project?->name ?? 'Site Project' }}</div>
-                                <small class="text-muted"><i class="fa-solid fa-warehouse me-1"></i>{{ $emr->store?->name ?? 'Store' }}</small>
+                                <div class="fw-semibold text-dark">{{ $emr->project->name ?? 'Site Project' }}</div>
+                                <small class="text-muted"><i class="fa-solid fa-warehouse me-1"></i>{{ $emr->store->name ?? 'Store' }}</small>
                             </td>
                             <td>
                                 <div class="d-flex flex-wrap gap-1" style="max-width: 360px;">
                                     @foreach($emr->items as $itm)
                                         <span class="badge bg-light text-dark border font-monospace py-1 px-2">
-                                            <i class="fa-solid fa-cube text-danger me-1"></i>{{ $itm->product?->name ?? 'Material' }}:
-                                            <strong>{{ (float)$itm->quantity }} {{ $itm->product?->unit ?? $itm->unit ?? 'pcs' }}</strong>
+                                            <i class="fa-solid fa-cube text-danger me-1"></i>{{ $itm->product->name ?? 'Material' }}:
+                                            <strong>{{ (float)$itm->quantity }} {{ $itm->product->unit ?? $itm->unit ?? 'pcs' }}</strong>
                                         </span>
                                     @endforeach
                                 </div>
                             </td>
                             <td>
-                                <div class="small fw-semibold text-dark">{{ $emr->requestedBy?->name ?? $emr->creator?->name ?? 'Site Engineer' }}</div>
+                                <div class="small fw-semibold text-dark">{{ $emr->requestedBy->name ?? $emr->creator->name ?? 'Site Engineer' }}</div>
                                 <small class="text-muted">{{ $emr->created_at->diffForHumans() }}</small>
                             </td>
                             <td>
@@ -490,7 +490,7 @@
                             <select name="recipient_id" class="form-select form-select-sm" required>
                                 @foreach($storeKeepers as $k)
                                     @php
-                                        $kPhone = $k->phone ?? $k->employee?->phone ?? $k->employee?->mobile_phone ?? '';
+                                        $kPhone = $k->phone ?? $k->employee->phone ?? $k->employee->mobile_phone ?? '';
                                     @endphp
                                     <option value="{{ $k->id }}" {{ (optional($assignedStore)->manager_id == $k->id || Auth::id() == $k->id) ? 'selected' : '' }}>
                                         {{ $k->name }} ({{ $k->email }}) {{ $kPhone ? '— ' . $kPhone : '' }}

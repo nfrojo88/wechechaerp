@@ -60,7 +60,7 @@
                                                 data-name="{{ $acc->name }}"
                                                 data-type="{{ ucfirst($acc->type) }}"
                                                 data-balance="{{ (float)$acc->current_balance }}"
-                                                data-manager="{{ $acc->manager?->name ?? 'Unassigned' }}"
+                                                data-manager="{{ $acc->manager->name ?? 'Unassigned' }}"
                                                 @selected(old('from_coa_id', $preselectedFrom) == $acc->id)>
                                             {{ $acc->code }} — {{ $acc->name }} (Bal: {{ number_format($acc->current_balance, 2) }} ETB) • [{{ ucfirst($acc->type) }}]
                                         </option>
@@ -96,7 +96,7 @@
                                                 data-name="{{ $acc->name }}"
                                                 data-type="{{ ucfirst($acc->type) }}"
                                                 data-balance="{{ (float)$acc->current_balance }}"
-                                                data-manager="{{ $acc->manager?->name ?? 'Unassigned' }}"
+                                                data-manager="{{ $acc->manager->name ?? 'Unassigned' }}"
                                                 @selected(old('to_coa_id', $preselectedTo) == $acc->id)>
                                             {{ $acc->code }} — {{ $acc->name }} (Bal: {{ number_format($acc->current_balance, 2) }} ETB) • [{{ ucfirst($acc->type) }}]
                                         </option>

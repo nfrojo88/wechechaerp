@@ -184,7 +184,7 @@
                         </tbody>
                         <tfoot class="bg-light border-top">
                             @php
-                                $gmTotal = (float)($ledger->purchaseRequest?->direct_buy_amount ?? 0);
+                                $gmTotal = (float)($ledger->purchaseRequest->direct_buy_amount ?? 0);
                                 $itemsDiff = abs($calculatedItemsTotal - (float)$ledger->credit_amount);
                                 $calculatedItemsWithVat = round($calculatedItemsTotal * 1.15, 2);
                             @endphp
@@ -1818,7 +1818,7 @@
                             </div>
                         </label>
 
-                        @if(($ledger->purchaseRequest?->direct_buy_amount ?? 0) > 0)
+                        @if(($ledger->purchaseRequest->direct_buy_amount ?? 0) > 0)
                             <!-- Option 3: GM Approved Direct Buy Amount -->
                             <label class="list-group-item list-group-item-action d-flex align-items-center gap-3 p-3 cursor-pointer">
                                 <input class="form-check-input flex-shrink-0 mt-0" type="radio" name="sync_mode" value="pr_direct" onchange="toggleCustomAmountInput(false)">

@@ -132,7 +132,7 @@
                                 <div class="text-muted" style="font-size: 0.72rem;">{{ $blocked->email }}</div>
                             </td>
                             <td>
-                                {{ $blocked->employee?->employee_code ?? 'No Code' }} &bull; {{ $blocked->employee?->department ?? 'General' }}
+                                {{ $blocked->employee->employee_code ?? 'No Code' }} &bull; {{ $blocked->employee->department ?? 'General' }}
                             </td>
                             <td>
                                 <span class="font-monospace text-danger">{{ optional($blocked->access_blocked_at)->format('M d, Y H:i') }}</span>

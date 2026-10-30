@@ -495,7 +495,7 @@
                                             $bankDetail = $linkedBank ? " • A/C: {$linkedBank->account_number} ({$linkedBank->bank_name})" : "";
                                         @endphp
                                         <option value="{{ $coa->id }}" 
-                                                data-bank-id="{{ $linkedBank?->id ?? '' }}"
+                                                data-bank-id="{{ $linkedBank->id ?? '' }}"
                                                 data-balance="{{ $coa->current_balance }}">
                                             [{{ $coa->code }}] {{ $coa->name }}{{ $bankDetail }} — Bal: ETB {{ number_format($coa->current_balance, 2) }}
                                         </option>

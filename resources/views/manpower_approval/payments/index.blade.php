@@ -75,8 +75,8 @@
                                 </a>
                             </td>
                             <td>
-                                <strong class="text-dark d-block text-truncate" style="max-width: 160px;" title="{{ $b->project?->name }}">
-                                    {{ $b->project?->name ?? 'General Site' }}
+                                <strong class="text-dark d-block text-truncate" style="max-width: 160px;" title="{{ $b->project->name }}">
+                                    {{ $b->project->name ?? 'General Site' }}
                                 </strong>
                             </td>
                             <td>{{ $b->week_start->format('M d') }} &ndash; {{ $b->week_end->format('M d, Y') }}</td>

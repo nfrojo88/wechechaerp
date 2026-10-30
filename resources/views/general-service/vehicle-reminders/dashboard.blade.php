@@ -145,15 +145,15 @@
                                             </div>
                                             <div>
                                                 <a href="{{ route('general-service.vehicle-reminders.vehicle-detail', $item->fixed_asset_unit_id) }}" class="fw-bold text-decoration-none" style="color: var(--brand-900);">
-                                                    {{ $item->fixedAsset?->name ?? 'Vehicle' }}
+                                                    {{ $item->fixedAsset->name ?? 'Vehicle' }}
                                                 </a>
                                                 <div class="d-flex gap-2 align-items-center mt-0.5">
-                                                    @if($item->assetUnit?->plate_number)
+                                                    @if($item->assetUnit->plate_number)
                                                         <span class="badge bg-dark text-white rounded-pill px-2 font-monospace" style="font-size: 0.7rem;">
                                                             {{ $item->assetUnit->plate_number }}
                                                         </span>
                                                     @endif
-                                                    <span class="text-muted small font-monospace">{{ $item->assetUnit?->unit_code }}</span>
+                                                    <span class="text-muted small font-monospace">{{ $item->assetUnit->unit_code }}</span>
                                                 </div>
                                             </div>
                                         </div>
@@ -258,7 +258,7 @@
                                                     <div class="modal-body p-4 bg-white">
                                                         <div class="mb-3">
                                                             <label class="form-label text-muted small fw-semibold">Vehicle</label>
-                                                            <div class="fw-bold" style="color: var(--brand-900);">{{ $item->fixedAsset?->name }} ({{ $item->assetUnit?->plate_number ?? $item->assetUnit?->unit_code }})</div>
+                                                            <div class="fw-bold" style="color: var(--brand-900);">{{ $item->fixedAsset->name }} ({{ $item->assetUnit->plate_number ?? $item->assetUnit->unit_code }})</div>
                                                         </div>
                                                         <div class="row g-2 mb-3">
                                                             <div class="col-6">

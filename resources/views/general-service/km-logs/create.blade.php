@@ -62,7 +62,7 @@
                                 <option value="">— Select Vehicle —</option>
                                 @foreach($vehicles as $v)
                                     <option value="{{ $v->id }}" {{ (old('fixed_asset_unit_id', $selectedUnitId) == $v->id) ? 'selected' : '' }}>
-                                        {{ $v->plate_number ? 'Plate: ' . $v->plate_number : $v->unit_code }} — {{ $v->parentAsset?->name }} ({{ $v->unit_code }})
+                                        {{ $v->plate_number ? 'Plate: ' . $v->plate_number : $v->unit_code }} — {{ $v->parentAsset->name }} ({{ $v->unit_code }})
                                     </option>
                                 @endforeach
                             </select>
@@ -126,7 +126,7 @@
                             <select name="driver_employee_id" id="driver_employee_id" class="form-select @error('driver_employee_id') is-invalid @enderror">
                                 <option value="">— Auto-detect or Unassigned —</option>
                                 @foreach($drivers as $d)
-                                    <option value="{{ $d->id }}" {{ (old('driver_employee_id', $selectedVehicle?->assigned_to_employee_id) == $d->id) ? 'selected' : '' }}>
+                                    <option value="{{ $d->id }}" {{ (old('driver_employee_id', $selectedVehicle->assigned_to_employee_id) == $d->id) ? 'selected' : '' }}>
                                         {{ $d->full_name }} ({{ $d->role_title ?: 'Driver' }})
                                     </option>
                                 @endforeach

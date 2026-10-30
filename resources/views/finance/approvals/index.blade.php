@@ -552,20 +552,20 @@
 
                     @php
                         $rawReq = ($item->type === 'expense_request') ? $item->raw_model : null;
-                        $mReq = $rawReq?->maintenanceRequest ?? null;
+                        $mReq = $rawReq->maintenanceRequest ?? null;
 
                         // 1. Identify Approved Person / Petty Cash Custodian (to exclude their bank account)
-                        $custodian = $mReq?->pettyCashOwner ?? $rawReq?->pettyCashOwner ?? null;
-                        $custodianUserId = $custodian?->id ?? $rawReq?->petty_cash_owner_id;
-                        $custodianEmpId = $custodian?->employee?->id;
-                        $custodianName = $custodian?->name;
+                        $custodian = $mReq->pettyCashOwner ?? $rawReq->pettyCashOwner ?? null;
+                        $custodianUserId = $custodian->id ?? $rawReq->petty_cash_owner_id;
+                        $custodianEmpId = $custodian->employee->id;
+                        $custodianName = $custodian->name;
                         if (!$custodianName && preg_match('/Petty Cash Custodian:\s*([^\.]+?)(?:\.|$)/i', $item->description ?? '', $custM)) {
                             $custodianName = trim($custM[1]);
                         }
 
                         // 2. Identify Beneficiary / Approvee Employee (e.g. Nebeyu Engedashet)
-                        $beneficiaryEmployee = $rawReq?->employee;
-                        $beneficiaryEmpId = $beneficiaryEmployee?->id;
+                        $beneficiaryEmployee = $rawReq->employee;
+                        $beneficiaryEmpId = $beneficiaryEmployee->id;
 
                         // 3. Identify Asking Person (Requester - ጥያቄ አቅራቢ)
                         // STRICT RULE: Show the person who ASKED / SUBMITTED the request, NOT the approved person!
@@ -599,7 +599,7 @@
                             }
                         } elseif ($item->type === 'purchase_request') {
                             $pr = $item->raw_model;
-                            $askingUser = $pr?->requestedBy;
+                            $askingUser = $pr->requestedBy;
                             if ($askingUser) {
                                 $askingEmployee = $askingUser->employee 
                                     ?? \App\Models\Employee::withoutGlobalScope(\App\Scopes\NotDeadFileScope::class)->where('user_id', $askingUser->id)->first()
@@ -608,14 +608,14 @@
                         }
 
                         // Asking Person Details (ጥያቄ አቅራቢ)
-                        $requesterName = $askingUser?->name 
-                            ?? $askingEmployee?->full_name 
+                        $requesterName = $askingUser->name 
+                            ?? $askingEmployee->full_name 
                             ?? 'Requester';
 
-                        $requesterEmail = $askingUser?->email ?? $askingEmployee?->email ?? null;
-                        $requesterAcc = $askingEmployee?->account_number ?? null;
-                        $requesterBank = $askingEmployee?->bank_name ?? null;
-                        $requesterPhone = $askingEmployee?->phone ?? null;
+                        $requesterEmail = $askingUser->email ?? $askingEmployee->email ?? null;
+                        $requesterAcc = $askingEmployee->account_number ?? null;
+                        $requesterBank = $askingEmployee->bank_name ?? null;
+                        $requesterPhone = $askingEmployee->phone ?? null;
 
                         // Priority: If specific bank account details were specified on this Expense Request ("Ask Money")
                         if ($rawReq && (!empty($rawReq->account_number) || !empty($rawReq->bank_name) || !empty($rawReq->account_name))) {
@@ -626,12 +626,12 @@
                                 $requesterBank = $rawReq->bank_name;
                             }
                             if (!empty($rawReq->account_name)) {
-                                $requesterName = $rawReq->account_name . ' (For: ' . ($askingUser?->name ?? $askingEmployee?->full_name ?? 'Requester') . ')';
+                                $requesterName = $rawReq->account_name . ' (For: ' . ($askingUser->name ?? $askingEmployee->full_name ?? 'Requester') . ')';
                             }
                         }
 
                         // Ensure we NEVER display the approved person / custodian's bank account
-                        if ($custodian?->employee && $requesterAcc === $custodian->employee->account_number) {
+                        if ($custodian->employee && $requesterAcc === $custodian->employee->account_number) {
                             $requesterAcc = null;
                         }
 
@@ -643,10 +643,10 @@
                         }
 
                         // Optional external technician info (if recorded on maintenance ticket)
-                        $techName = $mReq?->maintenance_person_name;
-                        $techAcc = $mReq?->maintenance_person_account;
-                        $techPhone = $mReq?->maintenance_person_phone;
-                        if ($custodian?->employee && $techAcc === $custodian->employee->account_number) {
+                        $techName = $mReq->maintenance_person_name;
+                        $techAcc = $mReq->maintenance_person_account;
+                        $techPhone = $mReq->maintenance_person_phone;
+                        if ($custodian->employee && $techAcc === $custodian->employee->account_number) {
                             $techAcc = null;
                         }
                         if ($custodian && $techName === $custodian->name) {
@@ -1052,7 +1052,7 @@
                                     <input type="hidden" name="vendor_name" id="finOcrVendor_{{ $req->id }}" value="{{ $linkedRcp->vendor_name ?? '' }}">
                                     <input type="hidden" name="supplier_tin" id="finOcrTin_{{ $req->id }}" value="{{ $linkedRcp->vendor_tin ?? '' }}">
                                     <input type="hidden" name="fs_no" id="finOcrFs_{{ $req->id }}" value="{{ $linkedRcp->fs_no ?? '' }}">
-                                    <input type="hidden" name="receipt_date" id="finOcrDate_{{ $req->id }}" value="{{ optional($linkedRcp?->receipt_date)->format('Y-m-d') ?? '' }}">
+                                    <input type="hidden" name="receipt_date" id="finOcrDate_{{ $req->id }}" value="{{ optional($linkedRcp->receipt_date)->format('Y-m-d') ?? '' }}">
                                     <input type="hidden" name="mrc" id="finOcrMrc_{{ $req->id }}" value="{{ $linkedRcp->mrc_no ?? '' }}">
                                     <input type="hidden" name="subtotal" id="finOcrSubtotal_{{ $req->id }}" value="{{ $req->gross_amount ?? $req->amount }}">
                                     <input type="hidden" name="vat_amount" id="finOcrVat_{{ $req->id }}" value="{{ $req->vat_amount ?? '0.00' }}">
@@ -1664,9 +1664,9 @@
                                 $payMReq = $req->maintenanceRequest ?? null;
 
                                 // 1. Identify Approved Person / Petty Cash Custodian
-                                $payCustodian = $payMReq?->pettyCashOwner ?? $req->pettyCashOwner ?? null;
-                                $payCustodianUserId = $payCustodian?->id ?? $req->petty_cash_owner_id;
-                                $payCustodianEmpId = $payCustodian?->employee?->id;
+                                $payCustodian = $payMReq->pettyCashOwner ?? $req->pettyCashOwner ?? null;
+                                $payCustodianUserId = $payCustodian->id ?? $req->petty_cash_owner_id;
+                                $payCustodianEmpId = $payCustodian->employee->id;
 
                                 // 2. Identify Asking Question Person (Requester - ጥያቄ አቅራቢ)
                                 $payAskingEmp = null;
@@ -1704,13 +1704,13 @@
                                     }
                                 }
 
-                                $payRequesterName = $payAskingEmp?->full_name 
-                                    ?? $payAskingUser?->name 
-                                    ?? ($payMReq?->employee?->full_name ?? ($payMReq?->reportedBy?->name ?? 'Requester'));
+                                $payRequesterName = $payAskingEmp->full_name 
+                                    ?? $payAskingUser->name 
+                                    ?? ($payMReq->employee->full_name ?? ($payMReq->reportedBy->name ?? 'Requester'));
 
-                                $payRequesterAcc = $payAskingEmp?->account_number ?? $payAskingUser?->employee?->account_number ?? null;
-                                $payRequesterBank = $payAskingEmp?->bank_name ?? $payAskingUser?->employee?->bank_name ?? 'Commercial Bank of Ethiopia (CBE)';
-                                $payRequesterPhone = $payAskingEmp?->phone ?? $payAskingUser?->employee?->phone ?? null;
+                                $payRequesterAcc = $payAskingEmp->account_number ?? $payAskingUser->employee->account_number ?? null;
+                                $payRequesterBank = $payAskingEmp->bank_name ?? $payAskingUser->employee->bank_name ?? 'Commercial Bank of Ethiopia (CBE)';
+                                $payRequesterPhone = $payAskingEmp->phone ?? $payAskingUser->employee->phone ?? null;
 
                                 // Priority: If specific bank account details were specified on this Expense Request ("Ask Money")
                                 if ($req && (!empty($req->account_number) || !empty($req->bank_name) || !empty($req->account_name))) {
@@ -1721,18 +1721,18 @@
                                         $payRequesterBank = $req->bank_name;
                                     }
                                     if (!empty($req->account_name)) {
-                                        $payRequesterName = $req->account_name . ' (For: ' . ($payAskingEmp?->full_name ?? $payAskingUser?->name ?? 'Requester') . ')';
+                                        $payRequesterName = $req->account_name . ' (For: ' . ($payAskingEmp->full_name ?? $payAskingUser->name ?? 'Requester') . ')';
                                     }
                                 }
 
-                                if ($payCustodian?->employee && $payRequesterAcc === $payCustodian->employee->account_number) {
+                                if ($payCustodian->employee && $payRequesterAcc === $payCustodian->employee->account_number) {
                                     $payRequesterAcc = null;
                                 }
 
-                                $payTechName = $payMReq?->maintenance_person_name;
-                                $payTechAcc = $payMReq?->maintenance_person_account;
-                                $payTechPhone = $payMReq?->maintenance_person_phone;
-                                if ($payCustodian?->employee && $payTechAcc === $payCustodian->employee->account_number) {
+                                $payTechName = $payMReq->maintenance_person_name;
+                                $payTechAcc = $payMReq->maintenance_person_account;
+                                $payTechPhone = $payMReq->maintenance_person_phone;
+                                if ($payCustodian->employee && $payTechAcc === $payCustodian->employee->account_number) {
                                     $payTechAcc = null;
                                 }
 
@@ -2318,7 +2318,7 @@
                                             @foreach($chartOfAccounts as $coa)
                                                 <option value="{{ $coa->id }}" 
                                                         data-staff-id="{{ $coa->assigned_to }}"
-                                                        data-staff-name="{{ $coa->manager?->name }}"
+                                                        data-staff-name="{{ $coa->manager->name }}"
                                                         {{ $officeReq->coa_id == $coa->id ? 'selected' : '' }}>
                                                     [{{ $coa->code }}] {{ $coa->name }}
                                                 </option>
@@ -2331,7 +2331,7 @@
                                             <option value="">-- Assign Staff / Self --</option>
                                             @foreach($financeStaff as $staff)
                                                 <option value="{{ $staff->id }}" {{ $officeReq->assigned_finance_staff_id == $staff->id ? 'selected' : '' }}>
-                                                    {{ $staff->name }} ({{ ucfirst(str_replace('_', ' ', $staff->roles->first()?->name ?? 'Staff')) }})
+                                                    {{ $staff->name }} ({{ ucfirst(str_replace('_', ' ', $staff->roles->first()->name ?? 'Staff')) }})
                                                 </option>
                                             @endforeach
                                         </select>
@@ -2383,7 +2383,7 @@
                                     @foreach($chartOfAccounts as $coa)
                                         <option value="{{ $coa->id }}" 
                                                 data-staff-id="{{ $coa->assigned_to }}"
-                                                data-staff-name="{{ $coa->manager?->name }}"
+                                                data-staff-name="{{ $coa->manager->name }}"
                                                 {{ $officeReq->coa_id == $coa->id ? 'selected' : '' }}>
                                             [{{ $coa->code }}] {{ $coa->name }}
                                         </option>
@@ -2396,7 +2396,7 @@
                                     <option value="">-- Assign Staff / Self --</option>
                                     @foreach($financeStaff as $staff)
                                         <option value="{{ $staff->id }}" {{ $officeReq->assigned_finance_staff_id == $staff->id ? 'selected' : '' }}>
-                                            {{ $staff->name }} ({{ ucfirst(str_replace('_', ' ', $staff->roles->first()?->name ?? 'Staff')) }})
+                                            {{ $staff->name }} ({{ ucfirst(str_replace('_', ' ', $staff->roles->first()->name ?? 'Staff')) }})
                                         </option>
                                     @endforeach
                                 </select>
@@ -2436,7 +2436,7 @@
                                 <span class="text-muted small text-uppercase fw-bold">Approved Budget:</span>
                                 <strong class="text-success fs-5">ETB {{ number_format($item->net_amount, 2) }}</strong>
                             </div>
-                            <div class="small text-muted mb-1"><i class="fa-solid fa-sitemap me-1"></i> Funding Account: <strong>{{ $officeReq->coa?->name ?? 'Head Office Expense' }}</strong></div>
+                            <div class="small text-muted mb-1"><i class="fa-solid fa-sitemap me-1"></i> Funding Account: <strong>{{ $officeReq->coa->name ?? 'Head Office Expense' }}</strong></div>
                             <div class="small text-muted"><i class="fa-solid fa-list me-1"></i> Purpose: {{ $item->description }}</div>
                         </div>
 

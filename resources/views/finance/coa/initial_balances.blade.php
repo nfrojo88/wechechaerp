@@ -109,7 +109,7 @@
                             </label>
                             <select name="balancing_equity_id" id="balancingEquitySelect" class="form-select form-select-sm" required>
                                 @foreach($equityAccounts as $eq)
-                                    <option value="{{ $eq->id }}" {{ (old('balancing_equity_id', $defaultEquity?->id) == $eq->id) ? 'selected' : '' }}>
+                                    <option value="{{ $eq->id }}" {{ (old('balancing_equity_id', $defaultEquity->id) == $eq->id) ? 'selected' : '' }}>
                                         {{ $eq->code }} - {{ $eq->name }} (Current: {{ number_format($eq->current_balance, 2) }} ETB)
                                     </option>
                                 @endforeach

@@ -280,8 +280,8 @@
                                 @foreach($availableUnits as $unit)
                                     <option value="{{ $unit->id }}"
                                             data-code="{{ $unit->unit_code }}"
-                                            data-name="{{ $unit->parentAsset?->name ?? $unit->unit_code }}">
-                                        [{{ $unit->unit_code }}] {{ $unit->parentAsset?->name ?? 'Asset' }}
+                                            data-name="{{ $unit->parentAsset->name ?? $unit->unit_code }}">
+                                        [{{ $unit->unit_code }}] {{ $unit->parentAsset->name ?? 'Asset' }}
                                         @if($unit->plate_number) · Plate: {{ $unit->plate_number }} @endif
                                         @if($unit->serial_number) · SN: {{ $unit->serial_number }} @endif
                                         @if($unit->current_location) ({{ $unit->current_location }}) @endif

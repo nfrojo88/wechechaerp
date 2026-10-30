@@ -336,10 +336,10 @@
                                         <div class="row g-2" id="subconListContainer">
                                             @forelse($subconAgreements as $sub)
                                                 @php
-                                                    $subPhone = trim($sub->subcontractor_contact ?: ($sub->supplier?->phone ?? ''));
+                                                    $subPhone = trim($sub->subcontractor_contact ?: ($sub->supplier->phone ?? ''));
                                                     $subName = $sub->subcontractor_display_name;
                                                 @endphp
-                                                <div class="col-md-6 subcon-item-col" data-subcon-search="{{ strtolower($subName . ' ' . $sub->agreement_no . ' ' . ($sub->project?->name ?? '')) }}">
+                                                <div class="col-md-6 subcon-item-col" data-subcon-search="{{ strtolower($subName . ' ' . $sub->agreement_no . ' ' . ($sub->project->name ?? '')) }}">
                                                     <div class="form-check border rounded-2 p-2 h-100 d-flex align-items-start gap-2 bg-light-subtle">
                                                         <input class="form-check-input mt-1 ms-1 subcon-checkbox" type="checkbox" name="subcon_ids[]" value="{{ $sub->id }}" id="subcon_{{ $sub->id }}" data-has-phone="{{ !empty($subPhone) ? '1' : '0' }}" onchange="updateSubconCount()" {{ !empty($subPhone) ? 'checked' : '' }}>
                                                         <label class="form-check-label small flex-grow-1" for="subcon_{{ $sub->id }}">
@@ -348,8 +348,8 @@
                                                                 <span class="badge bg-secondary-subtle text-secondary font-monospace" style="font-size:0.7rem;">{{ $sub->agreement_no ?? 'AGR' }}</span>
                                                             </div>
                                                             <div class="d-flex justify-content-between align-items-center mt-1">
-                                                                <span class="text-muted text-truncate" style="font-size:0.75rem; max-width: 160px;" title="{{ $sub->project?->name ?? 'General Project' }}">
-                                                                    <i class="fa-solid fa-folder-open me-1"></i>{{ $sub->project?->name ?? 'General Project' }}
+                                                                <span class="text-muted text-truncate" style="font-size:0.75rem; max-width: 160px;" title="{{ $sub->project->name ?? 'General Project' }}">
+                                                                    <i class="fa-solid fa-folder-open me-1"></i>{{ $sub->project->name ?? 'General Project' }}
                                                                 </span>
                                                                 @if(!empty($subPhone))
                                                                     <span class="badge bg-success-subtle text-success font-monospace" style="font-size:0.7rem;">
@@ -452,7 +452,7 @@
                                     </div>
                                 </div>
                                 <div class="d-flex gap-2 align-items-center">
-                                    <input type="text" id="testPhoneNumber" class="form-control form-control-sm" placeholder="e.g. 0911234567" style="max-width: 170px;" value="{{ auth()->user()->employee?->phone ?? auth()->user()->phone ?? '' }}">
+                                    <input type="text" id="testPhoneNumber" class="form-control form-control-sm" placeholder="e.g. 0911234567" style="max-width: 170px;" value="{{ auth()->user()->employee->phone ?? auth()->user()->phone ?? '' }}">
                                     <button type="button" class="btn btn-sm btn-outline-warning text-dark fw-bold text-nowrap" id="btnSendTestSms" onclick="dispatchTestSms()">
                                         <i class="fa-solid fa-paper-plane me-1"></i>Send Test SMS
                                     </button>

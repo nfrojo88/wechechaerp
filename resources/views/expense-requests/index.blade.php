@@ -1572,7 +1572,7 @@
                                                  @endphp
                                                  @foreach($linkedPr->items as $idx => $prItem)
                                                  @php
-                                                     $itemName = $prItem->product?->name ?? $prItem->item_name ?? $prItem->description ?? ('Item #' . ($prItem->product_id ?? ($idx + 1)));
+                                                     $itemName = $prItem->product->name ?? $prItem->item_name ?? $prItem->description ?? ('Item #' . ($prItem->product_id ?? ($idx + 1)));
                                                      $qty = (float)$prItem->quantity;
                                                      $unitPrice = (float)($prItem->estimated_unit_cost ?? $prItem->unit_price ?? $prItem->estimated_unit_price ?? 0);
                                                      if ($unitPrice <= 0 && $selectedProforma && $selectedProforma->items) {
@@ -1820,7 +1820,7 @@
                                 <input type="hidden" name="vendor_name" id="ocrVendor_{{ $req->id }}" value="{{ $linkedRcp->vendor_name ?? '' }}">
                                 <input type="hidden" name="supplier_tin" id="ocrTin_{{ $req->id }}" value="{{ $linkedRcp->vendor_tin ?? '' }}">
                                 <input type="hidden" name="fs_no" id="ocrFs_{{ $req->id }}" value="{{ $linkedRcp->fs_no ?? '' }}">
-                                <input type="hidden" name="receipt_date" id="ocrDate_{{ $req->id }}" value="{{ optional($linkedRcp?->receipt_date)->format('Y-m-d') ?? '' }}">
+                                <input type="hidden" name="receipt_date" id="ocrDate_{{ $req->id }}" value="{{ optional($linkedRcp->receipt_date)->format('Y-m-d') ?? '' }}">
                                 <input type="hidden" name="mrc" id="ocrMrc_{{ $req->id }}" value="{{ $linkedRcp->mrc_no ?? '' }}">
                                 <input type="hidden" name="subtotal" id="ocrSubtotal_{{ $req->id }}" value="{{ $req->gross_amount ?? $req->amount }}">
                                 <input type="hidden" name="vat_amount" id="ocrVat_{{ $req->id }}" value="{{ $req->vat_amount ?? '0.00' }}">
@@ -1950,11 +1950,11 @@
                                 </div>
                                 @php
                                     $currentUserEmp = auth()->user()->employee;
-                                    $currentEmpId = $currentUserEmp?->id;
+                                    $currentEmpId = $currentUserEmp->id;
                                     $currentUserId = auth()->id();
-                                    $currentEmpBank = $currentUserEmp?->bank_name;
-                                    $currentEmpAcc = $currentUserEmp?->account_number;
-                                    $currentEmpName = $currentUserEmp?->full_name ?? auth()->user()->name;
+                                    $currentEmpBank = $currentUserEmp->bank_name;
+                                    $currentEmpAcc = $currentUserEmp->account_number;
+                                    $currentEmpName = $currentUserEmp->full_name ?? auth()->user()->name;
                                 @endphp
                                 <select name="employee_id" id="employeeSelect" class="form-select form-select-lg fw-semibold mt-1 border-info" onchange="onAssignedEmployeeChanged(this)">
                                     <option value="" selected disabled>-- Select Another Employee / Driver / Handler (ሌላ ሰራተኛ/አሽከርካሪ ይምረጡ) --</option>

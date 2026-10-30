@@ -34,7 +34,7 @@
     $sbManpowerPendingBadge = 0;
     try {
         if ($isSiteEngineer) {
-            $sbManpowerPendingBadge = \App\Models\DailyManpowerSheet::where('site_engineer_id', $authUser?->id)
+            $sbManpowerPendingBadge = \App\Models\DailyManpowerSheet::where('site_engineer_id', $authUser->id)
                 ->where('status', \App\Services\ManpowerApprovalService::STATUS_REJECTED)->count();
         } elseif ($isPlanningManager) {
             $sbManpowerPendingBadge = \App\Models\DailyManpowerSheet::where('current_stage', \App\Services\ManpowerApprovalService::STAGE_PLANNING_MANAGER)->count();

@@ -240,8 +240,8 @@
                             @endif
                         </td>
                     </tr>
-                    <tr><td class="text-muted">Project</td><td class="fw-semibold">{{ $materialRequest->project?->name ?? 'Central / HQ' }}</td></tr>
-                    <tr><td class="text-muted">Deliver To</td><td class="fw-semibold">{{ $materialRequest->store?->name ?? 'General Store' }} ({{ $materialRequest->store?->code ?? '-' }})</td></tr>
+                    <tr><td class="text-muted">Project</td><td class="fw-semibold">{{ $materialRequest->project->name ?? 'Central / HQ' }}</td></tr>
+                    <tr><td class="text-muted">Deliver To</td><td class="fw-semibold">{{ $materialRequest->store->name ?? 'General Store' }} ({{ $materialRequest->store->code ?? '-' }})</td></tr>
                     <tr><td class="text-muted">Required By</td><td class="fw-semibold {{ optional($materialRequest->required_date)->isPast() ? 'text-danger' : '' }}">{{ optional($materialRequest->required_date)->format('d M Y') ?? '-' }}</td></tr>
                 </table>
                 @if($materialRequest->notes)
@@ -257,13 +257,13 @@
             <div class="card-body text-muted small">
                 <div class="mb-3">
                     <div class="text-uppercase fw-bold mb-1">Created By</div>
-                    <div class="fw-semibold text-dark">{{ $materialRequest->creator?->name ?? 'Staff' }}</div>
+                    <div class="fw-semibold text-dark">{{ $materialRequest->creator->name ?? 'Staff' }}</div>
                     <div>{{ optional($materialRequest->created_at)->format('d M Y H:i') ?? 'â€”' }}</div>
                 </div>
                 <div>
                     <div class="text-uppercase fw-bold mb-1">Approved By</div>
-                    <div class="fw-semibold text-dark">{{ $materialRequest->approver?->name ?? 'â€”' }}</div>
-                    <div>{{ $materialRequest->approved_at?->format('d M Y H:i') ?? 'â€”' }}</div>
+                    <div class="fw-semibold text-dark">{{ $materialRequest->approver->name ?? 'â€”' }}</div>
+                    <div>{{ $materialRequest->approved_at->format('d M Y H:i') ?? 'â€”' }}</div>
                 </div>
             </div>
         </div>

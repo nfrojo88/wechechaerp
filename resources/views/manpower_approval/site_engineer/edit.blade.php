@@ -51,7 +51,7 @@
                     </div>
                     <div class="col-md-3">
                         <label class="form-label small fw-bold text-dark mb-1">Project / Site</label>
-                        <input type="text" class="form-control form-control-sm" value="{{ $sheet->project?->name }}" readonly style="background-color: #f8f9fa;">
+                        <input type="text" class="form-control form-control-sm" value="{{ $sheet->project->name }}" readonly style="background-color: #f8f9fa;">
                     </div>
                     <div class="col-md-3">
                         <label class="form-label small fw-bold text-dark mb-1">Trade Category</label>
@@ -112,11 +112,11 @@
                                 <td class="font-monospace text-muted">{{ $idx + 1 }}</td>
                                 <td class="text-start">
                                     <input type="hidden" name="lines[{{ $idx }}][worker_id]" value="{{ $line->worker_id }}">
-                                    <strong class="text-dark d-block">{{ $line->worker?->name }}</strong>
-                                    <span class="font-monospace text-primary small" style="font-size: 0.68rem;">{{ $line->worker?->worker_code }}</span>
+                                    <strong class="text-dark d-block">{{ $line->worker->name }}</strong>
+                                    <span class="font-monospace text-primary small" style="font-size: 0.68rem;">{{ $line->worker->worker_code }}</span>
                                 </td>
                                 <td>
-                                    <input type="text" class="form-control form-control-sm text-center" value="{{ $line->worker?->trade }}" readonly style="background-color: #f8f9fa;">
+                                    <input type="text" class="form-control form-control-sm text-center" value="{{ $line->worker->trade }}" readonly style="background-color: #f8f9fa;">
                                 </td>
                                 <td>
                                     <input type="time" name="lines[{{ $idx }}][check_in]" class="form-control form-control-sm text-center" value="{{ $line->check_in }}">

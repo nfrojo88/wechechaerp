@@ -29,8 +29,8 @@
                 </a>
                 <a href="{{ route('admin.role-assignment.index') }}" class="btn btn-outline-info btn-sm rounded-pill px-3 shadow-xs" style="min-height: 36px; display: inline-flex; align-items: center;">
                     <i class="fa-solid fa-user-gear me-1"></i>User &amp; Roles
-                    @if((['unassigned_roles_count'] ?? 0) > 0)
-                        <span class="badge bg-danger rounded-pill ms-1">{{ ['unassigned_roles_count'] }}</span>
+                    @if(($kpi['unassigned_roles_count'] ?? 0) > 0)
+                        <span class="badge bg-danger rounded-pill ms-1">{{ $kpi['unassigned_roles_count'] }}</span>
                     @endif
                 </a>
                 <a href="{{ route('coa.index') }}" class="btn btn-outline-dark btn-sm rounded-pill px-3 shadow-xs" style="min-height: 36px; display: inline-flex; align-items: center;">
@@ -38,8 +38,8 @@
                 </a>
                 <a href="#executive-approval-hub" class="btn btn-outline-warning text-dark btn-sm rounded-pill px-3 shadow-xs" style="min-height: 36px; display: inline-flex; align-items: center;">
                     <i class="fa-solid fa-gavel me-1"></i>Decision Hub
-                    @if(( ?? 0) > 0)
-                        <span class="badge bg-danger rounded-pill ms-1">{{  }}</span>
+                    @if(($totalUrgentActions ?? 0) > 0)
+                        <span class="badge bg-danger rounded-pill ms-1">{{ $totalUrgentActions ?? 0 }}</span>
                     @endif
                 </a>
                 <a href="#vat-withholding-report" class="btn btn-outline-primary btn-sm rounded-pill px-3 shadow-xs" style="min-height: 36px; display: inline-flex; align-items: center;">

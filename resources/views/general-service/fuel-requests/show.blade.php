@@ -23,7 +23,7 @@
                     <i class="fa-solid {{ $badge['icon'] }} me-1"></i>{{ $badge['label'] }}
                 </span>
             </div>
-            <p class="text-muted small mb-0">Vehicle: <strong>{{ $fuelRequest->assetUnit?->plate_number ?: $fuelRequest->assetUnit?->unit_code }}</strong> &bull; Submitted {{ $fuelRequest->created_at?->format('l, d M Y - h:i A') }}</p>
+            <p class="text-muted small mb-0">Vehicle: <strong>{{ $fuelRequest->assetUnit->plate_number ?: $fuelRequest->assetUnit->unit_code }}</strong> &bull; Submitted {{ $fuelRequest->created_at->format('l, d M Y - h:i A') }}</p>
         </div>
         <div class="d-flex flex-wrap gap-2">
             <a href="{{ route('vehicle-fuel-requests.index') }}" class="btn btn-outline-secondary rounded-pill px-3 shadow-sm">
@@ -73,13 +73,13 @@
                     <div class="row g-3">
                         <div class="col-sm-6">
                             <span class="text-muted small d-block">Vehicle Asset</span>
-                            <strong class="text-dark fs-6">{{ $fuelRequest->assetUnit?->parentAsset?->name ?? 'Vehicle' }}</strong>
-                            <div class="font-monospace text-muted small">Plate: {{ $fuelRequest->assetUnit?->plate_number ?: 'N/A' }} | Code: {{ $fuelRequest->assetUnit?->unit_code }}</div>
+                            <strong class="text-dark fs-6">{{ $fuelRequest->assetUnit->parentAsset->name ?? 'Vehicle' }}</strong>
+                            <div class="font-monospace text-muted small">Plate: {{ $fuelRequest->assetUnit->plate_number ?: 'N/A' }} | Code: {{ $fuelRequest->assetUnit->unit_code }}</div>
                         </div>
                         <div class="col-sm-6">
                             <span class="text-muted small d-block">Driver / Requester</span>
-                            <strong class="text-dark fs-6">{{ $fuelRequest->driver?->full_name ?? ($fuelRequest->requestedBy?->name ?? 'Driver') }}</strong>
-                            <div class="text-muted small">Submitted by: {{ $fuelRequest->requestedBy?->name ?? 'System' }}</div>
+                            <strong class="text-dark fs-6">{{ $fuelRequest->driver->full_name ?? ($fuelRequest->requestedBy->name ?? 'Driver') }}</strong>
+                            <div class="text-muted small">Submitted by: {{ $fuelRequest->requestedBy->name ?? 'System' }}</div>
                         </div>
 
                         <div class="col-sm-4">
@@ -126,7 +126,7 @@
                         @if($fuelRequest->driverBooking)
                             <div class="col-sm-6">
                                 <span class="text-muted small d-block">Linked Logistics Booking</span>
-                                <strong class="text-dark">PR #{{ $fuelRequest->driverBooking->purchaseRequest?->request_number ?: $fuelRequest->driverBooking->purchase_request_id }}</strong>
+                                <strong class="text-dark">PR #{{ $fuelRequest->driverBooking->purchaseRequest->request_number ?: $fuelRequest->driverBooking->purchase_request_id }}</strong>
                             </div>
                         @endif
                     </div>
@@ -161,7 +161,7 @@
                                 </div>
                                 <div class="col-sm-6">
                                     <span class="text-muted">Assigned Cashier:</span>
-                                    <strong class="text-dark ms-1">{{ $exp->assignedFinanceStaff?->name ?? 'Pending Assignment' }}</strong>
+                                    <strong class="text-dark ms-1">{{ $exp->assignedFinanceStaff->name ?? 'Pending Assignment' }}</strong>
                                 </div>
                                 @if($exp->paid_at)
                                     <div class="col-sm-6">
@@ -170,7 +170,7 @@
                                     </div>
                                     <div class="col-sm-6">
                                         <span class="text-muted">Disbursed By:</span>
-                                        <strong class="text-dark ms-1">{{ $exp->paidBy?->name ?? 'Cashier' }}</strong>
+                                        <strong class="text-dark ms-1">{{ $exp->paidBy->name ?? 'Cashier' }}</strong>
                                     </div>
                                     @if($exp->payment_reference)
                                         <div class="col-12">
@@ -283,7 +283,7 @@
                                     </div>
                                 @endif
                                 <div class="col-12 mt-2 pt-2 border-top text-muted d-flex justify-content-between align-items-center flex-wrap gap-1" style="font-size:0.75rem;">
-                                    <span>Verified &amp; closed on {{ $fuelRequest->closed_at?->format('d M Y, H:i') }} by {{ $fuelRequest->closedByUser?->name ?? 'System' }}.</span>
+                                    <span>Verified &amp; closed on {{ $fuelRequest->closed_at->format('d M Y, H:i') }} by {{ $fuelRequest->closedByUser->name ?? 'System' }}.</span>
                                     <a href="{{ route('finance.tax-deductions.index', ['tab' => 'vat']) }}" class="btn btn-xs btn-outline-primary rounded-pill px-2 py-0.5 text-xxs">
                                         <i class="fa-solid fa-book-open me-1"></i>View in Tax Ledger
                                     </a>

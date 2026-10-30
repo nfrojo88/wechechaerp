@@ -57,8 +57,8 @@
                     <td class="text-muted small">{{ $res->unit ?: '—' }}</td>
                     <td class="text-end small">{{ $res->rate ? number_format($res->rate, 2) : '—' }}</td>
                     <td class="text-end fw-semibold">{{ $res->total_cost ? number_format($res->total_cost, 2) : '—' }}</td>
-                    <td class="small text-muted">{{ $res->task_start?->format('d M Y') ?? '—' }}</td>
-                    <td class="small text-muted">{{ $res->task_end?->format('d M Y') ?? '—' }}</td>
+                    <td class="small text-muted">{{ $res->task_start->format('d M Y') ?? '—' }}</td>
+                    <td class="small text-muted">{{ $res->task_end->format('d M Y') ?? '—' }}</td>
                 </tr>
                 @endforeach
             </tbody>

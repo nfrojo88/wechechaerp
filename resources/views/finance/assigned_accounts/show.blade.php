@@ -398,7 +398,7 @@
                                 <td>
                                     @if($rep->status === 'fulfilled')
                                         <div class="small fw-semibold text-success">ETB {{ number_format($rep->fulfilled_amount, 2) }} via {{ $rep->sourceCoa->name ?? 'Bank Account' }}</div>
-                                        <small class="text-muted">By {{ $rep->financeHead->name ?? 'Finance Head' }} on {{ $rep->fulfilled_at?->format('M d, Y') }}</small>
+                                        <small class="text-muted">By {{ $rep->financeHead->name ?? 'Finance Head' }} on {{ $rep->fulfilled_at->format('M d, Y') }}</small>
                                     @elseif($rep->status === 'rejected')
                                         <small class="text-danger"><i class="fas fa-info-circle me-1"></i> {{ Str::limit($rep->rejection_reason, 40) }}</small>
                                     @else
@@ -763,7 +763,7 @@
                             </div>
                             <div class="col-md-6">
                                 <span class="text-muted">Date:</span>
-                                <strong>{{ $rep->fulfilled_at?->format('M d, Y H:i') }}</strong>
+                                <strong>{{ $rep->fulfilled_at->format('M d, Y H:i') }}</strong>
                             </div>
                             @if($rep->fulfillment_reference)
                                 <div class="col-md-12">

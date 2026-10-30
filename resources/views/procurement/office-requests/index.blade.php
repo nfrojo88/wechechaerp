@@ -132,7 +132,7 @@
                                     @endif
                                 </td>
                                 <td>
-                                    <div class="fw-semibold text-dark">{{ $req->requestedBy?->name ?? 'Secretary' }}</div>
+                                    <div class="fw-semibold text-dark">{{ $req->requestedBy->name ?? 'Secretary' }}</div>
                                     <small class="text-muted"><i class="fa-solid fa-building me-1"></i>Head Office</small>
                                 </td>
                                 <td>
@@ -236,7 +236,7 @@
                 </div>
                 <div class="modal-body p-4 bg-white">
                     <div class="alert alert-warning py-2 px-3 small mb-3 border-start border-4 border-warning">
-                        <strong>{{ $req->request_no }}</strong> &bull; Requested by {{ $req->requestedBy?->name ?? 'Secretary' }}
+                        <strong>{{ $req->request_no }}</strong> &bull; Requested by {{ $req->requestedBy->name ?? 'Secretary' }}
                         <div class="text-muted mt-1">{{ $req->office_purpose }} ({{ $req->items->count() }} items)</div>
                     </div>
 
@@ -292,9 +292,9 @@
                             @foreach($coaAccounts as $coa)
                                 @php $linkedBank = $coa->bankAccounts->first(); @endphp
                                 <option value="{{ $coa->id }}" 
-                                        data-bank-id="{{ $linkedBank?->id ?? '' }}"
-                                        data-staff-id="{{ $coa->assigned_to ?? $linkedBank?->assigned_to ?? '' }}"
-                                        data-staff-name="{{ $coa->manager?->name ?? $linkedBank?->assignedStaff?->name ?? '' }}"
+                                        data-bank-id="{{ $linkedBank->id ?? '' }}"
+                                        data-staff-id="{{ $coa->assigned_to ?? $linkedBank->assigned_to ?? '' }}"
+                                        data-staff-name="{{ $coa->manager->name ?? $linkedBank->assignedStaff->name ?? '' }}"
                                         {{ $req->coa_id == $coa->id ? 'selected' : '' }}>
                                     [{{ $coa->code }}] {{ $coa->name }}
                                 </option>
@@ -309,7 +309,7 @@
                             <option value="">-- Assign Staff / Self --</option>
                             @foreach($financeStaff as $staff)
                                 <option value="{{ $staff->id }}" {{ $req->assigned_finance_staff_id == $staff->id ? 'selected' : '' }}>
-                                    {{ $staff->name }} ({{ ucfirst(str_replace('_', ' ', $staff->roles->first()?->name ?? 'Staff')) }})
+                                    {{ $staff->name }} ({{ ucfirst(str_replace('_', ' ', $staff->roles->first()->name ?? 'Staff')) }})
                                 </option>
                             @endforeach
                         </select>

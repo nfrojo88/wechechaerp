@@ -100,8 +100,8 @@
                     <tr><td class="text-muted w-50">Client Name</td><td class="fw-semibold">{{ $project->client_name ?? '—' }}</td></tr>
                     <tr><td class="text-muted">Client Contact</td><td class="fw-semibold">{{ $project->client_contact ?? '—' }}</td></tr>
                     <tr><td class="text-muted">Location</td><td class="fw-semibold">{{ $project->location ?? '—' }}</td></tr>
-                    <tr><td class="text-muted">Start Date</td><td class="fw-semibold">{{ $project->start_date?->format('d M Y') ?? '—' }}</td></tr>
-                    <tr><td class="text-muted">End Date</td><td class="fw-semibold">{{ $project->end_date?->format('d M Y') ?? '—' }}</td></tr>
+                    <tr><td class="text-muted">Start Date</td><td class="fw-semibold">{{ $project->start_date->format('d M Y') ?? '—' }}</td></tr>
+                    <tr><td class="text-muted">End Date</td><td class="fw-semibold">{{ $project->end_date->format('d M Y') ?? '—' }}</td></tr>
                     <tr><td class="text-muted">Created By</td><td class="fw-semibold">{{ $project->creator->name ?? '—' }}</td></tr>
                 </table>
                 @if($project->description)

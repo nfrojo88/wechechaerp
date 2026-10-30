@@ -104,7 +104,7 @@
                                 <a href="{{ route('general-service.vehicle-reminders.vehicle-detail', $v->id) }}" class="fw-bold text-decoration-none" style="color: var(--brand-900);">
                                     {{ $v->plate_number ?: $v->unit_code }}
                                 </a>
-                                <div class="text-muted small">{{ $v->parentAsset?->name }} ({{ $v->brand }} {{ $v->model }})</div>
+                                <div class="text-muted small">{{ $v->parentAsset->name }} ({{ $v->brand }} {{ $v->model }})</div>
                             </td>
                             <td class="py-3" data-label="Custodian">
                                 @if($v->assignedEmployee)

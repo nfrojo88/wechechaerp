@@ -31,7 +31,7 @@
                 </span>
                 @endif
             </div>
-            <p class="text-muted small mb-0 mt-1">Project: <strong>{{ $purchaseRequest->project?->name ?? 'N/A' }}</strong> | Channel: <strong>{{ $purchaseRequest->materialRequest?->source ?? 'Direct PR' }}</strong></p>
+            <p class="text-muted small mb-0 mt-1">Project: <strong>{{ $purchaseRequest->project->name ?? 'N/A' }}</strong> | Channel: <strong>{{ $purchaseRequest->materialRequest->source ?? 'Direct PR' }}</strong></p>
         </div>
         <div class="d-flex align-items-center gap-2 flex-wrap">
             @if($purchaseRequest->trashed() || $purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_CANCELLED)
@@ -166,7 +166,7 @@
                 break;
 
             case \App\Models\PurchaseRequest::STATUS_PENDING_PAYMENT:
-                if (!$purchaseRequest->payment?->assigned_finance_staff_id) {
+                if (!$purchaseRequest->payment->assigned_finance_staff_id) {
                     $canActOnCurrentStage = $isGlobalAdmin || in_array('finance_head', $rawUserRoles) || in_array('finance_manager', $rawUserRoles);
                 } else {
                     $canActOnCurrentStage = $isGlobalAdmin || in_array('finance_head', $rawUserRoles) || ($authUser && $purchaseRequest->payment->assigned_finance_staff_id === $authUser->id);
@@ -251,7 +251,7 @@
                             @endif
                         </td></tr>
                         <tr><th class="ps-3 text-muted">Priority</th><td><span class="badge bg-{{ $purchaseRequest->priority === 'urgent' ? 'danger' : ($purchaseRequest->priority === 'high' ? 'warning' : 'secondary') }}">{{ ucfirst($purchaseRequest->priority) }}</span></td></tr>
-                        <tr><th class="ps-3 text-muted">Requested By</th><td>{{ $purchaseRequest->requestedBy?->name ?? 'N/A' }}</td></tr>
+                        <tr><th class="ps-3 text-muted">Requested By</th><td>{{ $purchaseRequest->requestedBy->name ?? 'N/A' }}</td></tr>
                         <tr><th class="ps-3 text-muted">Required Date</th><td>{{ optional($purchaseRequest->required_date)->format('M d, Y') ?? '-' }}</td></tr>
                         <tr><th class="ps-3 text-muted">Justification</th><td>{{ $purchaseRequest->justification ?? '-' }}</td></tr>
                     </table>
@@ -547,11 +547,11 @@
                                         }
                                         $uCost = (float)($itm->estimated_unit_cost ?? 0);
                                         $lineTotal = round($pQty * $uCost, 2);
-                                        $unitLabel = $itm->unit ?? ($itm->product?->unit ?? 'pcs');
+                                        $unitLabel = $itm->unit ?? ($itm->product->unit ?? 'pcs');
                                     @endphp
                                     <div class="mb-2 pb-2 border-bottom">
                                         <div class="d-flex justify-content-between align-items-center mb-1">
-                                            <span class="small fw-bold text-dark">{{ $itm->product?->name ?? 'Item #' . $itm->product_id }}</span>
+                                            <span class="small fw-bold text-dark">{{ $itm->product->name ?? 'Item #' . $itm->product_id }}</span>
                                             <span class="badge bg-secondary-subtle text-dark border" title="Requested quantity">
                                                 Req: {{ (float)$itm->quantity }} {{ $unitLabel }}
                                             </span>
@@ -702,7 +702,7 @@
                                     @foreach($purchaseRequest->proformaInvoices as $prof)
                                         <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
                                             <div>
-                                                <strong>{{ $prof->supplier?->name ?? 'Supplier' }}</strong>
+                                                <strong>{{ $prof->supplier->name ?? 'Supplier' }}</strong>
                                                 <div class="text-muted" style="font-size: 11px;">#{{ $prof->proforma_no }} &bull; <strong class="text-primary">{{ number_format($prof->grand_total, 2) }} ETB</strong></div>
                                             </div>
                                             <div class="d-flex align-items-center gap-1">
@@ -985,7 +985,7 @@
                                     <div class="form-check py-1 border-bottom">
                                         <input class="form-check-input" type="checkbox" name="proforma_ids[]" value="{{ $prof->id }}" id="profSel{{ $prof->id }}" {{ $loop->first ? 'checked' : '' }}>
                                         <label class="form-check-label d-flex justify-content-between align-items-center" for="profSel{{ $prof->id }}">
-                                            <span><strong>{{ $prof->supplier?->name }}</strong> (#{{ $prof->proforma_no }})</span>
+                                            <span><strong>{{ $prof->supplier->name }}</strong> (#{{ $prof->proforma_no }})</span>
                                             <span class="text-primary fw-bold">{{ number_format($prof->grand_total, 2) }} ETB</span>
                                         </label>
                                     </div>
@@ -1083,10 +1083,10 @@
                         @php
                             $gmVariance    = $purchaseRequest->marketingVariance;
                             $gmDirectAmt   = (float)($purchaseRequest->direct_buy_amount ?? 0);
-                            $gmMarketAmt   = (float)($gmVariance?->market_price ?? 0);
-                            $gmVarAmt      = (float)($gmVariance?->variance_amount ?? ($gmDirectAmt - $gmMarketAmt));
-                            $gmVarPct      = (float)($gmVariance?->variance_percentage ?? ($gmMarketAmt > 0 ? round(($gmVarAmt / $gmMarketAmt) * 100, 2) : 0));
-                            $gmVarNotes    = $gmVariance?->variance_notes ?? null;
+                            $gmMarketAmt   = (float)($gmVariance->market_price ?? 0);
+                            $gmVarAmt      = (float)($gmVariance->variance_amount ?? ($gmDirectAmt - $gmMarketAmt));
+                            $gmVarPct      = (float)($gmVariance->variance_percentage ?? ($gmMarketAmt > 0 ? round(($gmVarAmt / $gmMarketAmt) * 100, 2) : 0));
+                            $gmVarNotes    = $gmVariance->variance_notes ?? null;
                             $gmLastPurchase = null;
                             // Try to get last purchase price from pricing benchmarks
                             if(isset($pricingBenchmarks['total_last_purchase']) && $pricingBenchmarks['total_last_purchase'] > 0) {
@@ -1260,8 +1260,8 @@
                                             @endphp
                                             <div class="bg-white p-2 rounded border gm-item-allocation-row shadow-2xs" data-item-id="{{ $itm->id }}" data-amount="{{ $lineTotal }}">
                                                 <div class="d-flex justify-content-between align-items-start mb-1">
-                                                    <div class="fw-bold text-dark small text-truncate pe-1" style="max-width: 170px;" title="{{ $itm->item_name ?? $itm->product?->name }}">
-                                                        {{ $itm->item_name ?? $itm->product?->name ?? 'Item #' . ($iIdx + 1) }}
+                                                    <div class="fw-bold text-dark small text-truncate pe-1" style="max-width: 170px;" title="{{ $itm->item_name ?? $itm->product->name }}">
+                                                        {{ $itm->item_name ?? $itm->product->name ?? 'Item #' . ($iIdx + 1) }}
                                                     </div>
                                                     <div class="text-end flex-shrink-0 font-monospace small fw-bold text-dark" style="font-size: 11px;">
                                                         {{ number_format($lineTotal, 2) }} ETB
@@ -1335,7 +1335,7 @@
                                                 <div class="d-flex align-items-center">
                                                     <input class="form-check-input me-2 mt-0 gm-proforma-radio" type="radio" name="sidebar_proforma_radio" value="{{ $prof->id }}" id="gmProfRadio_{{ $prof->id }}" {{ $isProfSelected ? 'checked' : '' }}>
                                                     <div>
-                                                        <div class="fw-bold small text-dark">{{ $prof->supplier?->name ?? ($prof->supplier_name ?: 'Vendor #' . $prof->supplier_id) }}</div>
+                                                        <div class="fw-bold small text-dark">{{ $prof->supplier->name ?? ($prof->supplier_name ?: 'Vendor #' . $prof->supplier_id) }}</div>
                                                         <div class="text-muted font-monospace" style="font-size: 11px;">
                                                             <code>{{ $prof->proforma_no }}</code>
                                                             @if($isLowest)
@@ -1384,7 +1384,7 @@
                                 <div class="d-flex justify-content-between align-items-center mt-2 p-2 bg-light rounded border">
                                     <span class="small fw-semibold text-muted text-uppercase" style="font-size: 10.5px;">Awarded Total:</span>
                                     <strong class="text-primary fs-6" id="gmDynamicGrandTotalDisplay">
-                                        {{ number_format($purchaseRequest->direct_buy_amount ?: ($purchaseRequest->proformaInvoices->first()?->grand_total ?? 0), 2) }} ETB
+                                        {{ number_format($purchaseRequest->direct_buy_amount ?: ($purchaseRequest->proformaInvoices->first()->grand_total ?? 0), 2) }} ETB
                                     </strong>
                                 </div>
                             </div>
@@ -1495,7 +1495,7 @@
                         </form>
 
                     <!-- STAGE 7b: Finance Head Payment Assignment -->
-                    @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_PAYMENT && !$purchaseRequest->payment?->assigned_finance_staff_id)
+                    @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_PAYMENT && !$purchaseRequest->payment->assigned_finance_staff_id)
                         <div class="mb-3">
                             <h6 class="fw-bold text-dark mb-1">
                                 <i class="fas fa-wallet text-primary me-1"></i> Finance Payment Assignment
@@ -1518,7 +1518,7 @@
                             </div>
                             <div class="mb-2">
                                 <label class="form-label small fw-bold text-uppercase text-muted">Payment Amount (ETB) <span class="text-danger">*</span></label>
-                                <input type="number" step="0.01" name="amount" id="fundingPaymentAmountInput" class="form-control form-control-sm fw-bold" value="{{ (float)($purchaseRequest->payment?->amount ?? $purchaseRequest->direct_buy_amount ?? 0) }}" required>
+                                <input type="number" step="0.01" name="amount" id="fundingPaymentAmountInput" class="form-control form-control-sm fw-bold" value="{{ (float)($purchaseRequest->payment->amount ?? $purchaseRequest->direct_buy_amount ?? 0) }}" required>
                             </div>
                             <input type="hidden" name="staff_user_id" id="assignFinanceStaffHidden" value="">
                             <div class="mb-3">
@@ -1537,7 +1537,7 @@
                         </div>
 
                     <!-- STAGE 7b: Finance Staff Execute Payment -->
-                    @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_PAYMENT && $purchaseRequest->payment?->assigned_finance_staff_id)
+                    @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_PAYMENT && $purchaseRequest->payment->assigned_finance_staff_id)
                         <div class="mb-3">
                             <h6 class="fw-bold text-success mb-1">
                                 <i class="fas fa-hand-holding-dollar text-success me-1"></i> Payment In Expense Hub
@@ -1552,7 +1552,7 @@
                             </div>
                             <div class="d-flex justify-content-between align-items-center mb-1">
                                 <span class="text-muted">Funding Account:</span>
-                                <strong class="text-dark">{{ $purchaseRequest->payment->coaAccount?->name }} ({{ $purchaseRequest->payment->coaAccount?->code }})</strong>
+                                <strong class="text-dark">{{ $purchaseRequest->payment->coaAccount->name }} ({{ $purchaseRequest->payment->coaAccount->code }})</strong>
                             </div>
                             @if($purchaseRequest->payment->assignedStaff)
                             <div class="d-flex justify-content-between align-items-center">
@@ -1607,7 +1607,7 @@
                                         <i class="fas fa-forward me-1"></i> Jump Directly to Next Stage (Store Material Intake)
                                     </h6>
                                     <p class="small text-muted mb-0">
-                                        Payment of <strong>{{ number_format($purchaseRequest->payment?->amount ?? $purchaseRequest->direct_buy_amount, 2) }} ETB</strong> disbursed. Skip receipt upload and move directly to <strong>Store Keeper Material Intake</strong>.
+                                        Payment of <strong>{{ number_format($purchaseRequest->payment->amount ?? $purchaseRequest->direct_buy_amount, 2) }} ETB</strong> disbursed. Skip receipt upload and move directly to <strong>Store Keeper Material Intake</strong>.
                                     </p>
                                 </div>
                                 <form action="{{ route('purchase-requests.skip-receipt-to-store', $purchaseRequest) }}" method="POST" class="d-inline">
@@ -1689,11 +1689,11 @@
 
                             {{-- Withholding Receipt (Optional / If Available) --}}
                             @php
-                                $paymentHasWithholding = (bool)($purchaseRequest->payment?->has_withholding || (float)($purchaseRequest->payment?->withholding_amount ?? 0) > 0);
-                                $defaultWithholdingRate = $purchaseRequest->payment?->withholding_rate ?? 2.00;
-                                $defaultWithholdingAmount = $purchaseRequest->payment?->withholding_amount ?? 0.00;
-                                $existingWithholdingReceipt = $purchaseRequest->payment?->withholding_receipt ?? $purchaseRequest->receipt?->withholding_receipt_path;
-                                $existingWithholdingNo = $purchaseRequest->payment?->withholding_receipt_number ?? $purchaseRequest->receipt?->withholding_receipt_number;
+                                $paymentHasWithholding = (bool)($purchaseRequest->payment->has_withholding || (float)($purchaseRequest->payment->withholding_amount ?? 0) > 0);
+                                $defaultWithholdingRate = $purchaseRequest->payment->withholding_rate ?? 2.00;
+                                $defaultWithholdingAmount = $purchaseRequest->payment->withholding_amount ?? 0.00;
+                                $existingWithholdingReceipt = $purchaseRequest->payment->withholding_receipt ?? $purchaseRequest->receipt->withholding_receipt_path;
+                                $existingWithholdingNo = $purchaseRequest->payment->withholding_receipt_number ?? $purchaseRequest->receipt->withholding_receipt_number;
                             @endphp
                             <div class="p-2.5 rounded-3 border bg-warning bg-opacity-10 mb-3 border-warning border-opacity-25">
                                 <div class="d-flex justify-content-between align-items-center mb-2">
@@ -1916,9 +1916,9 @@
                                     <span class="input-group-text bg-light"><i class="fas fa-hashtag text-muted"></i></span>
                                     <input type="text" name="slip_no" id="intakeSlipNoInput" 
                                            class="form-control form-control-sm font-monospace fw-bold @error('slip_no') is-invalid @enderror" 
-                                           data-start="{{ $receiveSlipSequence?->book_start_no ?? '' }}"
-                                           data-end="{{ $receiveSlipSequence?->book_end_no ?? '' }}"
-                                           data-prefix="{{ $receiveSlipSequence?->prefix ?? '' }}"
+                                           data-start="{{ $receiveSlipSequence->book_start_no ?? '' }}"
+                                           data-end="{{ $receiveSlipSequence->book_end_no ?? '' }}"
+                                           data-prefix="{{ $receiveSlipSequence->prefix ?? '' }}"
                                            oninput="validateIntakeSlipRange()"
                                            value="{{ old('slip_no', $nextReceiveSlipNo ?? ('REC-' . date('Ymd') . '-' . str_pad($purchaseRequest->id, 4, '0', STR_PAD_LEFT))) }}" required>
                                 </div>
@@ -1974,7 +1974,7 @@
                                                         <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 ms-1 py-0 px-1" style="font-size: 9px;">Stocked</span>
                                                     </div>
                                                     <div class="text-muted" style="font-size: 10px;">
-                                                        {{ $dr->received_date?->format('M d, Y') ?? date('M d, Y') }}
+                                                        {{ $dr->received_date->format('M d, Y') ?? date('M d, Y') }}
                                                         @if($dr->store) &bull; {{ $dr->store->name }} @endif
                                                         @if($dr->receivedBy) &bull; By: {{ $dr->receivedBy->name }} @endif
                                                     </div>
@@ -2013,11 +2013,11 @@
                                                 ? $itm->getRemainingIntakeQty() 
                                                 : max(0.0, $targetQty - $receivedQty);
                                             $isFulfilled = ($remainingQty <= 0.001 && $targetQty > 0);
-                                            $unitLabel = $itm->unit ?? ($itm->product?->unit ?? 'pcs');
+                                            $unitLabel = $itm->unit ?? ($itm->product->unit ?? 'pcs');
                                         @endphp
                                         <div class="mb-2 pb-2 border-bottom {{ $isFulfilled ? 'opacity-75' : '' }}">
                                             <div class="d-flex justify-content-between align-items-center mb-1">
-                                                <span class="small fw-bold text-dark">{{ $itm->product?->name ?? 'Material #' . $itm->product_id }}</span>
+                                                <span class="small fw-bold text-dark">{{ $itm->product->name ?? 'Material #' . $itm->product_id }}</span>
                                                 @if($isFulfilled)
                                                     <span class="badge bg-success text-white">
                                                         <i class="fas fa-check-circle me-1"></i>Fulfilled ({{ number_format($targetQty, 2) }} {{ $unitLabel }})
@@ -2305,7 +2305,7 @@
                                                value="{{ $item->id }}"
                                                data-item-id="{{ $item->id }}"
                                                data-product-id="{{ $item->product_id }}"
-                                               data-product-name="{{ $item->product?->name ?? 'Item #' . $item->product_id }}"
+                                               data-product-name="{{ $item->product->name ?? 'Item #' . $item->product_id }}"
                                                data-quantity="{{ (float)$item->quantity }}"
                                                data-unit="{{ $item->unit }}"
                                                data-estimated-cost="{{ (float)($item->estimated_unit_cost ?? 0) }}"
@@ -2315,8 +2315,8 @@
                                     </td>
                                     @endif
                                     <td>
-                                        <strong class="text-dark">{{ $item->product?->name ?? 'Item #' . $item->product_id }}</strong>
-                                        @if($item->product?->code)
+                                        <strong class="text-dark">{{ $item->product->name ?? 'Item #' . $item->product_id }}</strong>
+                                        @if($item->product->code)
                                              <br><code class="small text-muted">{{ $item->product->code }}</code>
                                         @endif
                                         @if($item->specifications)
@@ -2411,7 +2411,7 @@
                                                 <div class="small text-muted mt-1" style="font-size: 11px;">
                                                     @foreach($itemStocks as $st)
                                                         @if(($st->net_available ?? 0) > 0)
-                                                            {{ $st->store?->name }}: {{ number_format($st->net_available, 1) }} | 
+                                                            {{ $st->store->name }}: {{ number_format($st->net_available, 1) }} | 
                                                         @endif
                                                     @endforeach
                                                 </div>
@@ -2537,12 +2537,12 @@
                                             @if($isGlobalAdmin && !$isStoreReviewStage && !$isStoreManagerOnly)
                                             <!-- Global Admin Only: Edit / Update Item / Purchased Qty -->
                                             <button type="button" class="btn btn-outline-secondary btn-sm" title="Edit Item Details (Global Admin Only)"
-                                                    onclick="openEditPrItemModal({{ $item->id }}, '{{ addslashes($item->product?->name ?? 'Item #' . $item->product_id) }}', {{ $reqQty }}, {{ $purchQty }}, '{{ addslashes($item->unit) }}', {{ (float)($item->estimated_unit_cost ?? 0) }}, '{{ addslashes($item->specifications ?? '') }}')">
+                                                    onclick="openEditPrItemModal({{ $item->id }}, '{{ addslashes($item->product->name ?? 'Item #' . $item->product_id) }}', {{ $reqQty }}, {{ $purchQty }}, '{{ addslashes($item->unit) }}', {{ (float)($item->estimated_unit_cost ?? 0) }}, '{{ addslashes($item->specifications ?? '') }}')">
                                                 <i class="fas fa-pen-to-square"></i>
                                             </button>
                                             @if($purchaseRequest->items->count() > 1 && !in_array($purchaseRequest->status, [\App\Models\PurchaseRequest::STATUS_COMPLETED, \App\Models\PurchaseRequest::STATUS_CANCELLED]))
                                             <button type="button" class="btn btn-outline-danger btn-sm" title="Remove Item (Global Admin Only)"
-                                                    onclick="confirmDeletePrItem({{ $item->id }}, '{{ addslashes($item->product?->name ?? 'Item #' . $item->product_id) }}')">
+                                                    onclick="confirmDeletePrItem({{ $item->id }}, '{{ addslashes($item->product->name ?? 'Item #' . $item->product_id) }}')">
                                                 <i class="fas fa-trash-can"></i>
                                             </button>
                                             @endif
@@ -2589,10 +2589,10 @@
                                                                                 #{{ $tr->transfer_no ?? ('TR-' . $tr->id) }}
                                                                             </a>
                                                                         </td>
-                                                                        <td class="fw-bold">{{ $ti->product?->name ?? ('Item #' . $ti->product_id) }}</td>
-                                                                        <td class="text-center fw-bold">{{ (float)($ti->requested_quantity ?? $ti->approved_quantity ?? 0) }} {{ $ti->unit ?? ($ti->product?->unit ?? 'pcs') }}</td>
-                                                                        <td>{{ $tr->fromStore?->name ?? 'Source Store' }}</td>
-                                                                        <td>{{ $tr->toStore?->name ?? 'Destination Store' }}</td>
+                                                                        <td class="fw-bold">{{ $ti->product->name ?? ('Item #' . $ti->product_id) }}</td>
+                                                                        <td class="text-center fw-bold">{{ (float)($ti->requested_quantity ?? $ti->approved_quantity ?? 0) }} {{ $ti->unit ?? ($ti->product->unit ?? 'pcs') }}</td>
+                                                                        <td>{{ $tr->fromStore->name ?? 'Source Store' }}</td>
+                                                                        <td>{{ $tr->toStore->name ?? 'Destination Store' }}</td>
                                                                         <td><span class="badge bg-success-subtle text-success">{{ ucfirst($tr->status) }}</span></td>
                                                                         <td class="text-end pe-2">
                                                                             @if($tr->isDeductedFromOrigin() && $tr->isAddedToDestination())
@@ -2697,7 +2697,7 @@
                     <div class="text-end">
                         <span class="text-muted">Selected Total Award:</span> 
                         <strong class="text-primary fs-6 ms-1" id="matrixAwardedGrandTotal">
-                            {{ number_format($purchaseRequest->direct_buy_amount ?: ($purchaseRequest->proformaInvoices->first()?->grand_total ?? 0), 2) }} ETB
+                            {{ number_format($purchaseRequest->direct_buy_amount ?: ($purchaseRequest->proformaInvoices->first()->grand_total ?? 0), 2) }} ETB
                         </strong>
                     </div>
                 </div>
@@ -2877,8 +2877,8 @@
                                 @endphp
                                 <tr>
                                     <td>
-                                        <strong class="text-dark">{{ $prof->supplier?->name ?? 'N/A' }}</strong>
-                                        @if($prof->supplier?->phone)
+                                        <strong class="text-dark">{{ $prof->supplier->name ?? 'N/A' }}</strong>
+                                        @if($prof->supplier->phone)
                                             <div class="small text-muted"><i class="fas fa-phone me-1"></i>{{ $prof->supplier->phone }}</div>
                                         @endif
                                     </td>
@@ -2940,7 +2940,7 @@
                                         <div class="card card-body bg-white border shadow-sm p-3">
                                             <div class="d-flex justify-content-between align-items-center mb-2">
                                                 <h6 class="fw-bold small text-dark mb-0">
-                                                    <i class="fas fa-file-invoice me-1 text-primary"></i> Item Price Breakdown: <strong>{{ $prof->supplier?->name }}</strong> (Quote #{{ $prof->proforma_no }})
+                                                    <i class="fas fa-file-invoice me-1 text-primary"></i> Item Price Breakdown: <strong>{{ $prof->supplier->name }}</strong> (Quote #{{ $prof->proforma_no }})
                                                 </h6>
                                                 <span class="badge bg-light text-dark border">Grand Total: {{ number_format($prof->grand_total, 2) }} ETB</span>
                                             </div>
@@ -3009,7 +3009,7 @@
                     };
 
                     $withholdingUrl = $purchaseRequest->withholding_receipt_url;
-                    $wPath = $purchaseRequest->receipt?->withholding_receipt_path ?? $purchaseRequest->payment?->withholding_receipt ?? '';
+                    $wPath = $purchaseRequest->receipt->withholding_receipt_path ?? $purchaseRequest->payment->withholding_receipt ?? '';
                     $wExt = strtolower(pathinfo($wPath, PATHINFO_EXTENSION));
                     $wIsImage = in_array($wExt, ['jpg', 'jpeg', 'png', 'webp', 'gif']);
                     $wIsPdf = $wExt === 'pdf';
@@ -3048,11 +3048,11 @@
                         </div>
                     </div>
                     <div class="card-body p-3">
-                        @if($purchaseRequest->receipt?->verification_notes)
+                        @if($purchaseRequest->receipt->verification_notes)
                             <div class="alert alert-light border small py-2 px-3 mb-3">
                                 <strong>Verification Notes:</strong> {{ $purchaseRequest->receipt->verification_notes }}
                                 @if($purchaseRequest->receipt->verifiedBy)
-                                    <span class="text-muted">(by {{ $purchaseRequest->receipt->verifiedBy->name }} on {{ $purchaseRequest->receipt->verified_at?->format('M d, Y H:i') }})</span>
+                                    <span class="text-muted">(by {{ $purchaseRequest->receipt->verifiedBy->name }} on {{ $purchaseRequest->receipt->verified_at->format('M d, Y H:i') }})</span>
                                 @endif
                             </div>
                         @endif
@@ -3269,8 +3269,8 @@
                                     @php $stocks = $stockAvailability[$item->product_id] ?? collect(); @endphp
                                     @forelse($stocks as $st)
                                     <tr>
-                                        <td><strong>{{ $item->product?->name ?? 'Item #' . $item->product_id }}</strong></td>
-                                        <td>{{ $st->store?->name ?? 'N/A' }}</td>
+                                        <td><strong>{{ $item->product->name ?? 'Item #' . $item->product_id }}</strong></td>
+                                        <td>{{ $st->store->name ?? 'N/A' }}</td>
                                         <td>{{ number_format($st->quantity_on_hand, 2) }} {{ $item->unit }}</td>
                                         <td>
                                             @if(($st->in_transfer_qty ?? 0) > 0)
@@ -3303,7 +3303,7 @@
                                     </tr>
                                     @empty
                                     <tr>
-                                        <td><strong>{{ $item->product?->name ?? 'Item #' . $item->product_id }}</strong></td>
+                                        <td><strong>{{ $item->product->name ?? 'Item #' . $item->product_id }}</strong></td>
                                         <td colspan="5" class="text-muted italic">No stock available across any stores.</td>
                                     </tr>
                                     @endforelse
@@ -3344,14 +3344,14 @@
                                 <tr>
                                     <td>
                                         <strong class="font-monospace text-primary">{{ $tr->transfer_no }}</strong>
-                                        <br><small class="text-muted">{{ $tr->created_at?->format('M d, Y H:i') }}</small>
+                                        <br><small class="text-muted">{{ $tr->created_at->format('M d, Y H:i') }}</small>
                                     </td>
-                                    <td><span class="badge bg-light text-dark border">{{ $tr->fromStore?->name ?? 'N/A' }}</span></td>
-                                    <td><span class="badge bg-light text-dark border">{{ $tr->toStore?->name ?? 'N/A' }}</span></td>
+                                    <td><span class="badge bg-light text-dark border">{{ $tr->fromStore->name ?? 'N/A' }}</span></td>
+                                    <td><span class="badge bg-light text-dark border">{{ $tr->toStore->name ?? 'N/A' }}</span></td>
                                     <td>
                                         @foreach($tr->items as $tItem)
                                             <div class="small">
-                                                <strong>{{ $tItem->product?->name ?? 'Item' }}</strong>: 
+                                                <strong>{{ $tItem->product->name ?? 'Item' }}</strong>: 
                                                 <span class="badge bg-info bg-opacity-10 text-info fw-bold">{{ number_format($tItem->requested_quantity, 1) }} {{ $tItem->unit }}</span>
                                             </div>
                                         @endforeach
@@ -3399,7 +3399,7 @@
                                 <small class="text-muted">{{ $log->created_at->format('M d, Y H:i:s') }}</small>
                             </div>
                             <div class="small">
-                                <strong>{{ $log->actor?->name }}</strong> ({{ ucfirst(str_replace('_', ' ', $log->actor_role)) }}) moved stage to 
+                                <strong>{{ $log->actor->name }}</strong> ({{ ucfirst(str_replace('_', ' ', $log->actor_role)) }}) moved stage to 
                                 <span class="badge bg-info text-dark">{{ \App\Models\PurchaseRequest::statusLabels()[$log->to_stage] ?? $log->to_stage }}</span>
                             </div>
                             @if($log->notes)
@@ -3479,7 +3479,7 @@
                                 <tr>
                                     <td>
                                         <input type="hidden" name="allocations[{{ $index }}][item_id]" value="{{ $item->id }}">
-                                        <strong>{{ $item->product?->name ?? 'Item #' . $item->product_id }}</strong>
+                                        <strong>{{ $item->product->name ?? 'Item #' . $item->product_id }}</strong>
                                         <div class="small mt-1">
                                             @if($totalStock > 0)
                                                 <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">
@@ -3508,7 +3508,7 @@
                                                 <option value="">-- Choose Source Store --</option>
                                                 @foreach($stores as $st)
                                                     @php
-                                                        $stStock = $itemStocks->where('store_id', $st->id)->first()?->quantity_on_hand ?? 0;
+                                                        $stStock = $itemStocks->where('store_id', $st->id)->first()->quantity_on_hand ?? 0;
                                                     @endphp
                                                     <option value="{{ $st->id }}" {{ ($bestStore && $bestStore->store_id == $st->id) ? 'selected' : '' }}>
                                                         {{ $st->name }} (Stock: {{ number_format($stStock, 1) }})
@@ -3600,7 +3600,7 @@
                         </div>
                         <div class="col-md-6">
                             <label class="form-label fw-bold small text-uppercase">Transfer Reason / Remarks</label>
-                            <input type="text" name="reason" class="form-control form-control-sm" value="Store Transfer from PR #{{ $purchaseRequest->pr_no }} ({{ $purchaseRequest->project?->name ?? 'Project' }})">
+                            <input type="text" name="reason" class="form-control form-control-sm" value="Store Transfer from PR #{{ $purchaseRequest->pr_no }} ({{ $purchaseRequest->project->name ?? 'Project' }})">
                         </div>
                     </div>
 
@@ -4111,8 +4111,8 @@
                                                 @endphp
                                                 <tr>
                                                     <td class="ps-3">
-                                                        <div class="fw-bold text-dark">{{ $itm->product?->name ?? ('Item #' . $itm->product_id) }}</div>
-                                                        @if($itm->product?->code)
+                                                        <div class="fw-bold text-dark">{{ $itm->product->name ?? ('Item #' . $itm->product_id) }}</div>
+                                                        @if($itm->product->code)
                                                             <code class="small text-muted" style="font-size: 11px;">{{ $itm->product->code }}</code>
                                                         @endif
                                                     </td>

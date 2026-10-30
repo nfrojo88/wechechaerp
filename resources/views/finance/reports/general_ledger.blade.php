@@ -153,7 +153,7 @@
                             </td>
                             <td class="pe-4 text-center text-nowrap" data-label="Posted By">
                                 <span class="badge bg-secondary bg-opacity-10 text-secondary rounded-pill px-2.5 py-1 small">
-                                    {{ $entry->journalEntry?->creator?->name ?? 'System' }}
+                                    {{ $entry->journalEntry->creator->name ?? 'System' }}
                                 </span>
                             </td>
                         </tr>

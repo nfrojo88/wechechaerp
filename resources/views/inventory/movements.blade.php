@@ -116,7 +116,7 @@
                                 {{ $mov->balance_after !== null ? number_format((float)$mov->balance_after, 3) : '—' }}
                             </td>
                             <td class="py-3" data-label="Performed By">
-                                <div class="fw-semibold text-dark">{{ $mov->performer?->name ?? 'System' }}</div>
+                                <div class="fw-semibold text-dark">{{ $mov->performer->name ?? 'System' }}</div>
                             </td>
                             <td class="py-3" data-label="Reference">
                                 @if($mov->reference_type && $mov->reference_id)

@@ -83,7 +83,7 @@
                     <div class="col-6">
                         <div>Approved By:</div>
                         <div class="fw-semibold text-dark">{{ $boq->approver->name ?? '—' }}</div>
-                        <div>{{ $boq->approved_at?->format('d M Y') ?? '—' }}</div>
+                        <div>{{ $boq->approved_at->format('d M Y') ?? '—' }}</div>
                     </div>
                 </div>
             </div>

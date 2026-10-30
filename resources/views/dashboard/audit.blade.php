@@ -408,11 +408,11 @@
                             <tr>
                                 <td data-label="PR #" class="ps-4 py-3">
                                     <span class="fw-bold font-monospace text-primary">{{ $pr->pr_no }}</span>
-                                    <small class="text-muted d-block">{{ $pr->created_at?->format('M d, Y') }}</small>
+                                    <small class="text-muted d-block">{{ $pr->created_at->format('M d, Y') }}</small>
                                 </td>
                                 <td data-label="Project" class="py-3">
-                                    <strong class="text-dark">{{ $pr->project?->name ?? 'Head Office / Store' }}</strong>
-                                    <small class="text-muted d-block">{{ $pr->materialRequest?->source ?? 'Purchase Request' }}</small>
+                                    <strong class="text-dark">{{ $pr->project->name ?? 'Head Office / Store' }}</strong>
+                                    <small class="text-muted d-block">{{ $pr->materialRequest->source ?? 'Purchase Request' }}</small>
                                 </td>
                                 <td data-label="Priority" class="py-3">
                                     <span class="badge bg-{{ $pr->priority === 'urgent' ? 'danger' : ($pr->priority === 'high' ? 'warning' : 'secondary') }}">
@@ -499,7 +499,7 @@
                             <tr>
                                 <td data-label="Transfer #" class="ps-4 py-3">
                                     <span class="fw-bold font-monospace text-primary">{{ $tr->transfer_no }}</span>
-                                    <small class="text-muted d-block">{{ $tr->created_at?->format('M d, Y') }}</small>
+                                    <small class="text-muted d-block">{{ $tr->created_at->format('M d, Y') }}</small>
                                 </td>
                                 <td data-label="Origin" class="py-3">
                                     <strong class="text-dark">{{ $tr->fromStore->name ?? 'Main Store' }}</strong>

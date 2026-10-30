@@ -997,7 +997,7 @@
                         @endif
                     </div>
                     <div class="small text-muted mb-2">
-                        Reported by: <strong>{{ $mReq->reportedBy?->name ?? ($mReq->employee?->full_name ?? 'Staff') }}</strong> &bull; Reported to / Handled by: <strong>{{ $mReq->assignedTo?->name ?? 'Wondimagnhu Siyum' }}</strong>
+                        Reported by: <strong>{{ $mReq->reportedBy->name ?? ($mReq->employee->full_name ?? 'Staff') }}</strong> &bull; Reported to / Handled by: <strong>{{ $mReq->assignedTo->name ?? 'Wondimagnhu Siyum' }}</strong>
                     </div>
                     <div class="p-2.5 rounded bg-light border-start border-4 border-warning small text-dark" style="white-space: pre-wrap;">
                         {{ $mReq->description }}
@@ -1293,33 +1293,33 @@
                         <div class="col-sm-6 col-md-3">
                             <div class="p-2 rounded bg-light border h-100">
                                 <span class="text-muted small d-block text-uppercase fw-semibold" style="font-size: 0.7rem;">Catalog Asset</span>
-                                <strong class="text-dark">{{ $mReq->fixedAssetUnit?->parentAsset?->name ?? 'Direct Item' }}</strong>
-                                <small class="text-muted d-block" style="font-size:0.75rem;">Category: {{ $mReq->fixedAssetUnit?->parentAsset?->category ?? 'General Asset' }}</small>
+                                <strong class="text-dark">{{ $mReq->fixedAssetUnit->parentAsset->name ?? 'Direct Item' }}</strong>
+                                <small class="text-muted d-block" style="font-size:0.75rem;">Category: {{ $mReq->fixedAssetUnit->parentAsset->category ?? 'General Asset' }}</small>
                             </div>
                         </div>
                         <div class="col-sm-6 col-md-3">
                             <div class="p-2 rounded bg-light border h-100">
                                 <span class="text-muted small d-block text-uppercase fw-semibold" style="font-size: 0.7rem;">Brand &amp; Model</span>
-                                <strong class="text-dark">{{ $mReq->fixedAssetUnit?->brand ?? 'N/A' }} {{ $mReq->fixedAssetUnit?->model ?? '' }}</strong>
-                                <small class="text-muted d-block font-monospace" style="font-size:0.75rem;">Serial: {{ $mReq->fixedAssetUnit?->serial_number ?? ($mReq->fixedAssetUnit?->unit_code ?? 'N/A') }}</small>
+                                <strong class="text-dark">{{ $mReq->fixedAssetUnit->brand ?? 'N/A' }} {{ $mReq->fixedAssetUnit->model ?? '' }}</strong>
+                                <small class="text-muted d-block font-monospace" style="font-size:0.75rem;">Serial: {{ $mReq->fixedAssetUnit->serial_number ?? ($mReq->fixedAssetUnit->unit_code ?? 'N/A') }}</small>
                             </div>
                         </div>
                         <div class="col-sm-6 col-md-3">
                             <div class="p-2 rounded bg-light border h-100">
                                 <span class="text-muted small d-block text-uppercase fw-semibold" style="font-size: 0.7rem;">Location &amp; Station</span>
-                                <strong class="text-dark">{{ $mReq->fixedAssetUnit?->current_location ?? ($mReq->employee?->department ?? 'General Service') }}</strong>
-                                @if($mReq->fixedAssetUnit?->plate_number)
+                                <strong class="text-dark">{{ $mReq->fixedAssetUnit->current_location ?? ($mReq->employee->department ?? 'General Service') }}</strong>
+                                @if($mReq->fixedAssetUnit->plate_number)
                                     <small class="text-muted d-block" style="font-size:0.75rem;">Plate: {{ $mReq->fixedAssetUnit->plate_number }}</small>
                                 @else
-                                    <small class="text-muted d-block" style="font-size:0.75rem;">User: {{ $mReq->fixedAssetUnit?->assignedEmployee?->full_name ?? ($mReq->employee?->full_name ?? 'Staff') }}</small>
+                                    <small class="text-muted d-block" style="font-size:0.75rem;">User: {{ $mReq->fixedAssetUnit->assignedEmployee->full_name ?? ($mReq->employee->full_name ?? 'Staff') }}</small>
                                 @endif
                             </div>
                         </div>
                         <div class="col-sm-6 col-md-3">
                             <div class="p-2 rounded bg-light border h-100">
                                 <span class="text-muted small d-block text-uppercase fw-semibold" style="font-size: 0.7rem;">Purchase / Warranty</span>
-                                <strong class="text-dark">{{ $mReq->fixedAssetUnit?->purchase_price ? number_format($mReq->fixedAssetUnit->purchase_price, 2) . ' ETB' : 'N/A' }}</strong>
-                                <small class="text-muted d-block" style="font-size:0.75rem;">Warranty: {{ $mReq->fixedAssetUnit?->warranty_expiry ? $mReq->fixedAssetUnit->warranty_expiry->format('d M Y') : 'N/A' }}</small>
+                                <strong class="text-dark">{{ $mReq->fixedAssetUnit->purchase_price ? number_format($mReq->fixedAssetUnit->purchase_price, 2) . ' ETB' : 'N/A' }}</strong>
+                                <small class="text-muted d-block" style="font-size:0.75rem;">Warranty: {{ $mReq->fixedAssetUnit->warranty_expiry ? $mReq->fixedAssetUnit->warranty_expiry->format('d M Y') : 'N/A' }}</small>
                             </div>
                         </div>
                     </div>
@@ -1331,7 +1331,7 @@
                                 <i class="fa-solid fa-triangle-exclamation text-warning me-1"></i>Reported Issue &amp; Repair Details
                             </span>
                             <small class="text-muted" style="font-size:0.75rem;">
-                                Reported by <strong>{{ $mReq->reportedBy?->name ?? ($mReq->employee?->full_name ?? 'Staff') }}</strong> &bull; Reported to <strong>{{ $mReq->assignedTo?->name ?? 'Wondimagnhu Siyum' }}</strong> on {{ $mReq->created_at->format('M d, Y h:i A') }}
+                                Reported by <strong>{{ $mReq->reportedBy->name ?? ($mReq->employee->full_name ?? 'Staff') }}</strong> &bull; Reported to <strong>{{ $mReq->assignedTo->name ?? 'Wondimagnhu Siyum' }}</strong> on {{ $mReq->created_at->format('M d, Y h:i A') }}
                             </small>
                         </div>
                         <div class="text-dark" style="white-space: pre-wrap; font-size: 0.92rem; line-height: 1.5;">{{ $mReq->description }}</div>
@@ -1413,7 +1413,7 @@
                                                 <span class="text-muted">—</span>
                                             @endif
                                         </td>
-                                        <td class="text-muted">{{ $hTick->assignedTo?->name ?? 'Unassigned' }}</td>
+                                        <td class="text-muted">{{ $hTick->assignedTo->name ?? 'Unassigned' }}</td>
                                         <td>
                                             <span class="badge {{ $hTick->status_badge['class'] }} px-2 py-0.5">
                                                 {{ $hTick->status_badge['label'] }}

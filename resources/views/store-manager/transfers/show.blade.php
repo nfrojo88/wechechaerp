@@ -15,7 +15,7 @@
         $rawUserRoles = $user ? $user->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray() : [];
         $isAuditorUser = in_array('auditor', $rawUserRoles) || in_array('audit', $rawUserRoles) || in_array('internal_auditor', $rawUserRoles) || in_array('audit_team', $rawUserRoles) || ($user && $user->hasAnyRole(['auditor', 'audit', 'internal_auditor', 'Auditor', 'Audit']));
 
-        $userStoreId = $assignedStore?->id ?? $user->store_id;
+        $userStoreId = $assignedStore->id ?? $user->store_id;
         $isSenderStore = !$isAuditorUser && $userStoreId && ($transfer->from_store_id == $userStoreId);
         $isReceiverStore = !$isAuditorUser && $userStoreId && ($transfer->to_store_id == $userStoreId);
         $isAdmin = !$isAuditorUser && $user->hasAnyRole(['admin', 'global_admin', 'store_manager', 'general_service', 'coordinator']);

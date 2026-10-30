@@ -114,8 +114,8 @@
                                 </a>
                             </td>
                             <td>
-                                <strong class="text-dark d-block text-truncate" style="max-width: 160px;" title="{{ $sheet->project?->name }}">
-                                    {{ $sheet->project?->name ?? 'General Site' }}
+                                <strong class="text-dark d-block text-truncate" style="max-width: 160px;" title="{{ $sheet->project->name }}">
+                                    {{ $sheet->project->name ?? 'General Site' }}
                                 </strong>
                             </td>
                             <td>{{ $sheet->date->format('M d, Y') }}</td>

@@ -17,7 +17,7 @@
                 </span>
             </div>
             <p class="text-muted small mb-0 mt-1">
-                Project: <strong>{{ $sheet->project?->name }}</strong> &bull; Date: <strong>{{ $sheet->date->format('M d, Y (l)') }}</strong> &bull; Submitted by: <strong>{{ $sheet->siteEngineer?->name }}</strong>
+                Project: <strong>{{ $sheet->project->name }}</strong> &bull; Date: <strong>{{ $sheet->date->format('M d, Y (l)') }}</strong> &bull; Submitted by: <strong>{{ $sheet->siteEngineer->name }}</strong>
             </p>
         </div>
 
@@ -120,19 +120,19 @@
                             @foreach($sheet->lines as $idx => $line)
                             @php
                                 $w = $line->worker;
-                                $punches = $rawPunches->get($w?->phone) ?? $deviceLogs->get($w?->phone) ?? collect();
+                                $punches = $rawPunches->get($w->phone) ?? $deviceLogs->get($w->phone) ?? collect();
                             @endphp
                             <tr>
                                 <td class="font-monospace text-muted">{{ $idx + 1 }}</td>
                                 <td class="text-start">
-                                    <strong class="text-dark d-block">{{ $w?->name ?? 'Worker' }}</strong>
-                                    <span class="font-monospace text-primary" style="font-size: 0.68rem;">{{ $w?->worker_code }}</span>
-                                    @if($w?->phone)
+                                    <strong class="text-dark d-block">{{ $w->name ?? 'Worker' }}</strong>
+                                    <span class="font-monospace text-primary" style="font-size: 0.68rem;">{{ $w->worker_code }}</span>
+                                    @if($w->phone)
                                     <span class="text-muted" style="font-size: 0.68rem;">&bull; Tel: {{ $w->phone }}</span>
                                     @endif
                                 </td>
                                 <td>
-                                    <span class="badge bg-light text-dark border">{{ $w?->trade ?: 'Laborer' }}</span>
+                                    <span class="badge bg-light text-dark border">{{ $w->trade ?: 'Laborer' }}</span>
                                 </td>
                                 <td class="font-monospace">{{ $line->check_in ? substr($line->check_in, 0, 5) : '—' }}</td>
                                 <td class="font-monospace">{{ $line->check_out ? substr($line->check_out, 0, 5) : '—' }}</td>
@@ -216,7 +216,7 @@
                                         <strong class="text-dark">{{ ucwords(str_replace('_', ' ', $log->stage)) }}: {{ ucfirst($log->action) }}</strong>
                                         <span class="text-muted font-monospace" style="font-size: 0.68rem;">{{ $log->created_at->format('M d, H:i') }}</span>
                                     </div>
-                                    <div class="text-muted" style="font-size: 0.72rem;">By: {{ $log->user?->name }} &bull; {{ $log->comment }}</div>
+                                    <div class="text-muted" style="font-size: 0.72rem;">By: {{ $log->user->name }} &bull; {{ $log->comment }}</div>
                                 </div>
                             </li>
                             @empty
@@ -247,7 +247,7 @@
                 <div class="modal-body p-3">
                     <div class="alert alert-warning py-2 small mb-3">
                         <i class="fa-solid fa-circle-info me-1"></i>
-                        Returning this sheet will send it back to <strong>{{ $sheet->siteEngineer?->name }}</strong> with the rejection reason and any adjusted line amounts highlighted for correction.
+                        Returning this sheet will send it back to <strong>{{ $sheet->siteEngineer->name }}</strong> with the rejection reason and any adjusted line amounts highlighted for correction.
                     </div>
 
                     <div class="mb-3">

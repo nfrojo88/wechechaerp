@@ -125,7 +125,7 @@
                             </div>
                             <div class="col-md-3" id="hours-col">
                                 <label class="form-label small fw-semibold">Actual Hours</label>
-                                <input type="number" name="actual_hours" class="form-control form-control-sm" step="0.5" min="0" value="{{ $myAssignee?->actual_hours }}">
+                                <input type="number" name="actual_hours" class="form-control form-control-sm" step="0.5" min="0" value="{{ $myAssignee->actual_hours }}">
                             </div>
                             <div class="col-12" id="decline-col" style="display:none">
                                 <label class="form-label small fw-semibold">Reason for Decline / Hold</label>

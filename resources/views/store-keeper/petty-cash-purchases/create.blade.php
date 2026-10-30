@@ -85,9 +85,9 @@
                             <span class="badge bg-danger">Emergency Site Demand</span>
                         </div>
                         <p class="mb-0 text-muted small mt-0.5">
-                            Project: <strong>{{ $selectedMaterialRequest->project?->name ?? 'Site' }}</strong> &bull;
-                            Requested by: <strong>{{ $selectedMaterialRequest->requestedBy?->name ?? 'Site Engineer' }}</strong> &bull;
-                            Approved for Site Petty Cash by: <strong>{{ $selectedMaterialRequest->planningApprover?->name ?? 'Planning Manager' }}</strong>
+                            Project: <strong>{{ $selectedMaterialRequest->project->name ?? 'Site' }}</strong> &bull;
+                            Requested by: <strong>{{ $selectedMaterialRequest->requestedBy->name ?? 'Site Engineer' }}</strong> &bull;
+                            Approved for Site Petty Cash by: <strong>{{ $selectedMaterialRequest->planningApprover->name ?? 'Planning Manager' }}</strong>
                         </p>
                     </div>
                 </div>
@@ -119,7 +119,7 @@
                     <li>
                         <a class="dropdown-item py-2" href="{{ route('store-keeper.petty-cash-purchases.create', ['material_request_id' => $pemr->id]) }}">
                             <div class="fw-bold font-monospace text-primary">#{{ $pemr->reference_number }}</div>
-                            <small class="text-muted d-block">{{ $pemr->project?->name }} &bull; {{ $pemr->items->count() }} items</small>
+                            <small class="text-muted d-block">{{ $pemr->project->name }} &bull; {{ $pemr->items->count() }} items</small>
                         </a>
                     </li>
                     @endforeach
@@ -279,7 +279,7 @@
                         {{-- Notes --}}
                         <div class="mb-0">
                             <label class="form-label fw-semibold text-dark small">Notes / Purpose</label>
-                            <textarea name="notes" id="pettyNotes" rows="2" class="form-control form-control-sm" placeholder="Purpose or site usage note...">{{ old('notes', isset($selectedMaterialRequest) ? "Emergency Material Request #{$selectedMaterialRequest->reference_number} - Spot purchase for " . ($selectedMaterialRequest->project?->name ?? 'Site Store') : '') }}</textarea>
+                            <textarea name="notes" id="pettyNotes" rows="2" class="form-control form-control-sm" placeholder="Purpose or site usage note...">{{ old('notes', isset($selectedMaterialRequest) ? "Emergency Material Request #{$selectedMaterialRequest->reference_number} - Spot purchase for " . ($selectedMaterialRequest->project->name ?? 'Site Store') : '') }}</textarea>
                         </div>
 
                     </div>
@@ -529,7 +529,7 @@
                             <select name="recipient_id" id="modalRecipientSelect" class="form-select form-select-sm" required>
                                 @foreach($storeKeepers as $k)
                                     @php
-                                        $kPhone = $k->phone ?? $k->employee?->phone ?? $k->employee?->mobile_phone ?? '';
+                                        $kPhone = $k->phone ?? $k->employee->phone ?? $k->employee->mobile_phone ?? '';
                                     @endphp
                                     <option value="{{ $k->id }}" data-store="{{ $k->store_id }}" data-phone="{{ $kPhone }}"
                                         {{ (optional($assignedStore)->manager_id == $k->id || Auth::id() == $k->id) ? 'selected' : '' }}>

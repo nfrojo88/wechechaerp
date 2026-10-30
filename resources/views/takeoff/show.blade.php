@@ -254,7 +254,7 @@ if (!function_exists('evalTakeoffExpr')) {
                                 @php
                                     $sectionTotalQty  = $section->items->sum('result_quantity');
                                     $sectionTotalCost = $section->items->sum('total_cost');
-                                    $sectionUnit      = $section->items->first()?->result_unit ?? '';
+                                    $sectionUnit      = $section->items->first()->result_unit ?? '';
                                 @endphp
 
                                 {{-- Section Header --}}

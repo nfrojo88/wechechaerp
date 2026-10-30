@@ -170,7 +170,7 @@
                             x-show="(
                                 !search || 
                                 '{{ strtolower(addslashes($i->title)) }}'.includes(search.toLowerCase()) || 
-                                '{{ strtolower(addslashes($i->project?->name ?? '')) }}'.includes(search.toLowerCase())
+                                '{{ strtolower(addslashes($i->project->name ?? '')) }}'.includes(search.toLowerCase())
                             ) && (
                                 !categoryFilter || 
                                 '{{ strtolower($i->category) }}' === categoryFilter.toLowerCase()

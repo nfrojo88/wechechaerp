@@ -119,14 +119,14 @@
                         @forelse($logs as $log)
                         <tr>
                             <td class="ps-4 py-3">
-                                <strong class="text-dark">{{ $log->km_date?->format('d M Y') }}</strong>
-                                <div class="text-muted small" style="font-size: 0.75rem;">{{ $log->created_at?->diffForHumans() }}</div>
+                                <strong class="text-dark">{{ $log->km_date->format('d M Y') }}</strong>
+                                <div class="text-muted small" style="font-size: 0.75rem;">{{ $log->created_at->diffForHumans() }}</div>
                             </td>
                             <td class="py-3">
                                 <a href="{{ route('general-service.vehicle-reminders.vehicle-detail', $log->fixed_asset_unit_id) }}" class="fw-bold text-dark text-decoration-none">
-                                    {{ $log->assetUnit?->plate_number ?: $log->assetUnit?->unit_code }}
+                                    {{ $log->assetUnit->plate_number ?: $log->assetUnit->unit_code }}
                                 </a>
-                                <div class="text-muted small">{{ $log->assetUnit?->parentAsset?->name }}</div>
+                                <div class="text-muted small">{{ $log->assetUnit->parentAsset->name }}</div>
                             </td>
                             <td class="py-3">
                                 <span class="badge bg-dark font-monospace fs-6 px-3 py-1">
@@ -158,7 +158,7 @@
                                 </span>
                             </td>
                             <td class="py-3 text-muted small">
-                                <div><i class="fa-solid fa-user me-1 text-primary"></i>{{ $log->loggedBy?->name ?? 'System' }}</div>
+                                <div><i class="fa-solid fa-user me-1 text-primary"></i>{{ $log->loggedBy->name ?? 'System' }}</div>
                                 @if($log->driver)
                                     <div class="text-muted" style="font-size: 0.75rem;">Driver: {{ $log->driver->full_name }}</div>
                                 @endif

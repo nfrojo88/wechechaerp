@@ -130,7 +130,7 @@
                         <div class="col-md-6">
                             <label class="form-label form-label-sm">Receipt Date</label>
                             <input type="date" name="receipt_date" class="form-control form-control-sm"
-                                   value="{{ old('receipt_date', $receipt->receipt_date?->toDateString()) }}">
+                                   value="{{ old('receipt_date', $receipt->receipt_date->toDateString()) }}">
                         </div>
                         <div class="col-md-6">
                             <label class="form-label form-label-sm">Category</label>
@@ -193,7 +193,7 @@
                     <dd class="col-sm-8 small">{{ $receipt->vendor_tin ?? '—' }}</dd>
 
                     <dt class="col-sm-4 text-muted small fw-normal">Receipt Date</dt>
-                    <dd class="col-sm-8 small">{{ $receipt->receipt_date?->format('d M Y') ?? '—' }}</dd>
+                    <dd class="col-sm-8 small">{{ $receipt->receipt_date->format('d M Y') ?? '—' }}</dd>
 
                     <dt class="col-sm-4 text-muted small fw-normal">Category</dt>
                     <dd class="col-sm-8 small">{{ $categories[$receipt->category] ?? $receipt->category }}</dd>
@@ -274,7 +274,7 @@
                         <span class="badge bg-{{ $badge }} rounded-circle p-1 mt-1" style="width:8px;height:8px;"></span>
                         <span>
                             {{ ucfirst($receipt->status) }} by <strong>{{ $receipt->approver->name }}</strong>
-                            on {{ $receipt->approved_at?->format('d M Y, H:i') ?? '—' }}
+                            on {{ $receipt->approved_at->format('d M Y, H:i') ?? '—' }}
                         </span>
                     </li>
                     @endif

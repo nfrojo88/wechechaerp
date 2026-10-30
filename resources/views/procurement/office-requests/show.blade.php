@@ -61,7 +61,7 @@
                         <i class="fa-solid fa-check"></i>
                     </div>
                     <div class="fw-bold small text-dark">1. Requisition</div>
-                    <div class="text-muted" style="font-size: 0.75rem;">{{ $officeRequest->requestedBy?->name ?? 'Secretary' }}</div>
+                    <div class="text-muted" style="font-size: 0.75rem;">{{ $officeRequest->requestedBy->name ?? 'Secretary' }}</div>
                     <div class="text-muted" style="font-size: 0.7rem;">{{ $officeRequest->created_at ? $officeRequest->created_at->format('M d, Y') : '' }}</div>
                 </div>
 
@@ -128,8 +128,8 @@
                         </div>
                         <div class="col-sm-6 col-md-4">
                             <div class="text-muted small text-uppercase">Requested By</div>
-                            <div class="fw-bold text-dark mt-1">{{ $officeRequest->requestedBy?->name ?? 'Secretary' }}</div>
-                            <div class="text-muted small">{{ $officeRequest->requestedBy?->email }}</div>
+                            <div class="fw-bold text-dark mt-1">{{ $officeRequest->requestedBy->name ?? 'Secretary' }}</div>
+                            <div class="text-muted small">{{ $officeRequest->requestedBy->email }}</div>
                         </div>
                         <div class="col-sm-6 col-md-4">
                             <div class="text-muted small text-uppercase">Date Requested</div>
@@ -350,9 +350,9 @@
                                                 $linkedBank = $coa->bankAccounts->first();
                                             @endphp
                                             <option value="{{ $coa->id }}" 
-                                                    data-bank-id="{{ $linkedBank?->id ?? '' }}"
-                                                    data-staff-id="{{ $coa->assigned_to ?? $linkedBank?->assigned_to ?? '' }}"
-                                                    data-staff-name="{{ $coa->manager?->name ?? $linkedBank?->assignedStaff?->name ?? '' }}"
+                                                    data-bank-id="{{ $linkedBank->id ?? '' }}"
+                                                    data-staff-id="{{ $coa->assigned_to ?? $linkedBank->assigned_to ?? '' }}"
+                                                    data-staff-name="{{ $coa->manager->name ?? $linkedBank->assignedStaff->name ?? '' }}"
                                                     {{ $officeRequest->coa_id == $coa->id ? 'selected' : '' }}>
                                                 [{{ $coa->code }}] {{ $coa->name }}
                                             </option>
@@ -418,7 +418,7 @@
                             <div class="fw-bold text-success fs-4 mt-1">ETB {{ number_format((float)$officeRequest->amount, 2) }}</div>
                         </div>
                         <ul class="list-unstyled mb-0 small text-muted">
-                            <li class="mb-2"><i class="fa-solid fa-user-check me-2 text-success"></i> Paid by: <strong class="text-dark">{{ $officeRequest->paidBy?->name ?? 'Finance' }}</strong></li>
+                            <li class="mb-2"><i class="fa-solid fa-user-check me-2 text-success"></i> Paid by: <strong class="text-dark">{{ $officeRequest->paidBy->name ?? 'Finance' }}</strong></li>
                             <li class="mb-2"><i class="fa-solid fa-calendar me-2 text-success"></i> Date: <strong class="text-dark">{{ $officeRequest->paid_at ? $officeRequest->paid_at->format('M d, Y h:i A') : '-' }}</strong></li>
                             @if($officeRequest->payment_reference)
                                 <li class="mb-2"><i class="fa-solid fa-receipt me-2 text-success"></i> Reference: <strong class="text-dark">{{ $officeRequest->payment_reference }}</strong></li>
@@ -451,7 +451,7 @@
                             {{ $officeRequest->rejection_reason ?: 'Request was rejected.' }}
                         </div>
                         <div class="small text-muted mt-2">
-                            Rejected by {{ $officeRequest->rejectedBy?->name ?? 'Approver' }} on {{ $officeRequest->rejected_at ? $officeRequest->rejected_at->format('M d, Y h:i A') : '-' }}
+                            Rejected by {{ $officeRequest->rejectedBy->name ?? 'Approver' }} on {{ $officeRequest->rejected_at ? $officeRequest->rejected_at->format('M d, Y h:i A') : '-' }}
                         </div>
                     </div>
                 </div>
@@ -469,7 +469,7 @@
                             <span class="position-absolute top-0 start-0 translate-middle bg-primary rounded-circle p-1" style="width: 12px; height: 12px;"></span>
                             <div>
                                 <div class="fw-bold small text-dark">Office Request Submitted</div>
-                                <div class="text-muted" style="font-size: 0.75rem;">By {{ $officeRequest->requestedBy?->name ?? 'Secretary' }} &bull; {{ $officeRequest->created_at ? $officeRequest->created_at->format('M d, Y h:i A') : '' }}</div>
+                                <div class="text-muted" style="font-size: 0.75rem;">By {{ $officeRequest->requestedBy->name ?? 'Secretary' }} &bull; {{ $officeRequest->created_at ? $officeRequest->created_at->format('M d, Y h:i A') : '' }}</div>
                             </div>
                         </li>
 
@@ -479,7 +479,7 @@
                                 <span class="position-absolute top-0 start-0 translate-middle bg-warning rounded-circle p-1" style="width: 12px; height: 12px;"></span>
                                 <div>
                                     <div class="fw-bold small text-dark">Approved by HR / Coordinator</div>
-                                    <div class="text-muted" style="font-size: 0.75rem;">By {{ $officeRequest->hrReviewer?->name ?? 'HR' }} &bull; {{ $officeRequest->hr_reviewed_at->format('M d, Y h:i A') }}</div>
+                                    <div class="text-muted" style="font-size: 0.75rem;">By {{ $officeRequest->hrReviewer->name ?? 'HR' }} &bull; {{ $officeRequest->hr_reviewed_at->format('M d, Y h:i A') }}</div>
                                     <div class="text-success fw-bold small mt-1">Budget: ETB {{ number_format((float)$officeRequest->amount, 2) }}</div>
                                     @if($officeRequest->hr_notes)
                                         <div class="p-2 bg-light rounded mt-1 small text-dark">{{ $officeRequest->hr_notes }}</div>
@@ -494,7 +494,7 @@
                                 <span class="position-absolute top-0 start-0 translate-middle rounded-circle p-1" style="width: 12px; height: 12px; background:#7c3aed;"></span>
                                 <div>
                                     <div class="fw-bold small text-dark">Assigned in Finance Hub</div>
-                                    <div class="text-muted" style="font-size: 0.75rem;">By {{ $officeRequest->financeHead?->name ?? 'Finance Head' }} &bull; {{ $officeRequest->finance_assigned_at->format('M d, Y h:i A') }}</div>
+                                    <div class="text-muted" style="font-size: 0.75rem;">By {{ $officeRequest->financeHead->name ?? 'Finance Head' }} &bull; {{ $officeRequest->finance_assigned_at->format('M d, Y h:i A') }}</div>
                                     @if($officeRequest->assignedStaff)
                                         <div class="text-muted small">Assigned Staff: <strong>{{ $officeRequest->assignedStaff->name }}</strong></div>
                                     @endif
@@ -511,7 +511,7 @@
                                 <span class="position-absolute top-0 start-0 translate-middle bg-success rounded-circle p-1" style="width: 12px; height: 12px;"></span>
                                 <div>
                                     <div class="fw-bold small text-success">Payment Disbursed &amp; Completed</div>
-                                    <div class="text-muted" style="font-size: 0.75rem;">By {{ $officeRequest->paidBy?->name ?? 'Finance' }} &bull; {{ $officeRequest->paid_at->format('M d, Y h:i A') }}</div>
+                                    <div class="text-muted" style="font-size: 0.75rem;">By {{ $officeRequest->paidBy->name ?? 'Finance' }} &bull; {{ $officeRequest->paid_at->format('M d, Y h:i A') }}</div>
                                     @if($officeRequest->payment_reference)
                                         <div class="text-muted small">Ref: <strong>{{ $officeRequest->payment_reference }}</strong></div>
                                     @endif

@@ -310,22 +310,22 @@
                                         @forelse($siteInventoryItems ?? [] as $item)
                                         @php
                                             $isLow = $item->quantity_on_hand <= $item->min_stock && $item->min_stock > 0;
-                                            $skuCode = $item->product?->sku ?: ($item->product?->code ?: null);
+                                            $skuCode = $item->product->sku ?: ($item->product->code ?: null);
                                         @endphp
                                         <tr class="{{ $isLow ? 'table-warning' : '' }}">
                                             <td data-label="Material">
-                                                <div class="fw-semibold text-dark">{{ $item->product?->name ?? 'N/A' }}</div>
+                                                <div class="fw-semibold text-dark">{{ $item->product->name ?? 'N/A' }}</div>
                                                 @if($skuCode)
                                                     <small class="text-muted font-monospace"><i class="fa-solid fa-barcode me-1"></i>{{ $skuCode }}</small>
                                                 @endif
                                             </td>
                                             <td data-label="Store">
-                                                <span class="badge bg-light text-dark border">{{ $item->store?->name ?? 'Site Store' }}</span>
+                                                <span class="badge bg-light text-dark border">{{ $item->store->name ?? 'Site Store' }}</span>
                                             </td>
-                                            <td data-label="Category" class="small text-muted">{{ $item->product?->category ?? '—' }}</td>
+                                            <td data-label="Category" class="small text-muted">{{ $item->product->category ?? '—' }}</td>
                                             <td data-label="On Hand" class="text-end fw-bold font-tabular">
                                                 {{ number_format($item->quantity_on_hand, 2) }}
-                                                <small class="text-muted fw-normal">{{ $item->product?->unit ?? '' }}</small>
+                                                <small class="text-muted fw-normal">{{ $item->product->unit ?? '' }}</small>
                                             </td>
                                             <td data-label="Available" class="text-end font-tabular {{ $isLow ? 'text-danger fw-bold' : '' }}">
                                                 {{ number_format($item->quantity_available, 2) }}
@@ -392,17 +392,17 @@
                                                 <div class="fw-semibold text-dark">{{ $mov->created_at ? $mov->created_at->format('M d, H:i') : '—' }}</div>
                                             </td>
                                             <td data-label="Product">
-                                                <div class="fw-semibold small text-dark">{{ $mov->inventory?->product?->name ?? 'N/A' }}</div>
-                                                <small class="text-muted">{{ $mov->inventory?->store?->name ?? '' }}</small>
+                                                <div class="fw-semibold small text-dark">{{ $mov->inventory->product->name ?? 'N/A' }}</div>
+                                                <small class="text-muted">{{ $mov->inventory->store->name ?? '' }}</small>
                                             </td>
                                             <td data-label="Type">
                                                 <x-status-badge :status="$mov->type" :tone="$movTone" />
                                             </td>
                                             <td data-label="Quantity" class="text-end font-tabular fw-bold {{ $isPositive ? 'text-success' : 'text-danger' }}">
                                                 {{ $isPositive ? '+' : '-' }}{{ number_format(abs($qty), 2) }}
-                                                <small class="text-muted fw-normal">{{ $mov->inventory?->product?->unit ?? '' }}</small>
+                                                <small class="text-muted fw-normal">{{ $mov->inventory->product->unit ?? '' }}</small>
                                             </td>
-                                            <td data-label="Performed By" class="small">{{ $mov->performer?->name ?? 'System' }}</td>
+                                            <td data-label="Performed By" class="small">{{ $mov->performer->name ?? 'System' }}</td>
                                             <td data-label="Remarks" class="small text-muted text-truncate" style="max-width: 180px;">{{ $mov->remarks ?: '—' }}</td>
                                         </tr>
                                         @empty

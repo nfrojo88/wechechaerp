@@ -85,14 +85,14 @@
                             <tr class="worker-calc-row" data-worker-id="{{ $wId }}">
                                 <td class="font-monospace text-muted">{{ $i++ }}</td>
                                 <td class="text-start">
-                                    <strong class="text-dark d-block">{{ $w?->name ?? 'Worker' }}</strong>
-                                    <span class="font-monospace text-primary" style="font-size: 0.68rem;">{{ $w?->worker_code }}</span>
-                                    @if($w?->phone)
+                                    <strong class="text-dark d-block">{{ $w->name ?? 'Worker' }}</strong>
+                                    <span class="font-monospace text-primary" style="font-size: 0.68rem;">{{ $w->worker_code }}</span>
+                                    @if($w->phone)
                                     <span class="text-muted" style="font-size: 0.68rem;">&bull; Tel: {{ $w->phone }}</span>
                                     @endif
                                 </td>
                                 <td>
-                                    <span class="badge bg-light text-dark border">{{ $w?->trade ?: 'General' }}</span>
+                                    <span class="badge bg-light text-dark border">{{ $w->trade ?: 'General' }}</span>
                                 </td>
                                 <td class="font-monospace fw-semibold">{{ $data['days_worked'] }}</td>
                                 <td class="font-monospace">{{ number_format($data['regular_hours'], 1) }}h</td>

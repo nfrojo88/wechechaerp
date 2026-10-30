@@ -52,7 +52,7 @@
                         <div class="col-md-6">
                             <label class="form-label fw-semibold">Start Date <span class="text-danger">*</span></label>
                             <input type="date" name="plan_start_date" id="start_date"
-                                   value="{{ old('plan_start_date', $erp_plan->plan_start_date?->format('Y-m-d')) }}"
+                                   value="{{ old('plan_start_date', $erp_plan->plan_start_date->format('Y-m-d')) }}"
                                    class="form-control @error('plan_start_date') is-invalid @enderror" required>
                             @error('plan_start_date')<div class="invalid-feedback">{{ $message }}</div>@enderror
                         </div>
@@ -60,7 +60,7 @@
                         <div class="col-md-6">
                             <label class="form-label fw-semibold">End Date <span class="text-danger">*</span></label>
                             <input type="date" name="plan_end_date" id="end_date"
-                                   value="{{ old('plan_end_date', $erp_plan->plan_end_date?->format('Y-m-d')) }}"
+                                   value="{{ old('plan_end_date', $erp_plan->plan_end_date->format('Y-m-d')) }}"
                                    class="form-control @error('plan_end_date') is-invalid @enderror" required>
                             @error('plan_end_date')<div class="invalid-feedback">{{ $message }}</div>@enderror
                         </div>

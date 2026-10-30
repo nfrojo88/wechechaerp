@@ -244,10 +244,10 @@
                             $eMrMaterialsJson = $mr->items->map(function($itm) {
                                 return [
                                     'id' => $itm->id,
-                                    'name' => $itm->product?->name ?? 'Material',
-                                    'code' => $itm->product?->item_code ?? $itm->product?->sku ?? '-',
+                                    'name' => $itm->product->name ?? 'Material',
+                                    'code' => $itm->product->item_code ?? $itm->product->sku ?? '-',
                                     'quantity' => (float)$itm->quantity,
-                                    'unit' => $itm->product?->unit ?? 'Units',
+                                    'unit' => $itm->product->unit ?? 'Units',
                                     'estimated_unit_cost' => 0,
                                     'estimated_total' => 0,
                                     'specifications' => $itm->notes ?? '',
@@ -257,8 +257,8 @@
                         @endphp
                         <tr>
                             <td><strong>{{ $mr->reference_number }}</strong></td>
-                            <td>{{ $mr->project?->name }}</td>
-                            <td>{{ $mr->requestedBy?->name ?? $mr->creator?->name ?? 'N/A' }}</td>
+                            <td>{{ $mr->project->name }}</td>
+                            <td>{{ $mr->requestedBy->name ?? $mr->creator->name ?? 'N/A' }}</td>
                             <td class="col-procurement-materials">
                                 <div class="d-flex align-items-center justify-content-between mb-1">
                                     <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 px-2 py-0.5 fw-semibold" style="font-size:0.75rem;">
@@ -271,17 +271,17 @@
                                 <div class="procurement-materials-list d-flex flex-column gap-1" style="max-height: 160px; overflow-y: auto;">
                                     @foreach($mr->items as $itm)
                                         <div class="d-flex align-items-center justify-content-between p-1 bg-white rounded border text-nowrap shadow-2xs" style="font-size:0.78rem;">
-                                            <span class="fw-semibold text-dark text-truncate me-2" style="max-width: 200px;" title="{{ $itm->product?->name }}">
-                                                <i class="fa-solid fa-cube text-danger me-1"></i>{{ $itm->product?->name ?? 'Material' }}
+                                            <span class="fw-semibold text-dark text-truncate me-2" style="max-width: 200px;" title="{{ $itm->product->name }}">
+                                                <i class="fa-solid fa-cube text-danger me-1"></i>{{ $itm->product->name ?? 'Material' }}
                                             </span>
                                             <span class="badge bg-light text-dark border font-monospace px-1.5 py-0.5 fw-bold">
-                                                {{ (float)$itm->quantity }} {{ $itm->product?->unit ?? 'Units' }}
+                                                {{ (float)$itm->quantity }} {{ $itm->product->unit ?? 'Units' }}
                                             </span>
                                         </div>
                                     @endforeach
                                 </div>
                                 <div class="procurement-materials-compact-preview d-none text-muted small" style="font-size:11px;">
-                                    {{ $mr->items->count() }} item(s): {{ Str::limit($mr->items->map(fn($it) => $it->product?->name)->filter()->join(', '), 30) }}
+                                    {{ $mr->items->count() }} item(s): {{ Str::limit($mr->items->map(fn($it) => $it->product->name)->filter()->join(', '), 30) }}
                                 </div>
                             </td>
                             <td>{{ $mr->created_at->format('M d, Y H:i') }}</td>
@@ -302,8 +302,8 @@
                                                 class="btn btn-sm btn-outline-primary shadow-xs fw-semibold"
                                                 data-mr-id="{{ $mr->id }}"
                                                 data-ref="{{ $mr->reference_number }}"
-                                                data-project="{{ $mr->project?->name ?? 'General Project' }}"
-                                                data-requested-by="{{ $mr->requestedBy?->name ?? $mr->creator?->name ?? 'Site Engineer' }}"
+                                                data-project="{{ $mr->project->name ?? 'General Project' }}"
+                                                data-requested-by="{{ $mr->requestedBy->name ?? $mr->creator->name ?? 'Site Engineer' }}"
                                                 data-items="{{ json_encode($eMrMaterialsJson) }}"
                                                 onclick="openEmergencySplitModalFromBtn(this)"
                                                 title="Decide per Material Item (Petty Cash, Procurement, or Reject)">
@@ -379,10 +379,10 @@
                                 @endif
                             </td>
                             <td>
-                                <strong>{{ $cmr->project?->name ?? 'General Project' }}</strong>
-                                <small class="text-muted d-block"><i class="fas fa-warehouse me-1"></i>Store: {{ $cmr->store?->name ?? $cmr->destinationStore?->name ?? 'N/A' }}</small>
+                                <strong>{{ $cmr->project->name ?? 'General Project' }}</strong>
+                                <small class="text-muted d-block"><i class="fas fa-warehouse me-1"></i>Store: {{ $cmr->store->name ?? $cmr->destinationStore->name ?? 'N/A' }}</small>
                             </td>
-                            <td>{{ $cmr->requestedBy?->name ?? $cmr->creator?->name ?? 'Site Engineer' }}</td>
+                            <td>{{ $cmr->requestedBy->name ?? $cmr->creator->name ?? 'Site Engineer' }}</td>
                             <td>
                                 <span class="badge bg-success-subtle text-success border border-success-subtle">
                                     <i class="fas fa-check-circle me-1"></i>Planning Approved
@@ -392,10 +392,10 @@
                             @php
                                 $cmrMaterialsJson = $cmr->items->map(function($itm) {
                                     return [
-                                        'name' => $itm->product?->name ?? 'Material',
-                                        'code' => $itm->product?->item_code ?? '-',
+                                        'name' => $itm->product->name ?? 'Material',
+                                        'code' => $itm->product->item_code ?? '-',
                                         'quantity' => (float)$itm->quantity,
-                                        'unit' => $itm->product?->unit ?? 'Units',
+                                        'unit' => $itm->product->unit ?? 'Units',
                                         'estimated_unit_cost' => 0,
                                         'estimated_total' => 0,
                                         'specifications' => $itm->notes ?? '',
@@ -414,25 +414,25 @@
                                 <div class="procurement-materials-list d-flex flex-column gap-1" style="max-height: 160px; overflow-y: auto;">
                                     @foreach($cmr->items as $it)
                                         <div class="d-flex align-items-center justify-content-between p-1 bg-white rounded border text-nowrap shadow-2xs" style="font-size:0.78rem;">
-                                            <span class="fw-semibold text-dark text-truncate me-2" style="max-width: 200px;" title="{{ $it->product?->name }}">
-                                                <i class="fa-solid fa-cube text-primary me-1"></i>{{ $it->product?->name ?? 'Material' }}
+                                            <span class="fw-semibold text-dark text-truncate me-2" style="max-width: 200px;" title="{{ $it->product->name }}">
+                                                <i class="fa-solid fa-cube text-primary me-1"></i>{{ $it->product->name ?? 'Material' }}
                                             </span>
                                             <span class="badge bg-light text-dark border font-monospace px-1.5 py-0.5 fw-bold">
-                                                {{ (float)$it->quantity }} {{ $it->product?->unit ?? 'Units' }}
+                                                {{ (float)$it->quantity }} {{ $it->product->unit ?? 'Units' }}
                                             </span>
                                         </div>
                                     @endforeach
                                 </div>
                                 <div class="procurement-materials-compact-preview d-none text-muted small" style="font-size:11px;">
-                                    {{ $cmr->items->count() }} item(s): {{ Str::limit($cmr->items->map(fn($it) => $it->product?->name)->filter()->join(', '), 30) }}
+                                    {{ $cmr->items->count() }} item(s): {{ Str::limit($cmr->items->map(fn($it) => $it->product->name)->filter()->join(', '), 30) }}
                                 </div>
                             </td>
                             <td class="text-end">
                                 <div class="d-flex justify-content-end align-items-center gap-1">
                                     <button type="button" class="btn btn-sm btn-outline-primary shadow-xs fw-semibold btn-queue-quick-materials"
                                             data-ref="{{ $cmr->reference_number }}"
-                                            data-project="{{ $cmr->project?->name ?? 'General Project' }}"
-                                            data-store="{{ $cmr->store?->name ?? $cmr->destinationStore?->name ?? 'N/A' }}"
+                                            data-project="{{ $cmr->project->name ?? 'General Project' }}"
+                                            data-store="{{ $cmr->store->name ?? $cmr->destinationStore->name ?? 'N/A' }}"
                                             data-url="{{ $compPr ? route('purchase-requests.show', $compPr->id) : route('material-requests.show', $cmr) }}"
                                             data-items="{{ json_encode($cmrMaterialsJson) }}"
                                             onclick="openQuickMaterialsModalFromBtn(this)"
@@ -596,10 +596,10 @@
                                 $linkedPr = $mr->purchaseRequests->first();
                                 $mrMaterialsJson = $mr->items->map(function($itm) {
                                     return [
-                                        'name' => $itm->product?->name ?? 'Material',
-                                        'code' => $itm->product?->item_code ?? '-',
+                                        'name' => $itm->product->name ?? 'Material',
+                                        'code' => $itm->product->item_code ?? '-',
                                         'quantity' => (float)$itm->quantity,
-                                        'unit' => $itm->product?->unit ?? 'Units',
+                                        'unit' => $itm->product->unit ?? 'Units',
                                         'estimated_unit_cost' => 0,
                                         'estimated_total' => 0,
                                         'specifications' => $itm->notes ?? '',
@@ -619,8 +619,8 @@
                                     </div>
                                 </td>
                                 <td>
-                                    <strong>{{ $mr->project?->name ?? 'Head Office' }}</strong>
-                                    <small class="text-muted d-block">Store: {{ $mr->store?->name ?? 'N/A' }}</small>
+                                    <strong>{{ $mr->project->name ?? 'Head Office' }}</strong>
+                                    <small class="text-muted d-block">Store: {{ $mr->store->name ?? 'N/A' }}</small>
                                 </td>
                                 <td class="col-procurement-materials">
                                     <div class="d-flex align-items-center justify-content-between mb-1">
@@ -636,10 +636,10 @@
                                             <div class="d-flex align-items-center justify-content-between p-1.5 bg-white rounded border text-nowrap shadow-2xs" style="font-size:0.78rem;">
                                                 <div class="d-flex align-items-center gap-1.5 text-truncate me-2" style="max-width: 220px;">
                                                     <i class="fa-solid fa-cube text-primary" style="font-size:0.7rem;"></i>
-                                                    <strong class="text-dark text-truncate" title="{{ $mItm->product?->name }}">{{ $mItm->product?->name ?? 'Material' }}</strong>
+                                                    <strong class="text-dark text-truncate" title="{{ $mItm->product->name }}">{{ $mItm->product->name ?? 'Material' }}</strong>
                                                 </div>
                                                 <span class="badge bg-light text-dark border font-monospace px-1.5 py-0.5 fw-bold">
-                                                    {{ (float)$mItm->quantity }} {{ $mItm->product?->unit ?? 'Units' }}
+                                                    {{ (float)$mItm->quantity }} {{ $mItm->product->unit ?? 'Units' }}
                                                 </span>
                                             </div>
                                             @if(!empty($mItm->notes))
@@ -648,7 +648,7 @@
                                         @endforeach
                                     </div>
                                     <div class="procurement-materials-compact-preview d-none text-muted small" style="font-size:11px;">
-                                        {{ $mr->items->count() }} item(s): {{ Str::limit($mr->items->map(fn($it) => $it->product?->name)->filter()->join(', '), 30) }}
+                                        {{ $mr->items->count() }} item(s): {{ Str::limit($mr->items->map(fn($it) => $it->product->name)->filter()->join(', '), 30) }}
                                     </div>
                                 </td>
                                 <td><span class="badge bg-info text-dark border">Material Request</span></td>
@@ -657,7 +657,7 @@
                                 </td>
                                 <td>
                                     <span class="badge bg-secondary bg-opacity-10 text-dark">
-                                        {{ ucfirst(str_replace('_', ' ', $linkedPr?->current_owner_role ?? 'Store Manager')) }}
+                                        {{ ucfirst(str_replace('_', ' ', $linkedPr->current_owner_role ?? 'Store Manager')) }}
                                     </span>
                                 </td>
                                 <td>{{ $mr->created_at->format('M d, Y') }}</td>
@@ -665,8 +665,8 @@
                                     <div class="d-flex justify-content-end align-items-center gap-1 flex-wrap">
                                         <button type="button" class="btn btn-sm btn-outline-primary shadow-xs fw-semibold btn-queue-quick-materials"
                                                 data-ref="{{ $mr->reference_number }}"
-                                                data-project="{{ $mr->project?->name ?? 'Head Office' }}"
-                                                data-store="{{ $mr->store?->name ?? 'N/A' }}"
+                                                data-project="{{ $mr->project->name ?? 'Head Office' }}"
+                                                data-store="{{ $mr->store->name ?? 'N/A' }}"
                                                 data-url="{{ route('material-requests.show', $mr) }}"
                                                 data-items="{{ json_encode($mrMaterialsJson) }}"
                                                 onclick="openQuickMaterialsModalFromBtn(this)"
@@ -729,10 +729,10 @@
                                 $canActOnThisPr = false;
                                 $prMaterialsJson = $pr->items->map(function($itm) {
                                     return [
-                                        'name' => $itm->product?->name ?? 'Material',
-                                        'code' => $itm->product?->item_code ?? '-',
+                                        'name' => $itm->product->name ?? 'Material',
+                                        'code' => $itm->product->item_code ?? '-',
                                         'quantity' => (float)$itm->quantity,
-                                        'unit' => $itm->unit ?? ($itm->product?->unit ?? 'Units'),
+                                        'unit' => $itm->unit ?? ($itm->product->unit ?? 'Units'),
                                         'estimated_unit_cost' => (float)($itm->estimated_unit_cost ?? 0),
                                         'estimated_total' => (float)($itm->estimated_total ?? 0),
                                         'specifications' => $itm->specifications ?? '',
@@ -805,9 +805,9 @@
                                     @endif
                                 </td>
                                 <td>
-                                    <span class="fw-medium text-dark">{{ $pr->project?->name ?? 'N/A' }}</span>
+                                    <span class="fw-medium text-dark">{{ $pr->project->name ?? 'N/A' }}</span>
                                     @php
-                                        $destStore = $pr->store ?? $pr->materialRequest?->destinationStore ?? $pr->materialRequest?->store;
+                                        $destStore = $pr->store ?? $pr->materialRequest->destinationStore ?? $pr->materialRequest->store;
                                     @endphp
                                     @if($destStore)
                                         <small class="text-muted d-block"><i class="fas fa-warehouse me-1"></i>Store: {{ $destStore->name }}</small>
@@ -832,11 +832,11 @@
                                             <div class="d-flex align-items-center justify-content-between p-1.5 bg-white rounded border text-nowrap shadow-2xs" style="font-size:0.78rem;">
                                                 <div class="d-flex align-items-center gap-1.5 text-truncate me-2" style="max-width: 220px;">
                                                     <i class="fa-solid fa-cube text-primary" style="font-size:0.7rem;"></i>
-                                                    <strong class="text-dark text-truncate" title="{{ $pItm->product?->name }}">{{ $pItm->product?->name ?? 'Material' }}</strong>
+                                                    <strong class="text-dark text-truncate" title="{{ $pItm->product->name }}">{{ $pItm->product->name ?? 'Material' }}</strong>
                                                 </div>
                                                 <div class="font-monospace text-end">
                                                     <span class="badge bg-light text-dark border px-1.5 py-0.5 fw-bold">
-                                                        {{ (float)$pItm->quantity }} {{ $pItm->unit ?? ($pItm->product?->unit ?? 'Units') }}
+                                                        {{ (float)$pItm->quantity }} {{ $pItm->unit ?? ($pItm->product->unit ?? 'Units') }}
                                                     </span>
                                                     @if((float)($pItm->estimated_unit_cost ?? 0) > 0)
                                                         <small class="text-muted d-block" style="font-size:0.68rem;">@ {{ number_format($pItm->estimated_unit_cost, 2) }}</small>
@@ -849,7 +849,7 @@
                                         @endforeach
                                     </div>
                                     <div class="procurement-materials-compact-preview d-none text-muted small" style="font-size:11px;">
-                                        {{ $pr->items->count() }} item(s): {{ Str::limit($pr->items->map(fn($it) => $it->product?->name)->filter()->join(', '), 30) }}
+                                        {{ $pr->items->count() }} item(s): {{ Str::limit($pr->items->map(fn($it) => $it->product->name)->filter()->join(', '), 30) }}
                                     </div>
                                 </td>
                                 <td>
@@ -882,8 +882,8 @@
                                     <div class="d-flex justify-content-end align-items-center gap-1 flex-wrap">
                                         <button type="button" class="btn btn-sm btn-outline-primary shadow-xs fw-semibold btn-queue-quick-materials"
                                                 data-ref="{{ $pr->pr_no }}"
-                                                data-project="{{ $pr->project?->name ?? 'N/A' }}"
-                                                data-store="{{ $destStore?->name ?? 'Store Unassigned' }}"
+                                                data-project="{{ $pr->project->name ?? 'N/A' }}"
+                                                data-store="{{ $destStore->name ?? 'Store Unassigned' }}"
                                                 data-url="{{ route('purchase-requests.show', $pr->id) }}"
                                                 data-items="{{ json_encode($prMaterialsJson) }}"
                                                 onclick="openQuickMaterialsModalFromBtn(this)"
@@ -1011,16 +1011,16 @@
                                     </div>
                                 </td>
                                 <td>
-                                    <div class="fw-semibold text-dark">{{ $cPr->project?->name ?? 'N/A' }}</div>
-                                    <small class="text-muted"><i class="fas fa-warehouse me-1"></i>{{ $cPr->store?->name ?? 'Store Unassigned' }}</small>
+                                    <div class="fw-semibold text-dark">{{ $cPr->project->name ?? 'N/A' }}</div>
+                                    <small class="text-muted"><i class="fas fa-warehouse me-1"></i>{{ $cPr->store->name ?? 'Store Unassigned' }}</small>
                                 </td>
                                 @php
                                     $cPrMaterialsJson = $cPr->items->map(function($itm) {
                                         return [
-                                            'name' => $itm->product?->name ?? 'Material',
-                                            'code' => $itm->product?->item_code ?? '-',
+                                            'name' => $itm->product->name ?? 'Material',
+                                            'code' => $itm->product->item_code ?? '-',
                                             'quantity' => (float)$itm->quantity,
-                                            'unit' => $itm->unit ?? ($itm->product?->unit ?? 'Units'),
+                                            'unit' => $itm->unit ?? ($itm->product->unit ?? 'Units'),
                                             'estimated_unit_cost' => (float)($itm->estimated_unit_cost ?? 0),
                                             'estimated_total' => (float)($itm->estimated_total ?? 0),
                                             'specifications' => $itm->specifications ?? '',
@@ -1041,7 +1041,7 @@
                                             <div class="d-flex align-items-center justify-content-between p-1.5 bg-white rounded border text-nowrap shadow-2xs" style="font-size:0.78rem;">
                                                 <div class="d-flex align-items-center gap-1.5 text-truncate me-2" style="max-width: 220px;">
                                                     <i class="fa-solid fa-cube text-primary" style="font-size:0.7rem;"></i>
-                                                    <strong class="text-dark text-truncate" title="{{ $itm->product?->name }}">{{ $itm->product?->name ?? 'Material' }}</strong>
+                                                    <strong class="text-dark text-truncate" title="{{ $itm->product->name }}">{{ $itm->product->name ?? 'Material' }}</strong>
                                                 </div>
                                                 <div class="font-monospace text-end">
                                                     <span class="badge bg-light text-dark border px-1.5 py-0.5 fw-bold">
@@ -1060,7 +1060,7 @@
                                     <div class="procurement-materials-compact-preview d-none text-muted small" style="font-size:11px;">
                                         @foreach($cPr->items->take(2) as $itm)
                                             <span class="badge bg-light text-dark border me-1">
-                                                {{ $itm->product?->name ?? 'Item' }}: {{ (float)$itm->quantity }} {{ $itm->unit }}
+                                                {{ $itm->product->name ?? 'Item' }}: {{ (float)$itm->quantity }} {{ $itm->unit }}
                                             </span>
                                         @endforeach
                                         @if($cPr->items->count() > 2)
@@ -1100,8 +1100,8 @@
                                     <div class="d-flex justify-content-end align-items-center gap-1 flex-wrap">
                                         <button type="button" class="btn btn-sm btn-outline-primary shadow-xs fw-semibold btn-queue-quick-materials"
                                                 data-ref="{{ $cPr->pr_no }}"
-                                                data-project="{{ $cPr->project?->name ?? 'N/A' }}"
-                                                data-store="{{ $cPr->store?->name ?? 'Store Unassigned' }}"
+                                                data-project="{{ $cPr->project->name ?? 'N/A' }}"
+                                                data-store="{{ $cPr->store->name ?? 'Store Unassigned' }}"
                                                 data-url="{{ route('purchase-requests.show', $cPr->id) }}"
                                                 data-items="{{ json_encode($cPrMaterialsJson) }}"
                                                 onclick="openQuickMaterialsModalFromBtn(this)"
@@ -1143,16 +1143,16 @@
                                     <div class="small"><span class="badge bg-info bg-opacity-25 text-dark" style="font-size:9px;">Material Requisition</span></div>
                                 </td>
                                 <td>
-                                    <div class="fw-semibold text-dark">{{ $cMr->project?->name ?? 'Head Office' }}</div>
-                                    <small class="text-muted"><i class="fas fa-warehouse me-1"></i>{{ $cMr->store?->name ?? 'Store' }}</small>
+                                    <div class="fw-semibold text-dark">{{ $cMr->project->name ?? 'Head Office' }}</div>
+                                    <small class="text-muted"><i class="fas fa-warehouse me-1"></i>{{ $cMr->store->name ?? 'Store' }}</small>
                                 </td>
                                 @php
                                     $cMrMaterialsJson = $cMr->items->map(function($itm) {
                                         return [
-                                            'name' => $itm->product?->name ?? 'Material',
-                                            'code' => $itm->product?->item_code ?? '-',
+                                            'name' => $itm->product->name ?? 'Material',
+                                            'code' => $itm->product->item_code ?? '-',
                                             'quantity' => (float)$itm->quantity,
-                                            'unit' => $itm->product?->unit ?? 'Units',
+                                            'unit' => $itm->product->unit ?? 'Units',
                                             'estimated_unit_cost' => 0,
                                             'estimated_total' => 0,
                                             'specifications' => $itm->notes ?? '',
@@ -1173,10 +1173,10 @@
                                             <div class="d-flex align-items-center justify-content-between p-1.5 bg-white rounded border text-nowrap shadow-2xs" style="font-size:0.78rem;">
                                                 <div class="d-flex align-items-center gap-1.5 text-truncate me-2" style="max-width: 200px;">
                                                     <i class="fa-solid fa-cube text-primary" style="font-size:0.7rem;"></i>
-                                                    <strong class="text-dark text-truncate" title="{{ $mItm->product?->name }}">{{ $mItm->product?->name ?? 'Material' }}</strong>
+                                                    <strong class="text-dark text-truncate" title="{{ $mItm->product->name }}">{{ $mItm->product->name ?? 'Material' }}</strong>
                                                 </div>
                                                 <span class="badge bg-light text-dark border font-monospace px-1.5 py-0.5 fw-bold">
-                                                    {{ (float)$mItm->quantity }} {{ $mItm->product?->unit ?? 'Units' }}
+                                                    {{ (float)$mItm->quantity }} {{ $mItm->product->unit ?? 'Units' }}
                                                 </span>
                                             </div>
                                             @if(!empty($mItm->notes))
@@ -1185,7 +1185,7 @@
                                         @endforeach
                                     </div>
                                     <div class="procurement-materials-compact-preview d-none text-muted small" style="font-size:11px;">
-                                        {{ $cMr->items->count() }} item(s): {{ Str::limit($cMr->items->map(fn($it) => $it->product?->name)->filter()->join(', '), 30) }}
+                                        {{ $cMr->items->count() }} item(s): {{ Str::limit($cMr->items->map(fn($it) => $it->product->name)->filter()->join(', '), 30) }}
                                     </div>
                                 </td>
                                 <td><span class="text-muted small">Pending PR Pricing</span></td>
@@ -1203,8 +1203,8 @@
                                     <div class="d-flex justify-content-end align-items-center gap-1 flex-wrap">
                                         <button type="button" class="btn btn-sm btn-outline-primary shadow-xs fw-semibold btn-queue-quick-materials"
                                                 data-ref="{{ $cMr->reference_number }}"
-                                                data-project="{{ $cMr->project?->name ?? 'Head Office' }}"
-                                                data-store="{{ $cMr->store?->name ?? 'Store' }}"
+                                                data-project="{{ $cMr->project->name ?? 'Head Office' }}"
+                                                data-store="{{ $cMr->store->name ?? 'Store' }}"
                                                 data-url="{{ route('material-requests.show', $cMr) }}"
                                                 data-items="{{ json_encode($cMrMaterialsJson) }}"
                                                 onclick="openQuickMaterialsModalFromBtn(this)"
@@ -1277,19 +1277,19 @@
                                     </div>
                                 </td>
                                 <td>
-                                    <div class="fw-bold text-dark">{{ $compPr->project?->name ?? 'N/A' }}</div>
-                                    <small class="text-muted"><i class="fas fa-warehouse me-1 text-success"></i>{{ $compPr->store?->name ?? 'Store' }}</small>
+                                    <div class="fw-bold text-dark">{{ $compPr->project->name ?? 'N/A' }}</div>
+                                    <small class="text-muted"><i class="fas fa-warehouse me-1 text-success"></i>{{ $compPr->store->name ?? 'Store' }}</small>
                                 </td>
                                 <td>
-                                    <span class="small fw-semibold text-dark">{{ $compPr->requestedBy?->name ?? 'N/A' }}</span>
+                                    <span class="small fw-semibold text-dark">{{ $compPr->requestedBy->name ?? 'N/A' }}</span>
                                 </td>
                                 @php
                                     $compMaterialsJson = $compPr->items->map(function($item) {
                                         return [
-                                            'product_name' => $item->product?->name ?? 'Material Item',
-                                            'product_code' => $item->product?->item_code ?? '',
+                                            'product_name' => $item->product->name ?? 'Material Item',
+                                            'product_code' => $item->product->item_code ?? '',
                                             'quantity' => (float)$item->quantity,
-                                            'unit' => $item->unit ?? ($item->product?->unit ?? 'Units'),
+                                            'unit' => $item->unit ?? ($item->product->unit ?? 'Units'),
                                             'unit_cost' => (float)($item->estimated_unit_cost ?? 0),
                                             'specs' => $item->specifications ?? '',
                                         ];
@@ -1309,16 +1309,16 @@
                                             <div class="d-flex align-items-center justify-content-between p-1.5 bg-white rounded border text-nowrap shadow-2xs" style="font-size:0.78rem;">
                                                 <div class="d-flex align-items-center gap-1.5 text-truncate me-2" style="max-width: 190px;">
                                                     <i class="fa-solid fa-cube text-success" style="font-size:0.7rem;"></i>
-                                                    <strong class="text-dark text-truncate" title="{{ $cItm->product?->name }}">{{ $cItm->product?->name ?? 'Material' }}</strong>
+                                                    <strong class="text-dark text-truncate" title="{{ $cItm->product->name }}">{{ $cItm->product->name ?? 'Material' }}</strong>
                                                 </div>
                                                 <span class="badge bg-light text-dark border px-1.5 py-0.5 font-monospace fw-bold">
-                                                    {{ (float)$cItm->quantity }} {{ $cItm->unit ?? ($cItm->product?->unit ?? 'Units') }}
+                                                    {{ (float)$cItm->quantity }} {{ $cItm->unit ?? ($cItm->product->unit ?? 'Units') }}
                                                 </span>
                                             </div>
                                         @endforeach
                                     </div>
                                     <div class="procurement-materials-compact-preview d-none text-muted small" style="font-size:11px;">
-                                        {{ $compPr->items->count() }} item(s): {{ Str::limit($compPr->items->map(fn($it) => $it->product?->name)->filter()->join(', '), 30) }}
+                                        {{ $compPr->items->count() }} item(s): {{ Str::limit($compPr->items->map(fn($it) => $it->product->name)->filter()->join(', '), 30) }}
                                     </div>
                                 </td>
                                 <td>
@@ -1347,8 +1347,8 @@
                                     <div class="d-flex justify-content-end align-items-center gap-1 flex-wrap">
                                         <button type="button" class="btn btn-sm btn-outline-primary shadow-xs fw-semibold btn-queue-quick-materials"
                                                 data-ref="{{ $compPr->pr_no }}"
-                                                data-project="{{ $compPr->project?->name ?? 'N/A' }}"
-                                                data-store="{{ $compPr->store?->name ?? 'Store' }}"
+                                                data-project="{{ $compPr->project->name ?? 'N/A' }}"
+                                                data-store="{{ $compPr->store->name ?? 'Store' }}"
                                                 data-url="{{ route('purchase-requests.show', $compPr->id) }}"
                                                 data-items="{{ json_encode($compMaterialsJson) }}"
                                                 onclick="openQuickMaterialsModalFromBtn(this)"
@@ -1430,17 +1430,17 @@
                                     @endif
                                 </td>
                                 <td>
-                                    <strong>{{ $aPr->project?->name ?? 'Head Office' }}</strong>
-                                    <small class="text-muted d-block">{{ $aPr->store?->name ?? 'Store Unassigned' }}</small>
+                                    <strong>{{ $aPr->project->name ?? 'Head Office' }}</strong>
+                                    <small class="text-muted d-block">{{ $aPr->store->name ?? 'Store Unassigned' }}</small>
                                 </td>
-                                <td>{{ $aPr->requestedBy?->name ?? 'N/A' }}</td>
+                                <td>{{ $aPr->requestedBy->name ?? 'N/A' }}</td>
                                 @php
                                     $aPrMaterialsJson = $aPr->items->map(function($item) {
                                         return [
-                                            'product_name' => $item->product?->name ?? 'Material Item',
-                                            'product_code' => $item->product?->item_code ?? '',
+                                            'product_name' => $item->product->name ?? 'Material Item',
+                                            'product_code' => $item->product->item_code ?? '',
                                             'quantity' => (float)$item->quantity,
-                                            'unit' => $item->unit ?? ($item->product?->unit ?? 'Units'),
+                                            'unit' => $item->unit ?? ($item->product->unit ?? 'Units'),
                                             'unit_cost' => (float)($item->estimated_unit_cost ?? 0),
                                             'specs' => $item->specifications ?? '',
                                         ];
@@ -1460,18 +1460,18 @@
                                             <div class="d-flex align-items-center justify-content-between p-1.5 bg-white rounded border text-nowrap shadow-2xs" style="font-size:0.78rem;">
                                                 <div class="d-flex align-items-center gap-1.5 text-truncate me-2" style="max-width: 190px;">
                                                     <i class="fa-solid fa-cube text-primary" style="font-size:0.7rem;"></i>
-                                                    <strong class="text-dark text-truncate" title="{{ $aItm->product?->name }}">{{ $aItm->product?->name ?? 'Material' }}</strong>
+                                                    <strong class="text-dark text-truncate" title="{{ $aItm->product->name }}">{{ $aItm->product->name ?? 'Material' }}</strong>
                                                 </div>
                                                 <div class="font-monospace text-end">
                                                     <span class="badge bg-light text-dark border px-1.5 py-0.5 fw-bold">
-                                                        {{ (float)$aItm->quantity }} {{ $aItm->unit ?? ($aItm->product?->unit ?? 'Units') }}
+                                                        {{ (float)$aItm->quantity }} {{ $aItm->unit ?? ($aItm->product->unit ?? 'Units') }}
                                                     </span>
                                                 </div>
                                             </div>
                                         @endforeach
                                     </div>
                                     <div class="procurement-materials-compact-preview d-none text-muted small" style="font-size:11px;">
-                                        {{ $aPr->items->count() }} item(s): {{ Str::limit($aPr->items->map(fn($it) => $it->product?->name)->filter()->join(', '), 30) }}
+                                        {{ $aPr->items->count() }} item(s): {{ Str::limit($aPr->items->map(fn($it) => $it->product->name)->filter()->join(', '), 30) }}
                                     </div>
                                 </td>
                                 <td>
@@ -1492,8 +1492,8 @@
                                     <div class="d-flex justify-content-end align-items-center gap-1 flex-wrap">
                                         <button type="button" class="btn btn-sm btn-outline-primary shadow-xs fw-semibold btn-queue-quick-materials"
                                                 data-ref="{{ $aPr->pr_no }}"
-                                                data-project="{{ $aPr->project?->name ?? 'Head Office' }}"
-                                                data-store="{{ $aPr->store?->name ?? 'Store Unassigned' }}"
+                                                data-project="{{ $aPr->project->name ?? 'Head Office' }}"
+                                                data-store="{{ $aPr->store->name ?? 'Store Unassigned' }}"
                                                 data-url="{{ route('purchase-requests.show', $aPr->id) }}"
                                                 data-items="{{ json_encode($aPrMaterialsJson) }}"
                                                 onclick="openQuickMaterialsModalFromBtn(this)"
@@ -1583,20 +1583,20 @@
                                     </div>
                                 </td>
                                 <td>
-                                    <div class="fw-semibold text-dark">{{ $dPr->project?->name ?? 'Head Office / Unassigned' }}</div>
-                                    <small class="text-muted"><i class="fas fa-warehouse me-1"></i>{{ $dPr->store?->name ?? 'Store Unassigned' }}</small>
+                                    <div class="fw-semibold text-dark">{{ $dPr->project->name ?? 'Head Office / Unassigned' }}</div>
+                                    <small class="text-muted"><i class="fas fa-warehouse me-1"></i>{{ $dPr->store->name ?? 'Store Unassigned' }}</small>
                                 </td>
                                 <td>
-                                    <div class="fw-semibold text-dark">{{ $dPr->requestedBy?->name ?? 'System' }}</div>
-                                    <small class="text-muted">{{ $dPr->requestedBy?->email ?? '' }}</small>
+                                    <div class="fw-semibold text-dark">{{ $dPr->requestedBy->name ?? 'System' }}</div>
+                                    <small class="text-muted">{{ $dPr->requestedBy->email ?? '' }}</small>
                                 </td>
                                 @php
                                     $dPrMaterialsJson = $dPr->items->map(function($item) {
                                         return [
-                                            'product_name' => $item->product?->name ?? 'Material Item',
-                                            'product_code' => $item->product?->item_code ?? '',
+                                            'product_name' => $item->product->name ?? 'Material Item',
+                                            'product_code' => $item->product->item_code ?? '',
                                             'quantity' => (float)$item->quantity,
-                                            'unit' => $item->unit ?? ($item->product?->unit ?? 'Units'),
+                                            'unit' => $item->unit ?? ($item->product->unit ?? 'Units'),
                                             'unit_cost' => (float)($item->estimated_unit_cost ?? 0),
                                             'specs' => $item->specifications ?? '',
                                         ];
@@ -1616,16 +1616,16 @@
                                             <div class="d-flex align-items-center justify-content-between p-1.5 bg-white rounded border text-nowrap shadow-2xs" style="font-size:0.78rem;">
                                                 <div class="d-flex align-items-center gap-1.5 text-truncate me-2" style="max-width: 190px;">
                                                     <i class="fa-solid fa-cube text-danger" style="font-size:0.7rem;"></i>
-                                                    <strong class="text-dark text-truncate" title="{{ $itm->product?->name }}">{{ $itm->product?->name ?? 'Item' }}</strong>
+                                                    <strong class="text-dark text-truncate" title="{{ $itm->product->name }}">{{ $itm->product->name ?? 'Item' }}</strong>
                                                 </div>
                                                 <span class="badge bg-light text-dark border px-1.5 py-0.5 font-monospace fw-bold">
-                                                    {{ (float)$itm->quantity }} {{ $itm->unit ?? ($itm->product?->unit ?? 'Units') }}
+                                                    {{ (float)$itm->quantity }} {{ $itm->unit ?? ($itm->product->unit ?? 'Units') }}
                                                 </span>
                                             </div>
                                         @endforeach
                                     </div>
                                     <div class="procurement-materials-compact-preview d-none text-muted small" style="font-size:11px;">
-                                        {{ $dPr->items->count() }} item(s): {{ Str::limit($dPr->items->map(fn($it) => $it->product?->name)->filter()->join(', '), 30) }}
+                                        {{ $dPr->items->count() }} item(s): {{ Str::limit($dPr->items->map(fn($it) => $it->product->name)->filter()->join(', '), 30) }}
                                     </div>
                                 </td>
                                 <td>
@@ -1659,8 +1659,8 @@
                                     <div class="d-flex justify-content-end align-items-center gap-1 flex-wrap">
                                         <button type="button" class="btn btn-sm btn-outline-primary shadow-xs fw-semibold btn-queue-quick-materials"
                                                 data-ref="{{ $dPr->pr_no }}"
-                                                data-project="{{ $dPr->project?->name ?? 'Head Office / Unassigned' }}"
-                                                data-store="{{ $dPr->store?->name ?? 'Store Unassigned' }}"
+                                                data-project="{{ $dPr->project->name ?? 'Head Office / Unassigned' }}"
+                                                data-store="{{ $dPr->store->name ?? 'Store Unassigned' }}"
                                                 data-url="{{ route('purchase-requests.show', $dPr->id) }}"
                                                 data-items="{{ json_encode($dPrMaterialsJson) }}"
                                                 onclick="openQuickMaterialsModalFromBtn(this)"
@@ -1712,20 +1712,20 @@
                                     </div>
                                 </td>
                                 <td>
-                                    <div class="fw-semibold text-dark">{{ $dMr->project?->name ?? 'Head Office / General' }}</div>
-                                    <small class="text-muted"><i class="fas fa-warehouse me-1"></i>{{ $dMr->store?->name ?? 'Store Unassigned' }}</small>
+                                    <div class="fw-semibold text-dark">{{ $dMr->project->name ?? 'Head Office / General' }}</div>
+                                    <small class="text-muted"><i class="fas fa-warehouse me-1"></i>{{ $dMr->store->name ?? 'Store Unassigned' }}</small>
                                 </td>
                                 <td>
-                                    <div class="fw-semibold text-dark">{{ $dMr->creator?->name ?? $dMr->requestedBy?->name ?? 'Unknown' }}</div>
-                                    <small class="text-muted">{{ $dMr->creator?->email ?? '' }}</small>
+                                    <div class="fw-semibold text-dark">{{ $dMr->creator->name ?? $dMr->requestedBy->name ?? 'Unknown' }}</div>
+                                    <small class="text-muted">{{ $dMr->creator->email ?? '' }}</small>
                                 </td>
                                 @php
                                     $dMrMaterialsJson = $dMr->items->map(function($item) {
                                         return [
-                                            'product_name' => $item->product?->name ?? 'Material Item',
-                                            'product_code' => $item->product?->item_code ?? '',
+                                            'product_name' => $item->product->name ?? 'Material Item',
+                                            'product_code' => $item->product->item_code ?? '',
                                             'quantity' => (float)($item->quantity_requested ?? $item->quantity ?? 0),
-                                            'unit' => $item->unit ?? ($item->product?->unit ?? 'Units'),
+                                            'unit' => $item->unit ?? ($item->product->unit ?? 'Units'),
                                             'unit_cost' => 0,
                                             'specs' => $item->notes ?? '',
                                         ];
@@ -1745,16 +1745,16 @@
                                             <div class="d-flex align-items-center justify-content-between p-1.5 bg-white rounded border text-nowrap shadow-2xs" style="font-size:0.78rem;">
                                                 <div class="d-flex align-items-center gap-1.5 text-truncate me-2" style="max-width: 190px;">
                                                     <i class="fa-solid fa-cube text-secondary" style="font-size:0.7rem;"></i>
-                                                    <strong class="text-dark text-truncate" title="{{ $itm->product?->name }}">{{ $itm->product?->name ?? 'Item' }}</strong>
+                                                    <strong class="text-dark text-truncate" title="{{ $itm->product->name }}">{{ $itm->product->name ?? 'Item' }}</strong>
                                                 </div>
                                                 <span class="badge bg-light text-dark border px-1.5 py-0.5 font-monospace fw-bold">
-                                                    {{ (float)($itm->quantity_requested ?? $itm->quantity ?? 0) }} {{ $itm->unit ?? ($itm->product?->unit ?? 'Units') }}
+                                                    {{ (float)($itm->quantity_requested ?? $itm->quantity ?? 0) }} {{ $itm->unit ?? ($itm->product->unit ?? 'Units') }}
                                                 </span>
                                             </div>
                                         @endforeach
                                     </div>
                                     <div class="procurement-materials-compact-preview d-none text-muted small" style="font-size:11px;">
-                                        {{ $dMr->items->count() }} item(s): {{ Str::limit($dMr->items->map(fn($it) => $it->product?->name)->filter()->join(', '), 30) }}
+                                        {{ $dMr->items->count() }} item(s): {{ Str::limit($dMr->items->map(fn($it) => $it->product->name)->filter()->join(', '), 30) }}
                                     </div>
                                 </td>
                                 <td>
@@ -1779,8 +1779,8 @@
                                     <div class="d-flex justify-content-end align-items-center gap-1 flex-wrap">
                                         <button type="button" class="btn btn-sm btn-outline-primary shadow-xs fw-semibold btn-queue-quick-materials"
                                                 data-ref="{{ $dMr->reference_number }}"
-                                                data-project="{{ $dMr->project?->name ?? 'Head Office / General' }}"
-                                                data-store="{{ $dMr->store?->name ?? 'Store Unassigned' }}"
+                                                data-project="{{ $dMr->project->name ?? 'Head Office / General' }}"
+                                                data-store="{{ $dMr->store->name ?? 'Store Unassigned' }}"
                                                 data-url="{{ route('material-requests.show', $dMr->id) }}"
                                                 data-items="{{ json_encode($dMrMaterialsJson) }}"
                                                 onclick="openQuickMaterialsModalFromBtn(this)"

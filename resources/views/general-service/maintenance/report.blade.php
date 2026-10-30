@@ -157,13 +157,13 @@
             @endif
             <div class="info-item">
                 <div class="label">Reported By (Creator)</div>
-                <div class="value">{{ $maintenanceRequest->reportedBy?->name ?? 'Staff Requester' }}</div>
+                <div class="value">{{ $maintenanceRequest->reportedBy->name ?? 'Staff Requester' }}</div>
             </div>
             <div class="info-item">
                 <div class="label">Reported To (Decision Maker)</div>
-                <div class="value">{{ $maintenanceRequest->assignedTo?->name ?? 'Wondimagnhu Siyum' }}</div>
+                <div class="value">{{ $maintenanceRequest->assignedTo->name ?? 'Wondimagnhu Siyum' }}</div>
             </div>
-            @if($maintenanceRequest->fixedAssetUnit?->assignedEmployee)
+            @if($maintenanceRequest->fixedAssetUnit->assignedEmployee)
             <div class="info-item">
                 <div class="label">Operator / Custodian</div>
                 <div class="value">{{ $maintenanceRequest->fixedAssetUnit->assignedEmployee->full_name }}</div>

@@ -193,7 +193,7 @@
                                     <span class="badge bg-warning text-dark px-2 py-1"><i class="fa-solid fa-clock me-1"></i>Pending Review</span>
                                 @elseif ($request->status === 'approved')
                                     <span class="badge bg-success px-2 py-1"><i class="fa-solid fa-check me-1"></i>Approved</span>
-                                    <small class="text-muted d-block" style="font-size:0.72rem;">by {{ $request->approvedByUser?->name ?? 'GM' }}</small>
+                                    <small class="text-muted d-block" style="font-size:0.72rem;">by {{ $request->approvedByUser->name ?? 'GM' }}</small>
                                 @elseif ($request->status === 'rejected')
                                     <span class="badge bg-danger px-2 py-1"><i class="fa-solid fa-xmark me-1"></i>Rejected</span>
                                 @else

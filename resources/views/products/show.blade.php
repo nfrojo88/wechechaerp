@@ -23,7 +23,7 @@
     <code class="ms-1">{{ $product->sku }}</code>
 
     <div class="ms-auto d-flex gap-2">
-        @if(auth()->user()?->isGlobalAdmin())
+        @if(auth()->user()->isGlobalAdmin())
         <button type="button" class="btn btn-danger shadow-sm" onclick="openSkuDeleteModal('{{ $product->sku }}', '{{ addslashes($product->name) }}')">
             <i class="fas fa-trash-can me-1"></i> Complete Delete (SKU)
         </button>

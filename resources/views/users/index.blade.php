@@ -65,7 +65,7 @@
                             <span class="badge bg-primary">{{ str_replace('_', ' ', $role->name) }}</span>
                             @endforeach
                         </td>
-                        <td>{{ $user->store?->name ?? '—' }}</td>
+                        <td>{{ $user->store->name ?? '—' }}</td>
                         <td>
                             <span class="badge bg-{{ $user->is_active ? 'success' : 'danger' }}">
                                 {{ $user->is_active ? 'Active' : 'Inactive' }}

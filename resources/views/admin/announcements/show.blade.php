@@ -138,7 +138,7 @@
                         @forelse($logs as $log)
                             <tr>
                                 <td class="ps-4">
-                                    <div class="fw-bold text-dark">{{ $log->recipient_name ?? $log->employee?->full_name ?? 'Recipient' }}</div>
+                                    <div class="fw-bold text-dark">{{ $log->recipient_name ?? $log->employee->full_name ?? 'Recipient' }}</div>
                                     @if($log->employee)
                                         <small class="text-muted">{{ $log->employee->department ?? '' }} ({{ $log->employee->employee_code ?? '' }})</small>
                                     @endif

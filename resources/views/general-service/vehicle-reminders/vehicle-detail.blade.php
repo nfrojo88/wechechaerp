@@ -15,7 +15,7 @@
                 </ol>
             </nav>
             <div class="d-flex align-items-center gap-2">
-                <h1 class="h3 fw-bold mb-0 text-dark">{{ $unit->parentAsset?->name ?? 'Vehicle' }}</h1>
+                <h1 class="h3 fw-bold mb-0 text-dark">{{ $unit->parentAsset->name ?? 'Vehicle' }}</h1>
                 @if($unit->plate_number)
                     <span class="badge bg-dark text-white rounded-pill px-3 py-2 fs-6">
                         Plate: {{ $unit->plate_number }}
@@ -64,7 +64,7 @@
                     <span class="badge bg-warning text-dark rounded-pill px-3 py-1 mb-2 fw-semibold">
                         <i class="fa-solid fa-truck-pickup me-1"></i>Fleet Asset
                     </span>
-                    <h2 class="fw-bold mb-1 text-white">{{ $unit->parentAsset?->name }}</h2>
+                    <h2 class="fw-bold mb-1 text-white">{{ $unit->parentAsset->name }}</h2>
                     <div class="d-flex flex-wrap gap-3 align-items-center opacity-75 small mt-2">
                         <span><i class="fa-solid fa-barcode me-1"></i>Code: <strong>{{ $unit->unit_code }}</strong></span>
                         @if($unit->brand || $unit->model)
@@ -321,7 +321,7 @@
                             <tbody>
                                 @foreach($allHistory as $h)
                                     <tr>
-                                        <td class="ps-3 text-muted">{{ $h->performed_at?->format('d M Y H:i') }}</td>
+                                        <td class="ps-3 text-muted">{{ $h->performed_at->format('d M Y H:i') }}</td>
                                         <td>
                                             <span class="fw-semibold text-dark">{{ ucfirst(str_replace('_', ' ', $h->reminder_type)) }}</span>
                                         </td>
@@ -331,7 +331,7 @@
                                             </span>
                                         </td>
                                         <td class="text-dark">{{ $h->notes ?: '—' }}</td>
-                                        <td class="pe-3 text-muted">{{ $h->performer?->name ?? 'System' }}</td>
+                                        <td class="pe-3 text-muted">{{ $h->performer->name ?? 'System' }}</td>
                                     </tr>
                                 @endforeach
                             </tbody>
@@ -370,7 +370,7 @@
                             <tbody>
                                 @foreach($unitKmLogs as $kLog)
                                     <tr>
-                                        <td class="ps-3 text-muted">{{ $kLog->km_date?->format('d M Y') }}</td>
+                                        <td class="ps-3 text-muted">{{ $kLog->km_date->format('d M Y') }}</td>
                                         <td>
                                             <span class="badge bg-dark font-monospace fs-6 px-2 py-1">{{ number_format($kLog->odometer_km) }} KM</span>
                                         </td>
@@ -384,7 +384,7 @@
                                             @endif
                                         </td>
                                         <td><span class="badge bg-light text-dark border">{{ ucfirst(str_replace('_', ' ', $kLog->source)) }}</span></td>
-                                        <td class="text-muted">{{ $kLog->loggedBy?->name ?? 'System' }}</td>
+                                        <td class="text-muted">{{ $kLog->loggedBy->name ?? 'System' }}</td>
                                         <td class="text-dark">{{ $kLog->notes ?: '—' }}</td>
                                         <td class="pe-3">
                                             @if($kLog->photo_url)
@@ -437,7 +437,7 @@
                                                 {{ $fReq->request_no }}
                                             </a>
                                         </td>
-                                        <td class="text-muted">{{ $fReq->created_at?->format('d M Y') }}</td>
+                                        <td class="text-muted">{{ $fReq->created_at->format('d M Y') }}</td>
                                         <td>
                                             <strong>{{ number_format($fReq->liters_requested, 1) }} L</strong>
                                             <span class="badge {{ $fReq->fuel_type === 'diesel' ? 'bg-secondary' : 'bg-primary' }} text-capitalize ms-1">{{ $fReq->fuel_type }}</span>

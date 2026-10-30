@@ -17,7 +17,7 @@
                 </span>
             </div>
             <p class="text-muted small mb-0 mt-1">
-                Project: <strong>{{ $batch->project?->name }}</strong> &bull; Week: <strong>{{ $batch->week_start->format('M d') }} &ndash; {{ $batch->week_end->format('M d, Y') }}</strong> &bull; Prepared by: <strong>{{ $batch->preparedBy?->name }}</strong>
+                Project: <strong>{{ $batch->project->name }}</strong> &bull; Week: <strong>{{ $batch->week_start->format('M d') }} &ndash; {{ $batch->week_end->format('M d, Y') }}</strong> &bull; Prepared by: <strong>{{ $batch->preparedBy->name }}</strong>
             </p>
         </div>
 
@@ -78,7 +78,7 @@
                     <div class="small text-dark">
                         Paid on <strong>{{ optional($batch->payment_date)->format('M d, Y') }}</strong> via <strong>{{ $batch->payment_method }}</strong>
                         @if($batch->payment_reference) &bull; Ref: <span class="font-monospace fw-bold">{{ $batch->payment_reference }}</span> @endif
-                        &bull; Paid By: <strong>{{ $batch->paidByFinance?->name ?? 'Finance Officer' }}</strong>
+                        &bull; Paid By: <strong>{{ $batch->paidByFinance->name ?? 'Finance Officer' }}</strong>
                     </div>
                 </div>
                 @if($batch->payment_attachment)
@@ -152,13 +152,13 @@
                         <tr>
                             <td class="font-monospace text-muted">{{ $idx + 1 }}</td>
                             <td class="text-start">
-                                <strong class="text-dark d-block">{{ $w?->name ?? 'Worker' }}</strong>
-                                <span class="font-monospace text-primary" style="font-size: 0.68rem;">{{ $w?->worker_code }}</span>
-                                @if($w?->phone)
+                                <strong class="text-dark d-block">{{ $w->name ?? 'Worker' }}</strong>
+                                <span class="font-monospace text-primary" style="font-size: 0.68rem;">{{ $w->worker_code }}</span>
+                                @if($w->phone)
                                 <span class="text-muted" style="font-size: 0.68rem;">&bull; {{ $w->phone }}</span>
                                 @endif
                             </td>
-                            <td><span class="badge bg-light text-dark border">{{ $w?->trade ?: 'General' }}</span></td>
+                            <td><span class="badge bg-light text-dark border">{{ $w->trade ?: 'General' }}</span></td>
                             <td class="font-monospace">{{ number_format($item->days_worked, 1) }}</td>
                             <td class="font-monospace">{{ number_format($item->total_regular_hours, 1) }}h</td>
                             <td class="font-monospace">{{ $item->total_overtime_hours > 0 ? number_format($item->total_overtime_hours, 1) . 'h' : '—' }}</td>
@@ -246,7 +246,7 @@
                                     <strong class="text-dark">{{ ucwords(str_replace('_', ' ', $log->stage)) }}: {{ ucfirst($log->action) }}</strong>
                                     <span class="text-muted font-monospace" style="font-size: 0.68rem;">{{ $log->created_at->format('M d, H:i') }}</span>
                                 </div>
-                                <div class="text-muted" style="font-size: 0.72rem;">By: {{ $log->user?->name }} &bull; {{ $log->comment }}</div>
+                                <div class="text-muted" style="font-size: 0.72rem;">By: {{ $log->user->name }} &bull; {{ $log->comment }}</div>
                             </div>
                         </li>
                         @empty

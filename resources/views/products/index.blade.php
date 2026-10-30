@@ -65,7 +65,7 @@
         </p>
     </div>
     <div class="d-flex gap-2 align-items-center">
-        @if(auth()->user()?->isGlobalAdmin())
+        @if(auth()->user()->isGlobalAdmin())
         <button type="button" class="btn btn-danger shadow-sm" data-bs-toggle="modal" data-bs-target="#adminSkuDeleteModal">
             <i class="fas fa-trash-can me-1"></i> Complete Delete by SKU
         </button>
@@ -255,7 +255,7 @@
                                     </button>
                                 </form>
                                 @endcan
-                                @if(auth()->user()?->isGlobalAdmin())
+                                @if(auth()->user()->isGlobalAdmin())
                                 <button type="button" class="btn btn-sm btn-danger text-white px-2"
                                         title="Global Admin: Complete Delete by SKU (Permanent)"
                                         onclick="openSkuDeleteModal('{{ $product->sku }}', '{{ addslashes($product->name) }}')">

@@ -51,7 +51,7 @@
                                     <span class="text-muted small">({{ optional($ps->created_at)->format('M d, Y H:i') }})</span>
                                 </div>
                                 <div class="text-dark small">
-                                    Finance Head assigned: <strong class="text-primary">{{ $ps->financeHead?->name ?? 'Finance Head' }}</strong> &rarr; <strong class="text-success">{{ $ps->assignedStaff?->name ?? 'Finance Staff' }}</strong> &bull; 
+                                    Finance Head assigned: <strong class="text-primary">{{ $ps->financeHead->name ?? 'Finance Head' }}</strong> &rarr; <strong class="text-success">{{ $ps->assignedStaff->name ?? 'Finance Staff' }}</strong> &bull; 
                                     @if($isVatOnly)
                                         VAT to Pay: <strong class="text-info fs-6">ETB {{ number_format($ps->vat_amount, 2) }}</strong> &bull;
                                     @elseif($isWhtOnly)
@@ -1074,7 +1074,7 @@
                                 <td class="text-end font-monospace text-danger small">- ETB {{ number_format($st->withholding_amount, 2) }}</td>
                                 <td class="text-end font-monospace fw-bold text-dark">ETB {{ number_format($st->total_tax_paid, 2) }}</td>
                                 <td>
-                                    <div class="fw-semibold text-dark small">{{ $st->assignedStaff?->name ?? 'Unassigned' }}</div>
+                                    <div class="fw-semibold text-dark small">{{ $st->assignedStaff->name ?? 'Unassigned' }}</div>
                                     @if($st->financeHead)
                                         <small class="text-muted" style="font-size: 0.72rem;">By: {{ $st->financeHead->name }}</small>
                                     @endif
@@ -1433,27 +1433,27 @@
                                             $displayBase  = $calcBase;
                                         }
                                     }
-                                    $rcpDateYmd = optional($rcp?->receipt_date)->format('Y-m-d') ?: '';
+                                    $rcpDateYmd = optional($rcp->receipt_date)->format('Y-m-d') ?: '';
                                     $rcpDateEc = $rcp && $rcp->receipt_date ? \App\Services\EthiopianDate::formatDateEc($rcp->receipt_date, 'DD/MM/YYYY EC') : '';
                                 @endphp
                                 <tr id="ocr-row-{{ $ocrItem->id }}"
                                     data-id="{{ $ocrItem->id }}"
-                                    data-receipt-id="{{ $rcp?->id ?? '' }}"
-                                    data-expense-request-id="{{ $rcp?->expense_request_id ?? '' }}"
-                                    data-request-number="{{ $rcp?->expenseRequest?->request_number ?? '' }}"
+                                    data-receipt-id="{{ $rcp->id ?? '' }}"
+                                    data-expense-request-id="{{ $rcp->expense_request_id ?? '' }}"
+                                    data-request-number="{{ $rcp->expenseRequest->request_number ?? '' }}"
                                     data-slip-url="{{ $slipUrl ?? '' }}"
-                                    data-vendor-name="{{ e($rcp?->vendor_name ?? '') }}"
+                                    data-vendor-name="{{ e($rcp->vendor_name ?? '') }}"
                                     data-vendor-tin="{{ e($tin) }}"
                                     data-fs-no="{{ e($fsNo) }}"
-                                    data-mrc-no="{{ e($rcp?->mrc_no ?? '') }}"
+                                    data-mrc-no="{{ e($rcp->mrc_no ?? '') }}"
                                     data-receipt-date="{{ $rcpDateYmd }}"
                                     data-receipt-date-ec="{{ $rcpDateEc }}"
                                     data-item-description="{{ e($ocrItem->item_description ?: '') }}"
                                     data-vat-category="{{ $ocrItem->vat_category ?: 'G' }}"
                                     data-purchase-type="{{ $ocrItem->purchase_type ?: 3 }}"
-                                    data-project-id="{{ $rcp?->project_id ?? '' }}"
+                                    data-project-id="{{ $rcp->project_id ?? '' }}"
                                     data-project-name="{{ e($rcp && $rcp->project ? $rcp->project->name : 'General Company / HQ') }}"
-                                    data-category="{{ $rcp?->category ?? 'materials' }}"
+                                    data-category="{{ $rcp->category ?? 'materials' }}"
                                     data-base-value="{{ number_format($displayBase, 2, '.', '') }}"
                                     data-vat-amount="{{ number_format($displayVat, 2, '.', '') }}"
                                     data-total-value="{{ number_format($displayAfter, 2, '.', '') }}"
@@ -1972,9 +1972,9 @@
                                 <optgroup label="Bank Accounts (Commercial Banks)">
                                     @foreach($bankAccounts as $ba)
                                         @php
-                                            $baStaff = $ba->assignedStaff ?? ($ba->coa?->manager ?? null);
-                                            $baStaffId = $baStaff?->id ?? '';
-                                            $baStaffName = $baStaff?->name ?? '';
+                                            $baStaff = $ba->assignedStaff ?? ($ba->coa->manager ?? null);
+                                            $baStaffId = $baStaff->id ?? '';
+                                            $baStaffName = $baStaff->name ?? '';
                                         @endphp
                                         <option value="bank:{{ $ba->id }}" 
                                                 data-assigned-staff-id="{{ $baStaffId }}" 
@@ -1988,8 +1988,8 @@
                                     @foreach($chartOfAccounts as $coa)
                                         @php
                                             $coaStaff = $coa->manager;
-                                            $coaStaffId = $coaStaff?->id ?? '';
-                                            $coaStaffName = $coaStaff?->name ?? '';
+                                            $coaStaffId = $coaStaff->id ?? '';
+                                            $coaStaffName = $coaStaff->name ?? '';
                                         @endphp
                                         <option value="coa:{{ $coa->id }}" 
                                                 data-assigned-staff-id="{{ $coaStaffId }}" 
@@ -2129,9 +2129,9 @@
                                 <optgroup label="Bank Accounts (Commercial Banks)">
                                     @foreach($bankAccounts as $ba)
                                         @php
-                                            $baStaff = $ba->assignedStaff ?? ($ba->coa?->manager ?? null);
-                                            $baStaffId = $baStaff?->id ?? '';
-                                            $baStaffName = $baStaff?->name ?? '';
+                                            $baStaff = $ba->assignedStaff ?? ($ba->coa->manager ?? null);
+                                            $baStaffId = $baStaff->id ?? '';
+                                            $baStaffName = $baStaff->name ?? '';
                                         @endphp
                                         <option value="bank:{{ $ba->id }}" 
                                                 data-assigned-staff-id="{{ $baStaffId }}" 
@@ -2145,8 +2145,8 @@
                                     @foreach($chartOfAccounts as $coa)
                                         @php
                                             $coaStaff = $coa->manager;
-                                            $coaStaffId = $coaStaff?->id ?? '';
-                                            $coaStaffName = $coaStaff?->name ?? '';
+                                            $coaStaffId = $coaStaff->id ?? '';
+                                            $coaStaffName = $coaStaff->name ?? '';
                                         @endphp
                                         <option value="coa:{{ $coa->id }}" 
                                                 data-assigned-staff-id="{{ $coaStaffId }}" 
@@ -2310,8 +2310,8 @@
                                     @endif
                                 </div>
                                 <div class="small text-muted mt-2 text-center">
-                                    Assigned by: <strong>{{ $ps->financeHead?->name ?? 'Finance Head' }}</strong> &bull; 
-                                    Assigned to: <strong>{{ $ps->assignedStaff?->name ?? 'Finance Staff' }}</strong> &bull; 
+                                    Assigned by: <strong>{{ $ps->financeHead->name ?? 'Finance Head' }}</strong> &bull; 
+                                    Assigned to: <strong>{{ $ps->assignedStaff->name ?? 'Finance Staff' }}</strong> &bull; 
                                     Covering <strong>{{ $ps->records_count }}</strong> tax deduction records.
                                 </div>
                             </div>
@@ -2343,11 +2343,11 @@
                                     <select name="account_source" class="form-select">
                                         @if($ps->bank_account_id)
                                             <option value="bank:{{ $ps->bank_account_id }}" selected>
-                                                Default: {{ $ps->bankAccount?->bank_name }} - {{ $ps->bankAccount?->account_number }}
+                                                Default: {{ $ps->bankAccount->bank_name }} - {{ $ps->bankAccount->account_number }}
                                             </option>
                                         @elseif($ps->coa_id)
                                             <option value="coa:{{ $ps->coa_id }}" selected>
-                                                Default: {{ $ps->chartOfAccount?->name }} ({{ $ps->chartOfAccount?->code }})
+                                                Default: {{ $ps->chartOfAccount->name }} ({{ $ps->chartOfAccount->code }})
                                             </option>
                                         @endif
                                         @foreach($bankAccounts as $ba)

@@ -335,7 +335,7 @@
                     </div>
                     <div class="mb-3 d-flex justify-content-between">
                         <span class="text-muted small">Reviewed At</span>
-                        <span class="fw-semibold small">{{ $manpowerDailyReport->reviewed_at?->format('h:i A, d M Y') ?? '—' }}</span>
+                        <span class="fw-semibold small">{{ $manpowerDailyReport->reviewed_at->format('h:i A, d M Y') ?? '—' }}</span>
                     </div>
                     @if($manpowerDailyReport->review_notes)
                     <div class="bg-light rounded p-3 mt-2">

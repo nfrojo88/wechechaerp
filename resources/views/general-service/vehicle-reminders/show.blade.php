@@ -76,19 +76,19 @@
                             <span class="badge bg-warning text-dark rounded-pill px-3 py-1 mb-2 fw-semibold">
                                 <i class="fa-solid fa-truck me-1"></i>Company Vehicle
                             </span>
-                            <h3 class="fw-bold mb-1 text-white">{{ $vehicleReminder->fixedAsset?->name ?? 'Vehicle' }}</h3>
+                            <h3 class="fw-bold mb-1 text-white">{{ $vehicleReminder->fixedAsset->name ?? 'Vehicle' }}</h3>
                             <div class="d-flex flex-wrap gap-2 align-items-center opacity-75 small">
-                                <span>Unit Code: <strong>{{ $vehicleReminder->assetUnit?->unit_code }}</strong></span>
+                                <span>Unit Code: <strong>{{ $vehicleReminder->assetUnit->unit_code }}</strong></span>
                                 <span>&bull;</span>
-                                <span>Category: {{ $vehicleReminder->fixedAsset?->category }}</span>
-                                @if($vehicleReminder->assetUnit?->brand || $vehicleReminder->assetUnit?->model)
+                                <span>Category: {{ $vehicleReminder->fixedAsset->category }}</span>
+                                @if($vehicleReminder->assetUnit->brand || $vehicleReminder->assetUnit->model)
                                     <span>&bull;</span>
-                                    <span>{{ trim(($vehicleReminder->assetUnit?->brand ?? '') . ' ' . ($vehicleReminder->assetUnit?->model ?? '')) }}</span>
+                                    <span>{{ trim(($vehicleReminder->assetUnit->brand ?? '') . ' ' . ($vehicleReminder->assetUnit->model ?? '')) }}</span>
                                 @endif
                             </div>
                         </div>
                         <div class="text-end">
-                            @if($vehicleReminder->assetUnit?->plate_number)
+                            @if($vehicleReminder->assetUnit->plate_number)
                                 <div class="bg-white text-dark rounded-3 px-3 py-2 fw-bold fs-5 shadow-sm border border-2 border-warning" style="letter-spacing: 1px;">
                                     {{ $vehicleReminder->assetUnit->plate_number }}
                                 </div>
@@ -347,14 +347,14 @@
                                 <tbody>
                                     @foreach($vehicleReminder->history as $hist)
                                         <tr>
-                                            <td class="ps-3 text-muted">{{ $hist->performed_at?->format('d M Y H:i') }}</td>
+                                            <td class="ps-3 text-muted">{{ $hist->performed_at->format('d M Y H:i') }}</td>
                                             <td>
                                                 <span class="badge {{ $hist->action === 'renewed' ? 'bg-success' : ($hist->action === 'odometer_updated' ? 'bg-info' : 'bg-secondary') }} rounded-pill px-2">
                                                     {{ ucfirst(str_replace('_', ' ', $hist->action)) }}
                                                 </span>
                                             </td>
                                             <td class="text-dark">{{ $hist->notes ?: '—' }}</td>
-                                            <td class="pe-3 text-muted">{{ $hist->performer?->name ?? 'System' }}</td>
+                                            <td class="pe-3 text-muted">{{ $hist->performer->name ?? 'System' }}</td>
                                         </tr>
                                     @endforeach
                                 </tbody>
@@ -423,11 +423,11 @@
                         </li>
                         <li class="list-group-item bg-transparent d-flex justify-content-between px-0 py-1">
                             <span class="text-muted">Created:</span>
-                            <span>{{ $vehicleReminder->created_at?->format('d M Y') }}</span>
+                            <span>{{ $vehicleReminder->created_at->format('d M Y') }}</span>
                         </li>
                         <li class="list-group-item bg-transparent d-flex justify-content-between px-0 py-1">
                             <span class="text-muted">Created By:</span>
-                            <span>{{ $vehicleReminder->creator?->name ?? 'System' }}</span>
+                            <span>{{ $vehicleReminder->creator->name ?? 'System' }}</span>
                         </li>
                     </ul>
                 </div>

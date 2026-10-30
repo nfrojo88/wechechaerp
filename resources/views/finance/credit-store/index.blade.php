@@ -246,8 +246,8 @@
                                     <input type="checkbox" class="form-check-input credit-checkbox"
                                         value="{{ $ledger->id }}"
                                         data-id="{{ $ledger->id }}"
-                                        data-pr="{{ $ledger->pr_no ?? ($ledger->purchaseRequest?->pr_no ?? 'PR-'.$ledger->id) }}"
-                                        data-project="{{ $ledger->project?->name ?? '—' }}"
+                                        data-pr="{{ $ledger->pr_no ?? ($ledger->purchaseRequest->pr_no ?? 'PR-'.$ledger->id) }}"
+                                        data-project="{{ $ledger->project->name ?? '—' }}"
                                         data-supplier="{{ $ledger->supplier_name ?: 'Credit Supplier' }}"
                                         data-credit="{{ (float)$ledger->credit_amount }}"
                                         data-paid="{{ (float)$ledger->paid_amount }}"
@@ -259,7 +259,7 @@
                             </td>
                             <td class="fw-bold">
                                 <a href="{{ route('finance.credit-store.show', $ledger) }}" class="text-decoration-none text-primary">
-                                    #{{ $ledger->pr_no ?? ($ledger->purchaseRequest?->pr_no ?? 'PR-'.$ledger->id) }}
+                                    #{{ $ledger->pr_no ?? ($ledger->purchaseRequest->pr_no ?? 'PR-'.$ledger->id) }}
                                 </a>
                                 @if($ledger->purchaseRequest)
                                     <div class="small text-muted font-monospace" style="font-size: 0.75rem;">
@@ -268,18 +268,18 @@
                                 @endif
                             </td>
                             <td>
-                                <div class="fw-semibold text-dark">{{ $ledger->project?->name ?? '—' }}</div>
+                                <div class="fw-semibold text-dark">{{ $ledger->project->name ?? '—' }}</div>
                             </td>
                             <td>
                                 <div><i class="fas fa-building text-muted me-1 small"></i> {{ $ledger->supplier_name ?: 'Credit Supplier' }}</div>
                                 <div class="small text-muted font-monospace" style="font-size: 0.75rem;">
-                                    COA: {{ $ledger->coaAccount?->code ?? '5110' }} - {{ $ledger->coaAccount?->name ?? 'Cost Of Material By Credit' }}
+                                    COA: {{ $ledger->coaAccount->code ?? '5110' }} - {{ $ledger->coaAccount->name ?? 'Cost Of Material By Credit' }}
                                 </div>
                             </td>
                             <td class="text-muted">
                                 {{ $ledger->authorized_at ? $ledger->authorized_at->format('M d, Y') : ($ledger->created_at ? $ledger->created_at->format('M d, Y') : '—') }}
                                 <div class="small text-muted" style="font-size: 0.75rem;">
-                                    by {{ $ledger->authorizedByUser?->name ?? 'GM' }}
+                                    by {{ $ledger->authorizedByUser->name ?? 'GM' }}
                                 </div>
                             </td>
                             <td class="text-end fw-bold text-dark">

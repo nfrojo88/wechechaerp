@@ -129,7 +129,7 @@
                                 @endcan
                             @else
                                 {{-- Sent to coordinator — read-only badge --}}
-                                <span class="badge bg-warning text-dark" title="Sent on {{ $schedule->sent_at?->format('d M Y H:i') }}">
+                                <span class="badge bg-warning text-dark" title="Sent on {{ $schedule->sent_at->format('d M Y H:i') }}">
                                     <i class="fa-solid fa-paper-plane me-1"></i>Sent to Coordinator
                                 </span>
                             @endif

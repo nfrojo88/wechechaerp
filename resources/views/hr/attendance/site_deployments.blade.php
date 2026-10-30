@@ -177,7 +177,7 @@
                         <option value="">All Decision Makers</option>
                         @foreach($decidedUsers as $u)
                             <option value="{{ $u->id }}" {{ request('requested_by') == $u->id ? 'selected' : '' }}>
-                                {{ $u->name }} ({{ $u->roles->first()?->name ? ucwords(str_replace('_', ' ', $u->roles->first()->name)) : 'Manager' }})
+                                {{ $u->name }} ({{ $u->roles->first()->name ? ucwords(str_replace('_', ' ', $u->roles->first()->name)) : 'Manager' }})
                             </option>
                         @endforeach
                     </select>
@@ -238,14 +238,14 @@
                             <td class="ps-3 text-muted small">{{ $d->id }}</td>
                             <td>
                                 @if($isSingle)
-                                    <strong class="text-dark">{{ $d->start_date?->format('d M Y (D)') }}</strong>
+                                    <strong class="text-dark">{{ $d->start_date->format('d M Y (D)') }}</strong>
                                     <br><small class="text-primary font-monospace">🇪🇹 {{ $etStartMonth }} {{ $etStartDay }}, {{ $etStartYear }} ዓ.ም.</small>
                                 @else
-                                    <strong class="text-dark">{{ $d->start_date?->format('d M') }} &ndash; {{ $d->end_date?->format('d M Y') }}</strong>
+                                    <strong class="text-dark">{{ $d->start_date->format('d M') }} &ndash; {{ $d->end_date->format('d M Y') }}</strong>
                                     <span class="badge bg-info-subtle text-info border border-info ms-1" style="font-size:0.7rem;">
-                                        {{ $d->start_date?->diffInDays($d->end_date) + 1 }} Days
+                                        {{ $d->start_date->diffInDays($d->end_date) + 1 }} Days
                                     </span>
-                                    <br><small class="text-primary font-monospace">🇪🇹 {{ $etStartMonth }} {{ $etStartDay }} &ndash; {{ $d->end_date?->format('M d') }}</small>
+                                    <br><small class="text-primary font-monospace">🇪🇹 {{ $etStartMonth }} {{ $etStartDay }} &ndash; {{ $d->end_date->format('M d') }}</small>
                                 @endif
                             </td>
                             <td>
@@ -283,7 +283,7 @@
                                 @endif
                             </td>
                             <td>
-                                <div class="fw-semibold text-dark">{{ $d->requestedBy?->name ?: 'Authorized Manager' }}</div>
+                                <div class="fw-semibold text-dark">{{ $d->requestedBy->name ?: 'Authorized Manager' }}</div>
                                 <span class="badge bg-secondary-subtle text-dark border" style="font-size:0.7rem;">
                                     <i class="fa-solid fa-user-tie me-1 text-primary"></i>{{ $d->requested_by_role ?: 'Manager' }}
                                 </span>
@@ -364,7 +364,7 @@
                                     @if($d->isPending())
                                         @if($isHr)
                                             {{-- Approve Form --}}
-                                            <form action="{{ route('attendance.site-deployments.approve', $d) }}" method="POST" onsubmit="return confirm('Are you sure you want to APPROVE this site deployment for {{ $d->employee?->full_name }}? Official attendance will be recorded with Status S.');" class="d-inline">
+                                            <form action="{{ route('attendance.site-deployments.approve', $d) }}" method="POST" onsubmit="return confirm('Are you sure you want to APPROVE this site deployment for {{ $d->employee->full_name }}? Official attendance will be recorded with Status S.');" class="d-inline">
                                                 @csrf
                                                 <button type="submit" class="btn btn-success btn-sm fw-bold px-2 py-1 shadow-xs" title="Approve & Save in Attendance (ፍቀድ)">
                                                     <i class="fa-solid fa-check me-1"></i>Approve
@@ -380,7 +380,7 @@
                                             </span>
                                         @endif
                                     @elseif($d->isApproved())
-                                        <a href="{{ route('attendance.index', ['date' => $d->start_date?->format('Y-m-d'), 'employee' => $d->employee?->full_name]) }}" 
+                                        <a href="{{ route('attendance.index', ['date' => $d->start_date->format('Y-m-d'), 'employee' => $d->employee->full_name]) }}" 
                                            class="btn btn-outline-success btn-sm px-2 py-1 shadow-xs fw-semibold" 
                                            title="View this employee in attendance section with Status S">
                                             <span class="badge bg-success text-white me-1" style="font-size:0.68rem;">S</span> In Attendance <i class="fa-solid fa-arrow-up-right-from-square ms-1" style="font-size:0.7rem;"></i>
@@ -467,20 +467,20 @@
                         <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
                             <div class="d-flex align-items-center gap-3">
                                 <div class="rounded-circle text-white d-flex align-items-center justify-content-center fw-bold fs-5 shadow-xs" style="width: 48px; height: 48px; background: linear-gradient(135deg, #4f46e5 0%, #2563eb 100%);">
-                                    {{ strtoupper(substr($d->employee?->full_name ?? 'E', 0, 1)) }}
+                                    {{ strtoupper(substr($d->employee->full_name ?? 'E', 0, 1)) }}
                                 </div>
                                 <div>
-                                    <h6 class="fw-bold text-dark mb-0 fs-6">{{ $d->employee?->full_name ?? 'Unknown Employee' }}</h6>
+                                    <h6 class="fw-bold text-dark mb-0 fs-6">{{ $d->employee->full_name ?? 'Unknown Employee' }}</h6>
                                     <div class="text-muted small mt-0.5">
-                                        <span class="font-monospace text-primary fw-bold">{{ $d->employee?->employee_code ?? 'EMP' }}</span>
-                                        @if($d->employee?->designation) &bull; <span class="fw-semibold text-dark">{{ $d->employee->designation }}</span> @endif
-                                        @if($d->employee?->department) &bull; <span class="badge bg-light text-secondary border">{{ is_object($d->employee->department) ? ($d->employee->department->name ?? '') : $d->employee->department }}</span> @endif
+                                        <span class="font-monospace text-primary fw-bold">{{ $d->employee->employee_code ?? 'EMP' }}</span>
+                                        @if($d->employee->designation) &bull; <span class="fw-semibold text-dark">{{ $d->employee->designation }}</span> @endif
+                                        @if($d->employee->department) &bull; <span class="badge bg-light text-secondary border">{{ is_object($d->employee->department) ? ($d->employee->department->name ?? '') : $d->employee->department }}</span> @endif
                                     </div>
                                 </div>
                             </div>
                             <div class="d-flex align-items-center gap-2 flex-wrap">
                                 <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1 font-monospace">
-                                    <i class="fa-solid fa-fingerprint me-1"></i>Device ID: {{ $d->employee?->device_user_id ?: 'Not assigned' }}
+                                    <i class="fa-solid fa-fingerprint me-1"></i>Device ID: {{ $d->employee->device_user_id ?: 'Not assigned' }}
                                 </span>
                                 @if($d->start_date)
                                 <span class="badge bg-light text-dark border px-2 py-1 font-monospace" style="font-size:0.75rem;">
@@ -500,14 +500,14 @@
                                     <i class="fa-solid fa-location-dot text-danger me-1"></i>Destination Site &amp; Project
                                 </span>
                                 <h6 class="fw-bold text-dark mb-1 lh-sm">
-                                    {{ $d->siteProject?->name ?: ($d->site_name ?: 'General Site') }}
+                                    {{ $d->siteProject->name ?: ($d->site_name ?: 'General Site') }}
                                 </h6>
-                                @if($d->siteProject?->code)
+                                @if($d->siteProject->code)
                                     <div class="small text-muted mb-1 font-monospace">
                                         <span class="badge bg-light text-secondary border">Project Code: {{ $d->siteProject->code }}</span>
                                     </div>
                                 @endif
-                                @if($d->siteProject?->location)
+                                @if($d->siteProject->location)
                                     <div class="small text-muted mt-1">
                                         <i class="fa-solid fa-map-pin me-1 text-secondary"></i>{{ $d->siteProject->location }}
                                     </div>
@@ -522,7 +522,7 @@
                                     <i class="fa-regular fa-calendar-days text-primary me-1"></i>Deployment Period &amp; Dates
                                 </span>
                                 <div class="fw-bold text-dark mb-1 fs-6">
-                                    {{ $d->start_date?->format('d M Y') }}
+                                    {{ $d->start_date->format('d M Y') }}
                                     @if(!$isSingle && $d->end_date && $d->end_date->ne($d->start_date))
                                         <span class="text-muted fw-normal">to</span> {{ $d->end_date->format('d M Y') }}
                                     @endif
@@ -601,31 +601,31 @@
                                 <div class="row g-3 small">
                                     <div class="col-md-6 border-end-md">
                                         <div class="text-muted mb-1">Dispatched / Requested By:</div>
-                                        <strong class="text-dark fs-6">{{ $d->requestedBy?->name ?? 'Manager' }}</strong>
+                                        <strong class="text-dark fs-6">{{ $d->requestedBy->name ?? 'Manager' }}</strong>
                                         <span class="badge bg-light text-secondary border ms-1">{{ $d->requested_by_role ?? 'Manager' }}</span>
-                                        @if($d->requestedBy?->email)
+                                        @if($d->requestedBy->email)
                                             <div class="text-muted font-monospace mt-1" style="font-size:0.75rem;">{{ $d->requestedBy->email }}</div>
                                         @endif
                                         <div class="text-muted mt-1" style="font-size:0.75rem;">
-                                            <i class="fa-regular fa-clock me-1"></i>Submitted: {{ $d->created_at?->format('d M Y, h:i A') }}
+                                            <i class="fa-regular fa-clock me-1"></i>Submitted: {{ $d->created_at->format('d M Y, h:i A') }}
                                         </div>
                                     </div>
                                     <div class="col-md-6 ps-md-3">
                                         <div class="text-muted mb-1">HR Review Decision:</div>
                                         @if($d->isApproved())
                                             <div class="text-success fw-bold fs-6">
-                                                <i class="fa-solid fa-check-circle me-1"></i>Approved by {{ $d->hrReviewedBy?->name ?? 'HR Department' }}
+                                                <i class="fa-solid fa-check-circle me-1"></i>Approved by {{ $d->hrReviewedBy->name ?? 'HR Department' }}
                                             </div>
                                             <div class="text-muted mt-1" style="font-size:0.75rem;">
-                                                <i class="fa-regular fa-clock me-1"></i>Reviewed: {{ $d->hr_reviewed_at?->format('d M Y, h:i A') }}
+                                                <i class="fa-regular fa-clock me-1"></i>Reviewed: {{ $d->hr_reviewed_at->format('d M Y, h:i A') }}
                                             </div>
                                             <div class="small text-muted mt-1">Recorded into official attendance as Present (Status S).</div>
                                         @elseif($d->isRejected())
                                             <div class="text-danger fw-bold fs-6">
-                                                <i class="fa-solid fa-circle-xmark me-1"></i>Rejected by {{ $d->hrReviewedBy?->name ?? 'HR Department' }}
+                                                <i class="fa-solid fa-circle-xmark me-1"></i>Rejected by {{ $d->hrReviewedBy->name ?? 'HR Department' }}
                                             </div>
                                             <div class="text-muted mt-1" style="font-size:0.75rem;">
-                                                <i class="fa-regular fa-clock me-1"></i>Reviewed: {{ $d->hr_reviewed_at?->format('d M Y, h:i A') }}
+                                                <i class="fa-regular fa-clock me-1"></i>Reviewed: {{ $d->hr_reviewed_at->format('d M Y, h:i A') }}
                                             </div>
                                             <div class="alert alert-danger p-2 mt-2 mb-0 small">
                                                 <strong>Rejection Reason:</strong> {{ $d->hr_notes ?: 'No reason stated.' }}
@@ -651,7 +651,7 @@
                             <button type="button" class="btn btn-outline-danger btn-sm px-3 shadow-xs" data-bs-dismiss="modal" data-bs-toggle="modal" data-bs-target="#rejectModal{{ $d->id }}">
                                 <i class="fa-solid fa-xmark me-1"></i>Reject
                             </button>
-                            <form action="{{ route('attendance.site-deployments.approve', $d) }}" method="POST" onsubmit="return confirm('Are you sure you want to APPROVE this site deployment for {{ $d->employee?->full_name }}? Official attendance will be recorded with Status S.');" class="d-inline">
+                            <form action="{{ route('attendance.site-deployments.approve', $d) }}" method="POST" onsubmit="return confirm('Are you sure you want to APPROVE this site deployment for {{ $d->employee->full_name }}? Official attendance will be recorded with Status S.');" class="d-inline">
                                 @csrf
                                 <button type="submit" class="btn btn-success btn-sm fw-bold px-3 shadow-xs">
                                     <i class="fa-solid fa-check me-1"></i>Approve Deployment
@@ -679,10 +679,10 @@
                     @csrf
                     <div class="modal-body p-3 text-start">
                         <div class="alert alert-danger-subtle border border-danger small py-2 px-3 mb-3">
-                            <strong>Employee:</strong> {{ $d->employee?->full_name }}<br>
-                            <strong>Requested by:</strong> {{ $d->requestedBy?->name ?? 'Manager' }} ({{ $d->requested_by_role }})<br>
-                            <strong>Site / Project:</strong> {{ $d->siteProject?->name ?: ($d->site_name ?: 'Job Site') }}<br>
-                            <strong>Date:</strong> {{ $d->start_date?->format('d M Y') }} @if(!$isSingle) to {{ $d->end_date?->format('d M Y') }} @endif
+                            <strong>Employee:</strong> {{ $d->employee->full_name }}<br>
+                            <strong>Requested by:</strong> {{ $d->requestedBy->name ?? 'Manager' }} ({{ $d->requested_by_role }})<br>
+                            <strong>Site / Project:</strong> {{ $d->siteProject->name ?: ($d->site_name ?: 'Job Site') }}<br>
+                            <strong>Date:</strong> {{ $d->start_date->format('d M Y') }} @if(!$isSingle) to {{ $d->end_date->format('d M Y') }} @endif
                         </div>
                         <p class="small text-muted mb-2">
                             If you reject this site deployment, HR <strong>does not accept this information</strong> and <strong>no record will be saved in the attendance table</strong>.
@@ -716,16 +716,16 @@
                 <div class="modal-body p-3 text-start">
                     <div class="mb-3">
                         <span class="text-muted small d-block">Employee:</span>
-                        <strong>{{ $d->employee?->full_name }}</strong>
+                        <strong>{{ $d->employee->full_name }}</strong>
                     </div>
                     <div class="mb-3">
                         <span class="text-muted small d-block">Originally Requested By:</span>
-                        <strong>{{ $d->requestedBy?->name ?? 'Manager' }}</strong> ({{ $d->requested_by_role }})
+                        <strong>{{ $d->requestedBy->name ?? 'Manager' }}</strong> ({{ $d->requested_by_role }})
                     </div>
                     <div class="mb-3">
                         <span class="text-muted small d-block">Rejected By HR:</span>
-                        <strong>{{ $d->hrReviewedBy?->name ?? 'HR Officer' }}</strong>
-                        <span class="text-muted small">on {{ $d->hr_reviewed_at?->format('d M Y, h:i A') }}</span>
+                        <strong>{{ $d->hrReviewedBy->name ?? 'HR Officer' }}</strong>
+                        <span class="text-muted small">on {{ $d->hr_reviewed_at->format('d M Y, h:i A') }}</span>
                     </div>
                     <div class="alert alert-danger border-0 p-3 mb-0">
                         <span class="small fw-bold text-uppercase d-block mb-1">Rejection Reason:</span>
@@ -777,7 +777,7 @@
                             </div>
                         </div>
                         <span class="badge bg-primary text-white px-2 py-1">
-                            {{ auth()->user()->roles->first()?->name ? ucwords(str_replace('_', ' ', auth()->user()->roles->first()->name)) : 'Manager' }}
+                            {{ auth()->user()->roles->first()->name ? ucwords(str_replace('_', ' ', auth()->user()->roles->first()->name)) : 'Manager' }}
                         </span>
                     </div>
 

@@ -136,8 +136,8 @@
                                         </a>
                                     </td>
                                     <td>
-                                        <div class="text-truncate" style="max-width: 140px;" title="{{ $sheet->project?->name }}">
-                                            {{ $sheet->project?->name ?? 'General' }}
+                                        <div class="text-truncate" style="max-width: 140px;" title="{{ $sheet->project->name }}">
+                                            {{ $sheet->project->name ?? 'General' }}
                                         </div>
                                     </td>
                                     <td>{{ $sheet->date->format('M d, Y') }}</td>
@@ -204,7 +204,7 @@
                                         <a href="{{ route('manpower-approval.weekly.show', $batch->id) }}" class="fw-bold text-primary font-monospace text-decoration-none">
                                             {{ $batch->batch_number }}
                                         </a>
-                                        <div class="text-muted" style="font-size: 0.68rem;">{{ $batch->project?->name }}</div>
+                                        <div class="text-muted" style="font-size: 0.68rem;">{{ $batch->project->name }}</div>
                                     </td>
                                     <td>{{ $batch->week_start->format('M d') }} &ndash; {{ $batch->week_end->format('M d') }}</td>
                                     <td class="font-monospace fw-bold text-success">ETB {{ number_format($batch->total_net_payable, 2) }}</td>

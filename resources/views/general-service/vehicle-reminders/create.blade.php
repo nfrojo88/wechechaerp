@@ -62,13 +62,13 @@
                                 @foreach($vehicleUnits as $unit)
                                     <option value="{{ $unit->id }}"
                                             data-asset-id="{{ $unit->fixed_asset_id }}"
-                                            data-name="{{ $unit->parentAsset?->name }}"
+                                            data-name="{{ $unit->parentAsset->name }}"
                                             data-plate="{{ $unit->plate_number ?: 'N/A' }}"
                                             data-code="{{ $unit->unit_code }}"
                                             data-model="{{ trim(($unit->brand ?? '') . ' ' . ($unit->model ?? '')) ?: 'N/A' }}"
                                             data-year="{{ $unit->year ?: 'N/A' }}"
                                             {{ old('fixed_asset_unit_id') == $unit->id ? 'selected' : '' }}>
-                                        {{ $unit->unit_code }} — {{ $unit->parentAsset?->name }} (Plate: {{ $unit->plate_number ?: 'No Plate' }})
+                                        {{ $unit->unit_code }} — {{ $unit->parentAsset->name }} (Plate: {{ $unit->plate_number ?: 'No Plate' }})
                                     </option>
                                 @endforeach
                             </select>

@@ -89,7 +89,7 @@
                                     </a>
                                 </td>
                                 <td>{{ $sheet->date->format('M d, Y (D)') }}</td>
-                                <td>{{ $sheet->siteEngineer?->name }}</td>
+                                <td>{{ $sheet->siteEngineer->name }}</td>
                                 <td><span class="badge bg-light text-dark border">{{ $sheet->trade ?: 'General' }}</span></td>
                                 <td><span class="badge bg-light text-dark border font-monospace">{{ $sheet->total_headcount }}</span></td>
                                 <td class="font-monospace">{{ number_format($sheet->total_regular_hours + $sheet->total_overtime_hours, 1) }}h</td>

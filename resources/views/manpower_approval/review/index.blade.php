@@ -104,14 +104,14 @@
                                 </a>
                             </td>
                             <td>
-                                <strong class="text-dark d-block text-truncate" style="max-width: 160px;" title="{{ $sheet->project?->name }}">
-                                    {{ $sheet->project?->name ?? 'General Site' }}
+                                <strong class="text-dark d-block text-truncate" style="max-width: 160px;" title="{{ $sheet->project->name }}">
+                                    {{ $sheet->project->name ?? 'General Site' }}
                                 </strong>
                             </td>
                             <td>{{ $sheet->date->format('M d, Y') }}</td>
                             <td>
-                                <div class="fw-semibold text-dark">{{ $sheet->siteEngineer?->name ?? 'Site Staff' }}</div>
-                                <div class="text-muted" style="font-size: 0.68rem;">{{ $sheet->siteEngineer?->email }}</div>
+                                <div class="fw-semibold text-dark">{{ $sheet->siteEngineer->name ?? 'Site Staff' }}</div>
+                                <div class="text-muted" style="font-size: 0.68rem;">{{ $sheet->siteEngineer->email }}</div>
                             </td>
                             <td>
                                 <span class="badge bg-light text-dark border">{{ $sheet->trade ?: 'General Labor' }}</span>

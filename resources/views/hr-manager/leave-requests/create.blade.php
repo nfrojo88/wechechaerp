@@ -67,7 +67,7 @@
                         @php
                             $currentYear = \Carbon\Carbon::now()->year;
                             $annualType = $leaveTypes->firstWhere('code', 'ANNUAL') ?? $leaveTypes->first();
-                            $annualBal = $balances->firstWhere('leave_type_id', $annualType?->id) ?? $balances->first();
+                            $annualBal = $balances->firstWhere('leave_type_id', $annualType->id) ?? $balances->first();
                             
                             $joinDate = $employee->date_of_joining ? \Carbon\Carbon::parse($employee->date_of_joining) : null;
                             $joinYear = $joinDate ? $joinDate->year : $currentYear;
@@ -141,7 +141,7 @@
                             <select name="leave_type_id" id="leave_type_id" class="form-select @error('leave_type_id') is-invalid @enderror" required>
                                 <option value="">-- Choose Leave Type --</option>
                                 @foreach ($leaveTypes as $type)
-                                    <option value="{{ $type->id }}" {{ old('leave_type_id', $annualType?->id) == $type->id ? 'selected' : '' }}>
+                                    <option value="{{ $type->id }}" {{ old('leave_type_id', $annualType->id) == $type->id ? 'selected' : '' }}>
                                         {{ $type->name }}
                                     </option>
                                 @endforeach

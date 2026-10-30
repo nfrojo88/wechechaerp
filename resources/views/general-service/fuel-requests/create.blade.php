@@ -54,7 +54,7 @@
                         <i class="fa-solid fa-receipt me-2"></i>Outstanding Fuel Station Receipt Required
                     </h6>
                     <div class="small">
-                        The previous fuel request <strong>#{{ $unreceiptedReq->request_no }}</strong> for this vehicle ({{ $selectedVehicle?->plate_number ?: $selectedVehicle?->unit_code }}) was paid on {{ $unreceiptedReq->created_at?->format('d M Y') }} but has <strong>no station receipt attached yet</strong>.
+                        The previous fuel request <strong>#{{ $unreceiptedReq->request_no }}</strong> for this vehicle ({{ $selectedVehicle->plate_number ?: $selectedVehicle->unit_code }}) was paid on {{ $unreceiptedReq->created_at->format('d M Y') }} but has <strong>no station receipt attached yet</strong>.
                         @if($policy === 'block')
                             Under company fuel policy, new requests are <strong>blocked</strong> until the previous receipt is uploaded.
                         @else
@@ -109,7 +109,7 @@
                                 <option value="">— Select Vehicle —</option>
                                 @foreach($vehicles as $v)
                                     <option value="{{ $v->id }}" {{ (old('fixed_asset_unit_id', $selectedUnitId) == $v->id) ? 'selected' : '' }}>
-                                        {{ $v->plate_number ? 'Plate: ' . $v->plate_number : $v->unit_code }} — {{ $v->parentAsset?->name }} ({{ $v->unit_code }})
+                                        {{ $v->plate_number ? 'Plate: ' . $v->plate_number : $v->unit_code }} — {{ $v->parentAsset->name }} ({{ $v->unit_code }})
                                     </option>
                                 @endforeach
                             </select>
@@ -126,7 +126,7 @@
                             <select name="driver_employee_id" id="driver_employee_id" class="form-select @error('driver_employee_id') is-invalid @enderror">
                                 <option value="">— Auto-detect or Unassigned —</option>
                                 @foreach($drivers as $d)
-                                    <option value="{{ $d->id }}" {{ (old('driver_employee_id', $selectedVehicle?->assigned_to_employee_id) == $d->id) ? 'selected' : '' }}>
+                                    <option value="{{ $d->id }}" {{ (old('driver_employee_id', $selectedVehicle->assigned_to_employee_id) == $d->id) ? 'selected' : '' }}>
                                         {{ $d->full_name }} ({{ $d->role_title ?: 'Driver' }})
                                     </option>
                                 @endforeach
@@ -295,7 +295,7 @@
                                 <option value="">— Standalone Fuel Request —</option>
                                 @foreach($recentBookings as $b)
                                     <option value="{{ $b->id }}" {{ old('driver_booking_id') == $b->id ? 'selected' : '' }}>
-                                        PR #{{ $b->purchaseRequest?->request_number ?: $b->purchase_request_id }} — {{ $b->scheduled_at?->format('d M') }} ({{ $b->vehicle_number ?: 'Assigned' }})
+                                        PR #{{ $b->purchaseRequest->request_number ?: $b->purchase_request_id }} — {{ $b->scheduled_at->format('d M') }} ({{ $b->vehicle_number ?: 'Assigned' }})
                                     </option>
                                 @endforeach
                             </select>

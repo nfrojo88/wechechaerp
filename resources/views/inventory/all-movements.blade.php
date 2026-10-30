@@ -132,10 +132,10 @@
                         $qty = (float) $mov->quantity;
                         $isPositive = $qty > 0;
                         $isNegative = $qty < 0;
-                        $storeName = $mov->inventory?->store?->name ?? 'N/A';
-                        $productName = $mov->inventory?->product?->name ?? 'N/A';
-                        $skuCode = $mov->inventory?->product?->sku ?: ($mov->inventory?->product?->code ?: null);
-                        $unit = $mov->inventory?->product?->unit ?? '';
+                        $storeName = $mov->inventory->store->name ?? 'N/A';
+                        $productName = $mov->inventory->product->name ?? 'N/A';
+                        $skuCode = $mov->inventory->product->sku ?: ($mov->inventory->product->code ?: null);
+                        $unit = $mov->inventory->product->unit ?? '';
                     @endphp
                     <tr>
                         <td>
@@ -174,7 +174,7 @@
                             @endif
                         </td>
                         <td>
-                            <div class="small fw-semibold text-dark">{{ $mov->performer?->name ?? 'System' }}</div>
+                            <div class="small fw-semibold text-dark">{{ $mov->performer->name ?? 'System' }}</div>
                         </td>
                         <td class="text-wrap small text-muted">
                             {{ $mov->remarks ?: '—' }}

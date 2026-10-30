@@ -283,10 +283,10 @@
                                         <span class="badge bg-light text-dark border">{{ $log->action }}</span>
                                     </td>
                                     <td class="small">
-                                        {{ $log->sender?->name ?? 'System' }}
+                                        {{ $log->sender->name ?? 'System' }}
                                     </td>
                                     <td class="small">
-                                        <div class="fw-semibold">{{ $log->recipient?->name ?? ($log->recipientEmployee?->full_name ?? 'Unassigned') }}</div>
+                                        <div class="fw-semibold">{{ $log->recipient->name ?? ($log->recipientEmployee->full_name ?? 'Unassigned') }}</div>
                                         <small class="text-muted">{{ ucwords(str_replace('_', ' ', $log->role)) }}</small>
                                     </td>
                                     <td class="small text-nowrap font-monospace">
@@ -425,7 +425,7 @@
                         <label class="form-label fw-bold small">Recipient Phone Number</label>
                         <input type="text" name="test_phone" class="form-control"
                                placeholder="e.g. +251911123456 or 0911123456"
-                               value="{{ auth()->user()?->phone ?: '+251911000000' }}" required>
+                               value="{{ auth()->user()->phone ?: '+251911000000' }}" required>
                         <div class="form-text">Ethiopian format (09... or 07...) will automatically format to E.164 (+251...).</div>
                     </div>
 

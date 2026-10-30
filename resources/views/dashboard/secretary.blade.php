@@ -394,7 +394,7 @@
                                             <small class="text-muted">{{ optional($letter->date)->format('d M Y') ?? '-' }}</small>
                                         </td>
                                         <td data-label="Registered By">
-                                            <small class="text-muted">{{ $letter->creator?->name ?? 'Secretary' }}</small>
+                                            <small class="text-muted">{{ $letter->creator->name ?? 'Secretary' }}</small>
                                         </td>
                                         <td data-label="Status" class="text-center">
                                             <x-status-badge :status="$letter->status ?? 'pending'" />
@@ -443,8 +443,8 @@
                                             </a>
                                         </td>
                                         <td data-label="Employee">
-                                            <span class="fw-semibold text-dark">{{ $empLtr->employee?->full_name ?? 'N/A' }}</span>
-                                            <small class="text-muted font-monospace d-block">{{ $empLtr->employee?->employee_code ?? '' }}</small>
+                                            <span class="fw-semibold text-dark">{{ $empLtr->employee->full_name ?? 'N/A' }}</span>
+                                            <small class="text-muted font-monospace d-block">{{ $empLtr->employee->employee_code ?? '' }}</small>
                                         </td>
                                         <td data-label="Type">
                                             <span class="badge {{ $empLtr->badge_class ?? 'bg-secondary' }}">

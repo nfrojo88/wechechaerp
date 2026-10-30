@@ -151,7 +151,7 @@
                 <div class="col-md-4">
                     <label class="form-label">Baseline Date</label>
                     <input type="date" name="baseline_date" class="form-control"
-                           value="{{ old('baseline_date', $product->baseline_date?->format('Y-m-d')) }}">
+                           value="{{ old('baseline_date', $product->baseline_date->format('Y-m-d')) }}">
                 </div>
 
                 <div class="col-md-6">

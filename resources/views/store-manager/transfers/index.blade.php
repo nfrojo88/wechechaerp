@@ -388,7 +388,7 @@
                     <tbody>
                         @forelse($transfers as $transfer)
                         @php
-                            $userStoreId = $assignedStore?->id ?? auth()->user()->store_id;
+                            $userStoreId = $assignedStore->id ?? auth()->user()->store_id;
                             $isIncoming = $userStoreId && ($transfer->to_store_id == $userStoreId);
                             $isOutgoing = $userStoreId && ($transfer->from_store_id == $userStoreId);
                             $canEditTransfer = !$isAuditorUser && in_array($transfer->status, ['draft', 'pending_approval', 'approved']);

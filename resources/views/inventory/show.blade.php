@@ -139,7 +139,7 @@
                                 <td class="text-end font-monospace fw-semibold text-dark">
                                     {{ $mov->balance_after !== null ? number_format((float)$mov->balance_after, 3) : '—' }}
                                 </td>
-                                <td>{{ $mov->performer?->name ?? 'System' }}</td>
+                                <td>{{ $mov->performer->name ?? 'System' }}</td>
                                 <td class="text-muted small text-truncate" style="max-width:200px;">{{ $mov->remarks }}</td>
                             </tr>
                             @empty

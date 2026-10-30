@@ -8,7 +8,7 @@ An employee contract has been submitted for approval at the {{ $approvalLevel }}
 ## Employee Information
 - **Name:** {{ $employee->name }}
 - **Code:** {{ $employee->code }}
-- **Department:** {{ $employee->department?->name ?? 'N/A' }}
+- **Department:** {{ $employee->department->name ?? 'N/A' }}
 
 ## Contract Details
 - **Contract Number:** {{ $contract->contract_number }}

@@ -56,7 +56,7 @@
                         <option value="">All Vehicles</option>
                         @foreach($vehicleUnits as $unit)
                             <option value="{{ $unit->id }}" {{ request('vehicle_id') == $unit->id ? 'selected' : '' }}>
-                                {{ $unit->unit_code }} — {{ $unit->parentAsset?->name }} ({{ $unit->plate_number ?: 'No Plate' }})
+                                {{ $unit->unit_code }} — {{ $unit->parentAsset->name }} ({{ $unit->plate_number ?: 'No Plate' }})
                             </option>
                         @endforeach
                     </select>
@@ -158,16 +158,16 @@
                                             </div>
                                             <div>
                                                 <a href="{{ route('general-service.vehicle-reminders.vehicle-detail', $reminder->fixed_asset_unit_id) }}" class="fw-bold text-dark text-decoration-none">
-                                                    {{ $reminder->fixedAsset?->name ?? 'Vehicle' }}
+                                                    {{ $reminder->fixedAsset->name ?? 'Vehicle' }}
                                                 </a>
                                                 <div class="d-flex gap-2 align-items-center mt-1">
-                                                    @if($reminder->assetUnit?->plate_number)
+                                                    @if($reminder->assetUnit->plate_number)
                                                         <span class="badge bg-dark text-white rounded-pill px-2" style="font-size: 0.7rem;">
                                                             {{ $reminder->assetUnit->plate_number }}
                                                         </span>
                                                     @endif
-                                                    <span class="text-muted small">{{ $reminder->assetUnit?->unit_code }}</span>
-                                                    @if($reminder->assetUnit?->model)
+                                                    <span class="text-muted small">{{ $reminder->assetUnit->unit_code }}</span>
+                                                    @if($reminder->assetUnit->model)
                                                         <span class="text-muted small">· {{ $reminder->assetUnit->model }}</span>
                                                     @endif
                                                 </div>
@@ -419,7 +419,7 @@
                                                     <div class="modal-body p-4">
                                                         <div class="mb-3">
                                                             <label class="form-label text-muted small fw-semibold">Vehicle</label>
-                                                            <div class="fw-bold text-dark">{{ $reminder->fixedAsset?->name }} ({{ $reminder->assetUnit?->plate_number ?? $reminder->assetUnit?->unit_code }})</div>
+                                                            <div class="fw-bold text-dark">{{ $reminder->fixedAsset->name }} ({{ $reminder->assetUnit->plate_number ?? $reminder->assetUnit->unit_code }})</div>
                                                         </div>
                                                         <div class="row g-2 mb-3">
                                                             <div class="col-6">

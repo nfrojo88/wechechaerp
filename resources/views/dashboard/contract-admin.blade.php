@@ -317,7 +317,7 @@
                 </div>
                 <div class="card-body p-0">
                     @forelse($subconIpcs as $ipc)
-                    @php $sc = $ipc->agreement?->subcontractor ?? null; @endphp
+                    @php $sc = $ipc->agreement->subcontractor ?? null; @endphp
                     <div class="d-flex justify-content-between align-items-center px-3 py-2 border-bottom">
                         <div>
                             <p class="mb-0 fw-semibold small text-dark font-monospace">{{ $ipc->ipc_no ?? 'IPC-' . $ipc->id }}</p>

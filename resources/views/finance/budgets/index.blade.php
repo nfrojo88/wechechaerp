@@ -107,8 +107,8 @@
                         @endphp
                         <tr>
                             <td class="ps-4" data-label="Project">
-                                <div class="fw-bold text-dark">{{ $b->project?->name ?? 'General Enterprise' }}</div>
-                                @if($b->project?->code)
+                                <div class="fw-bold text-dark">{{ $b->project->name ?? 'General Enterprise' }}</div>
+                                @if($b->project->code)
                                     <span class="badge bg-light text-muted border font-monospace" style="font-size: 0.7rem;">{{ $b->project->code }}</span>
                                 @endif
                             </td>

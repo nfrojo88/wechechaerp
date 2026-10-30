@@ -331,7 +331,7 @@
                                         <span class="fs-6 fw-bold text-dark d-block">
                                             {{ $maintenanceRequest->pettyCashOwner->name ?? 'Not Assigned' }}
                                         </span>
-                                        @if($maintenanceRequest->pettyCashOwner?->employee)
+                                        @if($maintenanceRequest->pettyCashOwner->employee)
                                             <small class="text-muted d-block font-monospace mt-1" style="font-size:0.75rem;">
                                                 <span class="badge bg-secondary font-monospace">{{ $maintenanceRequest->pettyCashOwner->employee->employee_code }}</span>
                                                 @if($maintenanceRequest->pettyCashOwner->employee->account_number)
@@ -493,23 +493,23 @@
             @php
                 // Creator of the report/request
                 $reporterUser = $maintenanceRequest->reportedBy;
-                $reportedByName = $reporterUser?->name ?? 'Requester / Staff';
-                $reporterEmp = $reporterUser?->employee;
-                $reportedByCode = $reporterEmp?->employee_code;
-                $reportedByRole = $reporterEmp?->role_title 
-                    ?? $reporterEmp?->department 
-                    ?? ($reporterUser?->roles?->pluck('name')->map(fn($r) => ucwords(str_replace('_', ' ', $r)))->join(', ') ?: ($reporterUser?->email ?: 'Authorized Requester'));
+                $reportedByName = $reporterUser->name ?? 'Requester / Staff';
+                $reporterEmp = $reporterUser->employee;
+                $reportedByCode = $reporterEmp->employee_code;
+                $reportedByRole = $reporterEmp->role_title 
+                    ?? $reporterEmp->department 
+                    ?? ($reporterUser->roles->pluck('name')->map(fn($r) => ucwords(str_replace('_', ' ', $r)))->join(', ') ?: ($reporterUser->email ?: 'Authorized Requester'));
 
                 // Decision Maker / General Service Evaluator (Wondimagnhu Siyum)
                 $decisionMakerUser = $maintenanceRequest->assignedTo;
-                $decisionMakerName = $decisionMakerUser?->name ?? 'Wondimagnhu Siyum';
-                $decisionMakerEmp = $decisionMakerUser?->employee ?? ($decisionMakerName === 'Wondimagnhu Siyum' ? \App\Models\Employee::where('full_name', 'like', '%Wondimag%')->first() : null);
-                $decisionMakerCode = $decisionMakerEmp?->employee_code ?? 'EMP-01';
-                $decisionMakerDept = $decisionMakerEmp?->department ?? 'Administration / General Service';
+                $decisionMakerName = $decisionMakerUser->name ?? 'Wondimagnhu Siyum';
+                $decisionMakerEmp = $decisionMakerUser->employee ?? ($decisionMakerName === 'Wondimagnhu Siyum' ? \App\Models\Employee::where('full_name', 'like', '%Wondimag%')->first() : null);
+                $decisionMakerCode = $decisionMakerEmp->employee_code ?? 'EMP-01';
+                $decisionMakerDept = $decisionMakerEmp->department ?? 'Administration / General Service';
 
                 // Asset Operator / Custodian (if assigned to the equipment)
                 $assetUnit = $maintenanceRequest->fixedAssetUnit;
-                $operatorEmp = $assetUnit?->assignedEmployee ?? ($maintenanceRequest->employee && $maintenanceRequest->employee->full_name !== $decisionMakerName ? $maintenanceRequest->employee : null);
+                $operatorEmp = $assetUnit->assignedEmployee ?? ($maintenanceRequest->employee && $maintenanceRequest->employee->full_name !== $decisionMakerName ? $maintenanceRequest->employee : null);
             @endphp
             <div class="card border-0 shadow-sm rounded-4 mb-4">
                 <div class="card-header bg-white border-0 py-3 px-4 rounded-top-4 d-flex justify-content-between align-items-center">

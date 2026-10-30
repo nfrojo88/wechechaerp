@@ -197,12 +197,12 @@
         <div class="col-md-2">
             <label class="form-label fw-semibold small">Start Date <span class="text-danger">*</span></label>
             <input type="date" id="meta_start_date" class="form-control"
-                   value="{{ $takeoff->project->start_date?->format('Y-m-d') ?? now()->format('Y-m-d') }}" required>
+                   value="{{ $takeoff->project->start_date->format('Y-m-d') ?? now()->format('Y-m-d') }}" required>
         </div>
         <div class="col-md-2">
             <label class="form-label fw-semibold small">End Date <span class="text-danger">*</span></label>
             <input type="date" id="meta_end_date" class="form-control"
-                   value="{{ $takeoff->project->end_date?->format('Y-m-d') ?? now()->addDays(90)->format('Y-m-d') }}" required>
+                   value="{{ $takeoff->project->end_date->format('Y-m-d') ?? now()->addDays(90)->format('Y-m-d') }}" required>
         </div>
         <div class="col-md-4">
             <label class="form-label fw-semibold small">Notes</label>

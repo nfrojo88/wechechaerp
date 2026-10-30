@@ -131,12 +131,12 @@
                                 <a href="{{ route('vehicle-fuel-requests.show', $req->id) }}" class="fw-bold text-dark font-monospace text-decoration-none">
                                     {{ $req->request_no }}
                                 </a>
-                                <div class="text-muted small" style="font-size: 0.75rem;">{{ $req->created_at?->format('d M Y') }}</div>
+                                <div class="text-muted small" style="font-size: 0.75rem;">{{ $req->created_at->format('d M Y') }}</div>
                             </td>
                             <td class="py-3">
-                                <div class="fw-semibold text-dark">{{ $req->assetUnit?->plate_number ?: $req->assetUnit?->unit_code }}</div>
+                                <div class="fw-semibold text-dark">{{ $req->assetUnit->plate_number ?: $req->assetUnit->unit_code }}</div>
                                 <span class="text-muted small">
-                                    <i class="fa-solid fa-user me-1 text-primary"></i>{{ $req->driver?->full_name ?? ($req->requestedBy?->name ?? 'Driver') }}
+                                    <i class="fa-solid fa-user me-1 text-primary"></i>{{ $req->driver->full_name ?? ($req->requestedBy->name ?? 'Driver') }}
                                 </span>
                             </td>
                             <td class="py-3">
@@ -284,7 +284,7 @@
                                     <option value="">— Select Vehicle (Plate / Code) —</option>
                                     @foreach($vehicles as $v)
                                         <option value="{{ $v->id }}">
-                                            {{ $v->plate_number ? 'Plate: ' . $v->plate_number : $v->unit_code }} — {{ $v->parentAsset?->name }} ({{ $v->unit_code }})
+                                            {{ $v->plate_number ? 'Plate: ' . $v->plate_number : $v->unit_code }} — {{ $v->parentAsset->name }} ({{ $v->unit_code }})
                                         </option>
                                     @endforeach
                                 </select>

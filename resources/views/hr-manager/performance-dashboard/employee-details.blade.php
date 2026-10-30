@@ -27,7 +27,7 @@
                     <small class="text-muted">{{ $employee->code }}</small>
                     <hr>
                     <small class="d-block text-muted mb-2">Department</small>
-                    <p class="mb-3">{{ $employee->department?->name ?? 'N/A' }}</p>
+                    <p class="mb-3">{{ $employee->department->name ?? 'N/A' }}</p>
                     <small class="d-block text-muted mb-2">Status</small>
                     <p class="mb-0">
                         @if ($employee->is_active)

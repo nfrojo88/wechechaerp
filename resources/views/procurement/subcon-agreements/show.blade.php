@@ -94,7 +94,7 @@
                         <div class="col-sm-6">
                             <label class="text-muted small fw-semibold d-block text-uppercase">Project</label>
                             <span class="fs-6 fw-bold text-dark">{{ $subconAgreement->project->project_name ?? $subconAgreement->project->name ?? 'N/A' }}</span>
-                            @if($subconAgreement->project?->location)
+                            @if($subconAgreement->project->location)
                                 <small class="text-muted d-block"><i class="fa-solid fa-location-dot me-1"></i>{{ $subconAgreement->project->location }}</small>
                             @endif
                         </div>

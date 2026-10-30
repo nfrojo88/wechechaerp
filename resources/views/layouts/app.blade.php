@@ -957,9 +957,9 @@ body.sidebar-open { overflow-y: hidden !important; }
                                             <div class="d-flex align-items-start gap-2">
                                                 <i class="fa-solid fa-envelope-open-text text-primary mt-1"></i>
                                                 <div>
-                                                    <strong class="d-block text-dark font-size-13">{{ $notif->letter?->subject ?? 'New Letter Notification' }}</strong>
+                                                    <strong class="d-block text-dark font-size-13">{{ $notif->letter->subject ?? 'New Letter Notification' }}</strong>
                                                     <small class="text-muted text-wrap d-block">{{ \Illuminate\Support\Str::limit($notif->message, 70) }}</small>
-                                                    <small class="text-muted" style="font-size: 0.7rem;">{{ $notif->created_at?->diffForHumans() }}</small>
+                                                    <small class="text-muted" style="font-size: 0.7rem;">{{ $notif->created_at->diffForHumans() }}</small>
                                                 </div>
                                             </div>
                                         </a>
@@ -982,7 +982,7 @@ body.sidebar-open { overflow-y: hidden !important; }
                         @php
                             $authTargetIds = array_filter([
                                 auth()->id(),
-                                auth()->user()->employee?->id,
+                                auth()->user()->employee->id,
                             ]);
                             $allAuthCoas = \App\Models\ChartOfAccount::whereIn('assigned_to', $authTargetIds)->get();
                             $authPettyCash = $allAuthCoas->filter(function ($coa) {

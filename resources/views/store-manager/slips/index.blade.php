@@ -200,7 +200,7 @@
             <div class="modal-header">
                 <div>
                     <h5 class="modal-title">{{ $slip->dr_no }} - {{ ucfirst($slip->slip_type) }} Slip</h5>
-                    <small class="text-muted">{{ $slip->received_date?->format('M d, Y H:i') }}</small>
+                    <small class="text-muted">{{ $slip->received_date->format('M d, Y H:i') }}</small>
                 </div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>

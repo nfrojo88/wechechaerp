@@ -182,14 +182,14 @@
                         <div class="col-md-6">
                             <div class="p-2 border rounded bg-white">
                                 <span class="text-muted d-block">Addressed / Handled By:</span>
-                                <strong class="text-dark">{{ $letter->addressedTo?->name ?? 'Not yet assigned' }}</strong>
+                                <strong class="text-dark">{{ $letter->addressedTo->name ?? 'Not yet assigned' }}</strong>
                             </div>
                         </div>
                         @if($letter->registered_at)
                         <div class="col-md-6">
                             <div class="p-2 border rounded bg-white">
                                 <span class="text-muted d-block">Registered By:</span>
-                                <strong class="text-success">{{ $letter->registeredBy?->name ?? 'Secretary' }} ({{ $letter->registered_at->format('M d, Y H:i') }})</strong>
+                                <strong class="text-success">{{ $letter->registeredBy->name ?? 'Secretary' }} ({{ $letter->registered_at->format('M d, Y H:i') }})</strong>
                             </div>
                         </div>
                         @endif

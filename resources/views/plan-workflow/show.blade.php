@@ -137,7 +137,7 @@
                             <div class="fw-semibold small text-dark">2. Planning Manager Review</div>
                             @if($workflow->planning_manager_id)
                                 <div class="text-muted" style="font-size:.78rem;">
-                                    ✅ {{ $workflow->planningManager->name ?? '—' }} &bull; {{ $workflow->planning_manager_at?->format('M d, Y H:i') }}
+                                    ✅ {{ $workflow->planningManager->name ?? '—' }} &bull; {{ $workflow->planning_manager_at->format('M d, Y H:i') }}
                                     @if($workflow->planning_manager_note) <br><em class="text-secondary">{{ $workflow->planning_manager_note }}</em> @endif
                                 </div>
                             @else
@@ -155,7 +155,7 @@
                             <div class="fw-semibold small text-dark">3. Coordinator Review</div>
                             @if($workflow->coordinator_id)
                                 <div class="text-muted" style="font-size:.78rem;">
-                                    ✅ {{ $workflow->coordinator->name ?? '—' }} &bull; {{ $workflow->coordinator_at?->format('M d, Y H:i') }}
+                                    ✅ {{ $workflow->coordinator->name ?? '—' }} &bull; {{ $workflow->coordinator_at->format('M d, Y H:i') }}
                                     @if($workflow->coordinator_note) <br><em class="text-secondary">{{ $workflow->coordinator_note }}</em> @endif
                                 </div>
                             @else
@@ -173,7 +173,7 @@
                             <div class="fw-semibold small text-dark">4. Technical Manager Review</div>
                             @if($workflow->tech_manager_id)
                                 <div class="text-muted" style="font-size:.78rem;">
-                                    ✅ {{ $workflow->techManager->name ?? '—' }} &bull; {{ $workflow->tech_manager_at?->format('M d, Y H:i') }}
+                                    ✅ {{ $workflow->techManager->name ?? '—' }} &bull; {{ $workflow->tech_manager_at->format('M d, Y H:i') }}
                                     @if($workflow->tech_manager_note) <br><em class="text-secondary">{{ $workflow->tech_manager_note }}</em> @endif
                                 </div>
                             @else
@@ -191,7 +191,7 @@
                             <div class="fw-semibold small text-dark">5. GM Approval & Budget Allocation</div>
                             @if($workflow->gm_id)
                                 <div class="text-muted" style="font-size:.78rem;">
-                                    ✅ {{ $workflow->gm->name ?? '—' }} &bull; {{ $workflow->gm_at?->format('M d, Y H:i') }}<br>
+                                    ✅ {{ $workflow->gm->name ?? '—' }} &bull; {{ $workflow->gm_at->format('M d, Y H:i') }}<br>
                                     Budget Allocated: <strong class="text-success">{{ number_format($workflow->budget_allocated, 2) }} ETB</strong>
                                     @if($workflow->gm_note) <br><em class="text-secondary">{{ $workflow->gm_note }}</em> @endif
                                 </div>
@@ -208,7 +208,7 @@
                         <div class="ps-1">
                             <div class="fw-semibold small text-danger">Rejected</div>
                             <div class="text-muted" style="font-size:.78rem;">
-                                By {{ $workflow->rejector->name ?? '—' }} &bull; {{ $workflow->rejected_at?->format('M d, Y H:i') }}<br>
+                                By {{ $workflow->rejector->name ?? '—' }} &bull; {{ $workflow->rejected_at->format('M d, Y H:i') }}<br>
                                 <em>{{ $workflow->rejection_reason }}</em>
                             </div>
                         </div>
@@ -376,7 +376,7 @@
                         <textarea name="notes" rows="2" class="form-control form-control-sm"></textarea>
                     </div>
                     <button class="btn btn-primary btn-sm w-100"><i class="fas fa-paper-plane me-1"></i>
-                        {{ $workflow?->status === 'rejected' ? 'Resubmit for Review' : 'Submit for Review' }}
+                        {{ $workflow->status === 'rejected' ? 'Resubmit for Review' : 'Submit for Review' }}
                     </button>
                 </form>
             </div>

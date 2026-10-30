@@ -169,13 +169,13 @@
                                     @endif
                                 </td>
                                 <td>
-                                    <span class="fw-semibold">{{ $unit->parentAsset?->name ?? '—' }}</span>
+                                    <span class="fw-semibold">{{ $unit->parentAsset->name ?? '—' }}</span>
                                     @if($unit->brand || $unit->model)
                                         <div class="small text-muted">{{ trim($unit->brand . ' ' . $unit->model) }}</div>
                                     @endif
                                 </td>
                                 <td>
-                                    <span class="badge bg-light text-dark border">{{ $unit->parentAsset?->category ?? '—' }}</span>
+                                    <span class="badge bg-light text-dark border">{{ $unit->parentAsset->category ?? '—' }}</span>
                                 </td>
                                 <td>
                                     <span class="badge {{ $statusBadge['class'] }}">
@@ -210,7 +210,7 @@
                                                 data-bs-target="#reportModal"
                                                 data-unit-id="{{ $unit->id }}"
                                                 data-unit-code="{{ $unit->unit_code }}"
-                                                data-asset-name="{{ $unit->parentAsset?->name ?? $unit->unit_code }}"
+                                                data-asset-name="{{ $unit->parentAsset->name ?? $unit->unit_code }}"
                                                 data-asset-details="{{ trim(($unit->brand ?? '') . ' ' . ($unit->model ?? '')) }}"
                                                 onclick="fillReportModal(this)">
                                             <i class="fa-solid fa-wrench me-1"></i> Report Maintenance

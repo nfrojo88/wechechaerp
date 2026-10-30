@@ -137,7 +137,7 @@
                         <div class="row g-2 small">
                             <div class="col-md-6">
                                 <span class="text-muted">Reviewed By:</span>
-                                <strong>{{ $leaveRequest->approvedByUser?->name ?? 'Management' }}</strong>
+                                <strong>{{ $leaveRequest->approvedByUser->name ?? 'Management' }}</strong>
                             </div>
                             <div class="col-md-6">
                                 <span class="text-muted">Decision Date:</span>

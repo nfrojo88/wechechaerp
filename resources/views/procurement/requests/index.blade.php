@@ -44,7 +44,7 @@
                                 <span class="text-muted">Central/HQ</span>
                             @endif
                         </td>
-                        <td>{{ $req->store?->name ?? 'General Store' }}</td>
+                        <td>{{ $req->store->name ?? 'General Store' }}</td>
                         <td>
                             <span class="{{ optional($req->required_date)->isPast() && $req->status != 'fulfilled' ? 'text-danger fw-bold' : '' }}">
                                 {{ optional($req->required_date)->format('d M Y') ?? '-' }}
@@ -72,7 +72,7 @@
                             @endphp
                             <span class="badge bg-{{ $badge }}">{{ $statusText }}</span>
                         </td>
-                        <td class="small text-muted">{{ $req->creator?->name ?? 'Staff' }}</td>
+                        <td class="small text-muted">{{ $req->creator->name ?? 'Staff' }}</td>
                         <td class="text-end">
                             <a href="{{ route('material-requests.show', $req) }}" class="btn btn-sm btn-outline-primary">View</a>
                         </td>

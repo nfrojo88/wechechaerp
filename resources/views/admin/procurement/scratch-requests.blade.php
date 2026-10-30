@@ -261,7 +261,7 @@
                             <td>
                                 <div class="d-flex align-items-center gap-1.5">
                                     <i class="fa-solid fa-warehouse text-muted small"></i>
-                                    <span>{{ $req->store?->name ?? 'General Store' }}</span>
+                                    <span>{{ $req->store->name ?? 'General Store' }}</span>
                                 </div>
                             </td>
                             <td>
@@ -270,7 +270,7 @@
                                     <span class="badge bg-light text-dark border rounded-pill">{{ $itemCount }} {{ Str::plural('item', $itemCount) }}</span>
                                     @foreach($req->items->take(2) as $it)
                                         <span class="badge bg-secondary-subtle text-secondary rounded-pill fw-normal" style="font-size: 0.72rem;">
-                                            {{ $it->product?->name ?? 'Item' }} ({{ (float)$it->quantity_requested }} {{ $it->product?->unit ?? '' }})
+                                            {{ $it->product->name ?? 'Item' }} ({{ (float)$it->quantity_requested }} {{ $it->product->unit ?? '' }})
                                         </span>
                                     @endforeach
                                     @if($itemCount > 2)
@@ -317,9 +317,9 @@
                             <td>
                                 <div class="d-flex align-items-center gap-1.5">
                                     <div class="rounded-circle bg-light text-muted d-flex align-items-center justify-content-center" style="width: 24px; height: 24px; font-size: 0.65rem; font-weight: 700;">
-                                        {{ strtoupper(substr($req->creator?->name ?? 'S', 0, 1)) }}
+                                        {{ strtoupper(substr($req->creator->name ?? 'S', 0, 1)) }}
                                     </div>
-                                    <span class="small">{{ $req->creator?->name ?? 'Staff' }}</span>
+                                    <span class="small">{{ $req->creator->name ?? 'Staff' }}</span>
                                 </div>
                             </td>
                             <td>
@@ -413,7 +413,7 @@
                             <td>
                                 <div class="d-flex align-items-center gap-1.5">
                                     <i class="fa-solid fa-warehouse text-muted small"></i>
-                                    <span>{{ $pr->store?->name ?? 'General Store' }}</span>
+                                    <span>{{ $pr->store->name ?? 'General Store' }}</span>
                                 </div>
                             </td>
                             <td>
@@ -452,7 +452,7 @@
                                         <div class="d-flex flex-wrap gap-1 align-items-center">
                                             @foreach($transferredItems->take(2) as $ti)
                                                 <span class="badge bg-light text-dark border rounded-pill fw-normal" style="font-size: 0.72rem;">
-                                                    {{ $ti->product?->name ?? 'Material' }} ({{ (float)($ti->requested_quantity ?? $ti->approved_quantity ?? 0) }} {{ $ti->unit ?? 'pcs' }})
+                                                    {{ $ti->product->name ?? 'Material' }} ({{ (float)($ti->requested_quantity ?? $ti->approved_quantity ?? 0) }} {{ $ti->unit ?? 'pcs' }})
                                                 </span>
                                             @endforeach
                                             @if($transferredItems->count() > 2)
@@ -468,7 +468,7 @@
                                         <span class="badge bg-light text-dark border rounded-pill">{{ $directItems->count() }} {{ Str::plural('item', $directItems->count()) }}</span>
                                         @foreach($directItems->take(2) as $it)
                                             <span class="badge bg-secondary-subtle text-secondary rounded-pill fw-normal" style="font-size: 0.72rem;">
-                                                {{ $it->product?->name ?? 'Item' }} ({{ (float)$it->quantity }} {{ $it->unit ?? '' }})
+                                                {{ $it->product->name ?? 'Item' }} ({{ (float)$it->quantity }} {{ $it->unit ?? '' }})
                                             </span>
                                         @endforeach
                                         @if($directItems->count() > 2)
@@ -515,9 +515,9 @@
                             <td>
                                 <div class="d-flex align-items-center gap-1.5">
                                     <div class="rounded-circle bg-light text-muted d-flex align-items-center justify-content-center" style="width: 24px; height: 24px; font-size: 0.65rem; font-weight: 700;">
-                                        {{ strtoupper(substr($pr->requestedBy?->name ?? 'S', 0, 1)) }}
+                                        {{ strtoupper(substr($pr->requestedBy->name ?? 'S', 0, 1)) }}
                                     </div>
-                                    <span class="small">{{ $pr->requestedBy?->name ?? 'Staff' }}</span>
+                                    <span class="small">{{ $pr->requestedBy->name ?? 'Staff' }}</span>
                                 </div>
                             </td>
                             <td class="text-end pe-3">
@@ -541,7 +541,7 @@
                                                         <h5 class="modal-title fw-bold text-dark mb-0" id="prModalLabel{{ $pr->id }}">
                                                             Requisition Details &bull; {{ $pr->pr_no }}
                                                         </h5>
-                                                        <small class="text-muted">{{ $pr->project?->name ?? 'Central HQ' }} &bull; Store: {{ $pr->store?->name ?? 'General Store' }}</small>
+                                                        <small class="text-muted">{{ $pr->project->name ?? 'Central HQ' }} &bull; Store: {{ $pr->store->name ?? 'General Store' }}</small>
                                                     </div>
                                                 </div>
                                                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -559,7 +559,7 @@
                                                     </div>
                                                     <div class="col-sm-4">
                                                         <small class="text-muted text-uppercase fw-bold" style="font-size: 11px;">Requester</small>
-                                                        <div class="fw-semibold text-dark">{{ $pr->requestedBy?->name ?? 'Staff' }}</div>
+                                                        <div class="fw-semibold text-dark">{{ $pr->requestedBy->name ?? 'Staff' }}</div>
                                                     </div>
                                                     <div class="col-12">
                                                         <small class="text-muted text-uppercase fw-bold" style="font-size: 11px;">Justification / Request Notes</small>
@@ -594,10 +594,10 @@
                                                                 @foreach($linkedTr as $tr)
                                                                     @foreach($tr->items as $ti)
                                                                     <tr>
-                                                                        <td class="fw-bold">{{ $ti->product?->name ?? ('Item #' . $ti->product_id) }}</td>
-                                                                        <td class="text-center fw-bold">{{ (float)($ti->requested_quantity ?? $ti->approved_quantity ?? 0) }} {{ $ti->unit ?? ($ti->product?->unit ?? 'pcs') }}</td>
-                                                                        <td>{{ $tr->fromStore?->name ?? 'Source Store' }}</td>
-                                                                        <td>{{ $tr->toStore?->name ?? 'Destination Store' }}</td>
+                                                                        <td class="fw-bold">{{ $ti->product->name ?? ('Item #' . $ti->product_id) }}</td>
+                                                                        <td class="text-center fw-bold">{{ (float)($ti->requested_quantity ?? $ti->approved_quantity ?? 0) }} {{ $ti->unit ?? ($ti->product->unit ?? 'pcs') }}</td>
+                                                                        <td>{{ $tr->fromStore->name ?? 'Source Store' }}</td>
+                                                                        <td>{{ $tr->toStore->name ?? 'Destination Store' }}</td>
                                                                         <td>
                                                                             <a href="{{ route('store-manager.transfers.show', $tr) }}" class="badge bg-warning text-dark text-decoration-none">
                                                                                 #{{ $tr->transfer_no }}
@@ -630,11 +630,11 @@
                                                             <tbody>
                                                                 @foreach($directItems as $it)
                                                                 <tr>
-                                                                    <td class="fw-bold">{{ $it->product?->name ?? ('Item #' . $it->product_id) }}</td>
+                                                                    <td class="fw-bold">{{ $it->product->name ?? ('Item #' . $it->product_id) }}</td>
                                                                     <td class="text-center fw-bold">{{ (float)$it->quantity }}</td>
                                                                     <td class="text-center">{{ (float)($it->purchased_quantity ?? 0) }}</td>
                                                                     <td class="text-center">{{ (float)($it->received_quantity ?? 0) }}</td>
-                                                                    <td>{{ $it->unit ?? ($it->product?->unit ?? 'pcs') }}</td>
+                                                                    <td>{{ $it->unit ?? ($it->product->unit ?? 'pcs') }}</td>
                                                                     <td>{{ number_format($it->estimated_unit_cost ?? 0, 2) }} ETB</td>
                                                                 </tr>
                                                                 @endforeach
@@ -662,7 +662,7 @@
                                                                 <small class="text-muted">{{ optional($log->created_at)->format('M d, Y H:i') }}</small>
                                                             </div>
                                                             <div class="text-muted" style="font-size: 11px;">
-                                                                Actor: <strong>{{ $log->actor?->name ?? ($log->actor_role ?? 'System') }}</strong>
+                                                                Actor: <strong>{{ $log->actor->name ?? ($log->actor_role ?? 'System') }}</strong>
                                                                 @if(!empty($log->from_stage) || !empty($log->to_stage))
                                                                     &bull; <span>{{ ucfirst(str_replace('_', ' ', $log->from_stage)) }} &rarr; {{ ucfirst(str_replace('_', ' ', $log->to_stage)) }}</span>
                                                                 @endif

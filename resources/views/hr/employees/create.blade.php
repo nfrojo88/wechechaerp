@@ -600,8 +600,8 @@
                                     <option value="">-- Choose an Available Asset Unit (Optional) --</option>
                                     @foreach($fixedAssetUnits as $unit)
                                         @php
-                                            $parentName = $unit->parentAsset?->name ?? 'Asset';
-                                            $category = $unit->parentAsset?->category ?? 'General';
+                                            $parentName = $unit->parentAsset->name ?? 'Asset';
+                                            $category = $unit->parentAsset->category ?? 'General';
                                             $details = $unit->plate_number ? "Plate: {$unit->plate_number}" : ($unit->serial_number ? "SN: {$unit->serial_number}" : ($unit->brand ? "{$unit->brand} {$unit->model}" : 'In Store'));
                                             $searchKeywords = strtolower("{$unit->unit_code} {$parentName} {$category} {$details} {$unit->brand} {$unit->model} {$unit->serial_number} {$unit->plate_number}");
                                         @endphp

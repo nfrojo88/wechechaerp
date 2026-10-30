@@ -143,8 +143,8 @@
                                         <div class="modal-body p-4">
                                             <div class="bg-light p-3 rounded-4 mb-3 border">
                                                 <div class="fw-bold text-dark fs-6">{{ $sub->report_type }}</div>
-                                                <div class="text-muted small">Period: {{ $sub->from_date?->format('d M Y') }} – {{ $sub->to_date?->format('d M Y') }}</div>
-                                                <div class="text-muted small">Submitted by: {{ $sub->submitter?->name }} ({{ $sub->created_at?->format('d M Y, H:i') }})</div>
+                                                <div class="text-muted small">Period: {{ $sub->from_date->format('d M Y') }} – {{ $sub->to_date->format('d M Y') }}</div>
+                                                <div class="text-muted small">Submitted by: {{ $sub->submitter->name }} ({{ $sub->created_at->format('d M Y, H:i') }})</div>
                                                 @if($sub->notes)
                                                     <div class="mt-2 text-dark small bg-white p-2.5 rounded-3 border">
                                                         <strong>HR Notes:</strong> {{ $sub->notes }}
@@ -166,7 +166,7 @@
                                             </div>
                                         </div>
                                         <div class="modal-footer border-top py-2 px-4 d-flex justify-content-between">
-                                            <a href="{{ route('reports.attendance', ['from_date' => $sub->from_date?->toDateString(), 'to_date' => $sub->to_date?->toDateString()]) }}" target="_blank" class="btn btn-outline-info btn-sm rounded-pill px-3">
+                                            <a href="{{ route('reports.attendance', ['from_date' => $sub->from_date->toDateString(), 'to_date' => $sub->to_date->toDateString()]) }}" target="_blank" class="btn btn-outline-info btn-sm rounded-pill px-3">
                                                 <i class="fa-solid fa-arrow-up-right-from-square me-1"></i>Inspect Analytics
                                             </a>
                                             <div class="d-flex gap-2">

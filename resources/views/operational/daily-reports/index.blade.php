@@ -149,8 +149,8 @@
                                 {{ \Carbon\Carbon::parse($report->report_date)->format('M d, Y') }}
                             </td>
                             <td data-label="Project">
-                                <div class="fw-bold text-dark">{{ $report->project?->name ?? 'N/A' }}</div>
-                                @if($report->project?->code)
+                                <div class="fw-bold text-dark">{{ $report->project->name ?? 'N/A' }}</div>
+                                @if($report->project->code)
                                     <span class="badge bg-light text-muted border font-monospace" style="font-size: 0.7rem;">{{ $report->project->code }}</span>
                                 @endif
                             </td>

@@ -126,7 +126,7 @@
                             <dt class="col-sm-5 text-muted">Destination Store:</dt>
                             <dd class="col-sm-7 fw-semibold text-dark mb-2">
                                 {{ $replenishment->store->name ?? 'Site Store' }}
-                                @if($replenishment->store?->code)
+                                @if($replenishment->store->code)
                                     <small class="text-muted font-monospace">({{ $replenishment->store->code }})</small>
                                 @endif
                             </dd>

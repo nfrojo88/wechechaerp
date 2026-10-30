@@ -127,12 +127,12 @@
                                             @endif
                                         </td>
                                         <td data-label="Project & Store">
-                                            <strong>{{ $emr->project?->name ?? 'General Project' }}</strong>
-                                            <small class="text-muted d-block"><i class="fas fa-warehouse me-1"></i>Store: {{ $emr->store?->name ?? 'N/A' }}</small>
+                                            <strong>{{ $emr->project->name ?? 'General Project' }}</strong>
+                                            <small class="text-muted d-block"><i class="fas fa-warehouse me-1"></i>Store: {{ $emr->store->name ?? 'N/A' }}</small>
                                         </td>
                                         <td data-label="Items">
                                             <span class="badge bg-light text-dark border">{{ $emr->items->count() }} item(s)</span>
-                                            <small class="text-muted d-block">{{ Str::limit($emr->items->map(fn($it) => $it->product?->name)->filter()->join(', '), 25, '...') }}</small>
+                                            <small class="text-muted d-block">{{ Str::limit($emr->items->map(fn($it) => $it->product->name)->filter()->join(', '), 25, '...') }}</small>
                                         </td>
                                         <td data-label="Status">
                                             <x-status-badge status="Planning Approved" tone="success" icon="fa-solid fa-circle-check" />
@@ -183,12 +183,12 @@
                                             @endif
                                         </td>
                                         <td data-label="Project & Store">
-                                            <strong>{{ $cPr->project?->name ?? 'General Project' }}</strong>
-                                            <small class="text-muted d-block"><i class="fas fa-warehouse me-1"></i>Store: {{ $cPr->store?->name ?? 'N/A' }}</small>
+                                            <strong>{{ $cPr->project->name ?? 'General Project' }}</strong>
+                                            <small class="text-muted d-block"><i class="fas fa-warehouse me-1"></i>Store: {{ $cPr->store->name ?? 'N/A' }}</small>
                                         </td>
                                         <td data-label="Items">
                                             <span class="badge bg-light text-dark border">{{ $cPr->items->count() }} item(s)</span>
-                                            <small class="text-muted d-block">{{ Str::limit($cPr->items->map(fn($it) => $it->product?->name)->filter()->join(', '), 25, '...') }}</small>
+                                            <small class="text-muted d-block">{{ Str::limit($cPr->items->map(fn($it) => $it->product->name)->filter()->join(', '), 25, '...') }}</small>
                                         </td>
                                         <td data-label="Status">
                                             <x-status-badge status="Awaiting Dispatch" tone="warning" icon="fa-solid fa-hourglass-half" />
