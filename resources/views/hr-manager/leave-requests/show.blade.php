@@ -75,8 +75,8 @@
                             </div>
                             <div class="col-md-4">
                                 <span class="text-muted small d-block">Assigned Project / Site</span>
-                                <strong class="text-dark">{{ $leaveRequest->employee->project->name ?? 'Head Office' }}</strong>
-                                <div class="text-muted small">Joined: {{ optional($leaveRequest->employee->date_of_joining)->format('d M Y') ?? 'N/A' }}</div>
+                                <strong class="text-dark">{{ optional(optional($leaveRequest->employee)->project)->name ?? 'Head Office' }}</strong>
+                                <div class="text-muted small">Joined: {{ optional(optional($leaveRequest->employee)->date_of_joining)->format('d M Y') ?? 'N/A' }}</div>
                             </div>
                         </div>
                     </div>

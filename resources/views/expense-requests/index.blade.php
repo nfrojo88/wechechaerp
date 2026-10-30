@@ -1817,11 +1817,11 @@
                             <form action="{{ route('expense-requests.attach-receipt', $req->id) }}" method="POST" enctype="multipart/form-data" id="attachReceiptForm_{{ $req->id }}" data-req-id="{{ $req->id }}" data-has-existing="{{ !empty($req->attachment) ? '1' : '0' }}">
                                 @csrf
                                 <input type="hidden" name="save_in_vat" id="hiddenSaveInVat_{{ $req->id }}" value="{{ $isVatActive ? '1' : '0' }}">
-                                <input type="hidden" name="vendor_name" id="ocrVendor_{{ $req->id }}" value="{{ $linkedRcp->vendor_name ?? '' }}">
-                                <input type="hidden" name="supplier_tin" id="ocrTin_{{ $req->id }}" value="{{ $linkedRcp->vendor_tin ?? '' }}">
-                                <input type="hidden" name="fs_no" id="ocrFs_{{ $req->id }}" value="{{ $linkedRcp->fs_no ?? '' }}">
-                                <input type="hidden" name="receipt_date" id="ocrDate_{{ $req->id }}" value="{{ optional($linkedRcp->receipt_date)->format('Y-m-d') ?? '' }}">
-                                <input type="hidden" name="mrc" id="ocrMrc_{{ $req->id }}" value="{{ $linkedRcp->mrc_no ?? '' }}">
+                                <input type="hidden" name="vendor_name" id="ocrVendor_{{ $req->id }}" value="{{ optional($linkedRcp)->vendor_name ?? '' }}">
+                                <input type="hidden" name="supplier_tin" id="ocrTin_{{ $req->id }}" value="{{ optional($linkedRcp)->vendor_tin ?? '' }}">
+                                <input type="hidden" name="fs_no" id="ocrFs_{{ $req->id }}" value="{{ optional($linkedRcp)->fs_no ?? '' }}">
+                                <input type="hidden" name="receipt_date" id="ocrDate_{{ $req->id }}" value="{{ ($linkedRcp && $linkedRcp->receipt_date) ? (is_object($linkedRcp->receipt_date) ? $linkedRcp->receipt_date->format('Y-m-d') : $linkedRcp->receipt_date) : '' }}">
+                                <input type="hidden" name="mrc" id="ocrMrc_{{ $req->id }}" value="{{ optional($linkedRcp)->mrc_no ?? '' }}">
                                 <input type="hidden" name="subtotal" id="ocrSubtotal_{{ $req->id }}" value="{{ $req->gross_amount ?? $req->amount }}">
                                 <input type="hidden" name="vat_amount" id="ocrVat_{{ $req->id }}" value="{{ $req->vat_amount ?? '0.00' }}">
                                 <input type="hidden" name="total_amount" id="ocrTotal_{{ $req->id }}" value="{{ $req->gross_amount ?? $req->amount }}">

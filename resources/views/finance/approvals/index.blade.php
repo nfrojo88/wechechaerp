@@ -776,7 +776,7 @@
                                 </div>
                                 <div class="col-md-6 mt-2">
                                     <span class="text-muted d-block">GM / HR Approval:</span>
-                                    <strong>{{ optional($item->raw_model->gm_approved_at ?? $item->raw_model->created_at)->format('d M Y, h:i A') }}</strong>
+                                    <strong>{{ ($item->raw_model && ($item->raw_model->gm_approved_at || $item->raw_model->created_at)) ? \Carbon\Carbon::parse($item->raw_model->gm_approved_at ?: $item->raw_model->created_at)->format('d M Y, h:i A') : 'N/A' }}</strong>
                                 </div>
                                 <div class="col-md-6 mt-2">
                                     <span class="text-muted d-block">Amount Due to Pay:</span>
@@ -1053,11 +1053,11 @@
                                 <form action="{{ route('expense-requests.attach-receipt', $req->id) }}" method="POST" enctype="multipart/form-data" id="finAttachReceiptForm_{{ $req->id }}" data-req-id="{{ $req->id }}" data-has-existing="{{ !empty($req->attachment) ? '1' : '0' }}">
                                     @csrf
                                     <input type="hidden" name="save_in_vat" id="finHiddenSaveInVat_{{ $req->id }}" value="{{ $isVatActive ? '1' : '0' }}">
-                                    <input type="hidden" name="vendor_name" id="finOcrVendor_{{ $req->id }}" value="{{ $linkedRcp->vendor_name ?? '' }}">
-                                    <input type="hidden" name="supplier_tin" id="finOcrTin_{{ $req->id }}" value="{{ $linkedRcp->vendor_tin ?? '' }}">
-                                    <input type="hidden" name="fs_no" id="finOcrFs_{{ $req->id }}" value="{{ $linkedRcp->fs_no ?? '' }}">
-                                    <input type="hidden" name="receipt_date" id="finOcrDate_{{ $req->id }}" value="{{ optional($linkedRcp->receipt_date)->format('Y-m-d') ?? '' }}">
-                                    <input type="hidden" name="mrc" id="finOcrMrc_{{ $req->id }}" value="{{ $linkedRcp->mrc_no ?? '' }}">
+                                    <input type="hidden" name="vendor_name" id="finOcrVendor_{{ $req->id }}" value="{{ optional($linkedRcp)->vendor_name ?? '' }}">
+                                    <input type="hidden" name="supplier_tin" id="finOcrTin_{{ $req->id }}" value="{{ optional($linkedRcp)->vendor_tin ?? '' }}">
+                                    <input type="hidden" name="fs_no" id="finOcrFs_{{ $req->id }}" value="{{ optional($linkedRcp)->fs_no ?? '' }}">
+                                    <input type="hidden" name="receipt_date" id="finOcrDate_{{ $req->id }}" value="{{ ($linkedRcp && $linkedRcp->receipt_date) ? (is_object($linkedRcp->receipt_date) ? $linkedRcp->receipt_date->format('Y-m-d') : $linkedRcp->receipt_date) : '' }}">
+                                    <input type="hidden" name="mrc" id="finOcrMrc_{{ $req->id }}" value="{{ optional($linkedRcp)->mrc_no ?? '' }}">
                                     <input type="hidden" name="subtotal" id="finOcrSubtotal_{{ $req->id }}" value="{{ $req->gross_amount ?? $req->amount }}">
                                     <input type="hidden" name="vat_amount" id="finOcrVat_{{ $req->id }}" value="{{ $req->vat_amount ?? '0.00' }}">
                                     <input type="hidden" name="total_amount" id="finOcrTotal_{{ $req->id }}" value="{{ $req->gross_amount ?? $req->amount }}">
