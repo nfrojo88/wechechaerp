@@ -1,34 +1,98 @@
-:
+ROLE
+You are a senior UI/UX engineer working on the Wechecha Construction ERP (Laravel + Blade). Redesign the UI of ALL reports, dashboards, and export screens listed in the attached "Master System UI Reports & Analytics Catalog" so they share one common, minimalist design system and feel smooth on both mobile and 17-inch laptops.
 
-1. applyMovement must also reject any change that makes quantity_on_hand fall
-   below quantity_reserved. Deduct and Set must never remove stock that is
-   assigned to employees. Show a clear message such as "Only 7 available,
-   3 are assigned."
-2. On a negative adjustment of a Fixed Asset product, do NOT delete units.
-   Pick unassigned (in_store) units and set status = 'disposed'. Keep the
-   records. On a positive adjustment, create the new units and flag them as
-   "details incomplete" so someone can add serial numbers later.
-3. Make balance_before and balance_after nullable. Old movement rows show "—"
-   instead of 0.
-4. Also fix these, which are in your report but not in your plan:
-   - voidSlip must reverse the inventory and write a reversal movement.
-   - the wrong sign in syncTransferInventory.
-   - issueMaterialRequest must block negative stock.
-   - InventoryController::adjust must not route 'adjustment' to stockIn.
-   - Tell me what a "send" slip should do to stock before you change it.
-5. Make inventory_movements append-only in code too: throw an exception on
-   update or delete in the model.
-6. inventory:reconcile must run as a dry run by default and print a report. It
-   only changes data with --repair, and only after I confirm. For any product
-   where inventory and unit counts differ, list it and ask me which number is
-   correct. Do not guess.
-7. Before any migration, tell me to back up the database. Run tests only on a
-   test database.
-8. Work in phases and stop after each one so I can test:
-   Phase 1: migration + applyMovement + remove the cyclic sync that overwrites
-            inventory.
-   Phase 2: manual adjustments + movements page signs and balance columns.
-   Phase 3: fixed assets on applyMovement.
-   Phase 4: slips, transfers, material requests, voids.
-   Phase 5: reconcile command and page + tests.
-Start with Phase 1 only.
+HARD CONSTRAINTS
+- Do NOT change business logic, controllers, routes, route names, database queries, permissions, or export formats. Only change Blade views, CSS/JS, and shared components.
+- Use the CSS stack already in the project. If none exists, use Tailwind CSS + Alpine.js (no heavy SPA framework). Keep Chart.js/existing chart libraries.
+- Keep all existing features (filters, Send to GM, approval workflows, print, PDF/Excel/CSV exports).
+- Work in phases and keep every page working after each phase.
+
+DEVICE TARGETS (design mobile-first)
+- Primary: phones, 360–430px wide, used one-handed, often on slow mobile data.
+- Secondary: 17-inch laptops (1366×768, 1600×900, 1920×1080). Test at all three.
+- Breakpoints: <640 mobile, 640–1023 tablet, 1024–1365 small laptop, ≥1366 laptop.
+- Content max-width 1440px, centered, with generous whitespace. Do not stretch tables edge to edge on 1920px.
+
+DESIGN LANGUAGE (minimal, common, consistent)
+- One neutral palette: white surfaces, light gray page background (#F8FAFC), gray text scale, ONE primary color (deep blue or the company brand color).
+- Semantic colors only for meaning: green = approved/ok, amber = pending/warning, red = rejected/critical, gray = draft/neutral.
+- One font (Inter or system-ui), sizes: 12 / 14 / 16 / 20 / 24. Base body 14px on desktop, 16px on mobile (prevents iOS zoom on inputs).
+- 8px spacing grid. Border radius 8px (cards) and 6px (inputs/buttons). Thin 1px borders, almost no shadows (one subtle shadow for floating elements only).
+- Icons: one set (Lucide or Heroicons), 20px, outline style.
+- No decorative gradients, no heavy colors, no clutter. Numbers and data are the hero.
+- Define all tokens as CSS variables (colors, spacing, radius, font sizes) in one file so the theme can change in one place.
+
+SHARED LAYOUT
+- One master layout for every page:
+  - Mobile: top bar (title, back, menu) + bottom navigation (4–5 key items per role) + slide-in drawer for the full menu.
+  - Desktop: collapsible left sidebar (240px, collapsible to 64px icons) + slim top bar with search, notifications, user menu.
+- Sidebar grouped by the 10 domains in the catalog (Finance, HR, Site Ops, Planning, Procurement, Stores, Fleet, Marketing, Correspondence, Audit), showing only what the user's role may access.
+- Breadcrumbs on desktop only. Page header = title + short subtitle + primary action on the right (stacks on mobile).
+
+REUSABLE BLADE COMPONENTS (build once, use everywhere, in resources/views/components/)
+1. <x-page-header> (title, subtitle, actions slot)
+2. <x-kpi-card> (label, value, delta/trend, optional icon). Mobile: 2-column grid or horizontal swipe row. Desktop: 4 columns.
+3. <x-filter-bar> (date range, site/project, status, search). Desktop: inline row. Mobile: collapsed into a "Filters" button opening a bottom sheet with Apply/Reset. Show active filter chips.
+4. <x-data-table> responsive table:
+   - Desktop: sticky header, right-aligned numbers (tabular-nums), zebra off, row hover, sortable columns, sticky first column for wide tables, pagination.
+   - Mobile (<768px): each row becomes a stacked card (title line + 2–3 key fields + status badge, tap to expand details). Never force horizontal scrolling for main data. Wide financial tables (Trial Balance, General Ledger, Expense Hub 22 columns) may scroll horizontally inside a container with a sticky first column and a "swipe" hint.
+5. <x-status-badge> (approved / pending / draft / rejected / critical)
+6. <x-chart-card> (title, chart, legend). Charts are responsive, max height 280px on mobile, simplified labels, no 3D, max 5–6 colors.
+7. <x-export-menu> single "Export" dropdown (Excel / CSV / PDF / Print) used for every report, as a bottom sheet on mobile.
+8. <x-empty-state>, <x-skeleton-loader>, <x-toast>, <x-confirm-modal> (bottom sheet on mobile).
+9. <x-form-field> (label above input, inline validation, 44px min height, correct input types and mobile keyboards: numeric, tel, date).
+10. <x-approval-bar> for Send to GM / Approve / Reject / Query workflows, sticky at the bottom on mobile.
+
+MOBILE EXPERIENCE RULES
+- Touch targets minimum 44×44px, at least 8px between tappable items.
+- Primary action reachable by thumb (sticky bottom action bar or floating button).
+- Bottom sheets instead of centered modals; swipe-friendly tabs for sub-views.
+- Dashboards show the 3–4 most important KPIs first, charts below, details behind "View all".
+- Forms (Daily Reports, Morning Manpower, Material Usage, Damage Reports, Fuel Requests) are single-column, grouped in short steps, auto-save draft locally, and large numeric steppers for counts.
+- Works with slow connections: lazy-load charts below the fold, paginate/virtualize long lists (25 rows default), compress images, no layout shift.
+- Offline-friendly hint: show a clear banner when connection is lost and keep unsent form data.
+
+17-INCH LAPTOP RULES
+- Use the horizontal space well: 12-column grid, KPI row of 4, charts in 2 columns, tables full width of the content container.
+- Keep important content above the fold at 1366×768 (the smallest common size).
+- Keyboard-friendly: visible focus rings, Tab order, Enter to submit filters, "/" to focus search.
+
+SMOOTH EXPERIENCE
+- Transitions 150–200ms ease-out (hover, drawers, dropdowns, accordions). Respect prefers-reduced-motion.
+- Skeleton loaders instead of spinners for tables, KPIs, and charts. No blank screens.
+- Filter changes update the data without a full page reload (Alpine.js + fetch, or Livewire/HTMX if already used), with URL query params preserved so links are shareable.
+- Optimistic UI and toasts for approve/reject/send actions; disable buttons while submitting to prevent double submits.
+- Preserve scroll position and filter state when navigating back.
+- Consistent number/date formatting everywhere: ETB with thousand separators and 2 decimals, dates like "30 Oct 2026", right-aligned numbers.
+- Dark mode is optional; skip it unless it's trivial with the CSS variables.
+
+PRINT & PDF
+- Every report has a clean print stylesheet: hide sidebar/nav/buttons, black on white, company header/logo, report title, date range, page numbers, signature lines for approval reports (inventory audit, GM approvals).
+
+ACCESSIBILITY
+- WCAG AA contrast, labels on all inputs, aria labels for icon-only buttons, never rely on color alone (badges include text).
+
+PHASED PLAN (finish and show each phase before starting the next)
+Phase 1: Design tokens, master layout (sidebar + bottom nav), and all shared components above, plus one "style guide" page showing every component on mobile and desktop.
+Phase 2: The 15 role dashboards (Section 2 of the catalog), starting with GM, Finance, HR, Store Manager, Site Engineer.
+Phase 3: Finance reports (Section 3), Expense Hub, and Tax Deductions.
+Phase 4: HR reports (Section 4) and Site Operations reports (Section 5).
+Phase 5: Planning, Procurement, Stores, Fleet, Marketing, Correspondence, and Audit (Sections 6–11).
+Phase 6: Export menus and print styles for everything in Section 12, then a final consistency and performance pass.
+
+DELIVERABLES FOR EACH PHASE
+- List of files created/changed.
+- Screenshots or a description at 390px, 768px, 1366px, and 1920px widths.
+- A short note on anything you could not change without touching business logic.
+
+ACCEPTANCE CHECKLIST (verify before finishing)
+[ ] No horizontal page scroll at 360px on any page
+[ ] Every page uses the shared layout and components (no one-off styles)
+[ ] All tables readable on mobile (cards) and desktop (sticky header)
+[ ] Filters work on mobile via bottom sheet and on desktop inline
+[ ] Every report has the same Export menu and a working print view
+[ ] Loading states use skeletons; no layout jumps
+[ ] First content visible fast on 3G-like speed; charts lazy-loaded
+[ ] All existing routes, permissions, and exports still work unchanged
+
+Start with Phase 1 now. Before coding, briefly summarize your plan and the file structure you will use, then implement.

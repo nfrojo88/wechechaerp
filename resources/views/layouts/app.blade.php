@@ -358,7 +358,7 @@ html, body {
 }
 .header-user-name { font-size: 13px; font-weight: 600; }
 /* Content Wrapper */
-.content-wrapper { padding: 28px 28px 40px; flex: 1; min-height: 0; }
+.content-wrapper { padding: 28px 28px 40px; flex: 1; min-height: 0; max-width: var(--wc-max-content-width, 1440px); margin: 0 auto; width: 100%; }
 /* Alerts */
 .flash-container { margin-bottom: 20px; }
 .alert {
@@ -809,6 +809,10 @@ body.sidebar-open { overflow-y: hidden !important; }
 @keyframes fadeInUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 .sidebar.collapsed .sidebar-nav-link { position: relative; }
     </style>
+    <!-- Wechecha Minimalist Design Tokens -->
+    <link rel="stylesheet" href="{{ asset('css/wechecha-tokens.css') }}">
+    <!-- Alpine.js (Lightweight reactive interactions) -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.8/dist/cdn.min.js"></script>
     @stack('styles')
 </head>
 <body>
@@ -1384,5 +1388,6 @@ body.sidebar-open { overflow-y: hidden !important; }
     }
     </script>
     @stack('scripts')
+    @include('layouts._mobile_bottom_nav')
 </body>
 </html>

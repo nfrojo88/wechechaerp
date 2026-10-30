@@ -2,20 +2,41 @@
 @section('title', 'Store Keeper Dashboard')
 
 @section('content')
-<div class="container-fluid px-4 py-3">
+<div class="wc-container py-3 py-md-4">
+
+    {{-- Top Header --}}
+    <x-page-header
+        title="Store Keeper Dashboard"
+        subtitle="On-site storekeeping, stock receipts, material issuing &amp; physical transfer slips"
+        badge="Site Store Operations"
+    >
+        <x-slot:actions>
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <span class="badge bg-white text-secondary border px-3 py-2 shadow-xs rounded-pill d-none d-sm-inline-flex align-items-center">
+                    <i class="fa-regular fa-calendar text-primary me-2"></i>{{ now()->format('l, F j, Y') }}
+                </span>
+                <a href="{{ route('store-keeper.petty-cash-purchases.create') }}" class="btn btn-success btn-sm shadow-xs fw-bold" style="min-height: 38px; display: inline-flex; align-items: center;">
+                    <i class="fa-solid fa-cart-shopping me-1"></i> Buy Material (Petty Cash)
+                </a>
+                <a href="{{ route('store-manager.transfers.create') }}" class="btn btn-primary btn-sm shadow-xs" style="min-height: 38px; display: inline-flex; align-items: center;">
+                    <i class="fa-solid fa-exchange-alt me-1"></i> New Transfer
+                </a>
+            </div>
+        </x-slot:actions>
+    </x-page-header>
 
     {{-- ── Assigned Store Banner ──────────────────────────────────────────────── --}}
     @if($assignedStore)
-    <div class="card border-0 shadow-sm rounded-3 mb-4 bg-white" style="border-left: 5px solid #0284c7 !important;">
+    <div class="card border-0 shadow-sm rounded-3 mb-4 bg-white border-start border-4 border-info">
         <div class="card-body p-3 p-md-4">
             <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
                 <div class="d-flex align-items-center gap-3">
-                    <div class="p-3 rounded-3 bg-primary bg-opacity-10 text-primary">
+                    <div class="p-3 rounded-3 bg-primary bg-opacity-10 text-primary flex-shrink-0" style="width: 52px; height: 52px; display: flex; align-items: center; justify-content: center;">
                         <i class="fa-solid fa-warehouse fa-2x"></i>
                     </div>
                     <div>
-                        <div class="d-flex align-items-center gap-2 mb-1">
-                            <h4 class="mb-0 fw-bold text-dark">{{ $assignedStore->name }}</h4>
+                        <div class="d-flex align-items-center gap-2 mb-1 flex-wrap">
+                            <h4 class="mb-0 fw-bold text-dark fs-5">{{ $assignedStore->name }}</h4>
                             <span class="badge bg-primary font-monospace">{{ $assignedStore->code ?? 'STORE' }}</span>
                             <span class="badge bg-success"><i class="fa-solid fa-circle-check me-1"></i>Assigned Site Store</span>
                         </div>
@@ -31,19 +52,13 @@
                     </div>
                 </div>
                 <div class="d-flex flex-wrap gap-2">
-                    <a href="{{ route('store-keeper.petty-cash-purchases.create') }}" class="btn btn-success btn-sm shadow-sm fw-bold">
-                        <i class="fa-solid fa-cart-shopping me-1"></i> Buy Material (Petty Cash)
+                    <a href="{{ \Illuminate\Support\Facades\Route::has('store-keeper.weekly-material-demand') ? route('store-keeper.weekly-material-demand') : (\Illuminate\Support\Facades\Route::has('store-manager.weekly-material-demand') ? route('store-manager.weekly-material-demand') : url('/store-keeper/weekly-material-demand')) }}" class="btn btn-warning text-dark btn-sm shadow-xs" style="min-height: 36px; display: inline-flex; align-items: center;">
+                        <i class="fa-solid fa-calendar-check me-1"></i> Weekly Demand
                     </a>
-                    <a href="{{ route('store-manager.transfers.create') }}" class="btn btn-primary btn-sm shadow-sm">
-                        <i class="fa-solid fa-exchange-alt me-1"></i> New Transfer
-                    </a>
-                    <a href="{{ \Illuminate\Support\Facades\Route::has('store-keeper.weekly-material-demand') ? route('store-keeper.weekly-material-demand') : (\Illuminate\Support\Facades\Route::has('store-manager.weekly-material-demand') ? route('store-manager.weekly-material-demand') : url('/store-keeper/weekly-material-demand')) }}" class="btn btn-warning text-dark btn-sm shadow-sm">
-                        <i class="fa-solid fa-calendar-check me-1"></i> Weekly Material Demand
-                    </a>
-                    <a href="{{ route('store-manager.material-requests.index') }}" class="btn btn-danger btn-sm shadow-sm">
+                    <a href="{{ route('store-manager.material-requests.index') }}" class="btn btn-danger btn-sm shadow-xs" style="min-height: 36px; display: inline-flex; align-items: center;">
                         <i class="fa-solid fa-clipboard-list me-1"></i> Material Requests
                     </a>
-                    <a href="{{ route('store-manager.inventory.all') }}" class="btn btn-outline-secondary btn-sm shadow-sm">
+                    <a href="{{ route('store-manager.inventory.all') }}" class="btn btn-outline-secondary btn-sm shadow-xs" style="min-height: 36px; display: inline-flex; align-items: center;">
                         <i class="fa-solid fa-boxes-stacked me-1"></i> View Stock
                     </a>
                 </div>
@@ -56,7 +71,7 @@
     <div class="card border-0 shadow-sm rounded-3 mb-4 bg-white border-start border-4 border-danger">
         <div class="card-body p-3 d-flex flex-wrap justify-content-between align-items-center gap-3">
             <div class="d-flex align-items-center gap-3">
-                <div class="rounded-circle bg-danger bg-opacity-10 p-2 text-danger d-flex align-items-center justify-content-center" style="width: 46px; height: 46px;">
+                <div class="rounded-circle bg-danger bg-opacity-10 p-2 text-danger d-flex align-items-center justify-content-center flex-shrink-0" style="width: 46px; height: 46px;">
                     <i class="fa-solid fa-bolt fa-lg text-danger"></i>
                 </div>
                 <div>
@@ -68,7 +83,7 @@
                     </small>
                 </div>
             </div>
-            <a href="{{ route('store-keeper.petty-cash-purchases.index') }}" class="btn btn-danger btn-sm fw-bold shadow-sm px-3">
+            <a href="{{ route('store-keeper.petty-cash-purchases.index') }}" class="btn btn-danger btn-sm fw-bold shadow-xs px-3" style="min-height: 36px; display: inline-flex; align-items: center;">
                 <i class="fa-solid fa-cart-shopping me-1"></i> Open Petty Cash Purchase Queue
             </a>
         </div>
@@ -89,78 +104,47 @@
     {{-- ── KPI Cards ────────────────────────────────────────────────────────── --}}
     <div class="row g-3 mb-4">
         {{-- Total SKUs in Store --}}
-        <div class="col-6 col-xl-3">
-            <div class="card border-0 shadow-sm rounded-3 h-100" style="border-left: 4px solid #0284c7 !important;">
-                <div class="card-body p-3">
-                    <div class="d-flex justify-content-between align-items-start">
-                        <div>
-                            <p class="text-muted fw-semibold mb-1" style="font-size: 0.72rem; letter-spacing: .06em; text-transform: uppercase;">In-Store Items</p>
-                            <h3 class="fw-bold text-dark mb-0">{{ number_format($kpi['total_items']) }}</h3>
-                        </div>
-                        <div class="p-2 rounded-3" style="background: rgba(2,132,199,.12);">
-                            <i class="fa-solid fa-boxes-stacked fa-lg text-primary"></i>
-                        </div>
-                    </div>
-                    <small class="text-muted mt-2 d-block" style="font-size:0.73rem;">Unique catalog products in store</small>
-                </div>
-            </div>
+        <div class="col-12 col-sm-6 col-xl-3">
+            <x-kpi-card
+                title="In-Store Items"
+                :value="number_format($kpi['total_items'])"
+                subtitle="Unique catalog products in store"
+                icon="fa-solid fa-boxes-stacked"
+                tone="primary"
+            />
         </div>
 
         {{-- Total Units on Hand --}}
-        <div class="col-6 col-xl-3">
-            <div class="card border-0 shadow-sm rounded-3 h-100" style="border-left: 4px solid #10b981 !important;">
-                <div class="card-body p-3">
-                    <div class="d-flex justify-content-between align-items-start">
-                        <div>
-                            <p class="text-muted fw-semibold mb-1" style="font-size: 0.72rem; letter-spacing: .06em; text-transform: uppercase;">Stock Units on Hand</p>
-                            <h3 class="fw-bold text-success mb-0">{{ number_format($kpi['total_stock_qty']) }}</h3>
-                        </div>
-                        <div class="p-2 rounded-3" style="background: rgba(16,185,129,.12);">
-                            <i class="fa-solid fa-cubes-stacked fa-lg text-success"></i>
-                        </div>
-                    </div>
-                    <small class="text-muted mt-2 d-block" style="font-size:0.73rem;">Total inventory units stored</small>
-                </div>
-            </div>
+        <div class="col-12 col-sm-6 col-xl-3">
+            <x-kpi-card
+                title="Stock Units on Hand"
+                :value="number_format($kpi['total_stock_qty'])"
+                subtitle="Total inventory units stored"
+                icon="fa-solid fa-cubes-stacked"
+                tone="success"
+            />
         </div>
 
         {{-- Low Stock Alerts --}}
-        <div class="col-6 col-xl-3">
-            <div class="card border-0 shadow-sm rounded-3 h-100" style="border-left: 4px solid {{ $kpi['low_stock_count'] > 0 ? '#ef4444' : '#64748b' }} !important;">
-                <div class="card-body p-3">
-                    <div class="d-flex justify-content-between align-items-start">
-                        <div>
-                            <p class="text-muted fw-semibold mb-1" style="font-size: 0.72rem; letter-spacing: .06em; text-transform: uppercase;">Low Stock Alerts</p>
-                            <h3 class="fw-bold {{ $kpi['low_stock_count'] > 0 ? 'text-danger' : 'text-dark' }} mb-0">{{ $kpi['low_stock_count'] }}</h3>
-                        </div>
-                        <div class="p-2 rounded-3" style="background: {{ $kpi['low_stock_count'] > 0 ? 'rgba(239,68,68,.12)' : 'rgba(100,116,139,.12)' }};">
-                            <i class="fa-solid fa-triangle-exclamation fa-lg {{ $kpi['low_stock_count'] > 0 ? 'text-danger' : 'text-secondary' }}"></i>
-                        </div>
-                    </div>
-                    <small class="text-muted mt-2 d-block" style="font-size:0.73rem;">Items below minimum stock</small>
-                </div>
-            </div>
+        <div class="col-12 col-sm-6 col-xl-3">
+            <x-kpi-card
+                title="Low Stock Alerts"
+                :value="$kpi['low_stock_count']"
+                subtitle="Items below minimum stock"
+                icon="fa-solid fa-triangle-exclamation"
+                :tone="$kpi['low_stock_count'] > 0 ? 'danger' : 'neutral'"
+            />
         </div>
 
         {{-- Active Transfers --}}
-        <div class="col-6 col-xl-3">
-            <div class="card border-0 shadow-sm rounded-3 h-100" style="border-left: 4px solid #f59e0b !important;">
-                <div class="card-body p-3">
-                    <div class="d-flex justify-content-between align-items-start">
-                        <div>
-                            <p class="text-muted fw-semibold mb-1" style="font-size: 0.72rem; letter-spacing: .06em; text-transform: uppercase;">Site Transfers</p>
-                            <h3 class="fw-bold text-warning mb-0">{{ $kpi['pending_incoming'] + $kpi['pending_outgoing'] }}</h3>
-                        </div>
-                        <div class="p-2 rounded-3" style="background: rgba(245,158,11,.12);">
-                            <i class="fa-solid fa-truck-fast fa-lg text-warning"></i>
-                        </div>
-                    </div>
-                    <small class="text-muted mt-2 d-block" style="font-size:0.73rem;">
-                        <span class="text-success fw-bold">{{ $kpi['pending_incoming'] }} in</span> · 
-                        <span class="text-primary fw-bold">{{ $kpi['pending_outgoing'] }} out</span>
-                    </small>
-                </div>
-            </div>
+        <div class="col-12 col-sm-6 col-xl-3">
+            <x-kpi-card
+                title="Site Transfers"
+                :value="$kpi['pending_incoming'] + $kpi['pending_outgoing']"
+                :subtitle="$kpi['pending_incoming'] . ' incoming · ' . $kpi['pending_outgoing'] . ' outgoing'"
+                icon="fa-solid fa-truck-fast"
+                tone="warning"
+            />
         </div>
     </div>
 
@@ -171,22 +155,22 @@
                 <div class="card-body p-3">
                     <p class="text-muted fw-semibold mb-2" style="font-size:0.78rem; text-transform:uppercase; letter-spacing:.05em;">Store Keeper Quick Modules</p>
                     <div class="d-flex flex-wrap gap-2">
-                        <a href="{{ route('store-manager.inventory.all') }}" class="btn btn-outline-info btn-sm px-3">
+                        <a href="{{ route('store-manager.inventory.all') }}" class="btn btn-outline-info btn-sm px-3" style="min-height: 38px; display: inline-flex; align-items: center;">
                             <i class="fa-solid fa-boxes-stacked me-1"></i> 1. Store Inventory
                         </a>
-                        <a href="{{ route('store-manager.material-requests.index') }}" class="btn btn-outline-danger btn-sm px-3">
+                        <a href="{{ route('store-manager.material-requests.index') }}" class="btn btn-outline-danger btn-sm px-3" style="min-height: 38px; display: inline-flex; align-items: center;">
                             <i class="fa-solid fa-clipboard-list me-1"></i> 2. Material Requests (Issue Stock)
                         </a>
-                        <a href="{{ route('store-manager.transfers.index') }}" class="btn btn-outline-warning btn-sm px-3">
+                        <a href="{{ route('store-manager.transfers.index') }}" class="btn btn-outline-warning text-dark btn-sm px-3" style="min-height: 38px; display: inline-flex; align-items: center;">
                             <i class="fa-solid fa-truck-moving me-1"></i> 3. Transfers &amp; Slips
                         </a>
-                        <a href="{{ \Illuminate\Support\Facades\Route::has('store-keeper.weekly-material-demand') ? route('store-keeper.weekly-material-demand') : (\Illuminate\Support\Facades\Route::has('store-manager.weekly-material-demand') ? route('store-manager.weekly-material-demand') : url('/store-keeper/weekly-material-demand')) }}" class="btn btn-outline-primary btn-sm px-3">
+                        <a href="{{ \Illuminate\Support\Facades\Route::has('store-keeper.weekly-material-demand') ? route('store-keeper.weekly-material-demand') : (\Illuminate\Support\Facades\Route::has('store-manager.weekly-material-demand') ? route('store-manager.weekly-material-demand') : url('/store-keeper/weekly-material-demand')) }}" class="btn btn-outline-primary btn-sm px-3" style="min-height: 38px; display: inline-flex; align-items: center;">
                             <i class="fa-solid fa-calendar-check me-1"></i> 4. Weekly Material Demand
                         </a>
-                        <a href="{{ route('store-keeper.petty-cash-purchases.index') }}" class="btn btn-outline-success btn-sm px-3">
+                        <a href="{{ route('store-keeper.petty-cash-purchases.index') }}" class="btn btn-outline-success btn-sm px-3" style="min-height: 38px; display: inline-flex; align-items: center;">
                             <i class="fa-solid fa-cart-shopping me-1"></i> 5. Buy Material (Petty Cash)
                         </a>
-                        <a href="{{ route('expense-requests.index') }}" class="btn btn-outline-secondary btn-sm px-3">
+                        <a href="{{ route('expense-requests.index') }}" class="btn btn-outline-secondary btn-sm px-3" style="min-height: 38px; display: inline-flex; align-items: center;">
                             <i class="fa-solid fa-hand-holding-dollar me-1"></i> 6. Expense Requests
                         </a>
                     </div>
@@ -197,12 +181,11 @@
 
     {{-- ── Main Layout: Transfers & Inventory ───────────────────────────────── --}}
     <div class="row g-4 mb-4">
-
         {{-- Left: Site Transfers (Incoming & Outgoing for this store) --}}
         <div class="col-lg-8">
 
             {{-- Transfers Card --}}
-            <div class="card border-0 shadow-sm rounded-3 mb-4">
+            <div class="card border-0 shadow-sm rounded-3 mb-4 bg-white">
                 <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <div>
                         <h6 class="mb-0 fw-bold text-dark">
@@ -211,18 +194,18 @@
                         <small class="text-muted">Incoming &amp; outgoing transfers for this store</small>
                     </div>
                     <div class="d-flex gap-2 flex-wrap">
-                        <a href="{{ route('store-manager.transfers.index', ['tab' => 'incoming']) }}" class="btn btn-sm btn-outline-success">
+                        <a href="{{ route('store-manager.transfers.index', ['tab' => 'incoming']) }}" class="btn btn-sm btn-outline-success rounded-pill px-3" style="min-height: 34px; display: inline-flex; align-items: center;">
                             <i class="fa-solid fa-arrow-down me-1"></i>Incoming ({{ $kpi['pending_incoming'] ?? 0 }})
                         </a>
-                        <a href="{{ route('store-manager.transfers.index', ['tab' => 'outgoing']) }}" class="btn btn-sm btn-outline-primary">
+                        <a href="{{ route('store-manager.transfers.index', ['tab' => 'outgoing']) }}" class="btn btn-sm btn-outline-primary rounded-pill px-3" style="min-height: 34px; display: inline-flex; align-items: center;">
                             <i class="fa-solid fa-arrow-up me-1"></i>Outgoing ({{ $kpi['pending_outgoing'] ?? 0 }})
                         </a>
-                        <a href="{{ route('store-manager.transfers.create') }}" class="btn btn-sm btn-primary">
+                        <a href="{{ route('store-manager.transfers.create') }}" class="btn btn-sm btn-primary rounded-pill px-3" style="min-height: 34px; display: inline-flex; align-items: center;">
                             <i class="fa-solid fa-plus me-1"></i>New Transfer
                         </a>
                     </div>
                 </div>
-                <div class="table-responsive">
+                <div class="table-responsive wc-table-mobile-cards">
                     <table class="table table-hover align-middle mb-0">
                         <thead class="table-light">
                             <tr>
@@ -239,29 +222,21 @@
                             @php
                                 $isIncoming = $storeId && ($transfer->to_store_id == $storeId);
                                 $isOutgoing = $storeId && ($transfer->from_store_id == $storeId);
-                                $statusBadge = match($transfer->status ?? '') {
-                                    'approved'    => 'bg-success',
-                                    'in_transit'  => 'bg-info text-dark',
-                                    'completed', 'received' => 'bg-dark',
-                                    'rejected'    => 'bg-danger',
-                                    'draft', 'pending' => 'bg-warning text-dark',
-                                    default       => 'bg-secondary',
-                                };
                             @endphp
                             <tr>
-                                <td class="ps-3">
+                                <td data-label="Transfer #" class="ps-3">
                                     <a href="{{ route('store-manager.transfers.show', $transfer) }}" class="fw-bold font-monospace text-primary text-decoration-none">
                                         {{ $transfer->transfer_no ?? 'TR-'.$transfer->id }}
                                     </a>
                                 </td>
-                                <td>
+                                <td data-label="Slip #">
                                     @if($transfer->physical_slip_no)
                                         <span class="badge bg-success font-monospace" style="font-size:0.75rem;">{{ $transfer->physical_slip_no }}</span>
                                     @else
                                         <span class="text-muted small">—</span>
                                     @endif
                                 </td>
-                                <td>
+                                <td data-label="Direction">
                                     @if($isIncoming)
                                         <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-2 py-1">
                                             <i class="fa-solid fa-arrow-down me-1"></i>Incoming
@@ -274,25 +249,23 @@
                                         <span class="badge bg-light text-dark">Transfer</span>
                                     @endif
                                 </td>
-                                <td>
+                                <td data-label="Origin / Dest">
                                     <span class="fw-semibold text-dark small">
                                         {{ $isIncoming ? ($transfer->fromStore->name ?? 'Main Warehouse') : ($transfer->toStore->name ?? 'Destination') }}
                                     </span>
                                 </td>
-                                <td>
-                                    <span class="badge {{ $statusBadge }} small">
-                                        {{ ucfirst(str_replace('_', ' ', $transfer->status ?? 'Draft')) }}
-                                    </span>
+                                <td data-label="Status">
+                                    <x-status-badge :status="$transfer->status ?? 'Draft'" />
                                 </td>
-                                <td class="text-end pe-3">
-                                    <a href="{{ route('store-manager.transfers.show', $transfer) }}" class="btn btn-sm btn-outline-secondary">
+                                <td data-label="Action" class="text-end pe-3">
+                                    <a href="{{ route('store-manager.transfers.show', $transfer) }}" class="btn btn-sm btn-outline-secondary rounded-pill px-3" style="min-height: 34px; display: inline-flex; align-items: center;">
                                         <i class="fa-solid fa-eye me-1"></i>View
                                     </a>
                                 </td>
                             </tr>
                             @empty
                             <tr>
-                                <td colspan="7" class="text-center py-4 text-muted">
+                                <td colspan="6" class="text-center py-4 text-muted">
                                     <i class="fa-solid fa-truck-moving fa-2x mb-2 d-block opacity-25"></i>
                                     No transfers recorded for this store yet.
                                     <a href="{{ route('store-manager.transfers.create') }}" class="d-block mt-1 small">Initiate a transfer →</a>
@@ -305,24 +278,24 @@
             </div>
 
             {{-- Store Inventory on Hand Card --}}
-            <div class="card border-0 shadow-sm rounded-3">
-                <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
+            <div class="card border-0 shadow-sm rounded-3 bg-white">
+                <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <div>
                         <h6 class="mb-0 fw-bold text-dark">
                             <i class="fa-solid fa-boxes-stacked text-success me-2"></i>In-Store Inventory Overview
                         </h6>
                         <small class="text-muted">Top products currently on hand in {{ $assignedStore->name ?? 'this store' }}</small>
                     </div>
-                    <a href="{{ route('store-manager.inventory.all') }}" class="btn btn-sm btn-outline-primary">Full Stock List</a>
+                    <a href="{{ route('store-manager.inventory.all') }}" class="btn btn-sm btn-outline-primary rounded-pill px-3" style="min-height: 34px; display: inline-flex; align-items: center;">Full Stock List</a>
                 </div>
-                <div class="table-responsive">
-                    <table class="table table-sm table-hover align-middle mb-0">
+                <div class="table-responsive wc-table-mobile-cards">
+                    <table class="table table-hover align-middle mb-0">
                         <thead class="table-light">
                             <tr>
                                 <th class="ps-3">Product Name</th>
                                 <th>Category / Unit</th>
-                                <th class="text-center">On Hand Qty</th>
-                                <th class="text-center">Min Stock</th>
+                                <th class="text-end">On Hand Qty</th>
+                                <th class="text-end">Min Stock</th>
                                 <th class="text-center">Status</th>
                             </tr>
                         </thead>
@@ -333,28 +306,28 @@
                                 $isOut = $item->quantity_on_hand <= 0;
                             @endphp
                             <tr>
-                                <td class="ps-3">
+                                <td data-label="Product" class="ps-3">
                                     <span class="fw-semibold text-dark d-block">{{ $item->product->name ?? '—' }}</span>
                                     <small class="text-muted font-monospace">{{ $item->product->sku ?? $item->product->code ?? '' }}</small>
                                 </td>
-                                <td>
-                                    <span class="badge bg-light text-dark">{{ $item->product->unit_of_measure ?? $item->product->unit ?? 'Units' }}</span>
+                                <td data-label="Unit">
+                                    <span class="badge bg-light text-dark border">{{ $item->product->unit_of_measure ?? $item->product->unit ?? 'Units' }}</span>
                                 </td>
-                                <td class="text-center">
-                                    <span class="fw-bold {{ $isOut ? 'text-danger' : ($isLow ? 'text-warning' : 'text-dark') }}" style="font-size:0.95rem;">
+                                <td data-label="On Hand" class="text-end font-tabular">
+                                    <span class="fw-bold {{ $isOut ? 'text-danger' : ($isLow ? 'text-warning' : 'text-dark') }}">
                                         {{ number_format($item->quantity_on_hand, 2) }}
                                     </span>
                                 </td>
-                                <td class="text-center">
-                                    <small class="text-muted">{{ number_format($item->min_stock, 2) }}</small>
+                                <td data-label="Min Stock" class="text-end font-tabular text-muted">
+                                    {{ number_format($item->min_stock, 2) }}
                                 </td>
-                                <td class="text-center">
+                                <td data-label="Status" class="text-center">
                                     @if($isOut)
-                                        <span class="badge bg-danger">Out of Stock</span>
+                                        <x-status-badge status="Out of Stock" tone="danger" />
                                     @elseif($isLow)
-                                        <span class="badge bg-warning text-dark">Low Stock</span>
+                                        <x-status-badge status="Low Stock" tone="warning" />
                                     @else
-                                        <span class="badge bg-success">In Stock</span>
+                                        <x-status-badge status="In Stock" tone="success" />
                                     @endif
                                 </td>
                             </tr>
@@ -376,7 +349,7 @@
         <div class="col-lg-4">
 
             {{-- Low Stock Urgent Alerts --}}
-            <div class="card border-0 shadow-sm rounded-3 mb-4">
+            <div class="card border-0 shadow-sm rounded-3 mb-4 bg-white">
                 <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
                     <h6 class="mb-0 fw-bold text-danger">
                         <i class="fa-solid fa-triangle-exclamation me-2"></i>Low Stock Alerts
@@ -388,7 +361,7 @@
                 <div class="card-body p-0">
                     <ul class="list-group list-group-flush">
                         @forelse($lowStockItems as $low)
-                        <li class="list-group-item px-3 py-2">
+                        <li class="list-group-item px-3 py-3">
                             <div class="d-flex justify-content-between align-items-start">
                                 <div>
                                     <span class="fw-semibold d-block text-dark small">{{ $low->product->name ?? 'Product #'.$low->product_id }}</span>
@@ -396,8 +369,8 @@
                                         Qty: {{ number_format($low->quantity_on_hand, 2) }} (Min: {{ number_format($low->min_stock, 2) }})
                                     </small>
                                 </div>
-                                <a href="{{ route('store-manager.transfers.create') }}" class="btn btn-xs btn-outline-primary">
-                                    Request Transfer
+                                <a href="{{ route('store-manager.transfers.create') }}" class="btn btn-sm btn-outline-primary rounded-pill px-2" style="min-height: 32px; display: inline-flex; align-items: center;">
+                                    Transfer
                                 </a>
                             </div>
                         </li>
@@ -411,25 +384,23 @@
             </div>
 
             {{-- Site Material Requests --}}
-            <div class="card border-0 shadow-sm rounded-3 mb-4">
-                <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
+            <div class="card border-0 shadow-sm rounded-3 mb-4 bg-white">
+                <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <h6 class="mb-0 fw-bold text-dark">
                         <i class="fa-solid fa-clipboard-list text-info me-2"></i>Site Material Requests
                     </h6>
-                    <a href="{{ route('store-manager.material-requests.index') }}" class="btn btn-sm btn-outline-info">View All</a>
+                    <a href="{{ route('store-manager.material-requests.index') }}" class="btn btn-sm btn-outline-info rounded-pill px-3" style="min-height: 32px; display: inline-flex; align-items: center;">View All</a>
                 </div>
                 <div class="card-body p-0">
                     <ul class="list-group list-group-flush">
                         @forelse($materialRequests as $req)
-                        <li class="list-group-item px-3 py-2">
+                        <li class="list-group-item px-3 py-3">
                             <div class="d-flex justify-content-between align-items-start">
                                 <div>
                                     <span class="fw-semibold d-block text-dark small">{{ $req->request_no ?? 'MR-'.$req->id }}</span>
                                     <small class="text-muted">{{ $req->project->name ?? 'Site Project' }} · {{ optional($req->created_at)->format('d M') }}</small>
                                 </div>
-                                <span class="badge bg-{{ $req->status === 'approved' ? 'success' : ($req->status === 'pending' ? 'warning' : 'secondary') }} text-{{ $req->status === 'pending' ? 'dark' : '' }}" style="font-size:0.7rem;">
-                                    {{ ucfirst($req->status) }}
-                                </span>
+                                <x-status-badge :status="$req->status" />
                             </div>
                         </li>
                         @empty
@@ -442,17 +413,17 @@
             </div>
 
             {{-- Recent Deliveries Received --}}
-            <div class="card border-0 shadow-sm rounded-3">
-                <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
+            <div class="card border-0 shadow-sm rounded-3 bg-white mb-4">
+                <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <h6 class="mb-0 fw-bold text-dark">
                         <i class="fa-solid fa-boxes-packing text-success me-2"></i>Recent Deliveries / GRN
                     </h6>
-                    <a href="{{ route('store-manager.slips.index') }}" class="btn btn-sm btn-outline-success">Slips</a>
+                    <a href="{{ route('store-manager.slips.index') }}" class="btn btn-sm btn-outline-success rounded-pill px-3" style="min-height: 32px; display: inline-flex; align-items: center;">Slips</a>
                 </div>
                 <div class="card-body p-0">
                     <ul class="list-group list-group-flush">
                         @forelse($recentDeliveryReceipts as $dr)
-                        <li class="list-group-item px-3 py-2">
+                        <li class="list-group-item px-3 py-3">
                             <div class="d-flex justify-content-between align-items-center">
                                 <div>
                                     <span class="fw-semibold d-block text-dark small">{{ $dr->receipt_no ?? 'GRN-'.$dr->id }}</span>
@@ -471,17 +442,17 @@
             </div>
 
             {{-- Recent Petty Cash Purchases --}}
-            <div class="card border-0 shadow-sm rounded-3 mt-4">
-                <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
+            <div class="card border-0 shadow-sm rounded-3 bg-white">
+                <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <h6 class="mb-0 fw-bold text-dark">
                         <i class="fa-solid fa-cart-shopping text-success me-2"></i>Recent Petty Cash Buys
                     </h6>
-                    <a href="{{ route('store-keeper.petty-cash-purchases.index') }}" class="btn btn-sm btn-outline-success">View All</a>
+                    <a href="{{ route('store-keeper.petty-cash-purchases.index') }}" class="btn btn-sm btn-outline-success rounded-pill px-3" style="min-height: 32px; display: inline-flex; align-items: center;">View All</a>
                 </div>
                 <div class="card-body p-0">
                     <ul class="list-group list-group-flush">
                         @forelse($recentPettyCashPurchases ?? [] as $pcp)
-                        <li class="list-group-item px-3 py-2">
+                        <li class="list-group-item px-3 py-3">
                             <div class="d-flex justify-content-between align-items-center">
                                 <div>
                                     <a href="{{ route('store-keeper.petty-cash-purchases.show', $pcp) }}" class="fw-bold font-monospace text-primary text-decoration-none small d-block">
@@ -490,7 +461,7 @@
                                     <small class="text-muted">{{ $pcp->supplier_name ?: 'Supplier' }} &bull; {{ $pcp->items->count() }} items</small>
                                 </div>
                                 <div class="text-end">
-                                    <strong class="text-success font-monospace small d-block">ETB {{ number_format($pcp->total_amount, 2) }}</strong>
+                                    <strong class="text-success font-monospace font-tabular small d-block">ETB {{ number_format($pcp->total_amount, 2) }}</strong>
                                     <small class="text-muted" style="font-size:0.7rem;">{{ optional($pcp->purchase_date)->format('d M') }}</small>
                                 </div>
                             </div>

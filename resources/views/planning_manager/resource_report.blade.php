@@ -1,124 +1,166 @@
 @extends('layouts.app')
 @section('title', 'Project Resource Report')
 
+@push('styles')
+<style>
+    @media print {
+        .wc-no-print { display: none !important; }
+        .card { border: 1px solid #e2e8f0 !important; box-shadow: none !important; }
+        .table thead th { background-color: #f1f5f9 !important; color: #0f172a !important; -webkit-print-color-adjust: exact; }
+    }
+</style>
+@endpush
+
 @section('content')
-<div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <div>
-            <h1 class="h3 mb-1 fw-bold">
-                <i class="fa-solid fa-chart-bar text-info me-2"></i>Project Resource Report
-            </h1>
-            <p class="text-muted mb-0 small">Live resource allocation overview across all active projects</p>
-        </div>
-        <div>
-            <button class="btn btn-outline-secondary btn-sm" onclick="window.print()">
-                <i class="fa-solid fa-print me-1"></i>Print Report
-            </button>
-        </div>
-    </div>
+<div class="container-fluid px-3 px-md-4 py-3">
+    <x-print-header title="Project Resource Report" subtitle="Live Resource Allocation Overview Across Active Construction Sites" />
+
+    {{-- Page Header --}}
+    <x-page-header 
+        title="Project Resource Report" 
+        subtitle="Live resource allocation overview across all active construction projects">
+        <x-slot:actions>
+            <x-export-menu :print="true" label="Print / Export" />
+        </x-slot:actions>
+    </x-page-header>
 
     @if(count($reportData) === 0)
-    <div class="card border-0 shadow-sm">
-        <div class="card-body text-center py-5">
-            <i class="fa-solid fa-chart-bar fa-3x text-muted mb-3 d-block"></i>
-            <h5 class="text-muted">No active projects</h5>
-            <p class="small text-muted">Resource report will appear here once active projects are added.</p>
+    <div class="card border-0 shadow-sm rounded-4">
+        <div class="card-body p-5">
+            <x-empty-state 
+                icon="fa-solid fa-chart-bar" 
+                title="No Active Projects Found" 
+                message="Resource allocation reports will appear here once active construction projects are added with assigned resources." />
         </div>
     </div>
     @else
-    {{-- Resource Cards --}}
+    {{-- Resource KPI Cards --}}
+    @php
+        $totalManpower = array_sum(array_column($reportData, 'manpower_active'));
+        $totalEquipment = array_sum(array_column($reportData, 'equipment_active'));
+        $totalCement = array_sum(array_column($reportData, 'cement_qty'));
+        $totalSteel = array_sum(array_column($reportData, 'steel_qty'));
+        $totalSand = array_sum(array_column($reportData, 'sand_qty'));
+    @endphp
+
     <div class="row g-3 mb-4">
-        @php
-            $totalManpower = array_sum(array_column($reportData, 'manpower_active'));
-            $totalEquipment = array_sum(array_column($reportData, 'equipment_active'));
-            $totalCement = array_sum(array_column($reportData, 'cement_qty'));
-            $totalSteel = array_sum(array_column($reportData, 'steel_qty'));
-        @endphp
-        <div class="col-md-3">
-            <div class="card border-0 shadow-sm text-center p-3" style="background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;">
-                <i class="fa-solid fa-users fa-2x opacity-75 mb-2"></i>
-                <div class="fs-2 fw-bold">{{ $totalManpower }}</div>
-                <div class="small opacity-75">Total Active Manpower</div>
-            </div>
+        <div class="col-xl-3 col-sm-6">
+            <x-kpi-card 
+                label="Total Active Manpower" 
+                value="{{ number_format($totalManpower) }}" 
+                icon="fa-solid fa-users" 
+                variant="primary" 
+                helpText="Labor deployed across sites" />
         </div>
-        <div class="col-md-3">
-            <div class="card border-0 shadow-sm text-center p-3" style="background:linear-gradient(135deg,#11998e,#38ef7d);color:#fff;">
-                <i class="fa-solid fa-tractor fa-2x opacity-75 mb-2"></i>
-                <div class="fs-2 fw-bold">{{ $totalEquipment }}</div>
-                <div class="small opacity-75">Total Equipment Units</div>
-            </div>
+        <div class="col-xl-3 col-sm-6">
+            <x-kpi-card 
+                label="Total Equipment Units" 
+                value="{{ number_format($totalEquipment) }}" 
+                icon="fa-solid fa-tractor" 
+                variant="success" 
+                helpText="Active machinery & fleet" />
         </div>
-        <div class="col-md-3">
-            <div class="card border-0 shadow-sm text-center p-3" style="background:linear-gradient(135deg,#f093fb,#f5576c);color:#fff;">
-                <i class="fa-solid fa-bag-shopping fa-2x opacity-75 mb-2"></i>
-                <div class="fs-2 fw-bold">{{ number_format($totalCement) }}</div>
-                <div class="small opacity-75">Cement (Bags)</div>
-            </div>
+        <div class="col-xl-3 col-sm-6">
+            <x-kpi-card 
+                label="Cement Allocation" 
+                value="{{ number_format($totalCement) }} Bags" 
+                icon="fa-solid fa-cubes-stacked" 
+                variant="warning" 
+                helpText="Cement stock allocated" />
         </div>
-        <div class="col-md-3">
-            <div class="card border-0 shadow-sm text-center p-3" style="background:linear-gradient(135deg,#4facfe,#00f2fe);color:#fff;">
-                <i class="fa-solid fa-weight-scale fa-2x opacity-75 mb-2"></i>
-                <div class="fs-2 fw-bold">{{ number_format($totalSteel) }}T</div>
-                <div class="small opacity-75">Steel (Tons)</div>
-            </div>
+        <div class="col-xl-3 col-sm-6">
+            <x-kpi-card 
+                label="Reinforcement Steel" 
+                value="{{ number_format($totalSteel) }} Tons" 
+                icon="fa-solid fa-weight-scale" 
+                variant="info" 
+                helpText="Rebar & structural steel" />
         </div>
     </div>
 
     {{-- Per-project breakdown --}}
-    <div class="card border-0 shadow-sm">
-        <div class="card-header bg-white border-bottom">
-            <h6 class="mb-0 fw-bold"><i class="fa-solid fa-table me-2 text-info"></i>Resource Breakdown by Project</h6>
+    <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
+        <div class="card-header bg-white border-bottom py-3 px-4 d-flex justify-content-between align-items-center">
+            <h6 class="mb-0 fw-bold" style="color: var(--brand-900);">
+                <i class="fa-solid fa-table me-2 text-primary"></i>Resource Breakdown by Project
+            </h6>
+            <span class="badge bg-light text-dark border px-3 py-1 font-monospace">
+                {{ count($reportData) }} Projects
+            </span>
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
-                    <thead class="table-dark">
+                <table class="table table-hover align-middle mb-0 wc-table-mobile-cards">
+                    <thead class="table-light text-uppercase small text-muted" style="letter-spacing: 0.5px;">
                         <tr>
-                            <th>#</th>
-                            <th>Project</th>
-                            <th>Status</th>
-                            <th class="text-center">Manpower</th>
-                            <th class="text-center">Equipment</th>
-                            <th class="text-center">Cement (Bags)</th>
-                            <th class="text-center">Steel (Tons)</th>
-                            <th class="text-center">Sand (m3)</th>
+                            <th class="ps-4 py-3" style="width: 50px;">#</th>
+                            <th class="py-3">Project &amp; Location</th>
+                            <th class="py-3 text-center">Status</th>
+                            <th class="py-3 text-center">Manpower</th>
+                            <th class="py-3 text-center">Equipment</th>
+                            <th class="py-3 text-end">Cement (Bags)</th>
+                            <th class="py-3 text-end">Steel (Tons)</th>
+                            <th class="pe-4 py-3 text-end">Sand (m³)</th>
                         </tr>
                     </thead>
                     <tbody>
                         @foreach($reportData as $i => $row)
                         <tr>
-                            <td class="text-muted">{{ $i + 1 }}</td>
-                            <td>
-                                <div class="fw-semibold">{{ $row['project']->name }}</div>
-                                <small class="text-muted">{{ $row['project']->location ?? 'N/A' }}</small>
+                            <td class="ps-4 py-3 text-muted font-tabular" data-label="#">{{ $i + 1 }}</td>
+                            <td class="py-3" data-label="Project">
+                                <div class="fw-bold" style="color: var(--brand-900);">{{ $row['project']->name }}</div>
+                                <small class="text-muted"><i class="fa-solid fa-location-dot me-1 text-secondary"></i>{{ $row['project']->location ?? 'N/A' }}</small>
                             </td>
-                            <td><span class="badge bg-success">Active</span></td>
-                            <td class="text-center">
-                                <span class="badge bg-primary rounded-pill px-3">{{ $row['manpower_active'] }}</span>
+                            <td class="py-3 text-center" data-label="Status">
+                                <span class="badge bg-success-subtle text-success border border-success-subtle px-2.5 py-1 rounded-pill">
+                                    <i class="fa-solid fa-circle-check me-1"></i>Active
+                                </span>
                             </td>
-                            <td class="text-center">
-                                <span class="badge bg-success rounded-pill px-3">{{ $row['equipment_active'] }}</span>
+                            <td class="py-3 text-center" data-label="Manpower">
+                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill px-3 py-1 fw-bold font-tabular">
+                                    {{ $row['manpower_active'] }}
+                                </span>
                             </td>
-                            <td class="text-center">{{ number_format($row['cement_qty']) }}</td>
-                            <td class="text-center">{{ number_format($row['steel_qty']) }}</td>
-                            <td class="text-center">{{ number_format($row['sand_qty']) }}</td>
+                            <td class="py-3 text-center" data-label="Equipment">
+                                <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-3 py-1 fw-bold font-tabular">
+                                    {{ $row['equipment_active'] }}
+                                </span>
+                            </td>
+                            <td class="py-3 text-end font-tabular fw-semibold text-dark" data-label="Cement (Bags)">
+                                {{ number_format($row['cement_qty']) }}
+                            </td>
+                            <td class="py-3 text-end font-tabular fw-semibold text-dark" data-label="Steel (Tons)">
+                                {{ number_format($row['steel_qty']) }}
+                            </td>
+                            <td class="pe-4 py-3 text-end font-tabular fw-semibold text-dark" data-label="Sand (m³)">
+                                {{ number_format($row['sand_qty']) }}
+                            </td>
                         </tr>
                         @endforeach
                     </tbody>
-                    <tfoot class="table-light fw-bold">
+                    <tfoot class="table-light fw-bold border-top-2">
                         <tr>
-                            <td colspan="3" class="text-end">Totals:</td>
-                            <td class="text-center">{{ $totalManpower }}</td>
-                            <td class="text-center">{{ $totalEquipment }}</td>
-                            <td class="text-center">{{ number_format($totalCement) }}</td>
-                            <td class="text-center">{{ number_format($totalSteel) }}</td>
-                            <td class="text-center">{{ number_format(array_sum(array_column($reportData, 'sand_qty'))) }}</td>
+                            <td colspan="3" class="ps-4 py-3 text-uppercase text-muted" style="letter-spacing: 0.5px;">Portfolio Totals:</td>
+                            <td class="py-3 text-center font-tabular text-primary">{{ number_format($totalManpower) }}</td>
+                            <td class="py-3 text-center font-tabular text-success">{{ number_format($totalEquipment) }}</td>
+                            <td class="py-3 text-end font-tabular">{{ number_format($totalCement) }}</td>
+                            <td class="py-3 text-end font-tabular">{{ number_format($totalSteel) }}</td>
+                            <td class="pe-4 py-3 text-end font-tabular">{{ number_format($totalSand) }}</td>
                         </tr>
                     </tfoot>
                 </table>
             </div>
         </div>
     </div>
+
+    {{-- Official Print Signature Block --}}
+    <x-print-signatures 
+        preparedTitle="Prepared By" 
+        preparedRole="Planning Engineer" 
+        checkedTitle="Verified By" 
+        checkedRole="Planning Manager" 
+        approvedTitle="Approved By" 
+        approvedRole="General Manager" />
     @endif
 </div>
 @endsection

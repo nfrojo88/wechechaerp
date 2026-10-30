@@ -1,62 +1,53 @@
 @extends('layouts.app')
 @section('title', 'Global Admin Dashboard')
 @section('content')
-<div class="container-fluid py-2">
+<div class="wc-container py-3 py-md-4">
 
     {{-- ══════════════════════════════════════════════════════════════════════════
          1. EXECUTIVE HEADER & REAL-TIME SYSTEM BAR
          ══════════════════════════════════════════════════════════════════════════ --}}
-    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2 pb-3 border-bottom">
-        <div>
-            <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
-                <span class="badge bg-primary bg-opacity-10 text-primary px-3 py-1 rounded-pill fw-semibold" style="font-size:0.8rem;">
-                    <i class="fa-solid fa-shield-halved me-1"></i>Global Admin Command Center
-                </span>
+    <x-page-header
+        title="Global Admin Executive Dashboard"
+        subtitle="Enterprise management, cross-departmental operations, approvals &amp; strategic command"
+        badge="Command Center"
+    >
+        <x-slot:actions>
+            <div class="d-flex gap-2 flex-wrap align-items-center">
                 @if(!empty($ethiopianDateStr))
-                    <span class="badge bg-warning bg-opacity-10 text-dark border border-warning border-opacity-50 px-2 py-1 rounded-pill fw-semibold" style="font-size:0.75rem;">
+                    <span class="badge bg-warning bg-opacity-10 text-dark border border-warning border-opacity-50 px-2 py-1 rounded-pill fw-semibold d-none d-sm-inline-flex align-items-center" style="font-size:0.75rem;">
                         <i class="fa-solid fa-calendar-day me-1 text-warning"></i>{{ $ethiopianDateStr }}
                     </span>
                 @endif
-                <span class="badge bg-light text-muted border px-2 py-1 rounded-pill" style="font-size:0.75rem;">
+                <span class="badge bg-light text-muted border px-2 py-1 rounded-pill d-none d-md-inline-flex align-items-center" style="font-size:0.75rem;">
                     <i class="fa-regular fa-clock me-1"></i>{{ now()->format('l, F j, Y — H:i') }}
                 </span>
-                <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-2 py-1 rounded-pill" style="font-size:0.75rem;">
-                    <i class="fa-solid fa-circle-check me-1"></i>System Active
-                </span>
+                <a href="{{ route('system.clear-cache') }}" class="btn btn-outline-secondary btn-sm rounded-pill px-3 shadow-xs" style="min-height: 36px; display: inline-flex; align-items: center;" onclick="return confirm('Clear application and route caches now?')">
+                    <i class="fa-solid fa-broom me-1 text-warning"></i>Clear Cache
+                </a>
+                <a href="{{ route('system.run-migrations') }}" class="btn btn-outline-success btn-sm rounded-pill px-3 shadow-xs" style="min-height: 36px; display: inline-flex; align-items: center;" onclick="return confirm('Run database migrations and resync now?')">
+                    <i class="fa-solid fa-database me-1"></i>Auto Migrate DB
+                </a>
+                <a href="{{ route('admin.role-assignment.index') }}" class="btn btn-outline-info btn-sm rounded-pill px-3 shadow-xs" style="min-height: 36px; display: inline-flex; align-items: center;">
+                    <i class="fa-solid fa-user-gear me-1"></i>User &amp; Roles
+                    @if((['unassigned_roles_count'] ?? 0) > 0)
+                        <span class="badge bg-danger rounded-pill ms-1">{{ ['unassigned_roles_count'] }}</span>
+                    @endif
+                </a>
+                <a href="{{ route('coa.index') }}" class="btn btn-outline-dark btn-sm rounded-pill px-3 shadow-xs" style="min-height: 36px; display: inline-flex; align-items: center;">
+                    <i class="fa-solid fa-building-columns me-1 text-primary"></i>COA
+                </a>
+                <a href="#executive-approval-hub" class="btn btn-outline-warning text-dark btn-sm rounded-pill px-3 shadow-xs" style="min-height: 36px; display: inline-flex; align-items: center;">
+                    <i class="fa-solid fa-gavel me-1"></i>Decision Hub
+                    @if(( ?? 0) > 0)
+                        <span class="badge bg-danger rounded-pill ms-1">{{  }}</span>
+                    @endif
+                </a>
+                <a href="#vat-withholding-report" class="btn btn-outline-primary btn-sm rounded-pill px-3 shadow-xs" style="min-height: 36px; display: inline-flex; align-items: center;">
+                    <i class="fa-solid fa-receipt me-1"></i>Tax &amp; ERCA
+                </a>
             </div>
-            <h1 class="h3 mb-0 text-gray-800 fw-bold">
-                <i class="fas fa-gauge-high text-primary me-2"></i>Global Admin Executive Dashboard
-            </h1>
-        </div>
-
-        {{-- Executive Power Bar / Fast Controls --}}
-        <div class="d-flex gap-2 flex-wrap align-items-center">
-            <a href="{{ route('system.clear-cache') }}" class="btn btn-outline-secondary btn-sm rounded-pill px-3 shadow-xs" onclick="return confirm('Clear application and route caches now?')">
-                <i class="fa-solid fa-broom me-1 text-warning"></i>Clear Cache
-            </a>
-            <a href="{{ route('system.run-migrations') }}" class="btn btn-outline-success btn-sm rounded-pill px-3 shadow-xs" onclick="return confirm('Run database migrations and resync now?')">
-                <i class="fa-solid fa-database me-1"></i>Auto Migrate DB
-            </a>
-            <a href="{{ route('admin.role-assignment.index') }}" class="btn btn-outline-info btn-sm rounded-pill px-3 shadow-xs">
-                <i class="fa-solid fa-user-gear me-1"></i>User &amp; Roles
-                @if(($kpi['unassigned_roles_count'] ?? 0) > 0)
-                    <span class="badge bg-danger rounded-pill ms-1">{{ $kpi['unassigned_roles_count'] }}</span>
-                @endif
-            </a>
-            <a href="{{ route('coa.index') }}" class="btn btn-outline-dark btn-sm rounded-pill px-3 shadow-xs">
-                <i class="fa-solid fa-building-columns me-1 text-primary"></i>Chart of Accounts
-            </a>
-            <a href="#executive-approval-hub" class="btn btn-outline-warning btn-sm rounded-pill px-3 shadow-xs">
-                <i class="fa-solid fa-gavel me-1"></i>Decision Hub
-                @if(($totalUrgentActions ?? 0) > 0)
-                    <span class="badge bg-danger rounded-pill ms-1">{{ $totalUrgentActions }}</span>
-                @endif
-            </a>
-            <a href="#vat-withholding-report" class="btn btn-outline-primary btn-sm rounded-pill px-3 shadow-xs">
-                <i class="fa-solid fa-receipt me-1"></i>Tax &amp; ERCA Ledger
-            </a>
-        </div>
-    </div>
+        </x-slot:actions>
+    </x-page-header>
 
     {{-- ══════════════════════════════════════════════════════════════════════════
          DYNAMIC PERIOD & DATA SCOPE FILTER BAR (DON'T SHOW OLD DATA)
@@ -577,7 +568,7 @@
             </div>
         </div>
         <div class="card-body p-0">
-            <div class="table-responsive">
+            <div class="table-responsive wc-table-mobile-cards">
                 <table class="table table-hover align-middle mb-0">
                     <thead class="table-light text-uppercase text-muted" style="font-size:0.75rem;">
                         <tr>
@@ -648,7 +639,7 @@
             </a>
         </div>
         <div class="card-body p-0">
-            <div class="table-responsive">
+            <div class="table-responsive wc-table-mobile-cards">
                 <table class="table table-hover align-middle mb-0">
                     <thead class="table-light text-uppercase text-muted" style="font-size:0.75rem;">
                         <tr>
@@ -676,7 +667,7 @@
                                 <td class="font-monospace fw-bold {{ $proj['budget_status'] === 'danger' ? 'text-danger' : 'text-dark' }}">
                                     {{ number_format($proj['total_expense'], 2) }}
                                 </td>
-                                <td>
+                                <td data-label="Utilization">
                                     <div class="d-flex align-items-center gap-2">
                                         <div class="progress flex-grow-1" style="height: 7px;">
                                             <div class="progress-bar bg-{{ $proj['budget_status'] }}" role="progressbar" style="width: {{ min(100, $proj['utilization']) }}%;"></div>
@@ -785,7 +776,7 @@
 
             {{-- Recent Transfers Table --}}
             @if(isset($transfersData['recent']) && $transfersData['recent']->count() > 0)
-                <div class="table-responsive">
+                <div class="table-responsive wc-table-mobile-cards">
                     <table class="table table-hover align-middle mb-0">
                         <thead class="table-light text-uppercase text-muted" style="font-size:0.72rem;">
                             <tr>
@@ -1082,7 +1073,7 @@
                 {{-- TAB 1: PURCHASE REQUESTS PENDING GM/ADMIN --}}
                 <div class="tab-pane fade show active p-3" id="tab-prs" role="tabpanel">
                     @if($pendingGmPrs->count() > 0)
-                        <div class="table-responsive">
+                        <div class="table-responsive wc-table-mobile-cards">
                             <table class="table table-hover align-middle mb-0">
                                 <thead class="table-light text-uppercase text-muted" style="font-size:0.75rem;">
                                     <tr>
@@ -1130,7 +1121,7 @@
                 {{-- TAB 2: EXPENSE REQUESTS PENDING GM/ADMIN --}}
                 <div class="tab-pane fade p-3" id="tab-expenses" role="tabpanel">
                     @if($pendingGmExpenses->count() > 0)
-                        <div class="table-responsive">
+                        <div class="table-responsive wc-table-mobile-cards">
                             <table class="table table-hover align-middle mb-0">
                                 <thead class="table-light text-uppercase text-muted" style="font-size:0.75rem;">
                                     <tr>
@@ -1218,7 +1209,7 @@
                 {{-- TAB 4: PENDING EMPLOYEE APPROVALS --}}
                 <div class="tab-pane fade p-3" id="tab-employees" role="tabpanel">
                     @if($pendingEmployees->count() > 0)
-                        <div class="table-responsive">
+                        <div class="table-responsive wc-table-mobile-cards">
                             <table class="table table-hover align-middle mb-0">
                                 <thead class="table-light text-uppercase text-muted" style="font-size:0.75rem;">
                                     <tr>
@@ -1257,7 +1248,7 @@
                 {{-- TAB 5: OPEN SITE ISSUES --}}
                 <div class="tab-pane fade p-3" id="tab-issues" role="tabpanel">
                     @if($recentIssues->count() > 0)
-                        <div class="table-responsive">
+                        <div class="table-responsive wc-table-mobile-cards">
                             <table class="table table-hover align-middle mb-0">
                                 <thead class="table-light text-uppercase text-muted" style="font-size:0.75rem;">
                                     <tr>
@@ -1303,7 +1294,7 @@
                 {{-- TAB 6: STORE TRANSFERS (TR) IN-TRANSIT & DISPATCH --}}
                 <div class="tab-pane fade p-3" id="tab-transfers" role="tabpanel">
                     @if(isset($transfersData['recent']) && $transfersData['recent']->count() > 0)
-                        <div class="table-responsive">
+                        <div class="table-responsive wc-table-mobile-cards">
                             <table class="table table-hover align-middle mb-0">
                                 <thead class="table-light text-uppercase text-muted" style="font-size:0.75rem;">
                                     <tr>
@@ -1400,7 +1391,7 @@
                 </div>
                 <div class="card-body p-0">
                     @if($lowStockItems->count() > 0)
-                        <div class="table-responsive">
+                        <div class="table-responsive wc-table-mobile-cards">
                             <table class="table table-hover align-middle mb-0">
                                 <thead class="table-light text-uppercase text-muted" style="font-size:0.75rem;">
                                     <tr>
@@ -1525,7 +1516,7 @@
                 </a>
             </div>
             <div class="card-body p-0">
-                <div class="table-responsive">
+                <div class="table-responsive wc-table-mobile-cards">
                     <table class="table table-hover align-middle mb-0">
                         <thead class="table-light text-uppercase text-muted" style="font-size:0.75rem;">
                             <tr>

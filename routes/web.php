@@ -1635,6 +1635,7 @@ Route::middleware(['auth'])->group(function () {
     // Role Tester
     Route::get('/dev/roles', [App\Http\Controllers\RoleTesterController::class, 'index'])->name('dev.roles');
     Route::post('/dev/roles/login', [App\Http\Controllers\RoleTesterController::class, 'loginAsRole'])->name('dev.roles.login');
+    Route::get('/style-guide', fn() => view('dev.style-guide'))->name('style-guide');
 
     // ─── Dashboard placeholders (will be replaced per phase) ──────────────────
     Route::get('/dashboard/admin',          [App\Http\Controllers\DashboardController::class, 'admin'])->name('dashboard.admin');

@@ -1,103 +1,127 @@
 @extends('layouts.app')
 @section('title', 'Foreman Dashboard')
 @section('content')
-<div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1 class="h3 mb-0 text-gray-800"><i class="fas fa-hard-hat me-2"></i> Foreman Dashboard</h1>
-        <span class="badge badge-secondary p-2">{{ now()->format('l, F j Y') }}</span>
-    </div>
+<div class="wc-container py-3 py-md-4">
+    <x-page-header
+        title="Foreman Dashboard"
+        subtitle="Site crew attendance, material requisition, daily reports &amp; obstacle logs"
+        badge="Field Operations"
+    >
+        <x-slot:actions>
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <span class="badge bg-white text-secondary border px-3 py-2 shadow-xs rounded-pill d-none d-sm-inline-flex align-items-center">
+                    <i class="fa-regular fa-calendar text-primary me-2"></i>{{ now()->format('l, F j, Y') }}
+                </span>
+                <a href="{{ route('material-requests.create') }}" class="btn btn-primary btn-sm shadow-xs" style="min-height: 38px; display: inline-flex; align-items: center;">
+                    <i class="fas fa-plus me-1"></i> New Material Request
+                </a>
+            </div>
+        </x-slot:actions>
+    </x-page-header>
 
-    <div class="row">
-        <div class="col-xl-3 col-md-6 mb-4">
-            <div class="card border-left-primary shadow h-100 py-2">
-                <div class="card-body">
-                    <div class="row no-gutters align-items-center">
-                        <div class="col mr-2">
-                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">Present Today (Site)</div>
-                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ $kpi['attendance_today'] }}</div>
-                        </div>
-                        <div class="col-auto"><i class="fas fa-users fa-2x text-gray-300"></i></div>
-                    </div>
-                </div>
-            </div>
+    {{-- KPI Cards --}}
+    <div class="row g-3 mb-4">
+        <div class="col-12 col-sm-6 col-xl-3">
+            <x-kpi-card
+                title="Present Today (Site)"
+                :value="$kpi['attendance_today'] ?? 0"
+                subtitle="Workers on site"
+                icon="fa-solid fa-users"
+                tone="primary"
+            />
         </div>
-        <div class="col-xl-3 col-md-6 mb-4">
-            <div class="card border-left-danger shadow h-100 py-2">
-                <div class="card-body">
-                    <div class="row no-gutters align-items-center">
-                        <div class="col mr-2">
-                            <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">Pending MRs</div>
-                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ $kpi['my_mr_pending'] }}</div>
-                        </div>
-                        <div class="col-auto"><i class="fas fa-cart-flatbed fa-2x text-gray-300"></i></div>
-                    </div>
-                </div>
-            </div>
+        <div class="col-12 col-sm-6 col-xl-3">
+            <x-kpi-card
+                title="Pending Material Requests"
+                :value="$kpi['my_mr_pending'] ?? 0"
+                subtitle="Awaiting store / approval"
+                icon="fa-solid fa-cart-flatbed"
+                tone="danger"
+            />
         </div>
-        <div class="col-xl-3 col-md-6 mb-4">
-            <div class="card border-left-success shadow h-100 py-2">
-                <div class="card-body">
-                    <div class="row no-gutters align-items-center">
-                        <div class="col mr-2">
-                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Daily Reports (Month)</div>
-                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ $kpi['daily_reports'] }}</div>
-                        </div>
-                        <div class="col-auto"><i class="fas fa-file-contract fa-2x text-gray-300"></i></div>
-                    </div>
-                </div>
-            </div>
+        <div class="col-12 col-sm-6 col-xl-3">
+            <x-kpi-card
+                title="Daily Reports (This Mo.)"
+                :value="$kpi['daily_reports'] ?? 0"
+                subtitle="Submitted site logs"
+                icon="fa-solid fa-file-contract"
+                tone="success"
+            />
         </div>
-        <div class="col-xl-3 col-md-6 mb-4">
-            <div class="card border-left-warning shadow h-100 py-2">
-                <div class="card-body">
-                    <div class="row no-gutters align-items-center">
-                        <div class="col mr-2">
-                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">Open Issues</div>
-                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ $kpi['issues_open'] }}</div>
-                        </div>
-                        <div class="col-auto"><i class="fas fa-triangle-exclamation fa-2x text-gray-300"></i></div>
-                    </div>
-                </div>
-            </div>
+        <div class="col-12 col-sm-6 col-xl-3">
+            <x-kpi-card
+                title="Open Site Issues"
+                :value="$kpi['issues_open'] ?? 0"
+                subtitle="Obstacles needing action"
+                icon="fa-solid fa-triangle-exclamation"
+                tone="warning"
+            />
         </div>
     </div>
 
-    <div class="row">
+    {{-- Main Content Grid --}}
+    <div class="row g-4">
         <div class="col-lg-8">
-            <div class="card shadow mb-4">
-                <div class="card-header py-3 d-flex justify-content-between align-items-center">
-                    <h6 class="m-0 font-weight-bold text-primary"><i class="fas fa-box mr-2"></i> My Recent Material Requests</h6>
-                    <a href="{{ route('material-requests.index') }}" class="btn btn-sm btn-outline-primary">View All</a>
+            <div class="card shadow-sm border-0 bg-white">
+                <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <h6 class="m-0 fw-bold text-dark">
+                        <i class="fas fa-box text-primary me-2"></i>My Recent Material Requests
+                    </h6>
+                    <a href="{{ route('material-requests.index') }}" class="btn btn-sm btn-outline-primary rounded-pill px-3" style="min-height: 34px; display: inline-flex; align-items: center;">
+                        View All <i class="fa-solid fa-arrow-right ms-1"></i>
+                    </a>
                 </div>
                 <div class="card-body p-0">
-                    <table class="table table-hover mb-0">
-                        <thead class="thead-light"><tr><th>Request ID</th><th>Project</th><th>Created</th><th>Status</th></tr></thead>
-                        <tbody>
-                            @forelse($recentDaily as $mr)
-                            <tr>
-                                <td>#{{ $mr->id }}</td>
-                                <td>{{ $mr->project->name ?? 'N/A' }}</td>
-                                <td>{{ $mr->created_at->format('M d, Y') }}</td>
-                                <td><span class="badge badge-{{ $mr->status == 'approved' ? 'success' : ($mr->status == 'rejected' ? 'danger' : 'warning') }}">{{ ucfirst($mr->status) }}</span></td>
-                            </tr>
-                            @empty
-                            <tr><td colspan="4" class="text-center text-muted">No requests found.</td></tr>
-                            @endforelse
-                        </tbody>
-                    </table>
+                    <div class="table-responsive wc-table-mobile-cards">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-3">Request ID</th>
+                                    <th>Project</th>
+                                    <th>Created</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @forelse($recentDaily as $mr)
+                                <tr>
+                                    <td data-label="Request ID" class="ps-3 fw-bold text-primary">#{{ $mr->id }}</td>
+                                    <td data-label="Project">{{ $mr->project->name ?? 'N/A' }}</td>
+                                    <td data-label="Created" class="small text-muted">{{ $mr->created_at->format('M d, Y') }}</td>
+                                    <td data-label="Status">
+                                        <x-status-badge :status="$mr->status" />
+                                    </td>
+                                </tr>
+                                @empty
+                                <tr>
+                                    <td colspan="4" class="text-center text-muted py-4">No recent material requests found.</td>
+                                </tr>
+                                @endforelse
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
+
         <div class="col-lg-4">
-            <div class="card shadow mb-4">
-                <div class="card-header py-3">
-                    <h6 class="m-0 font-weight-bold text-primary">Quick Actions</h6>
+            <div class="card shadow-sm border-0 bg-white">
+                <div class="card-header bg-white py-3 border-bottom">
+                    <h6 class="m-0 fw-bold text-dark"><i class="fa-solid fa-bolt text-warning me-2"></i>Quick Actions</h6>
                 </div>
-                <div class="card-body">
-                    <a href="{{ route('material-requests.create') }}" class="btn btn-primary btn-block mb-2"><i class="fas fa-plus mr-2"></i> New Material Request</a>
-                    <a href="{{ route('issues.create') }}" class="btn btn-danger btn-block mb-2"><i class="fas fa-bug mr-2"></i> Report Issue</a>
-                    <a href="{{ route('waste.create') }}" class="btn btn-warning btn-block mb-2"><i class="fas fa-trash mr-2"></i> Log Waste</a>
-                    <a href="{{ route('attendance.index') }}" class="btn btn-success btn-block"><i class="fas fa-user-check mr-2"></i> Attendance Roster</a>
+                <div class="card-body d-flex flex-column gap-2 p-3">
+                    <a href="{{ route('material-requests.create') }}" class="btn btn-primary text-start fw-semibold py-2 d-flex align-items-center" style="min-height: 44px;">
+                        <i class="fas fa-plus me-2"></i> New Material Request
+                    </a>
+                    <a href="{{ route('issues.create') }}" class="btn btn-outline-danger text-start fw-semibold py-2 d-flex align-items-center" style="min-height: 44px;">
+                        <i class="fas fa-bug me-2"></i> Report Issue / Obstacle
+                    </a>
+                    <a href="{{ route('waste.create') }}" class="btn btn-outline-warning text-dark text-start fw-semibold py-2 d-flex align-items-center" style="min-height: 44px;">
+                        <i class="fas fa-trash me-2"></i> Log Scrap &amp; Waste
+                    </a>
+                    <a href="{{ route('attendance.index') }}" class="btn btn-outline-success text-start fw-semibold py-2 d-flex align-items-center" style="min-height: 44px;">
+                        <i class="fas fa-user-check me-2"></i> Attendance Roster
+                    </a>
                 </div>
             </div>
         </div>

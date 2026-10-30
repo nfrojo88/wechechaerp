@@ -2,162 +2,109 @@
 @section('title', 'Secretary Dashboard')
 
 @section('content')
-<div class="container-fluid px-4 py-3">
+<div class="wc-container py-3 py-md-4">
 
     {{-- ── Header ──────────────────────────────────────────────────────────────── --}}
-    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
-        <div>
-            <h1 class="h3 mb-1 fw-bold text-dark">
-                <i class="fa-solid fa-id-badge text-primary me-2"></i>Secretary Dashboard
-            </h1>
-            <p class="mb-0 text-muted small">
-                Welcome, <strong>{{ auth()->user()->name }}</strong> — {{ now()->format('l, F j, Y') }} · Official Letter Registry &amp; Administration
-            </p>
-        </div>
-        <div class="d-flex gap-2 flex-wrap">
-            <a href="{{ route('purchase-requests.create') }}" class="btn btn-success shadow-sm">
-                <i class="fa-solid fa-cart-plus me-1"></i> New Purchase Request (HO)
-            </a>
-            <a href="{{ route('letters.create') }}" class="btn btn-primary shadow-sm">
-                <i class="fa-solid fa-pen-to-square me-1"></i> Register New Letter
-            </a>
-            <a href="{{ route('letters.index', ['tab' => 'all', 'type' => 'incoming']) }}" class="btn btn-outline-info shadow-sm">
-                <i class="fa-solid fa-arrow-down-left me-1"></i> Incoming Letters
-            </a>
-            <a href="{{ route('letters.index', ['tab' => 'all', 'type' => 'outgoing']) }}" class="btn btn-outline-warning shadow-sm text-dark">
-                <i class="fa-solid fa-arrow-up-right me-1"></i> Outgoing Letters
-            </a>
-            <a href="{{ route('letters.index', ['tab' => 'all']) }}" class="btn btn-outline-secondary shadow-sm">
-                <i class="fa-solid fa-clock-rotate-left me-1"></i> Full Letter History
-            </a>
-        </div>
-    </div>
+    <x-page-header
+        title="Secretary Dashboard"
+        :subtitle="'Welcome, ' . auth()->user()->name . ' — Official Letter Registry, Office Logistics & Administration'"
+        badge="Administration"
+    >
+        <x-slot:actions>
+            <div class="d-flex gap-2 flex-wrap align-items-center">
+                <span class="badge bg-white text-secondary border px-3 py-2 shadow-xs rounded-pill d-none d-sm-inline-flex align-items-center">
+                    <i class="fa-regular fa-calendar text-primary me-2"></i>{{ now()->format('l, F j, Y') }}
+                </span>
+                <a href="{{ route('purchase-requests.create') }}" class="btn btn-success btn-sm shadow-xs" style="min-height: 38px; display: inline-flex; align-items: center;">
+                    <i class="fa-solid fa-cart-plus me-1"></i> New PR (HO)
+                </a>
+                <a href="{{ route('letters.create') }}" class="btn btn-primary btn-sm shadow-xs" style="min-height: 38px; display: inline-flex; align-items: center;">
+                    <i class="fa-solid fa-pen-to-square me-1"></i> Register Letter
+                </a>
+                <a href="{{ route('letters.index', ['tab' => 'all']) }}" class="btn btn-outline-secondary btn-sm shadow-xs" style="min-height: 38px; display: inline-flex; align-items: center;">
+                    <i class="fa-solid fa-clock-rotate-left me-1"></i> Registry
+                </a>
+            </div>
+        </x-slot:actions>
+    </x-page-header>
 
     {{-- ── KPI Summary Cards ─────────────────────────────────────────────────── --}}
     <div class="row g-3 mb-4">
         {{-- Total Letters History --}}
-        <div class="col-6 col-md-4 col-xl-2">
+        <div class="col-12 col-sm-6 col-xl-2">
             <a href="{{ route('letters.index', ['tab' => 'all']) }}" class="text-decoration-none">
-                <div class="card border-0 shadow-sm rounded-3 h-100" style="border-left: 4px solid #6366f1 !important;">
-                    <div class="card-body p-3">
-                        <div class="d-flex justify-content-between align-items-start">
-                            <div>
-                                <p class="text-muted fw-semibold mb-1" style="font-size: 0.7rem; letter-spacing: .06em; text-transform: uppercase;">Total Letters</p>
-                                <h3 class="fw-bold text-dark mb-0">{{ $totalLetters }}</h3>
-                            </div>
-                            <div class="p-2 rounded-3" style="background: rgba(99,102,241,.12);">
-                                <i class="fa-solid fa-envelope-open-text fa-lg" style="color:#6366f1;"></i>
-                            </div>
-                        </div>
-                        <small class="text-muted mt-2 d-block" style="font-size:0.72rem;">Complete Registry History</small>
-                    </div>
-                </div>
+                <x-kpi-card
+                    title="Total Letters"
+                    :value="$totalLetters"
+                    subtitle="Complete Registry History"
+                    icon="fa-solid fa-envelope-open-text"
+                    tone="purple"
+                />
             </a>
         </div>
 
         {{-- Incoming Letters --}}
-        <div class="col-6 col-md-4 col-xl-2">
+        <div class="col-12 col-sm-6 col-xl-2">
             <a href="{{ route('letters.index', ['tab' => 'all', 'type' => 'incoming']) }}" class="text-decoration-none">
-                <div class="card border-0 shadow-sm rounded-3 h-100" style="border-left: 4px solid #0ea5e9 !important;">
-                    <div class="card-body p-3">
-                        <div class="d-flex justify-content-between align-items-start">
-                            <div>
-                                <p class="text-muted fw-semibold mb-1" style="font-size: 0.7rem; letter-spacing: .06em; text-transform: uppercase;">Incoming (ገቢ)</p>
-                                <h3 class="fw-bold text-info mb-0">{{ $incomingLettersCount }}</h3>
-                            </div>
-                            <div class="p-2 rounded-3" style="background: rgba(14,165,233,.12);">
-                                <i class="fa-solid fa-arrow-down-left fa-lg text-info"></i>
-                            </div>
-                        </div>
-                        <small class="text-muted mt-2 d-block" style="font-size:0.72rem;">Received Correspondence</small>
-                    </div>
-                </div>
+                <x-kpi-card
+                    title="Incoming (ገቢ)"
+                    :value="$incomingLettersCount"
+                    subtitle="Received Correspondence"
+                    icon="fa-solid fa-arrow-down-left"
+                    tone="info"
+                />
             </a>
         </div>
 
         {{-- Outgoing Letters --}}
-        <div class="col-6 col-md-4 col-xl-2">
+        <div class="col-12 col-sm-6 col-xl-2">
             <a href="{{ route('letters.index', ['tab' => 'all', 'type' => 'outgoing']) }}" class="text-decoration-none">
-                <div class="card border-0 shadow-sm rounded-3 h-100" style="border-left: 4px solid #f59e0b !important;">
-                    <div class="card-body p-3">
-                        <div class="d-flex justify-content-between align-items-start">
-                            <div>
-                                <p class="text-muted fw-semibold mb-1" style="font-size: 0.7rem; letter-spacing: .06em; text-transform: uppercase;">Outgoing (ወጪ)</p>
-                                <h3 class="fw-bold text-warning mb-0">{{ $outgoingLettersCount }}</h3>
-                            </div>
-                            <div class="p-2 rounded-3" style="background: rgba(245,158,11,.12);">
-                                <i class="fa-solid fa-arrow-up-right fa-lg text-warning"></i>
-                            </div>
-                        </div>
-                        <small class="text-muted mt-2 d-block" style="font-size:0.72rem;">Dispatches &amp; Sent Letters</small>
-                    </div>
-                </div>
+                <x-kpi-card
+                    title="Outgoing (ወጪ)"
+                    :value="$outgoingLettersCount"
+                    subtitle="Dispatches & Sent Letters"
+                    icon="fa-solid fa-arrow-up-right"
+                    tone="warning"
+                />
             </a>
         </div>
 
         {{-- Pending / Active Letters --}}
-        <div class="col-6 col-md-4 col-xl-2">
+        <div class="col-12 col-sm-6 col-xl-2">
             <a href="{{ route('letters.index', ['tab' => 'all', 'status' => 'pending']) }}" class="text-decoration-none">
-                <div class="card border-0 shadow-sm rounded-3 h-100" style="border-left: 4px solid #ef4444 !important;">
-                    <div class="card-body p-3">
-                        <div class="d-flex justify-content-between align-items-start">
-                            <div>
-                                <p class="text-muted fw-semibold mb-1" style="font-size: 0.7rem; letter-spacing: .06em; text-transform: uppercase;">Pending Letters</p>
-                                <h3 class="fw-bold text-danger mb-0">{{ $pendingLetters }}</h3>
-                            </div>
-                            <div class="p-2 rounded-3" style="background: rgba(239,68,68,.12);">
-                                <i class="fa-solid fa-clock-rotate-left fa-lg text-danger"></i>
-                            </div>
-                        </div>
-                        <small class="text-muted mt-2 d-block" style="font-size:0.72rem;">Awaiting Decision / Action</small>
-                    </div>
-                </div>
+                <x-kpi-card
+                    title="Pending Letters"
+                    :value="$pendingLetters"
+                    subtitle="Awaiting Action"
+                    icon="fa-solid fa-clock-rotate-left"
+                    tone="danger"
+                />
             </a>
         </div>
 
         {{-- Office Supply Requests --}}
-        <div class="col-6 col-md-4 col-xl-2">
+        <div class="col-12 col-sm-6 col-xl-2">
             <a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.index') ? route('office-requests.index') : url('/office-requests') }}" class="text-decoration-none">
-                <div class="card border-0 shadow-sm rounded-3 h-100" style="border-left: 4px solid #f97316 !important;">
-                    <div class="card-body p-3">
-                        <div class="d-flex justify-content-between align-items-start">
-                            <div>
-                                <p class="text-muted fw-semibold mb-1" style="font-size: 0.7rem; letter-spacing: .06em; text-transform: uppercase;">Office Supplies</p>
-                                <h3 class="fw-bold text-dark mb-0">{{ $myOfficeRequestsCount ?? 0 }}</h3>
-                            </div>
-                            <div class="p-2 rounded-3" style="background: rgba(249,115,22,.12);">
-                                <i class="fa-solid fa-boxes-stacked fa-lg" style="color:#f97316;"></i>
-                            </div>
-                        </div>
-                        @if(($pendingOfficeRequestsCount ?? 0) > 0)
-                            <small class="text-warning fw-semibold mt-2 d-block" style="font-size:0.72rem;">
-                                <i class="fa-solid fa-hourglass-half me-1"></i>{{ $pendingOfficeRequestsCount }} Pending Review
-                            </small>
-                        @else
-                            <small class="text-muted mt-2 d-block" style="font-size:0.72rem;">Supply Requisitions</small>
-                        @endif
-                    </div>
-                </div>
+                <x-kpi-card
+                    title="Office Supplies"
+                    :value="$myOfficeRequestsCount ?? 0"
+                    :subtitle="(($pendingOfficeRequestsCount ?? 0) > 0) ? ($pendingOfficeRequestsCount . ' Pending Review') : 'Supply Requisitions'"
+                    icon="fa-solid fa-boxes-stacked"
+                    tone="primary"
+                />
             </a>
         </div>
 
         {{-- Employee Official Letters --}}
-        <div class="col-6 col-md-4 col-xl-2">
+        <div class="col-12 col-sm-6 col-xl-2">
             <a href="{{ route('employee-letters.index') }}" class="text-decoration-none">
-                <div class="card border-0 shadow-sm rounded-3 h-100" style="border-left: 4px solid #10b981 !important;">
-                    <div class="card-body p-3">
-                        <div class="d-flex justify-content-between align-items-start">
-                            <div>
-                                <p class="text-muted fw-semibold mb-1" style="font-size: 0.7rem; letter-spacing: .06em; text-transform: uppercase;">Employee Letters</p>
-                                <h3 class="fw-bold text-success mb-0">{{ $employeeLettersCount }}</h3>
-                            </div>
-                            <div class="p-2 rounded-3" style="background: rgba(16,185,129,.12);">
-                                <i class="fa-solid fa-file-signature fa-lg text-success"></i>
-                            </div>
-                        </div>
-                        <small class="text-muted mt-2 d-block" style="font-size:0.72rem;">Warnings, Commendations</small>
-                    </div>
-                </div>
+                <x-kpi-card
+                    title="Employee Letters"
+                    :value="$employeeLettersCount"
+                    subtitle="Warnings & Notices"
+                    icon="fa-solid fa-file-signature"
+                    tone="success"
+                />
             </a>
         </div>
     </div>
@@ -170,28 +117,28 @@
                     <i class="fa-solid fa-bolt text-warning me-1"></i>Quick Actions:
                 </span>
                 <div class="d-flex flex-wrap gap-2">
-                    <a href="{{ route('purchase-requests.create') }}" class="btn btn-success btn-sm px-3">
-                        <i class="fa-solid fa-cart-plus me-1"></i> Create Purchase Request (HO)
+                    <a href="{{ route('purchase-requests.create') }}" class="btn btn-success btn-sm px-3" style="min-height: 38px; display: inline-flex; align-items: center;">
+                        <i class="fa-solid fa-cart-plus me-1"></i> Create PR (HO)
                     </a>
-                    <a href="{{ route('procurement.my-queue') }}" class="btn btn-outline-primary btn-sm px-3">
+                    <a href="{{ route('procurement.my-queue') }}" class="btn btn-outline-primary btn-sm px-3" style="min-height: 38px; display: inline-flex; align-items: center;">
                         <i class="fa-solid fa-list-check me-1"></i> My PRs ({{ $myPurchaseRequestsCount ?? 0 }})
                     </a>
-                    <a href="{{ route('letters.create') }}" class="btn btn-primary btn-sm px-3">
-                        <i class="fa-solid fa-plus me-1"></i> Register New Letter
+                    <a href="{{ route('letters.create') }}" class="btn btn-primary btn-sm px-3" style="min-height: 38px; display: inline-flex; align-items: center;">
+                        <i class="fa-solid fa-plus me-1"></i> Register Letter
                     </a>
-                    <a href="{{ route('letters.index', ['tab' => 'all', 'type' => 'incoming']) }}" class="btn btn-outline-info btn-sm px-3">
+                    <a href="{{ route('letters.index', ['tab' => 'all', 'type' => 'incoming']) }}" class="btn btn-outline-info btn-sm px-3" style="min-height: 38px; display: inline-flex; align-items: center;">
                         <i class="fa-solid fa-arrow-down-left me-1"></i> Incoming Registry
                     </a>
-                    <a href="{{ route('letters.index', ['tab' => 'all', 'type' => 'outgoing']) }}" class="btn btn-outline-warning text-dark btn-sm px-3">
+                    <a href="{{ route('letters.index', ['tab' => 'all', 'type' => 'outgoing']) }}" class="btn btn-outline-warning text-dark btn-sm px-3" style="min-height: 38px; display: inline-flex; align-items: center;">
                         <i class="fa-solid fa-arrow-up-right me-1"></i> Outgoing Registry
                     </a>
-                    <a href="{{ route('employee-letters.create') }}" class="btn btn-outline-success btn-sm px-3">
-                        <i class="fa-solid fa-file-pen me-1"></i> Issue Official Employee Letter
+                    <a href="{{ route('employee-letters.create') }}" class="btn btn-outline-success btn-sm px-3" style="min-height: 38px; display: inline-flex; align-items: center;">
+                        <i class="fa-solid fa-file-pen me-1"></i> Employee Letter
                     </a>
-                    <a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.create') ? route('office-requests.create') : url('/office-requests/create') }}" class="btn btn-outline-secondary btn-sm px-3">
+                    <a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.create') ? route('office-requests.create') : url('/office-requests/create') }}" class="btn btn-outline-secondary btn-sm px-3" style="min-height: 38px; display: inline-flex; align-items: center;">
                         <i class="fa-solid fa-boxes-stacked me-1"></i> Request Supplies
                     </a>
-                    <a href="{{ route('expense-requests.index') }}" class="btn btn-outline-dark btn-sm px-3">
+                    <a href="{{ route('expense-requests.index') }}" class="btn btn-outline-dark btn-sm px-3" style="min-height: 38px; display: inline-flex; align-items: center;">
                         <i class="fa-solid fa-hand-holding-dollar me-1"></i> Ask Money
                     </a>
                 </div>
@@ -204,7 +151,7 @@
 
         {{-- Left: Comprehensive Letter History Tabs --}}
         <div class="col-lg-8">
-            <div class="card border-0 shadow-sm rounded-3 mb-4">
+            <div class="card border-0 shadow-sm rounded-3 mb-4 bg-white">
                 <div class="card-header bg-white border-bottom py-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
                     <div>
                         <h6 class="mb-0 fw-bold text-dark">
@@ -213,7 +160,7 @@
                         <small class="text-muted">Browse incoming, outgoing, and employee letters with status tracking</small>
                     </div>
                     <div class="d-flex gap-2">
-                        <a href="{{ route('letters.index', ['tab' => 'all']) }}" class="btn btn-sm btn-primary">
+                        <a href="{{ route('letters.index', ['tab' => 'all']) }}" class="btn btn-sm btn-primary rounded-pill px-3" style="min-height: 34px; display: inline-flex; align-items: center;">
                             <i class="fa-solid fa-list me-1"></i> Open Full Registry
                         </a>
                     </div>
@@ -254,7 +201,7 @@
 
                     {{-- ── 1. All Letters History ── --}}
                     <div class="tab-pane fade show active" id="allLettersPane" role="tabpanel">
-                        <div class="table-responsive">
+                        <div class="table-responsive wc-table-mobile-cards">
                             <table class="table table-hover align-middle mb-0" style="font-size: 0.88rem;">
                                 <thead class="table-light">
                                     <tr>
@@ -270,7 +217,7 @@
                                 <tbody>
                                     @forelse($recentLetters as $letter)
                                     <tr>
-                                        <td class="ps-3 fw-bold">
+                                        <td data-label="Letter #" class="ps-3 fw-bold">
                                             <a href="{{ route('letters.show', $letter->id) }}" class="text-decoration-none text-primary font-monospace">
                                                 {{ $letter->letter_number ?: '#'.$letter->id }}
                                             </a>
@@ -278,7 +225,7 @@
                                                 <span class="badge bg-danger ms-1" style="font-size:0.6rem;"><i class="fa-solid fa-fire me-1"></i>URGENT</span>
                                             @endif
                                         </td>
-                                        <td>
+                                        <td data-label="Type">
                                             @if($letter->type === 'incoming')
                                                 <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 px-2 py-1">
                                                     <i class="fa-solid fa-arrow-down-left me-1"></i> Incoming
@@ -289,7 +236,7 @@
                                                 </span>
                                             @endif
                                         </td>
-                                        <td>
+                                        <td data-label="Subject">
                                             <div class="fw-semibold text-dark text-truncate" style="max-width: 220px;" title="{{ $letter->subject }}">
                                                 {{ $letter->subject }}
                                             </div>
@@ -299,10 +246,10 @@
                                                 </small>
                                             @endif
                                         </td>
-                                        <td>
+                                        <td data-label="Date">
                                             <small class="text-muted">{{ optional($letter->date)->format('d M Y') ?? '-' }}</small>
                                         </td>
-                                        <td>
+                                        <td data-label="Party">
                                             <small class="text-dark fw-semibold d-block text-truncate" style="max-width: 180px;">
                                                 {{ $letter->type === 'incoming' ? ($letter->sender ?: 'External Sender') : ($letter->recipient_organization ?: 'Recipient') }}
                                             </small>
@@ -312,22 +259,11 @@
                                                 </span>
                                             @endif
                                         </td>
-                                        <td class="text-center">
-                                            @php
-                                                $statusColor = match($letter->status ?? '') {
-                                                    'closed'     => 'success',
-                                                    'pending'    => 'warning',
-                                                    'redirected' => 'info',
-                                                    'viewed'     => 'primary',
-                                                    default      => 'secondary',
-                                                };
-                                            @endphp
-                                            <span class="badge bg-{{ $statusColor }} text-{{ in_array($letter->status, ['pending', 'redirected']) ? 'dark' : '' }} px-2 py-1">
-                                                {{ ucfirst($letter->status ?? 'pending') }}
-                                            </span>
+                                        <td data-label="Status" class="text-center">
+                                            <x-status-badge :status="$letter->status ?? 'pending'" />
                                         </td>
-                                        <td class="text-end pe-3">
-                                            <a href="{{ route('letters.show', $letter->id) }}" class="btn btn-sm btn-outline-primary py-1 px-2" title="View Full Details">
+                                        <td data-label="Action" class="text-end pe-3">
+                                            <a href="{{ route('letters.show', $letter->id) }}" class="btn btn-sm btn-outline-primary rounded-pill px-2" style="min-width: 32px; min-height: 32px; display: inline-flex; align-items: center; justify-content: center;" title="View Full Details">
                                                 <i class="fa-solid fa-eye"></i>
                                             </a>
                                         </td>
@@ -348,7 +284,7 @@
 
                     {{-- ── 2. Incoming Letters History ── --}}
                     <div class="tab-pane fade" id="incomingPane" role="tabpanel">
-                        <div class="table-responsive">
+                        <div class="table-responsive wc-table-mobile-cards">
                             <table class="table table-hover align-middle mb-0" style="font-size: 0.88rem;">
                                 <thead class="table-light">
                                     <tr>
@@ -364,7 +300,7 @@
                                 <tbody>
                                     @forelse($incomingLetters as $letter)
                                     <tr>
-                                        <td class="ps-3 fw-bold">
+                                        <td data-label="Letter #" class="ps-3 fw-bold">
                                             <a href="{{ route('letters.show', $letter->id) }}" class="text-decoration-none text-info font-monospace">
                                                 {{ $letter->letter_number ?: '#'.$letter->id }}
                                             </a>
@@ -372,22 +308,22 @@
                                                 <span class="badge bg-danger ms-1" style="font-size:0.6rem;"><i class="fa-solid fa-fire me-1"></i>URGENT</span>
                                             @endif
                                         </td>
-                                        <td>
+                                        <td data-label="Subject">
                                             <div class="fw-semibold text-dark text-truncate" style="max-width: 240px;">{{ $letter->subject }}</div>
                                             @if($letter->specification)
                                                 <small class="text-muted text-truncate d-block" style="max-width: 240px;">{{ Str::limit($letter->specification, 45) }}</small>
                                             @endif
                                         </td>
-                                        <td>
+                                        <td data-label="Sender">
                                             <span class="fw-semibold text-dark">{{ $letter->sender ?: 'External Entity' }}</span>
                                             @if($letter->sender_department)
                                                 <small class="text-muted d-block">{{ $letter->sender_department }}</small>
                                             @endif
                                         </td>
-                                        <td>
+                                        <td data-label="Date">
                                             <small class="text-muted">{{ optional($letter->date)->format('d M Y') ?? '-' }}</small>
                                         </td>
-                                        <td>
+                                        <td data-label="Attachments">
                                             @if($letter->attachments && $letter->attachments->count() > 0)
                                                 <span class="badge bg-light text-muted border">
                                                     <i class="fa-solid fa-paperclip text-info me-1"></i>{{ $letter->attachments->count() }} file(s)
@@ -396,13 +332,11 @@
                                                 <small class="text-muted">—</small>
                                             @endif
                                         </td>
-                                        <td class="text-center">
-                                            <span class="badge bg-{{ $letter->status === 'closed' ? 'success' : 'warning' }} text-{{ $letter->status === 'closed' ? 'white' : 'dark' }} px-2 py-1">
-                                                {{ ucfirst($letter->status ?? 'pending') }}
-                                            </span>
+                                        <td data-label="Status" class="text-center">
+                                            <x-status-badge :status="$letter->status ?? 'pending'" />
                                         </td>
-                                        <td class="text-end pe-3">
-                                            <a href="{{ route('letters.show', $letter->id) }}" class="btn btn-sm btn-outline-info py-1 px-2">
+                                        <td data-label="Action" class="text-end pe-3">
+                                            <a href="{{ route('letters.show', $letter->id) }}" class="btn btn-sm btn-outline-info rounded-pill px-2" style="min-width: 32px; min-height: 32px; display: inline-flex; align-items: center; justify-content: center;">
                                                 <i class="fa-solid fa-eye"></i>
                                             </a>
                                         </td>
@@ -423,7 +357,7 @@
 
                     {{-- ── 3. Outgoing Letters History ── --}}
                     <div class="tab-pane fade" id="outgoingPane" role="tabpanel">
-                        <div class="table-responsive">
+                        <div class="table-responsive wc-table-mobile-cards">
                             <table class="table table-hover align-middle mb-0" style="font-size: 0.88rem;">
                                 <thead class="table-light">
                                     <tr>
@@ -439,7 +373,7 @@
                                 <tbody>
                                     @forelse($outgoingLetters as $letter)
                                     <tr>
-                                        <td class="ps-3 fw-bold">
+                                        <td data-label="Letter #" class="ps-3 fw-bold">
                                             <a href="{{ route('letters.show', $letter->id) }}" class="text-decoration-none text-warning font-monospace">
                                                 {{ $letter->letter_number ?: '#'.$letter->id }}
                                             </a>
@@ -447,28 +381,26 @@
                                                 <span class="badge bg-danger ms-1" style="font-size:0.6rem;"><i class="fa-solid fa-fire me-1"></i>URGENT</span>
                                             @endif
                                         </td>
-                                        <td>
+                                        <td data-label="Subject">
                                             <div class="fw-semibold text-dark text-truncate" style="max-width: 240px;">{{ $letter->subject }}</div>
                                             @if($letter->specification)
                                                 <small class="text-muted text-truncate d-block" style="max-width: 240px;">{{ Str::limit($letter->specification, 45) }}</small>
                                             @endif
                                         </td>
-                                        <td>
+                                        <td data-label="Recipient">
                                             <span class="fw-semibold text-dark">{{ $letter->recipient_organization ?: 'Recipient Organization' }}</span>
                                         </td>
-                                        <td>
+                                        <td data-label="Date">
                                             <small class="text-muted">{{ optional($letter->date)->format('d M Y') ?? '-' }}</small>
                                         </td>
-                                        <td>
+                                        <td data-label="Registered By">
                                             <small class="text-muted">{{ $letter->creator?->name ?? 'Secretary' }}</small>
                                         </td>
-                                        <td class="text-center">
-                                            <span class="badge bg-{{ $letter->status === 'closed' ? 'success' : 'warning' }} text-{{ $letter->status === 'closed' ? 'white' : 'dark' }} px-2 py-1">
-                                                {{ ucfirst($letter->status ?? 'pending') }}
-                                            </span>
+                                        <td data-label="Status" class="text-center">
+                                            <x-status-badge :status="$letter->status ?? 'pending'" />
                                         </td>
-                                        <td class="text-end pe-3">
-                                            <a href="{{ route('letters.show', $letter->id) }}" class="btn btn-sm btn-outline-warning text-dark py-1 px-2">
+                                        <td data-label="Action" class="text-end pe-3">
+                                            <a href="{{ route('letters.show', $letter->id) }}" class="btn btn-sm btn-outline-warning text-dark rounded-pill px-2" style="min-width: 32px; min-height: 32px; display: inline-flex; align-items: center; justify-content: center;">
                                                 <i class="fa-solid fa-eye"></i>
                                             </a>
                                         </td>
@@ -489,7 +421,7 @@
 
                     {{-- ── 4. Employee Official Letters History ── --}}
                     <div class="tab-pane fade" id="employeeLettersPane" role="tabpanel">
-                        <div class="table-responsive">
+                        <div class="table-responsive wc-table-mobile-cards">
                             <table class="table table-hover align-middle mb-0" style="font-size: 0.88rem;">
                                 <thead class="table-light">
                                     <tr>
@@ -505,33 +437,31 @@
                                 <tbody>
                                     @forelse($recentEmployeeLetters as $empLtr)
                                     <tr>
-                                        <td class="ps-3 fw-bold">
+                                        <td data-label="Ref #" class="ps-3 fw-bold">
                                             <a href="{{ route('employee-letters.show', $empLtr->id) }}" class="text-decoration-none text-primary font-monospace">
                                                 {{ $empLtr->reference_number ?: 'LTR-#'.$empLtr->id }}
                                             </a>
                                         </td>
-                                        <td>
+                                        <td data-label="Employee">
                                             <span class="fw-semibold text-dark">{{ $empLtr->employee?->full_name ?? 'N/A' }}</span>
                                             <small class="text-muted font-monospace d-block">{{ $empLtr->employee?->employee_code ?? '' }}</small>
                                         </td>
-                                        <td>
+                                        <td data-label="Type">
                                             <span class="badge {{ $empLtr->badge_class ?? 'bg-secondary' }}">
                                                 <i class="{{ $empLtr->icon ?? 'fa-solid fa-file-lines' }} me-1"></i>{{ $empLtr->type_label }}
                                             </span>
                                         </td>
-                                        <td>
+                                        <td data-label="Subject">
                                             <span class="text-dark fw-semibold text-truncate d-block" style="max-width: 200px;">{{ $empLtr->title }}</span>
                                         </td>
-                                        <td>
+                                        <td data-label="Date">
                                             <small class="text-muted">{{ optional($empLtr->issued_date)->format('d M Y') ?? '-' }}</small>
                                         </td>
-                                        <td class="text-center">
-                                            <span class="badge bg-{{ $empLtr->acknowledgement_status === 'acknowledged' ? 'success' : 'secondary' }}">
-                                                {{ ucfirst(str_replace('_', ' ', $empLtr->acknowledgement_status ?? 'acknowledged')) }}
-                                            </span>
+                                        <td data-label="Ack. Status" class="text-center">
+                                            <x-status-badge :status="$empLtr->acknowledgement_status ?? 'acknowledged'" />
                                         </td>
-                                        <td class="text-end pe-3">
-                                            <a href="{{ route('employee-letters.show', $empLtr->id) }}" class="btn btn-sm btn-outline-secondary py-1 px-2">
+                                        <td data-label="Action" class="text-end pe-3">
+                                            <a href="{{ route('employee-letters.show', $empLtr->id) }}" class="btn btn-sm btn-outline-secondary rounded-pill px-2" style="min-width: 32px; min-height: 32px; display: inline-flex; align-items: center; justify-content: center;">
                                                 <i class="fa-solid fa-eye"></i>
                                             </a>
                                         </td>
@@ -554,19 +484,19 @@
             </div>
 
             {{-- My Office Supply Requests Table --}}
-            <div class="card border-0 shadow-sm rounded-3">
-                <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
+            <div class="card border-0 shadow-sm rounded-3 bg-white">
+                <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <h6 class="mb-0 fw-bold text-dark">
                         <i class="fa-solid fa-boxes-stacked text-warning me-2"></i>My Office Supply Requests (የቢሮ እቃዎች ጥያቄዎች)
                     </h6>
                     <div class="d-flex gap-2">
-                        <a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.create') ? route('office-requests.create') : url('/office-requests/create') }}" class="btn btn-sm btn-primary">
+                        <a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.create') ? route('office-requests.create') : url('/office-requests/create') }}" class="btn btn-sm btn-primary rounded-pill px-3" style="min-height: 34px; display: inline-flex; align-items: center;">
                             <i class="fa-solid fa-plus me-1"></i> New Request
                         </a>
-                        <a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.index') ? route('office-requests.index') : url('/office-requests') }}" class="btn btn-sm btn-outline-secondary">View All</a>
+                        <a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.index') ? route('office-requests.index') : url('/office-requests') }}" class="btn btn-sm btn-outline-secondary rounded-pill px-3" style="min-height: 34px; display: inline-flex; align-items: center;">View All</a>
                     </div>
                 </div>
-                <div class="table-responsive">
+                <div class="table-responsive wc-table-mobile-cards">
                     <table class="table table-hover align-middle mb-0" style="font-size: 0.88rem;">
                         <thead class="table-light">
                             <tr>
@@ -581,31 +511,23 @@
                         <tbody>
                             @forelse($myOfficeRequests as $offReq)
                             <tr>
-                                <td class="ps-3">
+                                <td data-label="PR #" class="ps-3">
                                     <span class="fw-bold text-primary font-monospace" style="font-size:0.8rem;">{{ $offReq->pr_no }}</span>
                                 </td>
-                                <td>
+                                <td data-label="Purpose">
                                     <span class="fw-semibold text-dark">{{ $offReq->office_purpose ?: 'Office Supplies' }}</span>
                                 </td>
-                                <td>
+                                <td data-label="Items">
                                     <small class="text-muted">{{ $offReq->items->count() }} items</small>
                                 </td>
-                                <td class="text-center">
-                                    @if($offReq->status === 'pending_hr_approval')
-                                        <span class="badge bg-warning text-dark">Pending HR/Coordinator</span>
-                                    @elseif($offReq->status === 'approved')
-                                        <span class="badge bg-success">Approved</span>
-                                    @elseif($offReq->status === 'rejected')
-                                        <span class="badge bg-danger">Rejected</span>
-                                    @else
-                                        <span class="badge bg-info text-dark">{{ $offReq->status_label }}</span>
-                                    @endif
+                                <td data-label="Status" class="text-center">
+                                    <x-status-badge :status="$offReq->status_label ?? $offReq->status" />
                                 </td>
-                                <td class="text-center">
+                                <td data-label="Date" class="text-center">
                                     <small class="text-muted">{{ optional($offReq->created_at)->format('d M Y') }}</small>
                                 </td>
-                                <td class="text-end pe-3">
-                                    <a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.show') ? route('office-requests.show', $offReq) : url('/office-requests/' . $offReq->id) }}" class="btn btn-sm btn-outline-secondary py-1 px-2">
+                                <td data-label="Action" class="text-end pe-3">
+                                    <a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.show') ? route('office-requests.show', $offReq) : url('/office-requests/' . $offReq->id) }}" class="btn btn-sm btn-outline-secondary rounded-pill px-2" style="min-width: 32px; min-height: 32px; display: inline-flex; align-items: center; justify-content: center;">
                                         <i class="fa-solid fa-eye"></i>
                                     </a>
                                 </td>
@@ -629,7 +551,7 @@
         <div class="col-lg-4">
 
             {{-- Correspondence Status Summary Card --}}
-            <div class="card border-0 shadow-sm rounded-3 mb-4">
+            <div class="card border-0 shadow-sm rounded-3 mb-4 bg-white">
                 <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
                     <h6 class="mb-0 fw-bold text-dark">
                         <i class="fa-solid fa-folder-tree text-info me-2"></i>Letters &amp; Correspondence Navigation
@@ -637,23 +559,23 @@
                 </div>
                 <div class="card-body p-0">
                     <div class="list-group list-group-flush">
-                        <a href="{{ route('letters.index', ['tab' => 'all']) }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center px-3 py-2">
+                        <a href="{{ route('letters.index', ['tab' => 'all']) }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center px-3 py-3">
                             <span><i class="fa-solid fa-clock-rotate-left text-primary me-2"></i><strong>All Letter History</strong></span>
                             <span class="badge bg-primary rounded-pill">{{ $totalLetters }}</span>
                         </a>
-                        <a href="{{ route('letters.index', ['tab' => 'all', 'type' => 'incoming']) }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center px-3 py-2">
+                        <a href="{{ route('letters.index', ['tab' => 'all', 'type' => 'incoming']) }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center px-3 py-3">
                             <span><i class="fa-solid fa-arrow-down-left text-info me-2"></i><strong>Incoming Letters (ገቢ)</strong></span>
                             <span class="badge bg-info text-dark rounded-pill">{{ $incomingLettersCount }}</span>
                         </a>
-                        <a href="{{ route('letters.index', ['tab' => 'all', 'type' => 'outgoing']) }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center px-3 py-2">
+                        <a href="{{ route('letters.index', ['tab' => 'all', 'type' => 'outgoing']) }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center px-3 py-3">
                             <span><i class="fa-solid fa-arrow-up-right text-warning me-2"></i><strong>Outgoing Letters (ወጪ)</strong></span>
                             <span class="badge bg-warning text-dark rounded-pill">{{ $outgoingLettersCount }}</span>
                         </a>
-                        <a href="{{ route('employee-letters.index') }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center px-3 py-2">
+                        <a href="{{ route('employee-letters.index') }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center px-3 py-3">
                             <span><i class="fa-solid fa-file-signature text-success me-2"></i><strong>Employee Official Letters</strong></span>
                             <span class="badge bg-success rounded-pill">{{ $employeeLettersCount }}</span>
                         </a>
-                        <a href="{{ route('letters.create') }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center px-3 py-2 text-primary fw-semibold">
+                        <a href="{{ route('letters.create') }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center px-3 py-3 text-primary fw-semibold">
                             <span><i class="fa-solid fa-plus-circle text-primary me-2"></i>Register New Letter</span>
                             <i class="fa-solid fa-chevron-right text-muted small"></i>
                         </a>
@@ -662,16 +584,16 @@
             </div>
 
             {{-- Head Office Purchase Requests Card --}}
-            <div class="card border-0 shadow-sm rounded-3 mb-4">
+            <div class="card border-0 shadow-sm rounded-3 mb-4 bg-white">
                 <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
                     <h6 class="mb-0 fw-bold text-dark">
                         <i class="fa-solid fa-cart-shopping text-primary me-2"></i>Head Office Purchase Requests
                     </h6>
                     <div class="d-flex gap-1">
-                        <a href="{{ route('purchase-requests.create') }}" class="btn btn-sm btn-outline-success py-1 px-2" title="New Purchase Request">
+                        <a href="{{ route('purchase-requests.create') }}" class="btn btn-sm btn-outline-success rounded-pill px-2" style="min-height: 30px; display: inline-flex; align-items: center;" title="New Purchase Request">
                             <i class="fa-solid fa-plus me-1"></i> New
                         </a>
-                        <a href="{{ route('procurement.my-queue') }}" class="btn btn-sm btn-outline-primary py-1 px-2" title="View All in My Queue">
+                        <a href="{{ route('procurement.my-queue') }}" class="btn btn-sm btn-outline-primary rounded-pill px-2" style="min-height: 30px; display: inline-flex; align-items: center;" title="View All in My Queue">
                             <i class="fa-solid fa-list me-1"></i> All
                         </a>
                     </div>
@@ -679,15 +601,13 @@
                 <div class="card-body p-0">
                     <div class="list-group list-group-flush">
                         @forelse($recentPurchaseRequests ?? [] as $pr)
-                            <a href="{{ route('purchase-requests.show', $pr->id) }}" class="list-group-item list-group-item-action px-3 py-2">
+                            <a href="{{ route('purchase-requests.show', $pr->id) }}" class="list-group-item list-group-item-action px-3 py-3">
                                 <div class="d-flex justify-content-between align-items-center">
                                     <div>
                                         <div class="fw-bold text-primary font-monospace" style="font-size:0.82rem;">{{ $pr->pr_no }}</div>
                                         <small class="text-muted">{{ $pr->created_at->format('M d, Y') }} &bull; {{ $pr->items->count() }} item(s)</small>
                                     </div>
-                                    <span class="badge bg-light text-dark border" style="font-size:0.7rem;">
-                                        {{ ucfirst(str_replace('_', ' ', $pr->status)) }}
-                                    </span>
+                                    <x-status-badge :status="$pr->status" />
                                 </div>
                             </a>
                         @empty
@@ -701,29 +621,23 @@
             </div>
 
             {{-- My Expense Requests --}}
-            <div class="card border-0 shadow-sm rounded-3">
+            <div class="card border-0 shadow-sm rounded-3 bg-white">
                 <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
                     <h6 class="mb-0 fw-bold text-dark">
                         <i class="fa-solid fa-hand-holding-dollar text-success me-2"></i>My Ask Money (Petty Cash)
                     </h6>
-                    <a href="{{ route('expense-requests.index') }}" class="btn btn-sm btn-outline-success">View All</a>
+                    <a href="{{ route('expense-requests.index') }}" class="btn btn-sm btn-outline-success rounded-pill px-3" style="min-height: 30px; display: inline-flex; align-items: center;">View All</a>
                 </div>
                 <div class="card-body p-0">
                     <ul class="list-group list-group-flush">
                         @forelse($myExpenseRequests as $exp)
-                        <li class="list-group-item px-3 py-2">
+                        <li class="list-group-item px-3 py-3">
                             <div class="d-flex justify-content-between align-items-start">
                                 <div>
-                                    <span class="fw-semibold d-block" style="font-size:0.85rem;">{{ $exp->purpose ?? $exp->title ?? 'Request #'.$exp->id }}</span>
-                                    <small class="text-muted">Br {{ number_format($exp->amount ?? 0, 2) }}</small>
+                                    <span class="fw-semibold d-block text-dark" style="font-size:0.85rem;">{{ $exp->purpose ?? $exp->title ?? 'Request #'.$exp->id }}</span>
+                                    <small class="text-muted font-tabular">Br {{ number_format($exp->amount ?? 0, 2) }}</small>
                                 </div>
-                                @php
-                                    $expColor = str_contains(strtolower($exp->status ?? ''), 'approved') ? 'success'
-                                              : (str_contains(strtolower($exp->status ?? ''), 'reject') ? 'danger' : 'warning');
-                                @endphp
-                                <span class="badge bg-{{ $expColor }} text-{{ $expColor === 'warning' ? 'dark' : '' }}" style="font-size:0.7rem;">
-                                    {{ $exp->status ?? 'Pending' }}
-                                </span>
+                                <x-status-badge :status="$exp->status ?? 'Pending'" />
                             </div>
                         </li>
                         @empty

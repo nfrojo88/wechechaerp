@@ -1,0 +1,483 @@
+/**
+ * Wechecha Construction ERP — Master Design Tokens & Responsive Utilities
+ * Minimalist, mobile-first design system tailored for phones (360-430px)
+ * and 17-inch laptops (1366px, 1600px, 1920px).
+ */
+
+:root {
+  /* ── 1. Color Palette (Neutral + One Primary + Semantic Only) ── */
+  --wc-bg: #F8FAFC;                     /* Slate 50: clean light gray background */
+  --wc-surface: #FFFFFF;                /* White cards & panels */
+  --wc-surface-subtle: #F1F5F9;         /* Slate 100: header row, subtle fills */
+  --wc-surface-hover: #F8FAFC;          /* Hover row color */
+  
+  /* Text Scale */
+  --wc-text-main: #0F172A;              /* Slate 900: high contrast readability */
+  --wc-text-muted: #64748B;             /* Slate 500: secondary metadata */
+  --wc-text-subtle: #94A3B8;            /* Slate 400: placeholders, disabled */
+  --wc-border: #E2E8F0;                 /* Slate 200: thin 1px crisp borders */
+  --wc-border-strong: #CBD5E1;          /* Slate 300: active input borders */
+
+  /* One Primary Brand Color (Deep Navy Blue) */
+  --wc-primary: #0F2944;                /* Company Master Brand Blue */
+  --wc-primary-light: #1E40AF;          /* Hover/Interactive */
+  --wc-primary-bg: #EFF6FF;             /* 10% tint for active chips/badges */
+
+  /* Semantic Colors (Meaning Only) */
+  --wc-success: #10B981;                /* Emerald 500: approved / ok */
+  --wc-success-bg: #ECFDF5;
+  --wc-success-text: #065F46;
+
+  --wc-warning: #F59E0B;                /* Amber 500: pending / warning */
+  --wc-warning-bg: #FFFBEB;
+  --wc-warning-text: #92400E;
+
+  --wc-danger: #EF4444;                 /* Red 500: rejected / critical */
+  --wc-danger-bg: #FEF2F2;
+  --wc-danger-text: #991B1B;
+
+  --wc-info: #0284C7;                   /* Sky 600: informational */
+  --wc-info-bg: #F0F9FF;
+  --wc-info-text: #075985;
+
+  /* ── 2. Typography ── */
+  --wc-font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --wc-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  /* Type Scale */
+  --wc-text-xs: 0.75rem;    /* 12px */
+  --wc-text-sm: 0.875rem;   /* 14px - desktop body */
+  --wc-text-base: 1rem;     /* 16px - mobile body / inputs (prevents iOS zoom) */
+  --wc-text-lg: 1.25rem;    /* 20px - section headers */
+  --wc-text-xl: 1.5rem;     /* 24px - page titles & key KPI metrics */
+
+  /* ── 3. Spacing Grid (8px baseline) ── */
+  --wc-space-1: 4px;
+  --wc-space-2: 8px;
+  --wc-space-3: 12px;
+  --wc-space-4: 16px;
+  --wc-space-5: 20px;
+  --wc-space-6: 24px;
+  --wc-space-8: 32px;
+
+  /* ── 4. Geometry & Radius ── */
+  --wc-radius-sm: 6px;      /* Buttons, inputs, pills */
+  --wc-radius-md: 8px;      /* Cards, table containers */
+  --wc-radius-lg: 12px;     /* Modals, bottom sheets */
+
+  /* ── 5. Shadows (Minimal - no heavy drop shadows) ── */
+  --wc-shadow-subtle: 0 1px 2px 0 rgba(15, 23, 42, 0.05);
+  --wc-shadow-floating: 0 10px 25px -5px rgba(15, 23, 42, 0.1), 0 8px 10px -6px rgba(15, 23, 42, 0.05);
+
+  /* ── 6. Layout Constants ── */
+  --wc-max-content-width: 1440px;
+  --wc-touch-target: 44px;  /* Minimum 44x44 touch target */
+  --wc-bottom-nav-height: 64px;
+  --wc-transition: 180ms ease-out;
+}
+
+/* ── Global Layout Wrapper & Centering ── */
+body {
+  font-family: var(--wc-font-sans);
+  background-color: var(--wc-bg);
+  color: var(--wc-text-main);
+  -webkit-font-smoothing: antialiased;
+}
+
+.wc-container {
+  width: 100%;
+  max-width: var(--wc-max-content-width);
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: var(--wc-space-4);
+  padding-right: var(--wc-space-4);
+}
+
+@media (max-width: 639px) {
+  .wc-container {
+    padding-left: var(--wc-space-3);
+    padding-right: var(--wc-space-3);
+    padding-bottom: calc(var(--wc-bottom-nav-height) + 24px); /* Clearance for bottom nav */
+  }
+  
+  body, p, input, select, textarea {
+    font-size: var(--wc-text-base) !important; /* Prevent auto-zoom on iOS */
+  }
+}
+
+/* ── Touch Targets & Buttons ── */
+.wc-btn-touch {
+  min-height: var(--wc-touch-target);
+  min-width: var(--wc-touch-target);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--wc-space-2);
+  padding: 8px 16px;
+  font-size: var(--wc-text-sm);
+  font-weight: 600;
+  border-radius: var(--wc-radius-sm);
+  transition: all var(--wc-transition);
+  border: 1px solid transparent;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.wc-btn-primary {
+  background-color: var(--wc-primary);
+  color: #FFFFFF;
+}
+.wc-btn-primary:hover {
+  background-color: var(--wc-primary-light);
+  color: #FFFFFF;
+}
+
+.wc-btn-outline {
+  background-color: var(--wc-surface);
+  border-color: var(--wc-border);
+  color: var(--wc-text-main);
+}
+.wc-btn-outline:hover {
+  background-color: var(--wc-surface-subtle);
+  border-color: var(--wc-border-strong);
+  color: var(--wc-text-main);
+}
+
+/* ── Minimal Clean Cards ── */
+.wc-card {
+  background: var(--wc-surface);
+  border: 1px solid var(--wc-border);
+  border-radius: var(--wc-radius-md);
+  box-shadow: var(--wc-shadow-subtle);
+  overflow: hidden;
+}
+
+/* ── Tabular Numbers (Right-aligned accounting) ── */
+.wc-num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+  text-align: right;
+}
+
+/* ── Mobile Bottom Sheet Component ── */
+.wc-bottom-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(15, 23, 42, 0.4);
+  backdrop-filter: blur(2px);
+  z-index: 1050;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--wc-transition);
+}
+
+.wc-bottom-sheet-backdrop.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.wc-bottom-sheet {
+  background: var(--wc-surface);
+  width: 100%;
+  max-width: 540px;
+  max-height: 85vh;
+  border-top-left-radius: var(--wc-radius-lg);
+  border-top-right-radius: var(--wc-radius-lg);
+  box-shadow: var(--wc-shadow-floating);
+  overflow-y: auto;
+  transform: translateY(100%);
+  transition: transform var(--wc-transition);
+  padding: var(--wc-space-4);
+  padding-bottom: calc(var(--wc-space-6) + env(safe-area-inset-bottom, 0px));
+}
+
+.wc-bottom-sheet-backdrop.active .wc-bottom-sheet {
+  transform: translateY(0);
+}
+
+.wc-sheet-handle {
+  width: 36px;
+  height: 4px;
+  background-color: var(--wc-border-strong);
+  border-radius: 9999px;
+  margin: 0 auto var(--wc-space-3);
+}
+
+/* ── Mobile Bottom Bar Navigation ── */
+.wc-mobile-bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: var(--wc-bottom-nav-height);
+  background: var(--wc-surface);
+  border-top: 1px solid var(--wc-border);
+  display: none;
+  align-items: center;
+  justify-content: space-around;
+  z-index: 1040;
+  box-shadow: 0 -1px 3px rgba(15, 23, 42, 0.05);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@media (max-width: 768px) {
+  .wc-mobile-bottom-nav {
+    display: flex;
+  }
+}
+
+.wc-bottom-nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-width: 56px;
+  height: 100%;
+  color: var(--wc-text-muted);
+  text-decoration: none;
+  font-size: 0.7rem;
+  font-weight: 500;
+  transition: color var(--wc-transition);
+}
+
+.wc-bottom-nav-item.active,
+.wc-bottom-nav-item:hover {
+  color: var(--wc-primary);
+  font-weight: 600;
+}
+
+.wc-bottom-nav-item i {
+  font-size: 1.15rem;
+}
+
+/* ── Responsive Table Card Transform for Mobile (<768px) ── */
+@media (max-width: 768px) {
+  .wc-table-mobile-cards thead {
+    display: none;
+  }
+  
+  .wc-table-mobile-cards,
+  .wc-table-mobile-cards tbody,
+  .wc-table-mobile-cards tr,
+  .wc-table-mobile-cards td {
+    display: block;
+    width: 100%;
+  }
+
+  .wc-table-mobile-cards tr {
+    background: var(--wc-surface);
+    border: 1px solid var(--wc-border);
+    border-radius: var(--wc-radius-md);
+    margin-bottom: var(--wc-space-3);
+    padding: var(--wc-space-3);
+    box-shadow: var(--wc-shadow-subtle);
+  }
+
+  .wc-table-mobile-cards td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--wc-space-2) 0;
+    border-bottom: 1px solid var(--wc-surface-subtle);
+    font-size: var(--wc-text-sm);
+  }
+
+  .wc-table-mobile-cards td:last-child {
+    border-bottom: none;
+    padding-top: var(--wc-space-3);
+  }
+
+  .wc-table-mobile-cards td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: var(--wc-text-muted);
+    font-size: var(--wc-text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-right: var(--wc-space-3);
+  }
+}
+
+/* ── Print Utilities for Screen & Print ── */
+.wc-print-only {
+  display: none !important;
+}
+
+.wc-print-signature-block {
+  display: none;
+}
+
+/* ── Clean Universal Print Stylesheet ── */
+@media print {
+  @page {
+    margin: 12mm 15mm 15mm 15mm;
+    size: auto;
+  }
+
+  /* Hide screen chrome & controls */
+  #sidebar,
+  .sidebar,
+  .header,
+  .navbar,
+  .wc-mobile-bottom-nav,
+  .app-footer,
+  .btn,
+  button,
+  .wc-export-menu-container,
+  .wc-filter-bar,
+  .badge-close,
+  .modal-backdrop,
+  .modal,
+  .pagination,
+  .nav-tabs,
+  .nav-pills,
+  .breadcrumb,
+  .wc-no-print {
+    display: none !important;
+  }
+
+  /* Show dedicated print blocks */
+  .wc-print-only {
+    display: block !important;
+  }
+
+  .wc-print-signature-block {
+    display: flex !important;
+    justify-content: space-between;
+    margin-top: 40pt;
+    padding-top: 20pt;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  .wc-signature-col {
+    width: 30%;
+    text-align: left;
+    font-size: 10pt;
+    color: #1e293b;
+  }
+
+  .wc-signature-line {
+    border-bottom: 1.5pt solid #0f172a;
+    margin-top: 45pt;
+    margin-bottom: 6pt;
+  }
+
+  body, .content-wrapper, .wc-container, .main-content {
+    background: #FFFFFF !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+    font-size: 10.5pt !important;
+    line-height: 1.4 !important;
+    color: #0f172a !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Cards & Panels become clean document sections */
+  .wc-card, .card {
+    background: transparent !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 4pt !important;
+    box-shadow: none !important;
+    margin-bottom: 15pt !important;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  .card-header {
+    background: #f8fafc !important;
+    border-bottom: 1px solid #cbd5e1 !important;
+    padding: 8pt 12pt !important;
+  }
+
+  .card-body {
+    padding: 10pt 12pt !important;
+  }
+
+  /* Tables in Print */
+  .table-responsive {
+    overflow: visible !important;
+  }
+
+  .table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+    margin-bottom: 10pt !important;
+  }
+
+  .table th, .table td {
+    border: 1px solid #cbd5e1 !important;
+    padding: 5pt 7pt !important;
+    font-size: 9.5pt !important;
+    background-color: transparent !important;
+  }
+
+  .table thead th {
+    background-color: #f1f5f9 !important;
+    color: #0f172a !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+    font-size: 8.5pt !important;
+    letter-spacing: 0.5px;
+    border-bottom: 2px solid #0f172a !important;
+  }
+
+  .table tfoot td {
+    background-color: #f8fafc !important;
+    font-weight: 700 !important;
+    border-top: 2px solid #0f172a !important;
+  }
+
+  tr {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Avoid awkward breaks */
+  .wc-page-break-before {
+    page-break-before: always;
+    break-before: page;
+  }
+
+  .wc-page-break-after {
+    page-break-after: always;
+    break-after: page;
+  }
+
+  .wc-page-break-inside-avoid {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Print Header styling */
+  .wc-print-header {
+    border-bottom: 2pt solid #0f2944;
+    padding-bottom: 10pt;
+    margin-bottom: 15pt;
+  }
+
+  .wc-print-header .company-title {
+    font-size: 16pt;
+    font-weight: 800;
+    color: #0f2944;
+    letter-spacing: 0.5px;
+  }
+
+  .wc-print-header .report-title {
+    font-size: 13pt;
+    font-weight: 700;
+    color: #1e293b;
+    margin-top: 2pt;
+  }
+
+  .wc-print-header .meta-info {
+    font-size: 8.5pt;
+    color: #64748b;
+  }
+}

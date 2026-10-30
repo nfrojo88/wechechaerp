@@ -1,180 +1,230 @@
 @extends('layouts.app')
 @section('title', 'HR Dashboard')
+
 @section('content')
-<div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1 class="h3 mb-0 text-gray-800"><i class="fas fa-users me-2"></i> HR Dashboard</h1>
-        <span class="badge badge-secondary p-2">{{ now()->format('l, F j Y') }}</span>
+<div class="wc-container py-3">
+
+    {{-- Top Header --}}
+    <x-page-header 
+        title="Human Resources Command Center" 
+        subtitle="Workforce headcount, biometric daily presence, payroll disbursement status, and official notices."
+        :breadcrumbs="['Dashboard' => url('/dashboard'), 'Human Resources' => '']">
+        <x-slot:actions>
+            <a href="{{ route('reports.attendance') }}" class="wc-btn-touch wc-btn-outline" title="HR Analytics & Attendance Reports">
+                <i class="fa-solid fa-chart-line text-primary"></i>
+                <span class="d-none d-sm-inline">HR Reports</span>
+            </a>
+            <a href="{{ route('employees.create') }}" class="wc-btn-touch wc-btn-primary">
+                <i class="fa-solid fa-user-plus"></i>
+                <span>Add Employee</span>
+            </a>
+        </x-slot:actions>
+    </x-page-header>
+
+    {{-- 4 KPI Cards Row --}}
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-xl-3">
+            <x-kpi-card 
+                label="Active Employees" 
+                :value="$kpi['total_employees']" 
+                delta="Staff" 
+                trend="up" 
+                icon="fa-solid fa-id-badge" 
+                theme="primary" 
+                subtext="Current active roster" />
+        </div>
+
+        <div class="col-6 col-xl-3">
+            <x-kpi-card 
+                label="Present Today" 
+                :value="$kpi['present_today']" 
+                delta="Biometric" 
+                trend="up" 
+                icon="fa-solid fa-calendar-check" 
+                theme="success" 
+                subtext="Clocked in across sites" />
+        </div>
+
+        <div class="col-6 col-xl-3">
+            <x-kpi-card 
+                label="Pending Payrolls" 
+                :value="$kpi['pending_payroll']" 
+                delta="Unapproved" 
+                trend="neutral" 
+                icon="fa-solid fa-money-bill-wave" 
+                theme="warning" 
+                subtext="Awaiting GM authorization" />
+        </div>
+
+        <div class="col-6 col-xl-3">
+            <x-kpi-card 
+                label="Official Letters" 
+                :value="$kpi['total_letters'] ?? 0" 
+                delta="Archive" 
+                trend="neutral" 
+                icon="fa-solid fa-file-signature" 
+                theme="neutral" 
+                subtext="Issued notices & warnings" />
+        </div>
     </div>
 
-    <div class="row">
-        <div class="col-xl-3 col-md-6 mb-4">
-            <div class="card border-left-primary shadow h-100 py-2">
-                <div class="card-body">
-                    <div class="row no-gutters align-items-center">
-                        <div class="col mr-2">
-                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">Active Employees</div>
-                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ $kpi['total_employees'] }}</div>
-                        </div>
-                        <div class="col-auto"><i class="fas fa-id-badge fa-2x text-gray-300"></i></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-xl-3 col-md-6 mb-4">
-            <div class="card border-left-success shadow h-100 py-2">
-                <div class="card-body">
-                    <div class="row no-gutters align-items-center">
-                        <div class="col mr-2">
-                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Present Today</div>
-                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ $kpi['present_today'] }}</div>
-                        </div>
-                        <div class="col-auto"><i class="fas fa-calendar-check fa-2x text-gray-300"></i></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-xl-3 col-md-6 mb-4">
-            <div class="card border-left-warning shadow h-100 py-2">
-                <div class="card-body">
-                    <div class="row no-gutters align-items-center">
-                        <div class="col mr-2">
-                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">Pending Payrolls</div>
-                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ $kpi['pending_payroll'] }}</div>
-                        </div>
-                        <div class="col-auto"><i class="fas fa-money-bill-wave fa-2x text-gray-300"></i></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-xl-3 col-md-6 mb-4">
-            <div class="card border-left-info shadow h-100 py-2">
-                <div class="card-body">
-                    <div class="row no-gutters align-items-center">
-                        <div class="col mr-2">
-                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">Official Letters Recorded</div>
-                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ $kpi['total_letters'] ?? 0 }}</div>
-                        </div>
-                        <div class="col-auto"><i class="fas fa-file-signature fa-2x text-gray-300"></i></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="row">
+    {{-- Main Content Grid --}}
+    <div class="row g-3 mb-4">
+        {{-- Left 8 Cols: Tables --}}
         <div class="col-lg-8">
             {{-- Recent Official Employee Letters --}}
-            <div class="card shadow mb-4">
-                <div class="card-header py-3 d-flex justify-content-between align-items-center">
-                    <h6 class="m-0 font-weight-bold text-primary">
-                        <i class="fas fa-file-lines me-2"></i> Recent Official Letters &amp; Notices
-                    </h6>
+            <div class="wc-card mb-4">
+                <div class="card-header bg-white py-3 px-3 px-md-4 d-flex justify-content-between align-items-center border-bottom flex-wrap gap-2">
+                    <div>
+                        <h6 class="fw-bold text-dark mb-0">
+                            <i class="fa-solid fa-file-lines text-primary me-2"></i>Recent Official Letters &amp; Notices
+                        </h6>
+                        <small class="text-muted">Disciplinary, appreciation, and role assignments</small>
+                    </div>
                     <div class="d-flex gap-2">
-                        <a href="{{ route('employee-letters.create') }}" class="btn btn-sm btn-primary shadow-sm">
-                            <i class="fas fa-plus me-1"></i> Issue / Record Letter
+                        <a href="{{ route('employee-letters.create') }}" class="wc-btn-touch wc-btn-primary p-1 px-2.5" style="font-size: var(--wc-text-xs);">
+                            <i class="fa-solid fa-plus me-1"></i> Record Letter
                         </a>
-                        <a href="{{ route('employee-letters.index') }}" class="btn btn-sm btn-outline-primary">View All</a>
+                        <a href="{{ route('employee-letters.index') }}" class="wc-btn-touch wc-btn-outline p-1 px-2.5" style="font-size: var(--wc-text-xs);">
+                            View All
+                        </a>
                     </div>
                 </div>
-                <div class="card-body p-0">
-                    <div class="table-responsive">
-                        <table class="table table-hover mb-0 align-middle">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>Ref / Date</th>
-                                    <th>Employee</th>
-                                    <th>Type</th>
-                                    <th>Title</th>
-                                    <th class="text-end">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @forelse($recentLetters ?? [] as $letter)
-                                <tr>
-                                    <td>
-                                        <div class="font-monospace fw-bold small text-primary">{{ $letter->reference_number ?: 'LTR-#'.$letter->id }}</div>
-                                        <small class="text-muted">{{ optional($letter->issued_date)->format('M d, Y') }}</small>
-                                    </td>
-                                    <td>
-                                        <div class="fw-bold">{{ $letter->employee->full_name ?? 'N/A' }}</div>
-                                        <small class="text-muted">{{ $letter->employee->employee_code ?? '' }}</small>
-                                    </td>
-                                    <td>
-                                        <span class="badge {{ $letter->badge_class }}">{{ $letter->type_label }}</span>
-                                    </td>
-                                    <td>
-                                        <span class="text-truncate d-inline-block" style="max-width: 200px;" title="{{ $letter->title }}">{{ $letter->title }}</span>
-                                    </td>
-                                    <td class="text-end">
-                                        <a href="{{ route('employee-letters.show', $letter) }}" class="btn btn-sm btn-outline-primary" title="View Letter">
-                                            <i class="fas fa-eye"></i>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0 wc-table-mobile-cards">
+                        <thead class="bg-light text-uppercase text-muted" style="font-size: var(--wc-text-xs);">
+                            <tr>
+                                <th class="ps-3 ps-md-4">Ref / Date</th>
+                                <th>Employee</th>
+                                <th>Type</th>
+                                <th>Subject</th>
+                                <th class="text-end pe-3 pe-md-4">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody style="font-size: var(--wc-text-sm);">
+                            @forelse($recentLetters ?? [] as $letter)
+                            <tr>
+                                <td data-label="Ref / Date" class="ps-3 ps-md-4">
+                                    <div class="font-monospace fw-bold small text-primary">{{ $letter->reference_number ?: 'LTR-#'.$letter->id }}</div>
+                                    <small class="text-muted">{{ optional($letter->issued_date)->format('d M Y') }}</small>
+                                </td>
+                                <td data-label="Employee">
+                                    <div class="fw-bold text-dark">{{ $letter->employee->full_name ?? 'N/A' }}</div>
+                                    <small class="text-muted">{{ $letter->employee->employee_code ?? '' }}</small>
+                                </td>
+                                <td data-label="Type">
+                                    <span class="badge bg-light text-dark border">{{ $letter->type_label }}</span>
+                                </td>
+                                <td data-label="Subject">
+                                    <span class="text-truncate d-inline-block text-dark fw-medium" style="max-width: 200px;" title="{{ $letter->title }}">{{ $letter->title }}</span>
+                                </td>
+                                <td data-label="Actions" class="text-end pe-3 pe-md-4">
+                                    <div class="d-inline-flex gap-1">
+                                        <a href="{{ route('employee-letters.show', $letter) }}" class="wc-btn-touch wc-btn-outline p-1 px-2" title="View Letter">
+                                            <i class="fa-solid fa-eye"></i>
                                         </a>
-                                        <a href="{{ route('employee-letters.print', $letter) }}" target="_blank" class="btn btn-sm btn-outline-secondary" title="Print Letterhead">
-                                            <i class="fas fa-print"></i>
+                                        <a href="{{ route('employee-letters.print', $letter) }}" target="_blank" class="wc-btn-touch wc-btn-outline p-1 px-2" title="Print Letterhead">
+                                            <i class="fa-solid fa-print"></i>
                                         </a>
-                                    </td>
-                                </tr>
-                                @empty
-                                <tr>
-                                    <td colspan="5" class="text-center text-muted py-4">
-                                        <i class="fas fa-envelope-open-text fa-2x mb-2 d-block opacity-25"></i>
-                                        No official letters recorded yet. Click "Issue / Record Letter" above.
-                                    </td>
-                                </tr>
-                                @endforelse
-                            </tbody>
-                        </table>
-                    </div>
+                                    </div>
+                                </td>
+                            </tr>
+                            @empty
+                            <tr>
+                                <td colspan="5" class="text-center text-muted py-4 small">
+                                    <i class="fa-solid fa-envelope-open-text fa-2x mb-2 d-block opacity-25"></i>
+                                    No official letters recorded yet.
+                                </td>
+                            </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
                 </div>
             </div>
 
             {{-- Recent Payrolls --}}
-            <div class="card shadow mb-4">
-                <div class="card-header py-3 d-flex justify-content-between align-items-center">
-                    <h6 class="m-0 font-weight-bold text-primary"><i class="fas fa-file-invoice-dollar mr-2"></i> Recent Payrolls</h6>
-                    <a href="{{ route('payrolls.index') }}" class="btn btn-sm btn-outline-primary">View All</a>
+            <div class="wc-card">
+                <div class="card-header bg-white py-3 px-3 px-md-4 d-flex justify-content-between align-items-center border-bottom">
+                    <div>
+                        <h6 class="fw-bold text-dark mb-0"><i class="fa-solid fa-file-invoice-dollar text-success me-2"></i>Recent Payroll Records</h6>
+                        <small class="text-muted">Wage slips and monthly disbursements</small>
+                    </div>
+                    <a href="{{ route('payrolls.index') }}" class="text-primary small text-decoration-none fw-semibold">View All</a>
                 </div>
-                <div class="card-body p-0">
-                    <table class="table table-hover mb-0">
-                        <thead class="thead-light"><tr><th>Employee</th><th>Period</th><th>Net Pay</th><th>Status</th></tr></thead>
-                        <tbody>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0 wc-table-mobile-cards">
+                        <thead class="bg-light text-uppercase text-muted" style="font-size: var(--wc-text-xs);">
+                            <tr>
+                                <th class="ps-3 ps-md-4">Employee</th>
+                                <th>Period</th>
+                                <th class="text-end">Net Pay</th>
+                                <th class="text-center pe-3 pe-md-4">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody style="font-size: var(--wc-text-sm);">
                             @forelse($recentPayrolls as $payroll)
                             @php $net = $payroll->basic_salary + $payroll->allowances + $payroll->overtime_pay - $payroll->deductions - $payroll->tax; @endphp
                             <tr>
-                                <td>{{ $payroll->employee->first_name ?? $payroll->employee->full_name ?? 'N/A' }} {{ $payroll->employee->last_name ?? '' }}</td>
-                                <td>{{ date('M', mktime(0,0,0,$payroll->month,1)) }} {{ $payroll->year }}</td>
-                                <td><strong>${{ number_format($net, 2) }}</strong></td>
-                                <td><span class="badge badge-{{ $payroll->status == 'paid' ? 'success' : 'warning' }}">{{ ucfirst($payroll->status) }}</span></td>
+                                <td data-label="Employee" class="ps-3 ps-md-4">
+                                    <div class="fw-bold text-dark">{{ $payroll->employee->first_name ?? $payroll->employee->full_name ?? 'N/A' }} {{ $payroll->employee->last_name ?? '' }}</div>
+                                    <small class="text-muted">{{ $payroll->employee->department ?? 'General' }}</small>
+                                </td>
+                                <td data-label="Period" class="small text-muted">{{ date('M', mktime(0,0,0,$payroll->month,1)) }} {{ $payroll->year }}</td>
+                                <td data-label="Net Pay" class="text-end wc-num font-monospace fw-bold text-dark">ETB {{ number_format($net, 2) }}</td>
+                                <td data-label="Status" class="text-center pe-3 pe-md-4">
+                                    <x-status-badge :status="$payroll->status == 'paid' ? 'paid' : 'pending'" />
+                                </td>
                             </tr>
                             @empty
-                            <tr><td colspan="4" class="text-center text-muted">No payroll records found.</td></tr>
+                            <tr><td colspan="4" class="text-center text-muted py-4 small">No payroll records found.</td></tr>
                             @endforelse
                         </tbody>
                     </table>
                 </div>
             </div>
         </div>
+
+        {{-- Right 4 Cols: Quick Actions Panel --}}
         <div class="col-lg-4">
-            <div class="card shadow mb-4">
-                <div class="card-header py-3">
-                    <h6 class="m-0 font-weight-bold text-primary">Quick Actions</h6>
+            <div class="wc-card p-3 p-md-4 mb-4">
+                <h6 class="fw-bold text-dark mb-3">
+                    <i class="fa-solid fa-bolt text-warning me-2"></i>HR Quick Actions
+                </h6>
+                <div class="d-flex flex-column gap-2">
+                    <a href="{{ route('employee-letters.create') }}" class="wc-btn-touch wc-btn-primary w-100 justify-content-start">
+                        <i class="fa-solid fa-file-signature text-warning"></i>
+                        <span>Record Official Notice</span>
+                    </a>
+                    <a href="{{ route('payrolls.create') }}" class="wc-btn-touch wc-btn-outline w-100 justify-content-start">
+                        <i class="fa-solid fa-money-check-dollar text-success"></i>
+                        <span>Generate Monthly Payroll</span>
+                    </a>
+                    <a href="{{ route('attendance.index') }}" class="wc-btn-touch wc-btn-outline w-100 justify-content-start">
+                        <i class="fa-solid fa-clipboard-user text-primary"></i>
+                        <span>Biometric Attendance Roster</span>
+                    </a>
+                    <a href="{{ route('manpower-requests.create') }}" class="wc-btn-touch wc-btn-outline w-100 justify-content-start">
+                        <i class="fa-solid fa-person-circle-plus text-info"></i>
+                        <span>Submit Manpower Request</span>
+                    </a>
+                    <a href="{{ route('reports.turnover') }}" class="wc-btn-touch wc-btn-outline w-100 justify-content-start">
+                        <i class="fa-solid fa-chart-pie text-secondary"></i>
+                        <span>Staff Turnover Analysis</span>
+                    </a>
                 </div>
-                <div class="card-body d-flex flex-column gap-2">
-                    <a href="{{ route('employee-letters.create') }}" class="btn btn-primary w-100 py-2 shadow-sm font-weight-bold">
-                        <i class="fas fa-file-signature mr-2"></i> Record Official Letter
-                    </a>
-                    <a href="{{ route('employee-letters.index') }}" class="btn btn-outline-primary w-100 py-2">
-                        <i class="fas fa-folder-open mr-2"></i> View Letter Archive
-                    </a>
-                    <hr class="my-2">
-                    <a href="{{ route('payrolls.create') }}" class="btn btn-outline-secondary w-100 text-left"><i class="fas fa-plus mr-2"></i> Generate Payroll</a>
-                    <a href="{{ route('employees.create') }}" class="btn btn-outline-success w-100 text-left"><i class="fas fa-user-plus mr-2"></i> Add Employee</a>
-                    <a href="{{ route('attendance.index') }}" class="btn btn-outline-info w-100 text-left"><i class="fas fa-clipboard-user mr-2"></i> Attendance Roster</a>
-                    <a href="{{ route('manpower-requests.create') }}" class="btn btn-outline-warning text-dark w-100 text-left"><i class="fas fa-person-circle-plus mr-2"></i> Manpower Request</a>
+            </div>
+
+            {{-- Helpful Info Card --}}
+            <div class="wc-card p-3 bg-light border-0">
+                <div class="d-flex align-items-start gap-2">
+                    <i class="fa-solid fa-circle-info text-primary mt-1"></i>
+                    <small class="text-muted" style="font-size: var(--wc-text-xs);">
+                        Daily site manpower attendance reports must be approved by the HR Manager before monthly wage calculations are compiled.
+                    </small>
                 </div>
             </div>
         </div>
     </div>
+
 </div>
 @endsection

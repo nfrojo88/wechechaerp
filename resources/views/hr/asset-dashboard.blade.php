@@ -1,311 +1,335 @@
 @extends('layouts.app')
 
-@section('title', 'Asset Management Dashboard')
+@section('title', 'Fixed Asset & Equipment Management Dashboard')
 
 @section('content')
-<div class="d-flex align-items-center justify-content-between mb-4">
-    <div>
-        <h1 class="h3 mb-0">Asset Management Dashboard</h1>
-        <small class="text-muted">Track all employee equipment and material assignments</small>
-    </div>
-    <div class="gap-2 d-flex">
-        <div class="dropdown">
-            <button class="btn btn-sm btn-outline-info dropdown-toggle" type="button" id="reportsDropdown" data-bs-toggle="dropdown">
-                <i class="fa-solid fa-chart-bar me-2"></i>Reports
+<div class="container-fluid px-3 px-md-4 py-3">
+
+    {{-- Page Header --}}
+    <x-page-header 
+        title="Asset Management Dashboard" 
+        subtitle="Track company equipment, tools, electronics, and custody assignments across all departments">
+        <x-slot:actions>
+            <div class="dropdown d-inline-block">
+                <button class="btn btn-sm btn-outline-info rounded-pill px-3 shadow-xs dropdown-toggle" type="button" id="reportsDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="fa-solid fa-chart-pie me-1"></i>Asset Reports
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0 rounded-3" aria-labelledby="reportsDropdown">
+                    <li><a class="dropdown-item py-2" href="{{ route('asset-reports.utilization') }}"><i class="fa-solid fa-chart-line text-primary me-2"></i>Utilization Report</a></li>
+                    <li><a class="dropdown-item py-2" href="{{ route('asset-reports.damage') }}"><i class="fa-solid fa-triangle-exclamation text-danger me-2"></i>Damage Report</a></li>
+                    <li><a class="dropdown-item py-2" href="{{ route('asset-reports.employee-allocation') }}"><i class="fa-solid fa-users text-success me-2"></i>Employee Allocation</a></li>
+                </ul>
+            </div>
+            <a href="{{ route('assets.export') }}" class="btn btn-sm btn-outline-primary rounded-pill px-3 shadow-xs">
+                <i class="fa-solid fa-download me-1"></i>Export All Assets
+            </a>
+            <button class="btn btn-outline-secondary btn-sm rounded-pill px-3 shadow-xs" onclick="window.print()">
+                <i class="fa-solid fa-print me-1"></i>Print
             </button>
-            <ul class="dropdown-menu" aria-labelledby="reportsDropdown">
-                <li><a class="dropdown-item" href="{{ route('asset-reports.utilization') }}">Utilization Report</a></li>
-                <li><a class="dropdown-item" href="{{ route('asset-reports.damage') }}">Damage Report</a></li>
-                <li><a class="dropdown-item" href="{{ route('asset-reports.employee-allocation') }}">Employee Allocation</a></li>
-            </ul>
-        </div>
-        <a href="{{ route('assets.export') }}" class="btn btn-sm btn-outline-primary">
-            <i class="fa-solid fa-download me-2"></i>Export All
-        </a>
-    </div>
-</div>
+        </x-slot:actions>
+    </x-page-header>
 
-<div class="row g-3 mb-4">
-    {{-- Total Assets --}}
-    <div class="col-md-3">
-        <div class="card border-0 shadow-sm">
-            <div class="card-body text-center">
-                <i class="fa-solid fa-boxes-stacked fa-2x text-primary mb-2 opacity-50"></i>
-                <h6 class="text-muted mb-1">Total Assets</h6>
-                <h2 class="mb-0">{{ $totalAssets }}</h2>
-                <small class="text-muted">All assignments</small>
-            </div>
+    {{-- KPI Cards --}}
+    <div class="row g-3 mb-4">
+        <div class="col-xl-3 col-sm-6">
+            <x-kpi-card 
+                label="Total Asset Units" 
+                value="{{ number_format($totalAssets) }}" 
+                icon="fa-solid fa-boxes-stacked" 
+                variant="primary" 
+                helpText="All company inventory assignments" />
         </div>
-    </div>
-
-    {{-- Active Assignments --}}
-    <div class="col-md-3">
-        <div class="card border-0 shadow-sm">
-            <div class="card-body text-center">
-                <i class="fa-solid fa-computer fa-2x text-success mb-2 opacity-50"></i>
-                <h6 class="text-muted mb-1">Active Assets</h6>
-                <h2 class="mb-0">{{ $activeAssets }}</h2>
-                <small class="text-muted">In use or assigned</small>
-            </div>
+        <div class="col-xl-3 col-sm-6">
+            <x-kpi-card 
+                label="Active Assignments" 
+                value="{{ number_format($activeAssets) }}" 
+                icon="fa-solid fa-computer" 
+                variant="success" 
+                helpText="Currently in use or deployed" />
         </div>
-    </div>
-
-    {{-- Returned Assets --}}
-    <div class="col-md-3">
-        <div class="card border-0 shadow-sm">
-            <div class="card-body text-center">
-                <i class="fa-solid fa-arrow-rotate-left fa-2x text-warning mb-2 opacity-50"></i>
-                <h6 class="text-muted mb-1">Returned</h6>
-                <h2 class="mb-0">{{ $returnedAssets }}</h2>
-                <small class="text-muted">Available for reuse</small>
-            </div>
+        <div class="col-xl-3 col-sm-6">
+            <x-kpi-card 
+                label="Returned to Storage" 
+                value="{{ number_format($returnedAssets) }}" 
+                icon="fa-solid fa-arrow-rotate-left" 
+                variant="warning" 
+                helpText="Available for immediate reallocation" />
+        </div>
+        <div class="col-xl-3 col-sm-6">
+            <x-kpi-card 
+                label="Damaged / Write-Offs" 
+                value="{{ number_format($damagedAssets) }}" 
+                icon="fa-solid fa-triangle-exclamation" 
+                variant="{{ $damagedAssets > 0 ? 'danger' : 'success' }}" 
+                helpText="{{ $damagedAssets > 0 ? 'Requires maintenance or survey' : 'No damaged assets reported' }}" />
         </div>
     </div>
 
-    {{-- Damaged Assets --}}
-    <div class="col-md-3">
-        <div class="card border-0 shadow-sm">
-            <div class="card-body text-center">
-                <i class="fa-solid fa-exclamation-triangle fa-2x text-danger mb-2 opacity-50"></i>
-                <h6 class="text-muted mb-1">Damaged</h6>
-                <h2 class="mb-0">{{ $damagedAssets }}</h2>
-                <small class="text-muted">Requires action</small>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="row g-3 mb-4">
-    {{-- Asset Value Summary --}}
-    <div class="col-lg-6">
-        <div class="card border-0 shadow-sm">
-            <div class="card-header bg-light">
-                <h5 class="mb-0"><i class="fa-solid fa-chart-pie me-2"></i>Asset Value Distribution</h5>
-            </div>
-            <div class="card-body">
-                <div class="row g-3 text-center">
-                    <div class="col-md-6">
-                        <small class="text-muted d-block mb-1">Active Assets Value</small>
-                        <h4 class="mb-0 text-success">Br {{ number_format($activeAssetsValue, 2) }}</h4>
-                    </div>
-                    <div class="col-md-6">
-                        <small class="text-muted d-block mb-1">Damaged Assets Value</small>
-                        <h4 class="mb-0 text-danger">Br {{ number_format($damagedAssetsValue, 2) }}</h4>
-                    </div>
-                    <div class="col-12">
-                        <div class="progress" style="height: 25px;">
-                            @php
-                                $totalValue = $activeAssetsValue + $damagedAssetsValue;
-                                $activePercent = $totalValue > 0 ? ($activeAssetsValue / $totalValue) * 100 : 0;
-                                $damagedPercent = $totalValue > 0 ? ($damagedAssetsValue / $totalValue) * 100 : 0;
-                            @endphp
-                            <div class="progress-bar bg-success" style="width: {{ $activePercent }}%" role="progressbar">
-                                {{ round($activePercent) }}% Active
-                            </div>
-                            <div class="progress-bar bg-danger" style="width: {{ $damagedPercent }}%" role="progressbar">
-                                {{ round($damagedPercent) }}% Damaged
-                            </div>
+    {{-- Portfolio Valuation & Category Distribution --}}
+    <div class="row g-3 mb-4">
+        {{-- Asset Value Summary --}}
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm rounded-4 h-100">
+                <div class="card-header bg-white border-bottom py-3 px-4">
+                    <h6 class="mb-0 fw-bold" style="color: var(--brand-900);">
+                        <i class="fa-solid fa-wallet text-primary me-2"></i>Asset Value Distribution
+                    </h6>
+                </div>
+                <div class="card-body p-4">
+                    @php
+                        $totalValue = $activeAssetsValue + $damagedAssetsValue;
+                        $activePercent = $totalValue > 0 ? ($activeAssetsValue / $totalValue) * 100 : 0;
+                        $damagedPercent = $totalValue > 0 ? ($damagedAssetsValue / $totalValue) * 100 : 0;
+                    @endphp
+                    <div class="row g-3 text-center mb-3 font-tabular">
+                        <div class="col-6">
+                            <span class="text-muted small d-block mb-1">Active Assets Value</span>
+                            <h4 class="mb-0 text-success fw-bold">ETB {{ number_format($activeAssetsValue, 2) }}</h4>
+                        </div>
+                        <div class="col-6">
+                            <span class="text-muted small d-block mb-1">Damaged Assets Value</span>
+                            <h4 class="mb-0 text-danger fw-bold">ETB {{ number_format($damagedAssetsValue, 2) }}</h4>
                         </div>
                     </div>
-                    <div class="col-12">
-                        <small class="text-muted">Total Portfolio Value: <strong>Br {{ number_format($totalValue, 2) }}</strong></small>
+
+                    <div class="progress rounded-pill mb-3" style="height: 16px;">
+                        <div class="progress-bar bg-success" style="width: {{ $activePercent }}%" role="progressbar" title="{{ round($activePercent) }}% Active">
+                            {{ round($activePercent) }}%
+                        </div>
+                        <div class="progress-bar bg-danger" style="width: {{ $damagedPercent }}%" role="progressbar" title="{{ round($damagedPercent) }}% Damaged">
+                            {{ round($damagedPercent) }}%
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between align-items-center bg-light p-3 rounded-3">
+                        <span class="text-muted small fw-semibold">Total Portfolio Value:</span>
+                        <strong class="font-tabular fs-5 text-dark">ETB {{ number_format($totalValue, 2) }}</strong>
                     </div>
                 </div>
             </div>
         </div>
-    </div>
 
-    {{-- Asset Categories --}}
-    <div class="col-lg-6">
-        <div class="card border-0 shadow-sm">
-            <div class="card-header bg-light">
-                <h5 class="mb-0"><i class="fa-solid fa-list me-2"></i>Assets by Category</h5>
-            </div>
-            <div class="card-body">
-                @if($assetsByCategory->count() > 0)
-                <div class="table-responsive">
-                    <table class="table table-sm mb-0">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Category</th>
-                                <th class="text-end">Count</th>
-                                <th class="text-end">Value</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach($assetsByCategory as $category)
-                            <tr>
-                                <td>
-                                    <strong>{{ $category->category ?? 'Uncategorized' }}</strong>
-                                </td>
-                                <td class="text-end">{{ $category->total_count }}</td>
-                                <td class="text-end">Br {{ number_format($category->total_value, 2) }}</td>
-                            </tr>
-                            @endforeach
-                        </tbody>
-                    </table>
+        {{-- Asset Categories --}}
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm rounded-4 h-100">
+                <div class="card-header bg-white border-bottom py-3 px-4 d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0 fw-bold" style="color: var(--brand-900);">
+                        <i class="fa-solid fa-list-check text-primary me-2"></i>Assets by Category
+                    </h6>
+                    <span class="badge bg-light text-dark border font-monospace">{{ $assetsByCategory->count() }} Categories</span>
                 </div>
-                @else
-                <p class="text-muted mb-0">No assets categorized yet</p>
-                @endif
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="row g-3 mb-4">
-    {{-- Top Departments --}}
-    <div class="col-lg-6">
-        <div class="card border-0 shadow-sm">
-            <div class="card-header bg-light">
-                <h5 class="mb-0"><i class="fa-solid fa-sitemap me-2"></i>Assets by Department</h5>
-            </div>
-            <div class="card-body">
-                @if($assetsByDepartment->count() > 0)
-                <div class="table-responsive">
-                    <table class="table table-sm mb-0">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Department</th>
-                                <th class="text-end">Count</th>
-                                <th class="text-end">Active</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach($assetsByDepartment as $dept)
-                            <tr>
-                                <td><strong>{{ $dept->department }}</strong></td>
-                                <td class="text-end">{{ $dept->total_count }}</td>
-                                <td class="text-end">{{ $dept->active_count }}</td>
-                            </tr>
-                            @endforeach
-                        </tbody>
-                    </table>
+                <div class="card-body p-0">
+                    @if($assetsByCategory->count() > 0)
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light text-uppercase small text-muted" style="letter-spacing: 0.5px;">
+                                <tr>
+                                    <th class="ps-4 py-2.5">Category</th>
+                                    <th class="py-2.5 text-center">Unit Count</th>
+                                    <th class="pe-4 py-2.5 text-end">Total Valuation</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach($assetsByCategory as $category)
+                                <tr>
+                                    <td class="ps-4 py-2.5 fw-semibold text-dark">
+                                        {{ $category->category ?? 'Uncategorized' }}
+                                    </td>
+                                    <td class="py-2.5 text-center font-tabular">
+                                        <span class="badge bg-light text-dark border px-2.5 py-1 rounded-pill">{{ $category->total_count }}</span>
+                                    </td>
+                                    <td class="pe-4 py-2.5 text-end font-tabular fw-bold text-dark">
+                                        ETB {{ number_format($category->total_value, 2) }}
+                                    </td>
+                                </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                    @else
+                    <div class="p-4 text-center text-muted small">No assets categorized yet.</div>
+                    @endif
                 </div>
-                @else
-                <p class="text-muted mb-0">No departments with assets</p>
-                @endif
             </div>
         </div>
     </div>
 
-    {{-- Recent Activity --}}
-    <div class="col-lg-6">
-        <div class="card border-0 shadow-sm">
-            <div class="card-header bg-light">
-                <h5 class="mb-0"><i class="fa-solid fa-history me-2"></i>Recent Activity</h5>
+    {{-- Department Breakdown & Recent Activity --}}
+    <div class="row g-3 mb-4">
+        {{-- Top Departments --}}
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm rounded-4 h-100">
+                <div class="card-header bg-white border-bottom py-3 px-4">
+                    <h6 class="mb-0 fw-bold" style="color: var(--brand-900);">
+                        <i class="fa-solid fa-sitemap text-primary me-2"></i>Assets by Department
+                    </h6>
+                </div>
+                <div class="card-body p-0">
+                    @if($assetsByDepartment->count() > 0)
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light text-uppercase small text-muted" style="letter-spacing: 0.5px;">
+                                <tr>
+                                    <th class="ps-4 py-2.5">Department</th>
+                                    <th class="py-2.5 text-center">Total Assigned</th>
+                                    <th class="pe-4 py-2.5 text-center">Active in Use</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach($assetsByDepartment as $dept)
+                                <tr>
+                                    <td class="ps-4 py-2.5 fw-semibold text-dark">{{ $dept->department }}</td>
+                                    <td class="py-2.5 text-center font-tabular">{{ $dept->total_count }}</td>
+                                    <td class="pe-4 py-2.5 text-center font-tabular">
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2.5 py-1">
+                                            {{ $dept->active_count }}
+                                        </span>
+                                    </td>
+                                </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                    @else
+                    <div class="p-4 text-center text-muted small">No departmental allocations found.</div>
+                    @endif
+                </div>
             </div>
-            <div class="card-body">
-                @if($recentActivity->count() > 0)
-                <div class="timeline">
-                    @foreach($recentActivity as $activity)
-                    <div class="timeline-item mb-3 pb-3 border-bottom">
-                        <div class="d-flex gap-2">
+        </div>
+
+        {{-- Recent Activity --}}
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm rounded-4 h-100">
+                <div class="card-header bg-white border-bottom py-3 px-4">
+                    <h6 class="mb-0 fw-bold" style="color: var(--brand-900);">
+                        <i class="fa-solid fa-clock-rotate-left text-primary me-2"></i>Recent Custody Activity
+                    </h6>
+                </div>
+                <div class="card-body p-3">
+                    @if($recentActivity->count() > 0)
+                    <div class="d-flex flex-column gap-2">
+                        @foreach($recentActivity as $activity)
+                        <div class="p-2.5 rounded-3 bg-light border d-flex align-items-center gap-3">
                             <div>
                                 @if($activity->status === 'assigned')
-                                    <i class="fa-solid fa-circle-plus text-success"></i>
+                                    <span class="badge bg-primary-subtle text-primary p-2 rounded-circle"><i class="fa-solid fa-circle-plus"></i></span>
                                 @elseif($activity->status === 'returned')
-                                    <i class="fa-solid fa-circle-check text-warning"></i>
+                                    <span class="badge bg-warning-subtle text-warning p-2 rounded-circle"><i class="fa-solid fa-circle-check"></i></span>
                                 @elseif($activity->status === 'damaged')
-                                    <i class="fa-solid fa-circle-exclamation text-danger"></i>
+                                    <span class="badge bg-danger-subtle text-danger p-2 rounded-circle"><i class="fa-solid fa-circle-exclamation"></i></span>
+                                @else
+                                    <span class="badge bg-secondary-subtle text-secondary p-2 rounded-circle"><i class="fa-solid fa-tag"></i></span>
                                 @endif
                             </div>
                             <div class="flex-grow-1">
-                                <small class="text-muted d-block">
+                                <div class="small text-dark">
                                     <strong>{{ $activity->employee->full_name }}</strong>
                                     @if($activity->status === 'assigned')
-                                        assigned
+                                        was assigned
                                     @elseif($activity->status === 'returned')
                                         returned
                                     @elseif($activity->status === 'damaged')
-                                        reported damage
+                                        reported damage on
+                                    @else
+                                        updated
                                     @endif
-                                </small>
-                                <small class="text-muted d-block">{{ $activity->product->name }}</small>
+                                    <strong>{{ $activity->product->name }}</strong>
+                                </div>
                                 <small class="text-muted">{{ $activity->updated_at->diffForHumans() }}</small>
                             </div>
                         </div>
+                        @endforeach
                     </div>
-                    @endforeach
+                    @else
+                    <div class="p-4 text-center text-muted small">No recent activity recorded.</div>
+                    @endif
                 </div>
-                @else
-                <p class="text-muted mb-0">No recent activity</p>
-                @endif
             </div>
         </div>
     </div>
-</div>
 
-<div class="row g-3">
     {{-- All Assets Table --}}
-    <div class="col-12">
-        <div class="card border-0 shadow-sm">
-            <div class="card-header bg-light d-flex justify-content-between align-items-center">
-                <h5 class="mb-0"><i class="fa-solid fa-table me-2"></i>All Asset Assignments</h5>
-                <div>
-                    <input type="text" class="form-control form-control-sm" id="searchTable" placeholder="Search assets..." style="width: 200px;">
-                </div>
+    <div class="card border-0 shadow-sm rounded-4 overflow-hidden mb-4">
+        <div class="card-header bg-white border-bottom py-3 px-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <h6 class="mb-0 fw-bold" style="color: var(--brand-900);">
+                <i class="fa-solid fa-table me-2 text-primary"></i>All Asset Assignments
+            </h6>
+            <div>
+                <input type="text" class="form-control form-control-sm rounded-pill px-3" id="searchTable" placeholder="Search employee or asset..." style="width: 220px;">
             </div>
-            <div class="card-body">
-                <div class="table-responsive">
-                    <table class="table table-hover mb-0" id="assetsTable">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Employee</th>
-                                <th>Department</th>
-                                <th>Asset Name</th>
-                                <th>Type</th>
-                                <th>Assigned Date</th>
-                                <th>Status</th>
-                                <th>Unit Price</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @forelse($allAssets as $asset)
-                            <tr>
-                                <td>
-                                    <a href="{{ route('employees.show', $asset->employee) }}" class="text-decoration-none">
-                                        {{ $asset->employee->full_name }}
-                                    </a>
-                                </td>
-                                <td>{{ $asset->employee->department }}</td>
-                                <td><strong>{{ $asset->product->name }}</strong></td>
-                                <td>{{ $asset->product->type ?? 'General' }}</td>
-                                <td>{{ $asset->assigned_date->format('d M Y') }}</td>
-                                <td>
-                                    @if($asset->status === 'assigned')
-                                        <span class="badge bg-primary">Assigned</span>
-                                    @elseif($asset->status === 'in_use')
-                                        <span class="badge bg-success">In Use</span>
-                                    @elseif($asset->status === 'returned')
-                                        <span class="badge bg-warning">Returned</span>
-                                    @elseif($asset->status === 'damaged')
-                                        <span class="badge bg-danger">Damaged</span>
-                                    @endif
-                                </td>
-                                <td>Br {{ number_format($asset->product->unit_cost ?? 0, 2) }}</td>
-                                <td>
-                                    <a href="{{ route('employees.show', $asset->employee) }}" class="btn btn-sm btn-outline-secondary" title="View Employee">
-                                        <i class="fa-solid fa-eye"></i>
-                                    </a>
-                                </td>
-                            </tr>
-                            @empty
-                            <tr>
-                                <td colspan="8" class="text-center text-muted py-4">No assets assigned yet</td>
-                            </tr>
-                            @endforelse
-                        </tbody>
-                    </table>
-                </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0 wc-table-mobile-cards" id="assetsTable">
+                    <thead class="table-light text-uppercase small text-muted" style="letter-spacing: 0.5px;">
+                        <tr>
+                            <th class="ps-4 py-3">Employee</th>
+                            <th class="py-3">Department</th>
+                            <th class="py-3">Asset Name</th>
+                            <th class="py-3 text-center">Type</th>
+                            <th class="py-3">Assigned Date</th>
+                            <th class="py-3 text-center">Status</th>
+                            <th class="py-3 text-end">Unit Price</th>
+                            <th class="pe-4 py-3 text-end">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @forelse($allAssets as $asset)
+                        <tr>
+                            <td class="ps-4 py-3" data-label="Employee">
+                                <a href="{{ route('employees.show', $asset->employee) }}" class="fw-bold text-decoration-none" style="color: var(--brand-900);">
+                                    {{ $asset->employee->full_name }}
+                                </a>
+                            </td>
+                            <td class="py-3" data-label="Department">{{ $asset->employee->department }}</td>
+                            <td class="py-3 fw-semibold text-dark" data-label="Asset">{{ $asset->product->name }}</td>
+                            <td class="py-3 text-center" data-label="Type">
+                                <span class="badge bg-light text-dark border rounded-pill px-2.5 py-1">{{ $asset->product->type ?? 'General' }}</span>
+                            </td>
+                            <td class="py-3 font-tabular" data-label="Date">{{ $asset->assigned_date->format('d M Y') }}</td>
+                            <td class="py-3 text-center" data-label="Status">
+                                @if($asset->status === 'assigned')
+                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill px-2.5 py-1">Assigned</span>
+                                @elseif($asset->status === 'in_use')
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2.5 py-1">In Use</span>
+                                @elseif($asset->status === 'returned')
+                                    <span class="badge bg-warning-subtle text-warning border border-warning-subtle rounded-pill px-2.5 py-1">Returned</span>
+                                @elseif($asset->status === 'damaged')
+                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill px-2.5 py-1">Damaged</span>
+                                @else
+                                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle rounded-pill px-2.5 py-1">{{ ucfirst($asset->status) }}</span>
+                                @endif
+                            </td>
+                            <td class="py-3 text-end font-tabular fw-bold text-dark" data-label="Unit Price">
+                                ETB {{ number_format($asset->product->unit_cost ?? 0, 2) }}
+                            </td>
+                            <td class="pe-4 py-3 text-end" data-label="Action">
+                                <a href="{{ route('employees.show', $asset->employee) }}" class="btn btn-sm btn-outline-secondary rounded-pill px-2.5 py-1 shadow-xs" title="View Employee">
+                                    <i class="fa-solid fa-eye"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        @empty
+                        <tr>
+                            <td colspan="8" class="text-center py-5">
+                                <x-empty-state 
+                                    icon="fa-solid fa-computer" 
+                                    title="No Assets Assigned Yet" 
+                                    message="Assigned company equipment, tools, and electronics will appear in this registry." />
+                            </td>
+                        </tr>
+                        @endforelse
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
+
 </div>
 
+@push('scripts')
 <script>
-document.getElementById('searchTable').addEventListener('keyup', function() {
+document.getElementById('searchTable')?.addEventListener('keyup', function() {
     const searchValue = this.value.toLowerCase();
     const rows = document.querySelectorAll('#assetsTable tbody tr');
     
@@ -315,5 +339,5 @@ document.getElementById('searchTable').addEventListener('keyup', function() {
     });
 });
 </script>
-
+@endpush
 @endsection

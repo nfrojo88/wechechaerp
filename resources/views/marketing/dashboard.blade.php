@@ -2,117 +2,62 @@
 
 @section('title', 'Marketing & Price Intelligence Dashboard')
 
-@push('styles')
-<style>
-.stat-card {
-    border: none;
-    border-radius: 14px;
-    box-shadow: 0 4px 18px rgba(0,0,0,0.05);
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-.stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.08); }
-.stat-icon {
-    width: 48px; height: 48px;
-    border-radius: 12px;
-    display: inline-flex; align-items: center; justify-content: center;
-    font-size: 20px;
-}
-.badge-indicator-increase { background: #fee2e2; color: #dc2626; font-weight: 700; }
-.badge-indicator-decrease { background: #dcfce7; color: #16a34a; font-weight: 700; }
-.badge-indicator-no_change { background: #f1f5f9; color: #64748b; font-weight: 600; }
-</style>
-@endpush
-
 @section('content')
-<div class="container-fluid px-4 py-3">
+<div class="container-fluid px-3 px-md-4 py-3">
 
     {{-- Page Header --}}
-    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
-        <div>
-            <h1 class="h3 fw-bold text-dark mb-1">
-                <i class="fa-solid fa-bullhorn text-primary me-2"></i>Marketing &amp; Price Intelligence Dashboard
-            </h1>
-            <p class="text-muted small mb-0">Track market price trends, monthly inflation metrics, and cost intelligence.</p>
-        </div>
-        <div class="d-flex gap-2">
+    <x-page-header 
+        title="Marketing & Price Intelligence Dashboard" 
+        subtitle="Track construction commodity market price trends, monthly inflation metrics, and cost intelligence">
+        <x-slot:actions>
             @if(auth()->check() && (auth()->user()->hasRole('marketing') || auth()->user()->hasRole('admin') || auth()->user()->hasRole('global_admin')))
-            <a href="{{ route('marketing.prices.create') }}" class="btn btn-primary btn-sm fw-semibold">
+            <a href="{{ route('marketing.prices.create') }}" class="btn btn-primary btn-sm rounded-pill px-3 shadow-xs fw-bold">
                 <i class="fa-solid fa-plus-circle me-1"></i>New Price Update
             </a>
             @endif
-            <a href="{{ route('marketing.prices.history') }}" class="btn btn-outline-secondary btn-sm fw-semibold">
-                <i class="fa-solid fa-history me-1"></i>Price History
+            <a href="{{ route('marketing.prices.history') }}" class="btn btn-outline-secondary btn-sm rounded-pill px-3 shadow-xs">
+                <i class="fa-solid fa-clock-rotate-left me-1"></i>Price History
             </a>
-        </div>
-    </div>
+            <button class="btn btn-outline-secondary btn-sm rounded-pill px-3 shadow-xs" onclick="window.print()">
+                <i class="fa-solid fa-print me-1"></i>Print
+            </button>
+        </x-slot:actions>
+    </x-page-header>
 
-    {{-- Summary Cards --}}
+    {{-- Summary KPIs --}}
     <div class="row g-3 mb-4">
-        {{-- Total Materials Tracked --}}
-        <div class="col-12 col-sm-6 col-xl-3">
-            <div class="card stat-card bg-white p-3">
-                <div class="d-flex align-items-center justify-content-between">
-                    <div>
-                        <span class="text-muted small fw-semibold text-uppercase d-block mb-1">Tracked Materials</span>
-                        <h3 class="fw-bold mb-0 text-dark">{{ number_format($totalTracked) }}</h3>
-                    </div>
-                    <span class="stat-icon bg-primary bg-opacity-10 text-primary">
-                        <i class="fa-solid fa-boxes-stacked"></i>
-                    </span>
-                </div>
-            </div>
+        <div class="col-xl-3 col-sm-6">
+            <x-kpi-card 
+                label="Tracked Materials" 
+                value="{{ number_format($totalTracked) }}" 
+                icon="fa-solid fa-boxes-stacked" 
+                variant="primary" 
+                helpText="Active commodities monitored" />
         </div>
-
-        {{-- Materials Increased This Month --}}
-        <div class="col-12 col-sm-6 col-xl-3">
-            <div class="card stat-card bg-white p-3">
-                <div class="d-flex align-items-center justify-content-between">
-                    <div>
-                        <span class="text-muted small fw-semibold text-uppercase d-block mb-1">Price Increases</span>
-                        <h3 class="fw-bold mb-0 text-danger">{{ number_format($materialsIncreased) }}</h3>
-                    </div>
-                    <span class="stat-icon bg-danger bg-opacity-10 text-danger">
-                        <i class="fa-solid fa-arrow-trend-up"></i>
-                    </span>
-                </div>
-            </div>
+        <div class="col-xl-3 col-sm-6">
+            <x-kpi-card 
+                label="Price Increases (Month)" 
+                value="{{ number_format($materialsIncreased) }}" 
+                icon="fa-solid fa-arrow-trend-up" 
+                variant="danger" 
+                helpText="Materials experiencing price hikes" />
         </div>
-
-        {{-- Avg Inflation % This Month --}}
-        <div class="col-12 col-sm-6 col-xl-3">
-            <div class="card stat-card bg-white p-3">
-                <div class="d-flex align-items-center justify-content-between">
-                    <div>
-                        <span class="text-muted small fw-semibold text-uppercase d-block mb-1">Avg Inflation Rate</span>
-                        <h3 class="fw-bold mb-0 {{ $avgInflation > 0 ? 'text-danger' : 'text-success' }}">
-                            {{ $avgInflation > 0 ? '+' : '' }}{{ $avgInflation }}%
-                        </h3>
-                    </div>
-                    <span class="stat-icon bg-warning bg-opacity-10 text-warning">
-                        <i class="fa-solid fa-chart-line"></i>
-                    </span>
-                </div>
-            </div>
+        <div class="col-xl-3 col-sm-6">
+            <x-kpi-card 
+                label="Avg Inflation Rate" 
+                value="{{ $avgInflation > 0 ? '+' : '' }}{{ $avgInflation }}%" 
+                icon="fa-solid fa-chart-line" 
+                variant="{{ $avgInflation > 0 ? 'warning' : 'success' }}" 
+                helpText="MoM portfolio weighted shift" />
         </div>
-
-        {{-- Top Spike Material --}}
-        <div class="col-12 col-sm-6 col-xl-3">
-            <div class="card stat-card bg-white p-3">
-                <div class="d-flex align-items-center justify-content-between">
-                    <div>
-                        <span class="text-muted small fw-semibold text-uppercase d-block mb-1">Top Spike Material</span>
-                        <h5 class="fw-bold mb-0 text-dark text-truncate" style="max-width: 140px;">
-                            {{ $topIncreases->first()['name'] ?? 'None' }}
-                        </h5>
-                        @if($topIncreases->first())
-                        <small class="text-danger fw-bold">+{{ $topIncreases->first()['pct_change'] }}% MoM</small>
-                        @endif
-                    </div>
-                    <span class="stat-icon bg-info bg-opacity-10 text-info">
-                        <i class="fa-solid fa-fire text-danger"></i>
-                    </span>
-                </div>
-            </div>
+        <div class="col-xl-3 col-sm-6">
+            @php $topSpike = $topIncreases->first(); @endphp
+            <x-kpi-card 
+                label="Top Spike Material" 
+                value="{{ $topSpike['name'] ?? 'None' }}" 
+                icon="fa-solid fa-fire" 
+                variant="danger" 
+                helpText="{{ $topSpike ? '+' . $topSpike['pct_change'] . '% MoM surge' : 'No spike detected' }}" />
         </div>
     </div>
 
@@ -120,36 +65,38 @@
     <div class="row g-3 mb-4">
         {{-- Top Increases List --}}
         <div class="col-lg-5">
-            <div class="card border-0 shadow-sm rounded-3 h-100">
-                <div class="card-header bg-transparent py-3 d-flex align-items-center justify-content-between">
-                    <h6 class="mb-0 fw-bold text-dark">
+            <div class="card border-0 shadow-sm rounded-4 h-100">
+                <div class="card-header bg-white border-bottom py-3 px-4 d-flex align-items-center justify-content-between">
+                    <h6 class="mb-0 fw-bold" style="color: var(--brand-900);">
                         <i class="fa-solid fa-fire text-danger me-2"></i>Top Price Increases (This Month)
                     </h6>
-                    <a href="{{ route('marketing.reports.inflation') }}" class="small fw-semibold text-primary">View All</a>
+                    <a href="{{ route('marketing.reports.inflation') }}" class="small fw-semibold text-primary text-decoration-none">
+                        View Full Report <i class="fa-solid fa-arrow-right ms-1"></i>
+                    </a>
                 </div>
                 <div class="card-body p-0">
                     <div class="table-responsive">
-                        <table class="table align-middle mb-0">
-                            <thead class="bg-light text-muted small">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light text-muted small text-uppercase" style="letter-spacing: 0.5px;">
                                 <tr>
-                                    <th>Material</th>
-                                    <th>Latest Price</th>
-                                    <th class="text-end">Change</th>
+                                    <th class="ps-4 py-2.5">Material</th>
+                                    <th class="py-2.5 text-end">Latest Price</th>
+                                    <th class="pe-4 py-2.5 text-end">Change</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 @forelse($topIncreases as $inc)
                                 <tr>
-                                    <td>
+                                    <td class="ps-4 py-2.5">
                                         <span class="fw-semibold text-dark d-block">{{ $inc['name'] }}</span>
                                         <small class="text-muted">{{ $inc['unit'] }} · {{ $inc['category'] }}</small>
                                     </td>
-                                    <td>
-                                        <span class="fw-bold">ETB {{ number_format($inc['latest_price'], 2) }}</span>
+                                    <td class="py-2.5 text-end font-tabular fw-bold text-dark">
+                                        ETB {{ number_format($inc['latest_price'], 2) }}
                                     </td>
-                                    <td class="text-end">
-                                        <span class="badge badge-indicator-increase">
-                                            🔺 +{{ $inc['pct_change'] }}%
+                                    <td class="pe-4 py-2.5 text-end font-tabular">
+                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2.5 py-1 rounded-pill fw-bold">
+                                            +{{ $inc['pct_change'] }}%
                                         </span>
                                     </td>
                                 </tr>
@@ -167,13 +114,13 @@
 
         {{-- 6-Month Price Trend Chart --}}
         <div class="col-lg-7">
-            <div class="card border-0 shadow-sm rounded-3 h-100">
-                <div class="card-header bg-transparent py-3">
-                    <h6 class="mb-0 fw-bold text-dark">
+            <div class="card border-0 shadow-sm rounded-4 h-100">
+                <div class="card-header bg-white border-bottom py-3 px-4">
+                    <h6 class="mb-0 fw-bold" style="color: var(--brand-900);">
                         <i class="fa-solid fa-chart-area text-primary me-2"></i>6-Month Market Price Trends
                     </h6>
                 </div>
-                <div class="card-body">
+                <div class="card-body p-4">
                     <canvas id="priceTrendChart" height="220"></canvas>
                 </div>
             </div>
@@ -181,36 +128,47 @@
     </div>
 
     {{-- Material Market Price Overview Table --}}
-    <div class="card border-0 shadow-sm rounded-3">
-        <div class="card-header bg-transparent py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
-            <h6 class="mb-0 fw-bold text-dark">
+    <div class="card border-0 shadow-sm rounded-4 overflow-hidden mb-4">
+        <div class="card-header bg-white border-bottom py-3 px-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <h6 class="mb-0 fw-bold" style="color: var(--brand-900);">
                 <i class="fa-solid fa-table-list me-2 text-primary"></i>Material Market Prices &amp; Inflation Comparison
             </h6>
+            <span class="badge bg-light text-dark border px-3 py-1 font-monospace">{{ count($materialSummaries) }} Commodities</span>
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
-                    <thead class="bg-light text-muted small">
+                <table class="table table-hover align-middle mb-0 wc-table-mobile-cards">
+                    <thead class="table-light text-muted small text-uppercase" style="letter-spacing: 0.5px;">
                         <tr>
-                            <th>Material Name</th>
-                            <th>Category</th>
-                            <th>UM</th>
-                            <th class="text-end">Previous Price</th>
-                            <th class="text-end">Latest Market Price</th>
-                            <th class="text-center">MoM Change</th>
-                            <th class="text-center">Indicator</th>
-                            <th>Last Updated</th>
+                            <th class="ps-4 py-3">Material Name</th>
+                            <th class="py-3">Category</th>
+                            <th class="py-3 text-center">Unit</th>
+                            <th class="py-3 text-end">Previous Price</th>
+                            <th class="py-3 text-end">Latest Market Price</th>
+                            <th class="py-3 text-center">MoM Change</th>
+                            <th class="py-3 text-center">Indicator</th>
+                            <th class="pe-4 py-3 text-end">Last Updated</th>
                         </tr>
                     </thead>
                     <tbody>
                         @forelse($materialSummaries as $mat)
                         <tr>
-                            <td class="fw-bold text-dark">{{ $mat['name'] }}</td>
-                            <td><span class="badge bg-secondary bg-opacity-10 text-secondary">{{ $mat['category'] }}</span></td>
-                            <td><code>{{ $mat['unit'] }}</code></td>
-                            <td class="text-end text-muted">ETB {{ number_format($mat['prev_price'], 2) }}</td>
-                            <td class="text-end fw-bold text-primary">ETB {{ number_format($mat['latest_price'], 2) }}</td>
-                            <td class="text-center fw-bold">
+                            <td class="ps-4 py-3" data-label="Material">
+                                <span class="fw-bold" style="color: var(--brand-900);">{{ $mat['name'] }}</span>
+                            </td>
+                            <td class="py-3" data-label="Category">
+                                <span class="badge bg-light text-dark border rounded-pill px-2.5 py-1">{{ $mat['category'] }}</span>
+                            </td>
+                            <td class="py-3 text-center" data-label="Unit">
+                                <code class="text-secondary">{{ $mat['unit'] }}</code>
+                            </td>
+                            <td class="py-3 text-end font-tabular text-muted" data-label="Prev Price">
+                                ETB {{ number_format($mat['prev_price'], 2) }}
+                            </td>
+                            <td class="py-3 text-end font-tabular fw-bold text-dark fs-6" data-label="Latest Price">
+                                ETB {{ number_format($mat['latest_price'], 2) }}
+                            </td>
+                            <td class="py-3 text-center font-tabular fw-bold" data-label="MoM Change">
                                 @if($mat['pct_change'] > 0)
                                     <span class="text-danger">+{{ $mat['pct_change'] }}%</span>
                                 @elseif($mat['pct_change'] < 0)
@@ -219,20 +177,33 @@
                                     <span class="text-muted">0.00%</span>
                                 @endif
                             </td>
-                            <td class="text-center">
+                            <td class="py-3 text-center" data-label="Indicator">
                                 @if($mat['indicator'] === 'increase')
-                                    <span class="badge badge-indicator-increase">🔺 Inflation Spike</span>
+                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill px-2.5 py-1 fw-bold">
+                                        <i class="fa-solid fa-arrow-up me-1"></i>Spike
+                                    </span>
                                 @elseif($mat['indicator'] === 'decrease')
-                                    <span class="badge badge-indicator-decrease">🔻 Price Drop</span>
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2.5 py-1 fw-bold">
+                                        <i class="fa-solid fa-arrow-down me-1"></i>Drop
+                                    </span>
                                 @else
-                                    <span class="badge badge-indicator-no_change">➖ Stable</span>
+                                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle rounded-pill px-2.5 py-1">
+                                        <i class="fa-solid fa-minus me-1"></i>Stable
+                                    </span>
                                 @endif
                             </td>
-                            <td class="small text-muted">{{ $mat['last_updated'] }}</td>
+                            <td class="pe-4 py-3 text-end font-tabular small text-muted" data-label="Updated">
+                                {{ $mat['last_updated'] }}
+                            </td>
                         </tr>
                         @empty
                         <tr>
-                            <td colspan="8" class="text-center text-muted py-4">No materials found.</td>
+                            <td colspan="8" class="text-center py-5">
+                                <x-empty-state 
+                                    icon="fa-solid fa-bullhorn" 
+                                    title="No Material Price Summaries Found" 
+                                    message="Log commodity market surveys to track price shifts over time." />
+                            </td>
                         </tr>
                         @endforelse
                     </tbody>
@@ -250,18 +221,21 @@
 <script type="application/json" id="chart-datasets-data">{!! json_encode($chartDatasets ?? []) !!}</script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    const ctx = document.getElementById('priceTrendChart').getContext('2d');
-    const months = JSON.parse(document.getElementById('chart-months-data').textContent || '[]');
-    const datasetsRaw = JSON.parse(document.getElementById('chart-datasets-data').textContent || '[]');
+    const canvas = document.getElementById('priceTrendChart');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const months = JSON.parse(document.getElementById('chart-months-data')?.textContent || '[]');
+    const datasetsRaw = JSON.parse(document.getElementById('chart-datasets-data')?.textContent || '[]');
 
-    const colors = ['#2563eb', '#dc2626', '#16a34a', '#d97706'];
+    const colors = ['#0F2944', '#dc2626', '#16a34a', '#d97706', '#2563eb'];
     const datasets = datasetsRaw.map((ds, idx) => ({
         label: ds.label,
         data: ds.data,
         borderColor: colors[idx % colors.length],
-        backgroundColor: colors[idx % colors.length] + '1a',
+        backgroundColor: colors[idx % colors.length] + '15',
         tension: 0.3,
-        fill: true
+        fill: true,
+        borderWidth: 2
     }));
 
     new Chart(ctx, {
@@ -279,7 +253,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 y: {
                     beginAtZero: false,
                     ticks: {
-                        callback: function(val) { return 'ETB ' + val; }
+                        callback: function(val) { return 'ETB ' + val.toLocaleString(); }
                     }
                 }
             }

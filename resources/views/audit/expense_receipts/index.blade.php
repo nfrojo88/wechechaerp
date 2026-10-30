@@ -2,35 +2,38 @@
 
 @section('title', 'Expense Receipt Audit Center')
 
+@push('styles')
+<style>
+    @media print {
+        .wc-no-print { display: none !important; }
+        .card { border: 1px solid #e2e8f0 !important; box-shadow: none !important; }
+    }
+</style>
+@endpush
+
 @section('content')
-<div class="container-fluid py-4 px-4">
+<div class="container-fluid px-3 px-md-4 py-3">
 
-    <!-- Header Section -->
-    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
-        <div>
-            <div class="d-flex align-items-center gap-2">
-                <div class="rounded-circle p-2 d-flex align-items-center justify-content-center shadow-sm" style="width: 46px; height: 46px; background: linear-gradient(135deg, #f59e0b, #d97706); color: white;">
-                    <i class="fa-solid fa-receipt fa-lg"></i>
-                </div>
-                <div>
-                    <h3 class="fw-bold text-dark mb-0">Expense Receipt Audit Center</h3>
-                    <p class="text-muted small mb-0">Single-pane audit compliance: inspect all paid company expenses, verify receipts, issue inquiries, or waive non-receiptable costs.</p>
-                </div>
-            </div>
-        </div>
-        <div class="d-flex align-items-center gap-2">
-            <a href="{{ \Illuminate\Support\Facades\Route::has('dashboard.audit') ? route('dashboard.audit') : url('/dashboard/audit') }}" class="btn btn-outline-secondary rounded-pill px-3 shadow-xs">
-                <i class="fa-solid fa-chart-pie me-1"></i> Audit Dashboard
+    {{-- Page Header --}}
+    <x-page-header 
+        title="Expense Receipt Audit Center" 
+        subtitle="Single-pane audit compliance: inspect all paid company expenses, verify receipts, issue inquiries, or waive non-receiptable costs">
+        <x-slot:actions>
+            <a href="{{ \Illuminate\Support\Facades\Route::has('dashboard.audit') ? route('dashboard.audit') : url('/dashboard/audit') }}" class="btn btn-outline-secondary btn-sm rounded-pill px-3 shadow-xs">
+                <i class="fa-solid fa-chart-pie me-1"></i>Audit Dashboard
             </a>
-            <a href="{{ route('finance.replenishments.index', ['tab' => 'under_audit']) }}" class="btn btn-outline-warning text-dark rounded-pill px-3 shadow-xs">
-                <i class="fa-solid fa-hand-holding-dollar me-1"></i> Petty Cash Audits
+            <a href="{{ route('finance.replenishments.index', ['tab' => 'under_audit']) }}" class="btn btn-outline-warning text-dark btn-sm rounded-pill px-3 shadow-xs">
+                <i class="fa-solid fa-hand-holding-dollar me-1"></i>Petty Cash Audits
             </a>
-        </div>
-    </div>
+            <button class="btn btn-outline-secondary btn-sm rounded-pill px-3 shadow-xs wc-no-print" onclick="window.print()">
+                <i class="fa-solid fa-print me-1"></i>Print
+            </button>
+        </x-slot:actions>
+    </x-page-header>
 
-    <!-- Alerts -->
+    {{-- Alerts --}}
     @if(session('success'))
-        <div class="alert alert-success alert-dismissible fade show rounded-4 shadow-sm border-0 d-flex align-items-center" role="alert">
+        <div class="alert alert-success alert-dismissible fade show rounded-4 shadow-sm border-0 d-flex align-items-center mb-4" role="alert">
             <i class="fa-solid fa-circle-check fs-5 me-2"></i>
             <div>{{ session('success') }}</div>
             <button type="button" class="btn-close ms-auto" data-bs-dismiss="alert"></button>
@@ -38,148 +41,118 @@
     @endif
 
     @if(session('error'))
-        <div class="alert alert-danger alert-dismissible fade show rounded-4 shadow-sm border-0 d-flex align-items-center" role="alert">
+        <div class="alert alert-danger alert-dismissible fade show rounded-4 shadow-sm border-0 d-flex align-items-center mb-4" role="alert">
             <i class="fa-solid fa-circle-exclamation fs-5 me-2"></i>
             <div>{{ session('error') }}</div>
             <button type="button" class="btn-close ms-auto" data-bs-dismiss="alert"></button>
         </div>
     @endif
 
-    <!-- Metric Cards -->
+    {{-- Metric Cards --}}
     <div class="row g-3 mb-4">
-        <!-- 1. Total Paid Expenses Audited -->
+        {{-- Total Paid Expenses --}}
         <div class="col-xl col-md-4 col-sm-6">
-            <div class="card shadow-sm border-0 rounded-4 h-100 bg-white">
-                <div class="card-body p-3 d-flex justify-content-between align-items-center">
-                    <div>
-                        <span class="text-uppercase small fw-bold text-muted" style="font-size:0.70rem;">Total Paid Expenses</span>
-                        <h4 class="fw-bold text-dark mb-0 mt-1">ETB {{ number_format($totalExpensesAmount, 2) }}</h4>
-                        <small class="text-muted" style="font-size:0.75rem;"><i class="fa-solid fa-list-check me-1"></i>{{ number_format($totalExpensesCount) }} transactions</small>
-                    </div>
-                    <div class="rounded-circle d-flex align-items-center justify-content-center shadow-xs" style="width: 44px; height: 44px; background:#eff6ff; color:#2563eb;">
-                        <i class="fa-solid fa-file-invoice-dollar fa-lg"></i>
-                    </div>
-                </div>
-            </div>
+            <x-kpi-card 
+                label="Total Paid Expenses" 
+                value="ETB {{ number_format($totalExpensesAmount, 2) }}" 
+                icon="fa-solid fa-file-invoice-dollar" 
+                variant="primary" 
+                helpText="{{ number_format($totalExpensesCount) }} transactions audited" />
         </div>
 
-        <!-- 2. Missing Receipts (Risk Highlight) -->
+        {{-- Missing Receipts --}}
         <div class="col-xl col-md-4 col-sm-6">
-            <div class="card shadow-sm border-0 rounded-4 h-100 bg-white border-start border-danger border-4">
-                <div class="card-body p-3 d-flex justify-content-between align-items-center">
-                    <div>
-                        <span class="text-uppercase small fw-bold text-danger" style="font-size:0.70rem;">Missing Receipts</span>
-                        <h4 class="fw-bold text-danger mb-0 mt-1">ETB {{ number_format($missingReceiptAmount, 2) }}</h4>
-                        <small class="text-danger fw-semibold" style="font-size:0.75rem;"><i class="fa-solid fa-triangle-exclamation me-1"></i>{{ $missingReceiptCount }} missing</small>
-                    </div>
-                    <div class="rounded-circle d-flex align-items-center justify-content-center shadow-xs" style="width: 44px; height: 44px; background:#fee2e2; color:#dc2626;">
-                        <i class="fa-solid fa-receipt fa-lg"></i>
-                    </div>
-                </div>
-            </div>
+            <x-kpi-card 
+                label="Missing Receipts (Risk)" 
+                value="ETB {{ number_format($missingReceiptAmount, 2) }}" 
+                icon="fa-solid fa-triangle-exclamation" 
+                variant="danger" 
+                helpText="{{ $missingReceiptCount }} expenses missing vouchers" />
         </div>
 
-        <!-- 3. Receipts Attached -->
+        {{-- Receipts Attached --}}
         <div class="col-xl col-md-4 col-sm-6">
-            <div class="card shadow-sm border-0 rounded-4 h-100 bg-white">
-                <div class="card-body p-3 d-flex justify-content-between align-items-center">
-                    <div>
-                        <span class="text-uppercase small fw-bold text-success" style="font-size:0.70rem;">Receipts Attached</span>
-                        <h4 class="fw-bold text-success mb-0 mt-1">ETB {{ number_format($attachedReceiptAmount, 2) }}</h4>
-                        <small class="text-success" style="font-size:0.75rem;"><i class="fa-solid fa-shield-check me-1"></i>{{ $attachedReceiptCount }} verified</small>
-                    </div>
-                    <div class="rounded-circle d-flex align-items-center justify-content-center shadow-xs" style="width: 44px; height: 44px; background:#dcfce7; color:#16a34a;">
-                        <i class="fa-solid fa-circle-check fa-lg"></i>
-                    </div>
-                </div>
-            </div>
+            <x-kpi-card 
+                label="Receipts Attached" 
+                value="ETB {{ number_format($attachedReceiptAmount, 2) }}" 
+                icon="fa-solid fa-circle-check" 
+                variant="success" 
+                helpText="{{ $attachedReceiptCount }} verified receipts on file" />
         </div>
 
-        <!-- 4. Verified Without Receipt -->
+        {{-- Verified Without Receipt --}}
         <div class="col-xl col-md-6 col-sm-6">
-            <div class="card shadow-sm border-0 rounded-4 h-100 bg-white border-start border-info border-4">
-                <div class="card-body p-3 d-flex justify-content-between align-items-center">
-                    <div>
-                        <span class="text-uppercase small fw-bold text-info" style="font-size:0.70rem;">Verified Without Receipt</span>
-                        <h4 class="fw-bold text-info mb-0 mt-1">ETB {{ number_format($verifiedNoReceiptAmount ?? 0, 2) }}</h4>
-                        <small class="text-info fw-semibold" style="font-size:0.75rem;"><i class="fa-solid fa-check-double me-1"></i>{{ $verifiedNoReceiptCount ?? 0 }} waived costs</small>
-                    </div>
-                    <div class="rounded-circle d-flex align-items-center justify-content-center shadow-xs" style="width: 44px; height: 44px; background:#e0f2fe; color:#0284c7;">
-                        <i class="fa-solid fa-check-double fa-lg"></i>
-                    </div>
-                </div>
-            </div>
+            <x-kpi-card 
+                label="Verified W/O Receipt" 
+                value="ETB {{ number_format($verifiedNoReceiptAmount ?? 0, 2) }}" 
+                icon="fa-solid fa-check-double" 
+                variant="info" 
+                helpText="{{ $verifiedNoReceiptCount ?? 0 }} waived minor/transport fees" />
         </div>
 
-        <!-- 5. Receipts Inquired / Pending Upload -->
+        {{-- Inquiries Sent --}}
         <div class="col-xl col-md-6 col-sm-6">
-            <div class="card shadow-sm border-0 rounded-4 h-100 bg-white">
-                <div class="card-body p-3 d-flex justify-content-between align-items-center">
-                    <div>
-                        <span class="text-uppercase small fw-bold text-warning" style="font-size:0.70rem;">Inquiries Sent</span>
-                        <h4 class="fw-bold text-warning mb-0 mt-1">ETB {{ number_format($requestedReceiptAmount, 2) }}</h4>
-                        <small class="text-muted" style="font-size:0.75rem;"><i class="fa-solid fa-paper-plane me-1"></i>{{ $requestedReceiptCount }} pending</small>
-                    </div>
-                    <div class="rounded-circle d-flex align-items-center justify-content-center shadow-xs" style="width: 44px; height: 44px; background:#fef3c7; color:#d97706;">
-                        <i class="fa-solid fa-envelope-open-text fa-lg"></i>
-                    </div>
-                </div>
-            </div>
+            <x-kpi-card 
+                label="Inquiries Sent" 
+                value="ETB {{ number_format($requestedReceiptAmount, 2) }}" 
+                icon="fa-solid fa-envelope-open-text" 
+                variant="warning" 
+                helpText="{{ $requestedReceiptCount }} awaiting payee upload" />
         </div>
     </div>
 
-    <!-- Main Content Card -->
-    <div class="card shadow-sm border-0 rounded-4 overflow-hidden mb-4 bg-white">
-        <!-- Navigation Tabs -->
+    {{-- Main Content Card --}}
+    <div class="card border-0 shadow-sm rounded-4 overflow-hidden mb-4 bg-white">
+        {{-- Navigation Tabs --}}
         <div class="card-header bg-white border-bottom pt-3 px-4 pb-0">
             <ul class="nav nav-tabs card-header-tabs gap-2 border-0">
                 <li class="nav-item">
                     <a class="nav-link fw-semibold rounded-top-3 px-3 py-2 {{ $tab === 'all' ? 'active bg-light border-bottom-0 text-primary fw-bold' : 'text-secondary' }}" 
                        href="{{ request()->fullUrlWithQuery(['tab' => 'all', 'page' => 1]) }}">
                         <i class="fa-solid fa-list me-1"></i> All Paid Expenses 
-                        <span class="badge bg-secondary ms-1 rounded-pill">{{ $totalExpensesCount }}</span>
+                        <span class="badge bg-secondary ms-1 rounded-pill font-tabular">{{ $totalExpensesCount }}</span>
                     </a>
                 </li>
                 <li class="nav-item">
                     <a class="nav-link fw-semibold rounded-top-3 px-3 py-2 {{ $tab === 'missing' ? 'active bg-light border-bottom-0 text-danger fw-bold' : 'text-danger' }}" 
                        href="{{ request()->fullUrlWithQuery(['tab' => 'missing', 'page' => 1]) }}">
                         <i class="fa-solid fa-triangle-exclamation me-1 text-danger"></i> Missing Receipts 
-                        <span class="badge bg-danger ms-1 rounded-pill">{{ $missingReceiptCount }}</span>
+                        <span class="badge bg-danger ms-1 rounded-pill font-tabular">{{ $missingReceiptCount }}</span>
                     </a>
                 </li>
                 <li class="nav-item">
                     <a class="nav-link fw-semibold rounded-top-3 px-3 py-2 {{ $tab === 'requested' ? 'active bg-light border-bottom-0 text-warning fw-bold' : 'text-secondary' }}" 
                        href="{{ request()->fullUrlWithQuery(['tab' => 'requested', 'page' => 1]) }}">
                         <i class="fa-solid fa-paper-plane me-1 text-warning"></i> Inquiries Sent 
-                        <span class="badge bg-warning text-dark ms-1 rounded-pill">{{ $requestedReceiptCount }}</span>
+                        <span class="badge bg-warning text-dark ms-1 rounded-pill font-tabular">{{ $requestedReceiptCount }}</span>
                     </a>
                 </li>
                 <li class="nav-item">
                     <a class="nav-link fw-semibold rounded-top-3 px-3 py-2 {{ $tab === 'attached' ? 'active bg-light border-bottom-0 text-success fw-bold' : 'text-secondary' }}" 
                        href="{{ request()->fullUrlWithQuery(['tab' => 'attached', 'page' => 1]) }}">
                         <i class="fa-solid fa-circle-check me-1 text-success"></i> Receipts Attached 
-                        <span class="badge bg-success ms-1 rounded-pill">{{ $attachedReceiptCount }}</span>
+                        <span class="badge bg-success ms-1 rounded-pill font-tabular">{{ $attachedReceiptCount }}</span>
                     </a>
                 </li>
                 <li class="nav-item">
                     <a class="nav-link fw-semibold rounded-top-3 px-3 py-2 {{ $tab === 'verified_no_receipt' ? 'active bg-light border-bottom-0 text-info fw-bold' : 'text-secondary' }}" 
                        href="{{ request()->fullUrlWithQuery(['tab' => 'verified_no_receipt', 'page' => 1]) }}">
                         <i class="fa-solid fa-check-double me-1 text-info"></i> Verified Without Receipt 
-                        <span class="badge bg-info ms-1 rounded-pill">{{ $verifiedNoReceiptCount ?? 0 }}</span>
+                        <span class="badge bg-info ms-1 rounded-pill font-tabular">{{ $verifiedNoReceiptCount ?? 0 }}</span>
                     </a>
                 </li>
             </ul>
         </div>
 
-        <!-- Filter & Search Bar -->
-        <div class="card-body p-3 bg-light border-bottom">
+        {{-- Filter & Search Bar --}}
+        <div class="card-body p-3 bg-light border-bottom wc-no-print">
             <form method="GET" action="{{ \Illuminate\Support\Facades\Route::has('audit.expense-receipts.index') ? route('audit.expense-receipts.index') : url('/audit/expense-receipts') }}" class="row g-2 align-items-center">
                 <input type="hidden" name="tab" value="{{ $tab }}">
 
                 <div class="col-md-3">
                     <div class="input-group input-group-sm">
                         <span class="input-group-text bg-white border-end-0"><i class="fa-solid fa-magnifying-glass text-muted"></i></span>
-                        <input type="text" name="search" class="form-control form-control-sm border-start-0 ps-0" placeholder="Search ref #, requester, project, details..." value="{{ request('search') }}">
+                        <input type="text" name="search" class="form-control form-control-sm border-start-0 ps-0" placeholder="Search ref #, requester, project..." value="{{ request('search') }}">
                     </div>
                 </div>
 
@@ -216,11 +189,11 @@
                 </div>
 
                 <div class="col-md-2 d-flex gap-1 justify-content-end">
-                    <button type="submit" class="btn btn-sm btn-primary px-3 rounded-pill">
+                    <button type="submit" class="btn btn-sm btn-primary rounded-pill px-3 fw-bold w-100">
                         <i class="fa-solid fa-filter me-1"></i> Filter
                     </button>
                     @if(request('search') || (request('type') && request('type') !== 'all') || request('project_id') || request('start_date') || request('end_date'))
-                        <a href="{{ \Illuminate\Support\Facades\Route::has('audit.expense-receipts.index') ? route('audit.expense-receipts.index', ['tab' => $tab]) : url('/audit/expense-receipts?tab=' . $tab) }}" class="btn btn-sm btn-outline-danger px-2 rounded-pill" title="Clear all filters">
+                        <a href="{{ \Illuminate\Support\Facades\Route::has('audit.expense-receipts.index') ? route('audit.expense-receipts.index', ['tab' => $tab]) : url('/audit/expense-receipts?tab=' . $tab) }}" class="btn btn-sm btn-light border rounded-pill px-2 text-danger" title="Clear all filters">
                             <i class="fa-solid fa-xmark"></i>
                         </a>
                     @endif
@@ -228,27 +201,28 @@
             </form>
         </div>
 
-        <!-- Table View -->
-        <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0">
-                <thead class="bg-light text-muted small text-uppercase">
-                    <tr>
-                        <th class="ps-4 py-3">Ref # / Date</th>
-                        <th class="py-3">Requester / Dept</th>
-                        <th class="py-3">Category &amp; Description</th>
-                        <th class="py-3">Project</th>
-                        <th class="py-3 text-end">Amount</th>
-                        <th class="py-3 text-center">Receipt Status</th>
-                        <th class="pe-4 py-3 text-end">Audit Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @forelse($items as $item)
+        {{-- Table View --}}
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0 wc-table-mobile-cards">
+                    <thead class="table-light text-muted small text-uppercase" style="letter-spacing: 0.5px;">
                         <tr>
-                            <!-- Ref & Date -->
-                            <td class="ps-4 py-3" style="white-space: nowrap;">
-                                <div class="fw-bold text-dark font-monospace">{{ $item->reference_no }}</div>
-                                <div class="text-muted small">
+                            <th class="ps-4 py-3">Ref # / Date</th>
+                            <th class="py-3">Requester / Dept</th>
+                            <th class="py-3">Category &amp; Description</th>
+                            <th class="py-3">Project</th>
+                            <th class="py-3 text-end">Amount</th>
+                            <th class="py-3 text-center">Receipt Status</th>
+                            <th class="pe-4 py-3 text-end">Audit Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @forelse($items as $item)
+                        <tr>
+                            {{-- Ref & Date --}}
+                            <td class="ps-4 py-3" data-label="Reference">
+                                <div class="fw-bold font-monospace" style="color: var(--brand-900);">{{ $item->reference_no }}</div>
+                                <div class="text-muted small font-tabular">
                                     {{ \Carbon\Carbon::parse($item->date)->format('M d, Y') }}
                                 </div>
                                 <div>
@@ -264,31 +238,31 @@
                                 </div>
                             </td>
 
-                            <!-- Requester / Dept -->
-                            <td class="py-3">
+                            {{-- Requester / Dept --}}
+                            <td class="py-3" data-label="Requester">
                                 <div class="fw-semibold text-dark">{{ $item->requester }}</div>
                                 <div class="text-muted small">{{ $item->department }}</div>
                                 @if($item->account_name)
-                                    <div class="text-muted" style="font-size:0.72rem;"><i class="fa-solid fa-wallet me-1"></i>{{ $item->account_name }}</div>
+                                    <div class="text-muted small font-monospace" style="font-size:0.72rem;"><i class="fa-solid fa-wallet me-1"></i>{{ $item->account_name }}</div>
                                 @endif
                             </td>
 
-                            <!-- Category & Description -->
-                            <td class="py-3" style="max-width: 280px;">
-                                <span class="badge bg-light text-dark border mb-1">{{ $item->category }}</span>
+                            {{-- Category & Description --}}
+                            <td class="py-3" style="max-width: 260px;" data-label="Details">
+                                <span class="badge bg-light text-dark border mb-1 rounded-pill">{{ $item->category }}</span>
                                 <div class="text-dark small text-truncate" title="{{ $item->description }}">{{ $item->description }}</div>
                                 @if($item->audit_notes)
                                     <div class="text-warning small mt-1 font-monospace" style="font-size:0.72rem;">
-                                        <i class="fa-solid fa-comment-dots me-1"></i>Audit Note: {{ Str::limit($item->audit_notes, 50) }}
+                                        <i class="fa-solid fa-comment-dots me-1"></i>Note: {{ Str::limit($item->audit_notes, 40) }}
                                     </div>
                                 @endif
                             </td>
 
-                            <!-- Project Link Column -->
-                            <td class="py-3" style="min-width: 150px; max-width: 200px;">
+                            {{-- Project Link Column --}}
+                            <td class="py-3" style="min-width: 140px; max-width: 190px;" data-label="Project">
                                 @if(!empty($item->project_name))
                                     <div class="d-flex align-items-center gap-1">
-                                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-2 text-truncate py-1 px-2" style="max-width: 140px;" title="{{ $item->project_name }} {{ $item->project_code ? '(' . $item->project_code . ')' : '' }}">
+                                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-2 text-truncate py-1 px-2" style="max-width: 130px;" title="{{ $item->project_name }} {{ $item->project_code ? '(' . $item->project_code . ')' : '' }}">
                                             <i class="fa-solid fa-building me-1"></i>{{ $item->project_code ? $item->project_code . ' · ' : '' }}{{ $item->project_name }}
                                         </span>
                                         <button type="button" class="btn btn-link btn-sm p-0 text-muted" 
@@ -315,104 +289,104 @@
                                 @endif
                             </td>
 
-                            <!-- Amount -->
-                            <td class="py-3 text-end fw-bold" style="white-space: nowrap;">
-                                <div class="fs-6 text-dark">ETB {{ number_format($item->amount, 2) }}</div>
-                                <span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size:0.7rem;">{{ $item->payment_status }}</span>
+                            {{-- Amount --}}
+                            <td class="py-3 text-end font-tabular" data-label="Amount">
+                                <div class="fs-6 fw-bold text-dark">ETB {{ number_format($item->amount, 2) }}</div>
+                                <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill" style="font-size:0.7rem;">{{ $item->payment_status }}</span>
                             </td>
 
-                            <!-- Receipt Status -->
-                            <td class="py-3 text-center" style="white-space: nowrap;">
+                            {{-- Receipt Status --}}
+                            <td class="py-3 text-center" data-label="Status">
                                 @if($item->audit_status === 'verified_no_receipt')
                                     <div class="d-inline-flex flex-column align-items-center">
-                                        <span class="badge bg-info-subtle text-info border border-info-subtle px-3 py-1 rounded-pill fw-bold">
-                                            <i class="fa-solid fa-check-double me-1"></i> Verified Without Receipt
+                                        <span class="badge bg-info-subtle text-info border border-info-subtle px-2.5 py-1 rounded-pill fw-bold">
+                                            <i class="fa-solid fa-check-double me-1"></i>Verified W/O Receipt
                                         </span>
-                                        <small class="text-muted mt-1" style="font-size:0.68rem;" title="{{ $item->audit_notes }}"><i class="fa-solid fa-shield-check me-1"></i>Waived / Approved</small>
+                                        <small class="text-muted mt-0.5" style="font-size:0.68rem;" title="{{ $item->audit_notes }}"><i class="fa-solid fa-shield-check me-1"></i>Waived / Approved</small>
                                     </div>
                                 @elseif($item->has_receipt)
                                     <div class="d-inline-flex flex-column align-items-center">
-                                        <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-1 rounded-pill">
-                                            <i class="fa-solid fa-check-circle me-1"></i> Receipt Attached
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle px-2.5 py-1 rounded-pill">
+                                            <i class="fa-solid fa-check-circle me-1"></i>Receipt Attached
                                         </span>
                                         @if($item->audit_verified_at)
-                                            <small class="text-success fw-bold mt-1" style="font-size:0.68rem;"><i class="fa-solid fa-stamp me-1"></i>Verified</small>
+                                            <small class="text-success fw-bold mt-0.5" style="font-size:0.68rem;"><i class="fa-solid fa-stamp me-1"></i>Verified</small>
                                         @endif
                                     </div>
                                 @elseif($item->audit_status === 'requested')
-                                    <span class="badge bg-warning-subtle text-warning border border-warning-subtle px-3 py-1 rounded-pill">
-                                        <i class="fa-solid fa-paper-plane me-1"></i> Receipt Inquired
+                                    <span class="badge bg-warning-subtle text-warning border border-warning-subtle px-2.5 py-1 rounded-pill">
+                                        <i class="fa-solid fa-paper-plane me-1"></i>Receipt Inquired
                                     </span>
                                 @else
-                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-1 rounded-pill">
-                                        <i class="fa-solid fa-triangle-exclamation me-1"></i> Missing Receipt
+                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2.5 py-1 rounded-pill">
+                                        <i class="fa-solid fa-triangle-exclamation me-1"></i>Missing Receipt
                                     </span>
                                 @endif
                             </td>
 
-                            <!-- Audit Actions -->
-                            <td class="pe-4 py-3 text-end" style="white-space: nowrap;">
-                                <div class="d-inline-flex gap-1">
-                                    <!-- 1. View Attached Receipt -->
+                            {{-- Audit Actions --}}
+                            <td class="pe-4 py-3 text-end" data-label="Actions">
+                                <div class="d-inline-flex gap-1 flex-wrap justify-content-end">
+                                    {{-- 1. View Attached Receipt --}}
                                     @if($item->has_receipt && $item->receipt_url)
-                                        <a href="{{ $item->receipt_url }}" target="_blank" class="btn btn-outline-success btn-sm rounded-3 px-2" title="View attached receipt document">
-                                            <i class="fa-solid fa-eye me-1"></i> Receipt
+                                        <a href="{{ $item->receipt_url }}" target="_blank" class="btn btn-outline-success btn-sm rounded-pill px-2.5 shadow-xs" title="View attached receipt document">
+                                            <i class="fa-solid fa-eye me-1"></i>Receipt
                                         </a>
                                     @endif
 
-                                    <!-- 2. Project Link / Reassign Trigger -->
-                                    <button type="button" class="btn btn-outline-secondary btn-sm rounded-3 px-2" 
+                                    {{-- 2. Project Link / Reassign Trigger --}}
+                                    <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-2.5 shadow-xs" 
                                             onclick="openAuditModal('linkProjectModal_{{ $item->unique_key }}')" 
                                             data-bs-toggle="modal" 
                                             data-bs-target="#linkProjectModal_{{ $item->unique_key }}" 
                                             title="{{ !empty($item->project_name) ? 'Reassign Project (' . $item->project_name . ')' : 'Link Expense to Project' }}">
-                                        <i class="fa-solid fa-diagram-project me-1 text-primary"></i> Project
+                                        <i class="fa-solid fa-diagram-project me-1 text-primary"></i>Project
                                     </button>
 
-                                    <!-- 3. Ask For Receipt Modal Trigger -->
-                                    <button type="button" class="btn btn-outline-warning text-dark btn-sm rounded-3 px-2" 
+                                    {{-- 3. Ask For Receipt Modal Trigger --}}
+                                    <button type="button" class="btn btn-outline-warning text-dark btn-sm rounded-pill px-2.5 shadow-xs" 
                                             onclick="openAuditModal('askReceiptModal_{{ $item->unique_key }}')" 
                                             data-bs-toggle="modal" 
                                             data-bs-target="#askReceiptModal_{{ $item->unique_key }}" 
                                             title="Request missing receipt / send inquiry">
-                                        <i class="fa-solid fa-envelope-open-text me-1"></i> Ask Receipt
+                                        <i class="fa-solid fa-envelope-open-text me-1"></i>Ask Receipt
                                     </button>
 
-                                    <!-- 4. Add / Upload Receipt Modal Trigger -->
-                                    <button type="button" class="btn btn-primary btn-sm rounded-3 px-2 fw-semibold" 
+                                    {{-- 4. Add / Upload Receipt Modal Trigger --}}
+                                    <button type="button" class="btn btn-primary btn-sm rounded-pill px-2.5 shadow-xs fw-semibold" 
                                             onclick="openAuditModal('attachReceiptModal_{{ $item->unique_key }}')" 
                                             data-bs-toggle="modal" 
                                             data-bs-target="#attachReceiptModal_{{ $item->unique_key }}" 
                                             title="Directly upload and attach receipt voucher">
-                                        <i class="fa-solid fa-upload me-1"></i> Add Receipt
+                                        <i class="fa-solid fa-upload me-1"></i>Add Receipt
                                     </button>
 
-                                    <!-- 5. Verify Without Receipt Action Button -->
+                                    {{-- 5. Verify Without Receipt Action Button --}}
                                     @if($item->audit_status === 'verified_no_receipt')
-                                        <button type="button" class="btn btn-info text-white btn-sm rounded-3 px-2 fw-bold shadow-xs" 
+                                        <button type="button" class="btn btn-info text-white btn-sm rounded-pill px-2.5 shadow-xs fw-bold" 
                                                 onclick="openAuditModal('verifyNoReceiptModal_{{ $item->unique_key }}')" 
                                                 data-bs-toggle="modal" 
                                                 data-bs-target="#verifyNoReceiptModal_{{ $item->unique_key }}" 
                                                 title="Verified Without Receipt (Click to view or edit reason)">
-                                            <i class="fa-solid fa-check-double me-1"></i> Verified Without Receipt
+                                            <i class="fa-solid fa-check-double me-1"></i>Verified W/O
                                         </button>
                                     @elseif(!$item->has_receipt)
-                                        <button type="button" class="btn btn-outline-info text-dark btn-sm rounded-3 px-2 fw-bold" 
+                                        <button type="button" class="btn btn-outline-info text-dark btn-sm rounded-pill px-2.5 shadow-xs fw-bold" 
                                                 onclick="openAuditModal('verifyNoReceiptModal_{{ $item->unique_key }}')" 
                                                 data-bs-toggle="modal" 
                                                 data-bs-target="#verifyNoReceiptModal_{{ $item->unique_key }}" 
-                                                title="Verify without receipt (e.g. taxi, loading/unloading, parking, petty cash)">
-                                            <i class="fa-solid fa-check-double me-1 text-info"></i> Verify Without Receipt
+                                                title="Verify without receipt (e.g. taxi, loading, parking)">
+                                            <i class="fa-solid fa-check-double me-1 text-info"></i>Verify W/O
                                         </button>
                                     @endif
 
-                                    <!-- 6. Verify Receipt Stamp -->
+                                    {{-- 6. Verify Receipt Stamp --}}
                                     @if($item->has_receipt && !$item->audit_verified_at)
                                         <form method="POST" action="{{ \Illuminate\Support\Facades\Route::has('audit.expense-receipts.verify') ? route('audit.expense-receipts.verify') : url('/audit/expense-receipts/verify') }}" class="d-inline" onsubmit="return confirm('Verify this receipt as audit-compliant?')">
                                             @csrf
                                             <input type="hidden" name="source_type" value="{{ $item->source_type }}">
                                             <input type="hidden" name="source_id" value="{{ $item->source_id }}">
-                                            <button type="submit" class="btn btn-outline-secondary btn-sm rounded-3 px-2" title="Mark as Audit-Verified">
+                                            <button type="submit" class="btn btn-outline-secondary btn-sm rounded-pill px-2 shadow-xs" title="Mark as Audit-Verified">
                                                 <i class="fa-solid fa-stamp"></i>
                                             </button>
                                         </form>
@@ -420,27 +394,25 @@
                                 </div>
                             </td>
                         </tr>
-                    @empty
+                        @empty
                         <tr>
-                            <td colspan="7" class="text-center py-5 text-muted">
-                                <div class="d-flex flex-column align-items-center">
-                                    <div class="rounded-circle bg-light p-3 mb-3 text-secondary">
-                                        <i class="fa-solid fa-receipt fa-3x opacity-50"></i>
-                                    </div>
-                                    <h6 class="fw-bold">No audited paid expenses match the selected filters.</h6>
-                                    <p class="small text-muted mb-0">Try clearing filters or switching between tabs above.</p>
-                                </div>
+                            <td colspan="7" class="text-center py-5">
+                                <x-empty-state 
+                                    icon="fa-solid fa-receipt" 
+                                    title="No Audited Paid Expenses Found" 
+                                    message="No expenses match the selected filters. Switch tabs above or clear filter options." />
                             </td>
                         </tr>
-                    @endforelse
-                </tbody>
-            </table>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
         </div>
 
-        <!-- Pagination -->
+        {{-- Pagination --}}
         @if($items->hasPages())
             <div class="card-footer bg-white border-top py-3 px-4 d-flex justify-content-between align-items-center">
-                <div class="small text-muted">
+                <div class="small text-muted font-tabular">
                     Showing {{ $items->firstItem() }} to {{ $items->lastItem() }} of {{ $items->total() }} records
                 </div>
                 <div>
@@ -449,16 +421,15 @@
             </div>
         @endif
     </div>
+
 </div>
 
-<!-- ========================================== -->
-<!-- MODALS RENDERED OUTSIDE TABLE (CLEAN DOM)  -->
-<!-- ========================================== -->
+{{-- MODALS RENDERED OUTSIDE TABLE --}}
 @foreach($items as $item)
-    <!-- Modal 1: Ask for Receipt -->
+    {{-- Modal 1: Ask for Receipt --}}
     <div class="modal fade" id="askReceiptModal_{{ $item->unique_key }}" tabindex="-1" aria-labelledby="askModalLabel_{{ $item->unique_key }}" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content rounded-4 border-0 shadow-lg">
+            <div class="modal-content rounded-4 border-0 shadow-lg text-start">
                 <form method="POST" action="{{ \Illuminate\Support\Facades\Route::has('audit.expense-receipts.ask') ? route('audit.expense-receipts.ask') : url('/audit/expense-receipts/ask') }}">
                     @csrf
                     <input type="hidden" name="source_type" value="{{ $item->source_type }}">
@@ -478,18 +449,18 @@
                             </div>
                             <div class="d-flex justify-content-between text-muted small">
                                 <span>Disbursed Amount:</span>
-                                <strong class="text-danger">ETB {{ number_format($item->amount, 2) }}</strong>
+                                <strong class="text-danger font-tabular">ETB {{ number_format($item->amount, 2) }}</strong>
                             </div>
                         </div>
 
                         <div class="mb-3">
                             <label class="form-label fw-bold text-dark small text-uppercase">Audit Receipt Inquiry / Instructions <span class="text-danger">*</span></label>
-                            <textarea name="inquiry_note" class="form-control" rows="3" required placeholder="State required receipt documentation (e.g. Please attach the official VAT sales invoice or signed voucher for this payment)...">{{ $item->audit_notes ?: "Official VAT receipt / sales invoice required for audit verification of this ETB " . number_format($item->amount, 2) . " expense." }}</textarea>
+                            <textarea name="inquiry_note" class="form-control" rows="3" required placeholder="State required receipt documentation...">{{ $item->audit_notes ?: "Official VAT receipt / sales invoice required for audit verification of this ETB " . number_format($item->amount, 2) . " expense." }}</textarea>
                         </div>
                     </div>
                     <div class="modal-footer bg-light border-0 py-3 px-4">
                         <button type="button" class="btn btn-secondary rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" class="btn btn-warning rounded-pill px-4 fw-bold shadow-sm">
+                        <button type="submit" class="btn btn-warning rounded-pill px-4 fw-bold shadow-sm text-dark">
                             <i class="fa-solid fa-paper-plane me-1"></i> Send Request
                         </button>
                     </div>
@@ -498,10 +469,10 @@
         </div>
     </div>
 
-    <!-- Modal 2: Add / Upload Receipt -->
+    {{-- Modal 2: Add / Upload Receipt --}}
     <div class="modal fade" id="attachReceiptModal_{{ $item->unique_key }}" tabindex="-1" aria-labelledby="attachModalLabel_{{ $item->unique_key }}" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content rounded-4 border-0 shadow-lg">
+            <div class="modal-content rounded-4 border-0 shadow-lg text-start">
                 <form method="POST" action="{{ \Illuminate\Support\Facades\Route::has('audit.expense-receipts.attach') ? route('audit.expense-receipts.attach') : url('/audit/expense-receipts/attach') }}" enctype="multipart/form-data">
                     @csrf
                     <input type="hidden" name="source_type" value="{{ $item->source_type }}">
@@ -521,7 +492,7 @@
                             </div>
                             <div class="d-flex justify-content-between text-muted small">
                                 <span>Amount:</span>
-                                <strong class="text-success fs-6">ETB {{ number_format($item->amount, 2) }}</strong>
+                                <strong class="text-success fs-6 font-tabular">ETB {{ number_format($item->amount, 2) }}</strong>
                             </div>
                         </div>
 
@@ -533,7 +504,7 @@
 
                         <div class="mb-3">
                             <label class="form-label fw-bold text-dark small text-uppercase">Audit Verification Notes (Optional)</label>
-                            <input type="text" name="notes" class="form-control" placeholder="e.g. Verified official cash receipt #REC-8891 attached">
+                            <input type="text" name="notes" class="form-control" placeholder="e.g. Verified official cash receipt attached">
                         </div>
                     </div>
                     <div class="modal-footer bg-light border-0 py-3 px-4">
@@ -547,10 +518,10 @@
         </div>
     </div>
 
-    <!-- Modal 3: Verify Without Receipt -->
+    {{-- Modal 3: Verify Without Receipt --}}
     <div class="modal fade" id="verifyNoReceiptModal_{{ $item->unique_key }}" tabindex="-1" aria-labelledby="verifyNoReceiptModalLabel_{{ $item->unique_key }}" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content rounded-4 border-0 shadow-lg">
+            <div class="modal-content rounded-4 border-0 shadow-lg text-start">
                 <form method="POST" action="{{ \Illuminate\Support\Facades\Route::has('audit.expense-receipts.verify-no-receipt') ? route('audit.expense-receipts.verify-no-receipt') : url('/audit/expense-receipts/verify-no-receipt') }}">
                     @csrf
                     <input type="hidden" name="source_type" value="{{ $item->source_type }}">
@@ -570,12 +541,12 @@
                             </div>
                             <div class="d-flex justify-content-between text-muted small">
                                 <span>Expense Amount:</span>
-                                <strong class="text-success fs-6">ETB {{ number_format($item->amount, 2) }}</strong>
+                                <strong class="text-success fs-6 font-tabular">ETB {{ number_format($item->amount, 2) }}</strong>
                             </div>
                         </div>
 
                         <div class="alert alert-info border-0 rounded-3 small py-2 px-3 mb-3">
-                            <i class="fa-solid fa-circle-info me-1"></i> Use this option for operational expenses where a formal receipt cannot be obtained (e.g. taxi/transport, parking, loading/unloading, casual day labor).
+                            <i class="fa-solid fa-circle-info me-1"></i> Use this option for operational expenses where a formal receipt cannot be obtained (e.g. taxi/transport, parking, casual day labor).
                         </div>
 
                         <div class="mb-3">
@@ -594,10 +565,10 @@
         </div>
     </div>
 
-    <!-- Modal 4: Link / Reassign to Project -->
+    {{-- Modal 4: Link / Reassign to Project --}}
     <div class="modal fade" id="linkProjectModal_{{ $item->unique_key }}" tabindex="-1" aria-labelledby="linkProjectModalLabel_{{ $item->unique_key }}" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content rounded-4 border-0 shadow-lg">
+            <div class="modal-content rounded-4 border-0 shadow-lg text-start">
                 <form method="POST" action="{{ \Illuminate\Support\Facades\Route::has('audit.expense-receipts.link-project') ? route('audit.expense-receipts.link-project') : url('/audit/expense-receipts/link-project') }}">
                     @csrf
                     <input type="hidden" name="source_type" value="{{ $item->source_type }}">
@@ -621,11 +592,11 @@
                             </div>
                             <div class="d-flex justify-content-between text-muted small mb-1">
                                 <span>Expense Amount:</span>
-                                <strong class="text-success fw-bold">ETB {{ number_format($item->amount, 2) }}</strong>
+                                <strong class="text-success fw-bold font-tabular">ETB {{ number_format($item->amount, 2) }}</strong>
                             </div>
                             <div class="d-flex justify-content-between text-muted small">
                                 <span>Current Project:</span>
-                                <span class="badge {{ !empty($item->project_name) ? 'bg-primary-subtle text-primary border border-primary-subtle' : 'bg-warning-subtle text-warning border border-warning-subtle' }}">
+                                <span class="badge {{ !empty($item->project_name) ? 'bg-primary-subtle text-primary border border-primary-subtle' : 'bg-warning-subtle text-warning border border-warning-subtle' }} rounded-pill">
                                     {{ !empty($item->project_name) ? ($item->project_code ? '[' . $item->project_code . '] ' : '') . $item->project_name : 'None (Unlinked / General HQ)' }}
                                 </span>
                             </div>
@@ -633,7 +604,7 @@
 
                         <div class="mb-3">
                             <label class="form-label fw-bold text-dark small text-uppercase">Assign Construction Project <span class="text-danger">*</span></label>
-                            <select name="project_id" class="form-select select2-project">
+                            <select name="project_id" class="form-select">
                                 <option value="">-- No Project (General HQ / Unlink) --</option>
                                 @if(isset($projects))
                                     @foreach($projects as $projectOption)
@@ -672,7 +643,6 @@ function openAuditModal(modalId) {
         return;
     }
 
-    // Always move modal directly to <body> so it is never trapped behind backdrops
     if (modalEl.parentNode !== document.body) {
         document.body.appendChild(modalEl);
     }
@@ -693,18 +663,7 @@ function openAuditModal(modalId) {
         }
     } catch(e) {}
 
-    try {
-        if (typeof jQuery !== 'undefined' && typeof jQuery(modalEl).modal === 'function') {
-            jQuery(modalEl).modal('show');
-            return;
-        }
-        if (typeof $ !== 'undefined' && typeof $(modalEl).modal === 'function') {
-            $(modalEl).modal('show');
-            return;
-        }
-    } catch(e) {}
-
-    // Fallback: manual CSS display with correct z-index hierarchy
+    // Fallback
     modalEl.classList.add('show');
     modalEl.style.display = 'block';
     modalEl.style.zIndex = '1055';
@@ -733,7 +692,6 @@ function openAuditModal(modalId) {
     });
 }
 
-// Ensure all audit action modals are attached directly to body on page load
 document.addEventListener('DOMContentLoaded', function() {
     document.querySelectorAll('.modal[id^="askReceiptModal_"], .modal[id^="attachReceiptModal_"], .modal[id^="verifyNoReceiptModal_"], .modal[id^="linkProjectModal_"]').forEach(function(m) {
         if (m.parentNode !== document.body) {

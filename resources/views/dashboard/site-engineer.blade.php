@@ -2,107 +2,107 @@
 @section('title', 'Site Engineer Dashboard')
 
 @section('content')
-<div class="container-fluid px-4 py-3">
+<div class="wc-container py-3 py-md-4">
 
     {{-- Top Header --}}
-    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
-        <div>
-            <h3 class="fw-bold mb-1" style="color: #1e293b;">
-                <i class="fa-solid fa-hard-hat text-warning me-2"></i>Site Engineer Dashboard
-            </h3>
-            <p class="text-muted small mb-0">Site operations, morning workforce reporting, schedules, and material requests</p>
-        </div>
-        <div class="d-flex align-items-center gap-2 flex-wrap">
-            <span class="badge bg-white text-secondary border px-3 py-2 shadow-sm rounded-pill">
-                <i class="fa-solid fa-calendar-day text-primary me-1"></i>{{ now()->format('l, F j, Y') }}
-            </span>
-            <a href="{{ route('manpower-daily-report.create') }}" class="btn btn-primary btn-sm shadow-sm">
-                <i class="fa-solid fa-users-line me-1"></i> Submit Manpower Report
-            </a>
-            <a href="{{ route('material-requests.create', ['source' => 'Emergency']) }}" class="btn btn-danger btn-sm shadow-sm">
-                <i class="fa-solid fa-bolt me-1"></i> Emergency MR
-            </a>
-        </div>
-    </div>
+    <x-page-header
+        title="Site Engineer Dashboard"
+        subtitle="Site operations, morning workforce reporting, schedules, and material requests"
+        badge="Site Operations"
+    >
+        <x-slot:actions>
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <span class="badge bg-white text-secondary border px-3 py-2 shadow-sm rounded-pill d-none d-sm-inline-flex align-items-center">
+                    <i class="fa-solid fa-calendar-day text-primary me-2"></i>{{ now()->format('l, F j, Y') }}
+                </span>
+                <a href="{{ route('manpower-daily-report.create') }}" class="btn btn-primary btn-sm shadow-sm d-inline-flex align-items-center" style="min-height: 40px;">
+                    <i class="fa-solid fa-users-line me-1"></i> Submit Manpower
+                </a>
+                <a href="{{ route('material-requests.create', ['source' => 'Emergency']) }}" class="btn btn-danger btn-sm shadow-sm d-inline-flex align-items-center" style="min-height: 40px;">
+                    <i class="fa-solid fa-bolt me-1"></i> Emergency MR
+                </a>
+            </div>
+        </x-slot:actions>
+    </x-page-header>
 
     {{-- Morning Manpower Report Status Hero Banner --}}
     @if($todayManpowerReport)
         @if($todayManpowerReport->status === 'approved')
-            <div class="card border-0 shadow-sm rounded-3 mb-4 text-white" style="background: linear-gradient(135deg, #059669 0%, #10b981 100%);">
-                <div class="card-body p-4 d-flex justify-content-between align-items-center flex-wrap gap-3">
+            <div class="card border-0 shadow-sm rounded-3 mb-4 text-white" style="background: linear-gradient(135deg, var(--wc-success, #059669) 0%, #10b981 100%);">
+                <div class="card-body p-3 p-md-4 d-flex justify-content-between align-items-center flex-wrap gap-3">
                     <div class="d-flex align-items-center gap-3">
-                        <div class="rounded-circle bg-white bg-opacity-25 d-flex align-items-center justify-content-center" style="width: 52px; height: 52px;">
-                            <i class="fa-solid fa-circle-check fa-2x text-white"></i>
+                        <div class="rounded-circle bg-white bg-opacity-25 d-flex align-items-center justify-content-center flex-shrink-0" style="width: 48px; height: 48px;">
+                            <i class="fa-solid fa-circle-check fa-xl text-white"></i>
                         </div>
                         <div>
-                            <h5 class="fw-bold mb-1">Today's Morning Manpower Report Approved</h5>
+                            <h6 class="fw-bold mb-1 fs-6">Today's Morning Manpower Report Approved</h6>
                             <p class="mb-0 small text-white text-opacity-90">
                                 <strong>{{ $todayManpowerReport->total_present }}</strong> workers logged for <strong>{{ $todayManpowerReport->project->name ?? 'Site' }}</strong> &bull; Reviewed by <strong>{{ $todayManpowerReport->reviewer->name ?? 'Planning Manager' }}</strong>
                                 @if($todayManpowerReport->review_notes) — <em>"{{ $todayManpowerReport->review_notes }}"</em>@endif
                             </p>
                         </div>
                     </div>
-                    <a href="{{ route('manpower-daily-report.show', $todayManpowerReport) }}" class="btn btn-light btn-sm text-success fw-bold shadow-sm px-3">
+                    <a href="{{ route('manpower-daily-report.show', $todayManpowerReport) }}" class="btn btn-light btn-sm text-success fw-bold shadow-sm px-3" style="min-height: 40px; display: inline-flex; align-items: center;">
                         <i class="fa-solid fa-eye me-1"></i> View Report
                     </a>
                 </div>
             </div>
         @elseif($todayManpowerReport->status === 'rejected')
-            <div class="card border-0 shadow-sm rounded-3 mb-4 text-white" style="background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%);">
-                <div class="card-body p-4 d-flex justify-content-between align-items-center flex-wrap gap-3">
+            <div class="card border-0 shadow-sm rounded-3 mb-4 text-white" style="background: linear-gradient(135deg, var(--wc-danger, #dc2626) 0%, #ef4444 100%);">
+                <div class="card-body p-3 p-md-4 d-flex justify-content-between align-items-center flex-wrap gap-3">
                     <div class="d-flex align-items-center gap-3">
-                        <div class="rounded-circle bg-white bg-opacity-25 d-flex align-items-center justify-content-center" style="width: 52px; height: 52px;">
-                            <i class="fa-solid fa-triangle-exclamation fa-2x text-white"></i>
+                        <div class="rounded-circle bg-white bg-opacity-25 d-flex align-items-center justify-content-center flex-shrink-0" style="width: 48px; height: 48px;">
+                            <i class="fa-solid fa-triangle-exclamation fa-xl text-white"></i>
                         </div>
                         <div>
-                            <h5 class="fw-bold mb-1">Manpower Report Needs Revision</h5>
+                            <h6 class="fw-bold mb-1 fs-6">Manpower Report Needs Revision</h6>
                             <p class="mb-0 small text-white text-opacity-90">
                                 Planning Manager rejected today's submission.
                                 @if($todayManpowerReport->review_notes) Reason: <strong>"{{ $todayManpowerReport->review_notes }}"</strong>@endif
                             </p>
                         </div>
                     </div>
-                    <a href="{{ route('manpower-daily-report.create') }}" class="btn btn-light btn-sm text-danger fw-bold shadow-sm px-3">
+                    <a href="{{ route('manpower-daily-report.create') }}" class="btn btn-light btn-sm text-danger fw-bold shadow-sm px-3" style="min-height: 40px; display: inline-flex; align-items: center;">
                         <i class="fa-solid fa-pen-to-square me-1"></i> Resubmit Report
                     </a>
                 </div>
             </div>
         @else
-            <div class="card border-0 shadow-sm rounded-3 mb-4 text-dark" style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-left: 5px solid #f59e0b !important;">
-                <div class="card-body p-4 d-flex justify-content-between align-items-center flex-wrap gap-3">
+            <div class="card border-0 shadow-sm rounded-3 mb-4 text-dark" style="background: #FFFBEB; border-left: 4px solid var(--wc-warning, #D97706) !important;">
+                <div class="card-body p-3 p-md-4 d-flex justify-content-between align-items-center flex-wrap gap-3">
                     <div class="d-flex align-items-center gap-3">
-                        <div class="rounded-circle bg-warning bg-opacity-25 d-flex align-items-center justify-content-center" style="width: 52px; height: 52px;">
-                            <i class="fa-solid fa-hourglass-half fa-2x text-warning"></i>
+                        <div class="rounded-circle bg-warning bg-opacity-25 d-flex align-items-center justify-content-center flex-shrink-0" style="width: 48px; height: 48px;">
+                            <i class="fa-solid fa-hourglass-half fa-xl text-warning"></i>
                         </div>
                         <div>
-                            <h5 class="fw-bold mb-1 text-dark">Today's Manpower Report Submitted — Awaiting Review</h5>
-                            <p class="mb-0 small text-dark text-opacity-75">
+                            <h6 class="fw-bold mb-1 text-dark fs-6">Today's Manpower Report Submitted — Awaiting Review</h6>
+                            <p class="mb-0 small text-muted">
                                 Submitted at {{ $todayManpowerReport->created_at->format('h:i A') }} with <strong>{{ $todayManpowerReport->total_present }} workers</strong> for <strong>{{ $todayManpowerReport->project->name ?? 'Site' }}</strong>. Sent to Planning Manager.
                             </p>
                         </div>
                     </div>
-                    <a href="{{ route('manpower-daily-report.show', $todayManpowerReport) }}" class="btn btn-warning btn-sm text-dark fw-bold shadow-sm px-3">
+                    <a href="{{ route('manpower-daily-report.show', $todayManpowerReport) }}" class="btn btn-warning btn-sm text-dark fw-bold shadow-sm px-3" style="min-height: 40px; display: inline-flex; align-items: center;">
                         <i class="fa-solid fa-eye me-1"></i> View Submission
                     </a>
                 </div>
             </div>
         @endif
     @else
-        <div class="card border-0 shadow-sm rounded-3 mb-4 text-white" style="background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);">
-            <div class="card-body p-4 d-flex justify-content-between align-items-center flex-wrap gap-3">
+        <div class="card border-0 shadow-sm rounded-3 mb-4 text-white" style="background: linear-gradient(135deg, var(--wc-primary, #0F2944) 0%, #1e3a8a 100%);">
+            <div class="card-body p-3 p-md-4 d-flex justify-content-between align-items-center flex-wrap gap-3">
                 <div class="d-flex align-items-center gap-3">
-                    <div class="rounded-circle bg-white bg-opacity-20 d-flex align-items-center justify-content-center" style="width: 52px; height: 52px;">
-                        <i class="fa-solid fa-users-rays fa-2x text-warning"></i>
+                    <div class="rounded-circle bg-white bg-opacity-20 d-flex align-items-center justify-content-center flex-shrink-0" style="width: 48px; height: 48px;">
+                        <i class="fa-solid fa-users-rays fa-xl text-warning"></i>
                     </div>
                     <div>
-                        <h5 class="fw-bold mb-1">Morning Manpower Report Not Submitted Yet</h5>
+                        <h6 class="fw-bold mb-1 fs-6">Morning Manpower Report Not Submitted Yet</h6>
                         <p class="mb-0 small text-white text-opacity-90">
                             Please log today's site workforce count (skilled, unskilled, operators, subcontractors) for Planning Manager visibility.
                         </p>
                     </div>
                 </div>
-                <a href="{{ route('manpower-daily-report.create') }}" class="btn btn-warning btn-sm text-dark fw-bold shadow-sm px-4 py-2">
-                    <i class="fa-solid fa-paper-plane me-1"></i> Submit Morning Report Now
+                <a href="{{ route('manpower-daily-report.create') }}" class="btn btn-warning btn-sm text-dark fw-bold shadow-sm px-4 py-2" style="min-height: 40px; display: inline-flex; align-items: center;">
+                    <i class="fa-solid fa-paper-plane me-1"></i> Submit Morning Report
                 </a>
             </div>
         </div>
@@ -113,7 +113,7 @@
     <div class="card border-0 shadow-sm rounded-3 mb-4 bg-white border-start border-4 border-info">
         <div class="card-body p-3 d-flex flex-wrap align-items-center justify-content-between gap-3">
             <div class="d-flex align-items-center gap-3">
-                <div class="rounded-circle bg-info bg-opacity-10 p-2 text-info d-flex align-items-center justify-content-center" style="width: 46px; height: 46px;">
+                <div class="rounded-circle bg-info bg-opacity-10 p-2 text-info d-flex align-items-center justify-content-center flex-shrink-0" style="width: 44px; height: 44px;">
                     <i class="fa-solid fa-warehouse fa-lg"></i>
                 </div>
                 <div>
@@ -133,11 +133,11 @@
                 </div>
             </div>
             <div class="d-flex gap-2">
-                <a href="{{ route('inventory.index') }}" class="btn btn-sm btn-outline-primary fw-semibold">
-                    <i class="fa-solid fa-boxes-stacked me-1"></i> View Site Inventory
+                <a href="{{ route('inventory.index') }}" class="btn btn-sm btn-outline-primary fw-semibold" style="min-height: 38px; display: inline-flex; align-items: center;">
+                    <i class="fa-solid fa-boxes-stacked me-1"></i> Site Inventory
                 </a>
-                <a href="{{ route('inventory.all-movements') }}" class="btn btn-sm btn-outline-info fw-semibold">
-                    <i class="fa-solid fa-arrow-right-arrow-left me-1"></i> Site Movements
+                <a href="{{ route('inventory.all-movements') }}" class="btn btn-sm btn-outline-info fw-semibold" style="min-height: 38px; display: inline-flex; align-items: center;">
+                    <i class="fa-solid fa-arrow-right-arrow-left me-1"></i> Movements
                 </a>
             </div>
         </div>
@@ -147,75 +147,47 @@
     {{-- KPI Cards Row --}}
     <div class="row g-3 mb-4">
         <!-- Today Workforce -->
-        <div class="col-xl-3 col-md-6">
-            <div class="card border-0 shadow-sm rounded-3 h-100 bg-white border-start border-4 border-primary">
-                <div class="card-body p-3">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <div class="text-xs fw-bold text-primary text-uppercase mb-1">Total Site Workforce Today</div>
-                            <div class="h3 mb-0 fw-bold text-dark">{{ $kpi['today_manpower_count'] ?? 0 }}</div>
-                            <small class="text-muted">{{ $todayManpowerReport ? 'Logged in Morning Report' : 'Site Attendance' }}</small>
-                        </div>
-                        <div class="rounded-circle bg-primary bg-opacity-10 p-3 text-primary">
-                            <i class="fa-solid fa-users fa-2x"></i>
-                        </div>
-                    </div>
-                </div>
-            </div>
+        <div class="col-12 col-sm-6 col-xl-3">
+            <x-kpi-card
+                title="Total Site Workforce Today"
+                :value="$kpi['today_manpower_count'] ?? 0"
+                :subtitle="$todayManpowerReport ? 'Logged in Morning Report' : 'Site Attendance'"
+                icon="fa-solid fa-users"
+                tone="primary"
+            />
         </div>
 
         <!-- Assigned Work Orders -->
-        <div class="col-xl-3 col-md-6">
-            <div class="card border-0 shadow-sm rounded-3 h-100 bg-white border-start border-4 border-info">
-                <div class="card-body p-3">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <div class="text-xs fw-bold text-info text-uppercase mb-1">Active Work Orders</div>
-                            <div class="h3 mb-0 fw-bold text-dark">{{ $kpi['assigned_work_orders_count'] ?? 0 }}</div>
-                            <small class="text-muted">Assigned from Planning</small>
-                        </div>
-                        <div class="rounded-circle bg-info bg-opacity-10 p-3 text-info">
-                            <i class="fa-solid fa-calendar-check fa-2x"></i>
-                        </div>
-                    </div>
-                </div>
-            </div>
+        <div class="col-12 col-sm-6 col-xl-3">
+            <x-kpi-card
+                title="Active Work Orders"
+                :value="$kpi['assigned_work_orders_count'] ?? 0"
+                subtitle="Assigned from Planning"
+                icon="fa-solid fa-calendar-check"
+                tone="info"
+            />
         </div>
 
         <!-- Material Requests -->
-        <div class="col-xl-3 col-md-6">
-            <div class="card border-0 shadow-sm rounded-3 h-100 bg-white border-start border-4 border-warning">
-                <div class="card-body p-3">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <div class="text-xs fw-bold text-warning text-uppercase mb-1">Pending Material Requests</div>
-                            <div class="h3 mb-0 fw-bold text-dark">{{ $kpi['pending_mr_count'] ?? 0 }} <span class="fs-6 text-muted fw-normal">/ {{ $kpi['my_material_requests'] ?? 0 }}</span></div>
-                            <small class="text-muted">Awaiting store/approval</small>
-                        </div>
-                        <div class="rounded-circle bg-warning bg-opacity-10 p-3 text-warning">
-                            <i class="fa-solid fa-cart-flatbed fa-2x"></i>
-                        </div>
-                    </div>
-                </div>
-            </div>
+        <div class="col-12 col-sm-6 col-xl-3">
+            <x-kpi-card
+                title="Pending Material Requests"
+                :value="$kpi['pending_mr_count'] ?? 0"
+                :subtitle="'/ ' . ($kpi['my_material_requests'] ?? 0) . ' total requests'"
+                icon="fa-solid fa-cart-flatbed"
+                tone="warning"
+            />
         </div>
 
         <!-- Open Site Issues -->
-        <div class="col-xl-3 col-md-6">
-            <div class="card border-0 shadow-sm rounded-3 h-100 bg-white border-start border-4 border-danger">
-                <div class="card-body p-3">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <div class="text-xs fw-bold text-danger text-uppercase mb-1">Open Site Issues</div>
-                            <div class="h3 mb-0 fw-bold text-dark">{{ $kpi['open_issues_count'] ?? 0 }}</div>
-                            <small class="text-muted">Delays & site obstacles</small>
-                        </div>
-                        <div class="rounded-circle bg-danger bg-opacity-10 p-3 text-danger">
-                            <i class="fa-solid fa-triangle-exclamation fa-2x"></i>
-                        </div>
-                    </div>
-                </div>
-            </div>
+        <div class="col-12 col-sm-6 col-xl-3">
+            <x-kpi-card
+                title="Open Site Issues"
+                :value="$kpi['open_issues_count'] ?? 0"
+                subtitle="Delays & site obstacles"
+                icon="fa-solid fa-triangle-exclamation"
+                tone="danger"
+            />
         </div>
     </div>
 
@@ -230,12 +202,12 @@
                     <h6 class="m-0 fw-bold text-dark">
                         <i class="fa-solid fa-calendar-days text-info me-2"></i>Assigned Work Orders & Dispatches
                     </h6>
-                    <a href="{{ route('eng-schedule.my') }}" class="btn btn-sm btn-outline-primary">
+                    <a href="{{ route('eng-schedule.my') }}" class="btn btn-sm btn-outline-primary" style="min-height: 36px; display: inline-flex; align-items: center;">
                         View Schedule <i class="fa-solid fa-arrow-right ms-1"></i>
                     </a>
                 </div>
                 <div class="card-body p-0">
-                    <div class="table-responsive">
+                    <div class="table-responsive wc-table-mobile-cards">
                         <table class="table table-hover align-middle mb-0">
                             <thead class="table-light">
                                 <tr>
@@ -250,34 +222,34 @@
                             <tbody>
                                 @forelse($assignedWorkOrders as $order)
                                 <tr>
-                                    <td>
+                                    <td data-label="Work Order">
                                         <div class="fw-bold text-dark">{{ $order->title }}</div>
                                         <small class="text-muted">{{ $order->category ?? 'General' }}</small>
                                     </td>
-                                    <td>
+                                    <td data-label="Project / Location">
                                         <div class="fw-semibold small">{{ $order->project->name ?? 'N/A' }}</div>
                                         <small class="text-muted">{{ $order->location ?? 'Site' }}</small>
                                     </td>
-                                    <td class="small">
+                                    <td data-label="Schedule" class="small">
                                         <div><i class="fa-regular fa-clock text-muted me-1"></i>{{ $order->start_datetime->format('M d, H:i') }}</div>
                                         <div class="text-muted">to {{ $order->end_datetime->format('M d, H:i') }}</div>
                                     </td>
-                                    <td>
+                                    <td data-label="Priority">
                                         @php
-                                            $pColors = [
-                                                'urgent' => 'bg-danger',
-                                                'high'   => 'bg-warning text-dark',
-                                                'medium' => 'bg-info text-dark',
-                                                'low'    => 'bg-secondary',
+                                            $pTones = [
+                                                'urgent' => 'danger',
+                                                'high'   => 'warning',
+                                                'medium' => 'info',
+                                                'low'    => 'neutral',
                                             ];
                                         @endphp
-                                        <span class="badge {{ $pColors[$order->priority] ?? 'bg-secondary' }} text-uppercase">{{ $order->priority }}</span>
+                                        <x-status-badge :status="$order->priority" :tone="$pTones[$order->priority] ?? 'neutral'" />
                                     </td>
-                                    <td>
-                                        <span class="badge bg-light text-dark border">{{ ucfirst($order->status) }}</span>
+                                    <td data-label="Status">
+                                        <x-status-badge :status="$order->status" />
                                     </td>
-                                    <td class="text-end">
-                                        <a href="{{ route('eng-schedule.show', $order->id) }}" class="btn btn-sm btn-light border">
+                                    <td data-label="Action" class="text-end">
+                                        <a href="{{ route('eng-schedule.show', $order->id) }}" class="btn btn-sm btn-light border" title="View Details" style="min-width: 36px; min-height: 36px; display: inline-flex; align-items: center; justify-content: center;">
                                             <i class="fa-solid fa-eye"></i>
                                         </a>
                                     </td>
@@ -307,12 +279,12 @@
                     </div>
                     <ul class="nav nav-pills card-header-pills" id="siteInvTab" role="tablist">
                         <li class="nav-item" role="presentation">
-                            <button class="nav-link active btn-sm py-1 px-3" id="stock-tab" data-bs-toggle="pill" data-bs-target="#stock-panel" type="button" role="tab">
+                            <button class="nav-link active btn-sm py-1 px-3" id="stock-tab" data-bs-toggle="pill" data-bs-target="#stock-panel" type="button" role="tab" style="min-height: 36px;">
                                 <i class="fa-solid fa-boxes-stacked me-1"></i> Stock on Hand ({{ isset($siteInventoryItems) ? $siteInventoryItems->count() : 0 }})
                             </button>
                         </li>
                         <li class="nav-item" role="presentation">
-                            <button class="nav-link btn-sm py-1 px-3" id="movements-tab" data-bs-toggle="pill" data-bs-target="#movements-panel" type="button" role="tab">
+                            <button class="nav-link btn-sm py-1 px-3" id="movements-tab" data-bs-toggle="pill" data-bs-target="#movements-panel" type="button" role="tab" style="min-height: 36px;">
                                 <i class="fa-solid fa-arrow-right-arrow-left me-1"></i> Recent Movements
                             </button>
                         </li>
@@ -322,7 +294,7 @@
                     <div class="tab-content" id="siteInvTabContent">
                         {{-- Stock on Hand Tab --}}
                         <div class="tab-pane fade show active" id="stock-panel" role="tabpanel">
-                            <div class="table-responsive">
+                            <div class="table-responsive wc-table-mobile-cards">
                                 <table class="table table-hover align-middle mb-0">
                                     <thead class="table-light">
                                         <tr>
@@ -341,28 +313,28 @@
                                             $skuCode = $item->product?->sku ?: ($item->product?->code ?: null);
                                         @endphp
                                         <tr class="{{ $isLow ? 'table-warning' : '' }}">
-                                            <td>
+                                            <td data-label="Material">
                                                 <div class="fw-semibold text-dark">{{ $item->product?->name ?? 'N/A' }}</div>
                                                 @if($skuCode)
                                                     <small class="text-muted font-monospace"><i class="fa-solid fa-barcode me-1"></i>{{ $skuCode }}</small>
                                                 @endif
                                             </td>
-                                            <td>
+                                            <td data-label="Store">
                                                 <span class="badge bg-light text-dark border">{{ $item->store?->name ?? 'Site Store' }}</span>
                                             </td>
-                                            <td class="small text-muted">{{ $item->product?->category ?? '—' }}</td>
-                                            <td class="text-end fw-bold">
+                                            <td data-label="Category" class="small text-muted">{{ $item->product?->category ?? '—' }}</td>
+                                            <td data-label="On Hand" class="text-end fw-bold font-tabular">
                                                 {{ number_format($item->quantity_on_hand, 2) }}
                                                 <small class="text-muted fw-normal">{{ $item->product?->unit ?? '' }}</small>
                                             </td>
-                                            <td class="text-end {{ $isLow ? 'text-danger fw-bold' : '' }}">
+                                            <td data-label="Available" class="text-end font-tabular {{ $isLow ? 'text-danger fw-bold' : '' }}">
                                                 {{ number_format($item->quantity_available, 2) }}
                                             </td>
-                                            <td class="text-center">
+                                            <td data-label="Status" class="text-center">
                                                 @if($isLow)
-                                                    <span class="badge bg-danger"><i class="fa-solid fa-triangle-exclamation me-1"></i>Low</span>
+                                                    <x-status-badge status="Low Stock" tone="danger" icon="fa-solid fa-triangle-exclamation" />
                                                 @else
-                                                    <span class="badge bg-success">OK</span>
+                                                    <x-status-badge status="Healthy" tone="success" icon="fa-solid fa-check" />
                                                 @endif
                                             </td>
                                         </tr>
@@ -388,7 +360,7 @@
 
                         {{-- Recent Movements Tab --}}
                         <div class="tab-pane fade" id="movements-panel" role="tabpanel">
-                            <div class="table-responsive">
+                            <div class="table-responsive wc-table-mobile-cards">
                                 <table class="table table-hover align-middle mb-0">
                                     <thead class="table-light">
                                         <tr>
@@ -403,35 +375,35 @@
                                     <tbody>
                                         @forelse($siteRecentMovements ?? [] as $mov)
                                         @php
-                                            $badge = match(strtolower($mov->type ?? '')) {
+                                            $movTone = match(strtolower($mov->type ?? '')) {
                                                 'in', 'purchase_intake', 'grn' => 'success',
                                                 'out', 'dispatch', 'issue' => 'danger',
                                                 'transfer', 'transfer_in', 'transfer_out' => 'info',
                                                 'adjustment' => 'warning',
-                                                'reserve' => 'secondary',
+                                                'reserve' => 'neutral',
                                                 'release' => 'primary',
-                                                default => 'secondary'
+                                                default => 'neutral'
                                             };
                                             $isPositive = in_array(strtolower($mov->type ?? ''), ['in', 'purchase_intake', 'grn', 'adjustment', 'release']);
                                             $qty = (float) $mov->quantity;
                                         @endphp
                                         <tr>
-                                            <td class="small">
+                                            <td data-label="Date" class="small">
                                                 <div class="fw-semibold text-dark">{{ $mov->created_at ? $mov->created_at->format('M d, H:i') : '—' }}</div>
                                             </td>
-                                            <td>
+                                            <td data-label="Product">
                                                 <div class="fw-semibold small text-dark">{{ $mov->inventory?->product?->name ?? 'N/A' }}</div>
                                                 <small class="text-muted">{{ $mov->inventory?->store?->name ?? '' }}</small>
                                             </td>
-                                            <td>
-                                                <span class="badge bg-{{ $badge }} text-uppercase">{{ $mov->type }}</span>
+                                            <td data-label="Type">
+                                                <x-status-badge :status="$mov->type" :tone="$movTone" />
                                             </td>
-                                            <td class="text-end font-monospace fw-bold {{ $isPositive ? 'text-success' : 'text-danger' }}">
+                                            <td data-label="Quantity" class="text-end font-tabular fw-bold {{ $isPositive ? 'text-success' : 'text-danger' }}">
                                                 {{ $isPositive ? '+' : '-' }}{{ number_format(abs($qty), 2) }}
                                                 <small class="text-muted fw-normal">{{ $mov->inventory?->product?->unit ?? '' }}</small>
                                             </td>
-                                            <td class="small">{{ $mov->performer?->name ?? 'System' }}</td>
-                                            <td class="small text-muted text-truncate" style="max-width: 180px;">{{ $mov->remarks ?: '—' }}</td>
+                                            <td data-label="Performed By" class="small">{{ $mov->performer?->name ?? 'System' }}</td>
+                                            <td data-label="Remarks" class="small text-muted text-truncate" style="max-width: 180px;">{{ $mov->remarks ?: '—' }}</td>
                                         </tr>
                                         @empty
                                         <tr>
@@ -462,12 +434,12 @@
                     <h6 class="m-0 fw-bold text-dark">
                         <i class="fa-solid fa-users-line text-primary me-2"></i>Recent Morning Manpower Reports
                     </h6>
-                    <a href="{{ route('manpower-daily-report.index') }}" class="btn btn-sm btn-outline-primary">
+                    <a href="{{ route('manpower-daily-report.index') }}" class="btn btn-sm btn-outline-primary" style="min-height: 36px; display: inline-flex; align-items: center;">
                         View All History <i class="fa-solid fa-arrow-right ms-1"></i>
                     </a>
                 </div>
                 <div class="card-body p-0">
-                    <div class="table-responsive">
+                    <div class="table-responsive wc-table-mobile-cards">
                         <table class="table table-hover align-middle mb-0">
                             <thead class="table-light">
                                 <tr>
@@ -482,27 +454,27 @@
                             <tbody>
                                 @forelse($recentManpowerReports as $mp)
                                 <tr>
-                                    <td class="fw-semibold small">
+                                    <td data-label="Date" class="fw-semibold small">
                                         {{ $mp->report_date->format('D, M d, Y') }}
                                         @if($mp->report_date->isToday())
                                             <span class="badge bg-primary ms-1">Today</span>
                                         @endif
                                     </td>
-                                    <td class="small">{{ $mp->project->name ?? 'N/A' }}</td>
-                                    <td class="text-center">
+                                    <td data-label="Project" class="small">{{ $mp->project->name ?? 'N/A' }}</td>
+                                    <td data-label="Total Present" class="text-center">
                                         <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 px-2 py-1 fw-bold rounded-pill">
                                             <i class="fa-solid fa-users me-1"></i>{{ $mp->total_present }}
                                         </span>
                                     </td>
-                                    <td class="small text-muted">{{ $mp->work_area ?: '—' }}</td>
-                                    <td class="text-center">
+                                    <td data-label="Work Area" class="small text-muted">{{ $mp->work_area ?: '—' }}</td>
+                                    <td data-label="Review Status" class="text-center">
                                         <span class="badge {{ $mp->status_badge_class }}">{{ $mp->status_label }}</span>
                                         @if($mp->review_notes)
                                             <div class="text-muted small mt-1" style="font-size: 0.75rem;"><i class="fa-solid fa-comment me-1"></i>{{ \Illuminate\Support\Str::limit($mp->review_notes, 30) }}</div>
                                         @endif
                                     </td>
-                                    <td class="text-end">
-                                        <a href="{{ route('manpower-daily-report.show', $mp) }}" class="btn btn-sm btn-outline-primary">
+                                    <td data-label="Action" class="text-end">
+                                        <a href="{{ route('manpower-daily-report.show', $mp) }}" class="btn btn-sm btn-outline-primary" title="View Report" style="min-width: 36px; min-height: 36px; display: inline-flex; align-items: center; justify-content: center;">
                                             <i class="fa-solid fa-eye"></i>
                                         </a>
                                     </td>
@@ -530,12 +502,12 @@
                     <h6 class="m-0 fw-bold text-dark">
                         <i class="fa-solid fa-cart-flatbed text-warning me-2"></i>My Recent Material Requests
                     </h6>
-                    <a href="{{ route('material-requests.index') }}" class="btn btn-sm btn-outline-primary">
+                    <a href="{{ route('material-requests.index') }}" class="btn btn-sm btn-outline-primary" style="min-height: 36px; display: inline-flex; align-items: center;">
                         All Requests <i class="fa-solid fa-arrow-right ms-1"></i>
                     </a>
                 </div>
                 <div class="card-body p-0">
-                    <div class="table-responsive">
+                    <div class="table-responsive wc-table-mobile-cards">
                         <table class="table table-hover align-middle mb-0">
                             <thead class="table-light">
                                 <tr>
@@ -549,22 +521,14 @@
                             <tbody>
                                 @forelse($recentMR as $mr)
                                 <tr>
-                                    <td class="fw-bold">#{{ $mr->id }}</td>
-                                    <td>{{ $mr->project->name ?? 'N/A' }}</td>
-                                    <td class="small text-muted">{{ $mr->created_at->format('M d, Y') }}</td>
-                                    <td>
-                                        @php
-                                            $stMap = [
-                                                'approved' => 'bg-success',
-                                                'rejected' => 'bg-danger',
-                                                'pending'  => 'bg-warning text-dark',
-                                                'issued'   => 'bg-info text-dark',
-                                            ];
-                                        @endphp
-                                        <span class="badge {{ $stMap[$mr->status] ?? 'bg-secondary' }}">{{ ucfirst($mr->status) }}</span>
+                                    <td data-label="Request #" class="fw-bold">#{{ $mr->id }}</td>
+                                    <td data-label="Project">{{ $mr->project->name ?? 'N/A' }}</td>
+                                    <td data-label="Date" class="small text-muted">{{ $mr->created_at->format('M d, Y') }}</td>
+                                    <td data-label="Status">
+                                        <x-status-badge :status="$mr->status" />
                                     </td>
-                                    <td class="text-end">
-                                        <a href="{{ route('material-requests.show', $mr->id) }}" class="btn btn-sm btn-light border">
+                                    <td data-label="Action" class="text-end">
+                                        <a href="{{ route('material-requests.show', $mr->id) }}" class="btn btn-sm btn-light border" title="View Request" style="min-width: 36px; min-height: 36px; display: inline-flex; align-items: center; justify-content: center;">
                                             <i class="fa-solid fa-eye"></i>
                                         </a>
                                     </td>
@@ -593,31 +557,31 @@
                     </h6>
                 </div>
                 <div class="card-body d-flex flex-column gap-2 p-3">
-                    <a href="{{ route('manpower-daily-report.create') }}" class="btn btn-primary text-start fw-semibold py-2">
+                    <a href="{{ route('manpower-daily-report.create') }}" class="btn btn-primary text-start fw-semibold py-2 d-flex align-items-center" style="min-height: 44px;">
                         <i class="fa-solid fa-users-line me-2"></i> Submit Morning Manpower Report
                     </a>
-                    <a href="{{ route('inventory.index') }}" class="btn btn-outline-primary text-start fw-semibold py-2">
+                    <a href="{{ route('inventory.index') }}" class="btn btn-outline-primary text-start fw-semibold py-2 d-flex align-items-center" style="min-height: 44px;">
                         <i class="fa-solid fa-boxes-stacked me-2"></i> Site Store Inventory (Stock on Hand)
                     </a>
-                    <a href="{{ route('inventory.all-movements') }}" class="btn btn-outline-info text-start fw-semibold py-2">
+                    <a href="{{ route('inventory.all-movements') }}" class="btn btn-outline-info text-start fw-semibold py-2 d-flex align-items-center" style="min-height: 44px;">
                         <i class="fa-solid fa-arrow-right-arrow-left me-2"></i> Site Stock Movements
                     </a>
-                    <a href="{{ route('material-requests.create', ['source' => 'Emergency']) }}" class="btn btn-danger text-start fw-semibold py-2">
+                    <a href="{{ route('material-requests.create', ['source' => 'Emergency']) }}" class="btn btn-danger text-start fw-semibold py-2 d-flex align-items-center" style="min-height: 44px;">
                         <i class="fa-solid fa-bolt me-2"></i> Ask Emergency Material Request
                     </a>
-                    <a href="{{ route('eng-schedule.my') }}" class="btn btn-info text-dark text-start fw-semibold py-2">
+                    <a href="{{ route('eng-schedule.my') }}" class="btn btn-info text-dark text-start fw-semibold py-2 d-flex align-items-center" style="min-height: 44px;">
                         <i class="fa-solid fa-calendar-check me-2"></i> My Assigned Work Orders
                     </a>
-                    <a href="{{ route('daily-reports.create') }}" class="btn btn-success text-start fw-semibold py-2">
+                    <a href="{{ route('daily-reports.create') }}" class="btn btn-success text-start fw-semibold py-2 d-flex align-items-center" style="min-height: 44px;">
                         <i class="fa-solid fa-file-signature me-2"></i> Create Daily Site Log
                     </a>
-                    <a href="{{ route('issues.create') }}" class="btn btn-outline-danger text-start fw-semibold py-2">
+                    <a href="{{ route('issues.create') }}" class="btn btn-outline-danger text-start fw-semibold py-2 d-flex align-items-center" style="min-height: 44px;">
                         <i class="fa-solid fa-triangle-exclamation me-2"></i> Report Site Issue / Obstacle
                     </a>
-                    <a href="{{ route('attendance.index') }}" class="btn btn-outline-secondary text-start fw-semibold py-2">
+                    <a href="{{ route('attendance.index') }}" class="btn btn-outline-secondary text-start fw-semibold py-2 d-flex align-items-center" style="min-height: 44px;">
                         <i class="fa-solid fa-user-check me-2"></i> Mark Site Attendance
                     </a>
-                    <a href="{{ route('manpower-daily-report.index') }}" class="btn btn-outline-primary text-start fw-semibold py-2">
+                    <a href="{{ route('manpower-daily-report.index') }}" class="btn btn-outline-primary text-start fw-semibold py-2 d-flex align-items-center" style="min-height: 44px;">
                         <i class="fa-solid fa-clock-rotate-left me-2"></i> My Manpower History
                     </a>
                 </div>
@@ -671,7 +635,7 @@
                     <h6 class="m-0 fw-bold text-dark">
                         <i class="fa-solid fa-triangle-exclamation text-danger me-2"></i>Site Issues & Delays
                     </h6>
-                    <a href="{{ route('issues.index') }}" class="btn btn-sm btn-outline-danger">All Issues</a>
+                    <a href="{{ route('issues.index') }}" class="btn btn-sm btn-outline-danger" style="min-height: 36px; display: inline-flex; align-items: center;">All Issues</a>
                 </div>
                 <div class="card-body p-0">
                     <ul class="list-group list-group-flush">
@@ -682,7 +646,7 @@
                                     <div class="fw-semibold small text-dark">{{ $issue->title ?? 'Site Issue #'.$issue->id }}</div>
                                     <small class="text-muted">{{ $issue->project->name ?? 'Site' }} &bull; {{ $issue->created_at->diffForHumans() }}</small>
                                 </div>
-                                <span class="badge {{ $issue->status === 'open' ? 'bg-danger' : 'bg-secondary' }}">{{ ucfirst($issue->status) }}</span>
+                                <x-status-badge :status="$issue->status" :tone="$issue->status === 'open' ? 'danger' : 'neutral'" />
                             </div>
                         </li>
                         @empty
