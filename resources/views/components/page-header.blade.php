@@ -1,8 +1,9 @@
 @props([
-    'title',
-    'subtitle' => null,
+    'title'       => null,
+    'subtitle'    => null,
     'breadcrumbs' => [],
-    'backUrl' => null,
+    'backUrl'     => null,
+    'badge'       => null,
 ])
 
 <div {{ $attributes->merge(['class' => 'wc-page-header mb-4']) }}>
@@ -30,9 +31,16 @@
                 </a>
             @endif
             <div>
-                <h1 class="h4 mb-0 fw-bold text-dark tracking-tight" style="font-size: clamp(1.2rem, 2.5vw, 1.5rem); letter-spacing: -0.02em;">
-                    {{ $title }}
-                </h1>
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <h1 class="h4 mb-0 fw-bold text-dark tracking-tight" style="font-size: clamp(1.2rem, 2.5vw, 1.5rem); letter-spacing: -0.02em;">
+                        {{ $title ?? '' }}
+                    </h1>
+                    @if($badge)
+                        <span class="badge bg-primary bg-opacity-10 text-primary fw-semibold rounded-pill px-2 py-1" style="font-size: 0.7rem;">
+                            {{ $badge }}
+                        </span>
+                    @endif
+                </div>
                 @if($subtitle)
                     <p class="text-muted small mb-0 mt-0.5" style="font-size: var(--wc-text-sm);">
                         {{ $subtitle }}

@@ -1,8 +1,8 @@
 @props([
-    'title',
-    'chartId',
+    'title'    => null,
+    'chartId'  => null,
     'subtitle' => null,
-    'height' => '280px',
+    'height'   => '280px',
 ])
 
 <div {{ $attributes->merge(['class' => 'wc-card p-3 p-md-4 h-100']) }}>

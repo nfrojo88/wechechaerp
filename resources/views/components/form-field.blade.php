@@ -1,13 +1,13 @@
 @props([
-    'label',
-    'name',
-    'type' => 'text', // text, number, tel, email, date, select, textarea
-    'value' => null,
-    'required' => false,
+    'label'       => null,
+    'name'        => null,
+    'type'        => 'text', // text, number, tel, email, date, select, textarea
+    'value'       => null,
+    'required'    => false,
     'placeholder' => null,
-    'hint' => null,
-    'options' => [], // Key-value or array for select
-    'inputmode' => null,
+    'hint'        => null,
+    'options'     => [], // Key-value or array for select
+    'inputmode'   => null,
 ])
 
 @php

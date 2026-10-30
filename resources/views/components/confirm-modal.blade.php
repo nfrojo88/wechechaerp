@@ -1,10 +1,10 @@
 @props([
-    'id',
-    'title' => 'Are you sure?',
-    'message' => 'This action cannot be undone. Do you wish to proceed?',
-    'action' => '#',
-    'method' => 'POST',
-    'confirmText' => 'Confirm',
+    'id'           => null,
+    'title'        => 'Are you sure?',
+    'message'      => 'This action cannot be undone. Do you wish to proceed?',
+    'action'       => '#',
+    'method'       => 'POST',
+    'confirmText'  => 'Confirm',
     'confirmTheme' => 'danger', // 'danger' or 'primary'
 ])
 
