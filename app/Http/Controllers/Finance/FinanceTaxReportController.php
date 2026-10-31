@@ -157,6 +157,9 @@ class FinanceTaxReportController extends Controller
                     if (!Schema::hasColumn('receipts', 'fs_no')) {
                         $table->string('fs_no')->nullable()->index();
                     }
+                    if (!Schema::hasColumn('receipts', 'invoice_type')) {
+                        $table->string('invoice_type', 10)->nullable()->default('FS')->index();
+                    }
                     if (!Schema::hasColumn('receipts', 'mrc_no')) {
                         $table->string('mrc_no')->nullable();
                     }
@@ -2968,6 +2971,7 @@ class FinanceTaxReportController extends Controller
                 'purchase_category'       => ($vatAmount > 0 ? 'vat_purchase' : 'tas_purchase'),
                 'purchase_category_label' => ($vatAmount > 0 ? 'VAT Purchase (15%)' : 'TAS Purchase (0% VAT)'),
                 'purchase_category_badge' => ($vatAmount > 0 ? 'bg-success-subtle text-success border border-success-subtle' : 'bg-primary-subtle text-primary border border-primary-subtle'),
+                'invoice_type'            => $this->resolveReceiptInvoiceType($item, $r),
                 'fs_no'                   => $fsNo ?: '-',
                 'mrc_no'                  => $mrcNo ?: '-',
                 'seller_tin'              => $sellerTin ?: '-',
@@ -3112,6 +3116,7 @@ class FinanceTaxReportController extends Controller
                         'purchase_category'       => 'tas_purchase',
                         'purchase_category_label' => 'TAS Purchase (0% VAT)',
                         'purchase_category_badge' => 'bg-primary-subtle text-primary border border-primary-subtle',
+                        'invoice_type'            => $this->resolveReceiptInvoiceType($p, $pcReceipt),
                         'fs_no'                   => $p->fs_no ?: ($p->receipt_no ?: '-'),
                         'mrc_no'                  => $p->mrc_no ?: '-',
                         'seller_tin'              => $p->supplier_tin ?: '-',
@@ -3210,6 +3215,7 @@ class FinanceTaxReportController extends Controller
                         'purchase_category'       => 'tas_purchase',
                         'purchase_category_label' => 'TAS Purchase (0% VAT)',
                         'purchase_category_badge' => 'bg-primary-subtle text-primary border border-primary-subtle',
+                        'invoice_type'            => 'M',
                         'fs_no'                   => '-',
                         'mrc_no'                  => '-',
                         'seller_tin'              => '-',
@@ -3328,6 +3334,7 @@ class FinanceTaxReportController extends Controller
                         'purchase_category'       => 'tas_purchase',
                         'purchase_category_label' => 'TAS Purchase (0% VAT)',
                         'purchase_category_badge' => 'bg-primary-subtle text-primary border border-primary-subtle',
+                        'invoice_type'            => $this->resolveReceiptInvoiceType($tr),
                         'fs_no'                   => $tr->fs_no ?: ($tr->fs_no_raw ?: '-'),
                         'mrc_no'                  => $tr->mrc_no ?: (!empty($parsed['mrc']) ? $parsed['mrc'] : '-'),
                         'seller_tin'              => $tr->vendor_tin ?: (!empty($parsed['seller_tin']) ? $parsed['seller_tin'] : '-'),
@@ -3519,6 +3526,7 @@ class FinanceTaxReportController extends Controller
                         'purchase_category'          => ($ppVat > 0 ? 'vat_purchase' : 'tas_purchase'),
                         'purchase_category_label'    => ($ppVat > 0 ? 'VAT Purchase (15%)' : 'TAS Purchase (0% VAT)'),
                         'purchase_category_badge'    => ($ppVat > 0 ? 'bg-success-subtle text-success border border-success-subtle' : 'bg-primary-subtle text-primary border border-primary-subtle'),
+                        'invoice_type'               => $this->resolveReceiptInvoiceType($pp, $ppReceipt),
                         'fs_no'                      => $ppFsNo,
                         'mrc_no'                     => $ppMrcNo,
                         'seller_tin'                 => $supplierTin,
@@ -3660,6 +3668,7 @@ class FinanceTaxReportController extends Controller
                         'purchase_category'          => ($cspVat > 0 ? 'vat_purchase' : 'tas_purchase'),
                         'purchase_category_label'    => ($cspVat > 0 ? 'VAT Purchase (15%)' : 'TAS Purchase (0% VAT)'),
                         'purchase_category_badge'    => ($cspVat > 0 ? 'bg-success-subtle text-success border border-success-subtle' : 'bg-primary-subtle text-primary border border-primary-subtle'),
+                        'invoice_type'               => $this->resolveReceiptInvoiceType($csp, $cspReceipt),
                         'fs_no'                      => $csp->reference_no ?: '-',
                         'mrc_no'                     => '-',
                         'seller_tin'                 => $supplierTin,
@@ -3987,6 +3996,7 @@ class FinanceTaxReportController extends Controller
                 'is_pdf'             => $isPdf,
                 'is_vat_receipt'     => ($vatVal > 0 && !$isNoVat),
                 'is_no_vat'          => $isNoVat,
+                'invoice_type'       => $this->resolveReceiptInvoiceType($ocr, $r),
                 'receipt_timestamp'  => $r?->receipt_date ? Carbon::parse($r->receipt_date)->timestamp : ($date ? Carbon::parse($date)->timestamp : 0),
                 'created_timestamp'  => $ocr->created_at ? Carbon::parse($ocr->created_at)->timestamp : ($r?->created_at ? Carbon::parse($r->created_at)->timestamp : 0),
                 'updated_timestamp'  => max(
@@ -4278,6 +4288,7 @@ class FinanceTaxReportController extends Controller
                 'purchase_category'          => $ocr['is_vat_receipt'] ? 'vat_purchase' : 'tas_purchase',
                 'purchase_category_label'    => $ocr['is_vat_receipt'] ? 'VAT Purchase (15%)' : 'TAS Purchase (0% VAT)',
                 'purchase_category_badge'    => $ocr['is_vat_receipt'] ? 'bg-success-subtle text-success border border-success-subtle' : 'bg-primary-subtle text-primary border border-primary-subtle',
+                'invoice_type'               => $ocr['invoice_type'] ?? $this->resolveReceiptInvoiceType($ocr),
                 'fs_no'                      => $ocr['fs_no'] ?: '-',
                 'mrc_no'                     => $ocr['mrc_no'] ?: '-',
                 'seller_tin'                 => $ocr['seller_tin'] ?: '-',
@@ -5293,6 +5304,7 @@ class FinanceTaxReportController extends Controller
 
         $headers = [
             'Voucher / Request #',
+            'Invoice Type (FS / M)',
             'Receipt Date (EC)',
             'Receipt Date (GC)',
             'Supplier / Payee Name',
@@ -5329,17 +5341,22 @@ class FinanceTaxReportController extends Controller
             $whtAmtVal = round((float)($item['withholding_amount'] ?? 0), 2);
             $netVal = round((float)($item['net_disbursed'] ?? max(0, $baseVal - $whtAmtVal)), 2);
 
+            $invType = $this->resolveReceiptInvoiceType($item);
+            $rawFs = (!empty($item['fs_no']) && $item['fs_no'] !== '-') ? trim($item['fs_no']) : '';
+            $formattedFs = $rawFs ? $this->formatReceiptNoWithFsOrM($rawFs, $invType) : '-';
+
             $totalBase += $baseVal;
             $totalWht += $whtAmtVal;
             $totalNet += $netVal;
 
             $rows[] = [
                 $item['request_number'] ?? '-',
+                $invType,
                 $item['date_ec'] ?? '-',
                 $item['date_gc'] ?? '-',
                 $item['payee'] ?? 'Vendor',
                 $item['seller_tin'] ?? '-',
-                $item['fs_no'] ?? '-',
+                $formattedFs,
                 $item['category'] ?? 'Expense',
                 $item['project_name'] ?? 'General',
                 $baseVal,
@@ -5350,10 +5367,11 @@ class FinanceTaxReportController extends Controller
             ];
         }
 
-        // Add TOTAL summary row at the bottom of the Excel sheet
+        // Add TOTAL summary row at the bottom of the Excel sheet (14 columns)
         if (!empty($rows)) {
             $rows[] = [
                 'TOTAL',
+                '',
                 '',
                 '',
                 '',
@@ -5387,6 +5405,7 @@ class FinanceTaxReportController extends Controller
             'Buyer TIN',
             'Buyer Name',
             'Transaction',
+            'Invoice Type (FS / M)',
             'Receipt Category',
             'Receipt Used',
             'MRC',
@@ -5443,35 +5462,39 @@ class FinanceTaxReportController extends Controller
             // Col D: Transaction
             $transaction = trim((string)($inc->transaction_type ?: 'Cash Sales'));
 
-            // Col E: Receipt Category
+            // Col E: Invoice Type (FS / M)
+            $invType = $this->resolveReceiptInvoiceType($inc);
+
+            // Col F: Receipt Category
             $receiptCategory = trim((string)($inc->receipt_category ?: 'Cash Sales Fiscal Receipt'));
 
-            // Col F: Receipt Used
+            // Col G: Receipt Used
             $receiptUsed = trim((string)($inc->receipt_used ?: 'Fiscal Cash Register'));
 
-            // Col G: MRC
+            // Col H: MRC
             $mrc = trim((string)($inc->mrc_no ?? ''));
 
-            // Col H: Receipt No
-            $receiptNo = $inc->formatted_receipt_no ?: trim((string)($inc->receipt_no ?: ($inc->income_no ?: ('INC-' . $inc->id))));
+            // Col I: Receipt No
+            $rawReceiptNo = $inc->formatted_receipt_no ?: trim((string)($inc->receipt_no ?: ($inc->income_no ?: ('INC-' . $inc->id))));
+            $receiptNo = $this->formatReceiptNoWithFsOrM($rawReceiptNo, $invType);
 
-            // Col I: Commodity Type
+            // Col J: Commodity Type
             $commodityType = trim((string)($inc->commodity_type ?? ''));
             if (empty($commodityType)) {
                 $cat = strtolower((string)$inc->category);
                 $commodityType = in_array($cat, ['construction', 'goods']) ? 'Goods' : 'Services';
             }
 
-            // Col J: Quantity
+            // Col K: Quantity
             $qtyVal = round((float)($inc->quantity > 0 ? $inc->quantity : 1.00), 2);
 
-            // Col K: Price
+            // Col L: Price
             $priceVal = round((float)($inc->unit_price > 0 ? $inc->unit_price : $inc->amount), 2);
 
             $totalQty += $qtyVal;
             $totalPrice += $priceVal;
 
-            // Col L: Receipt Date (Format: DD/MM/YYYY EC or DD/MM/YYYY GC)
+            // Col M: Receipt Date (Format: DD/MM/YYYY EC or DD/MM/YYYY GC)
             $rDate = $inc->receipt_date ?: $inc->income_date;
             if ($userCalendar === 'G') {
                 $receiptDateFormatted = $this->formatExportDate($rDate, null, 'G', '/');
@@ -5479,7 +5502,7 @@ class FinanceTaxReportController extends Controller
                 $receiptDateFormatted = $this->formatExportDate($rDate, null, 'E', '/') . ' EC';
             }
 
-            // Col M: Encoded By
+            // Col N: Encoded By
             $encodedBy = trim((string)($inc->encoded_by ?: ($request->input('encoded_by') ?: (
                 SystemSetting::get('etax_encoded_by') ?: (
                     $inc->createdBy && !in_array(strtolower($inc->createdBy->name), ['admin', 'global admin', 'system'])
@@ -5494,6 +5517,7 @@ class FinanceTaxReportController extends Controller
                 $buyerTinVal,
                 $buyerName,
                 $transaction,
+                $invType,
                 $receiptCategory,
                 $receiptUsed,
                 $mrc,
@@ -5506,10 +5530,11 @@ class FinanceTaxReportController extends Controller
             ];
         }
 
-        // Add TOTAL summary row at the bottom of the Excel sheet
+        // Add TOTAL summary row at the bottom of the Excel sheet (14 columns)
         if (!empty($rows)) {
             $rows[] = [
                 'TOTAL',
+                '',
                 '',
                 '',
                 '',
@@ -5541,6 +5566,7 @@ class FinanceTaxReportController extends Controller
 
         $headers = [
             '#',
+            'Invoice Type (FS / M)',
             'Receipt / FS No',
             'MRC Number',
             'Receipt Date (' . ($userCalendar === 'G' ? 'GC' : 'EC') . ')',
@@ -5620,7 +5646,9 @@ class FinanceTaxReportController extends Controller
         $totalGross = 0.0;
 
         foreach ($ocrList as $idx => $ocr) {
-            $fsNo = (!empty($ocr['fs_no']) && $ocr['fs_no'] !== '-') ? trim((string)$ocr['fs_no']) : (trim((string)($ocr['receipt_number'] ?? '')) ?: '-');
+            $rawFs = (!empty($ocr['fs_no']) && $ocr['fs_no'] !== '-') ? trim((string)$ocr['fs_no']) : (trim((string)($ocr['receipt_number'] ?? '')) ?: '-');
+            $invType = $this->resolveReceiptInvoiceType($ocr);
+            $fsNo = $this->formatReceiptNoWithFsOrM($rawFs, $invType);
             $mrcNo = (!empty($ocr['mrc_no']) && $ocr['mrc_no'] !== '-') ? trim((string)$ocr['mrc_no']) : '-';
 
             $rawDate = $ocr['receipt_date_ymd'] ?? null;
@@ -5676,6 +5704,7 @@ class FinanceTaxReportController extends Controller
 
             $rows[] = [
                 $idx + 1,
+                $invType,
                 $fsNo,
                 $mrcNo,
                 $primaryDate,
@@ -5717,6 +5746,7 @@ class FinanceTaxReportController extends Controller
                 '',
                 '',
                 '',
+                '',
                 round($totalQty, 4),
                 '',
                 round($totalBase, 2),
@@ -5728,6 +5758,183 @@ class FinanceTaxReportController extends Controller
         }
 
         return $this->writeExcelFile($headers, $rows, $tempPath, $filename);
+    }
+
+    /**
+     * Determine if a receipt / invoice is Fiscal Sales (FS) or Manual (M).
+     * Returns 'FS' or 'M'.
+     */
+    public function resolveReceiptInvoiceType($item, $receipt = null): string
+    {
+        $rawFs = '';
+        $rawRef = '';
+        $rawMrc = '';
+        $rawCategory = '';
+        $rawDesc = '';
+        $isManualFlag = false;
+        $explicitType = null;
+
+        if (is_array($item)) {
+            $explicitType = $item['invoice_type'] ?? null;
+            $rawFs = trim((string)($item['fs_no'] ?? ($item['receipt_no'] ?? ($item['receipt_number'] ?? ''))));
+            $rawRef = trim((string)($item['payment_reference'] ?? ($item['request_number'] ?? '')));
+            $rawMrc = trim((string)($item['mrc_no'] ?? ($item['mrc'] ?? '')));
+            $rawCategory = trim((string)($item['receipt_category'] ?? ($item['category'] ?? '')));
+            $rawDesc = trim((string)($item['description'] ?? ($item['item_description'] ?? '')));
+            $isManualFlag = !empty($item['is_manual']) || !empty($item['manual_entry']);
+        } elseif ($item instanceof \App\Models\Receipt) {
+            $explicitType = $item->invoice_type ?? null;
+            $rawFs = trim((string)($item->fs_no_raw ?: ($item->fs_no ?: $item->receipt_number)));
+            $rawMrc = trim((string)($item->mrc_no ?? ''));
+            $rawCategory = trim((string)($item->category ?? ''));
+            $rawDesc = trim((string)($item->description ?? ''));
+            $parsed = is_string($item->parsed_data) ? (json_decode($item->parsed_data, true) ?: []) : (array)($item->parsed_data ?? []);
+            if (!$explicitType && !empty($parsed['invoice_type'])) {
+                $explicitType = $parsed['invoice_type'];
+            }
+            if (!empty($parsed['is_manual'])) {
+                $isManualFlag = true;
+            }
+        } elseif ($item instanceof \App\Models\ReceiptItem) {
+            $r = $receipt ?: $item->receipt;
+            if ($r) {
+                $explicitType = $r->invoice_type ?? null;
+                $rawFs = trim((string)($r->fs_no_raw ?: ($r->fs_no ?: $r->receipt_number)));
+                $rawMrc = trim((string)($r->mrc_no ?? ''));
+                $rawCategory = trim((string)($r->category ?? ''));
+                $rawDesc = trim((string)($item->item_description ?: $r->description));
+                $parsed = is_string($r->parsed_data) ? (json_decode($r->parsed_data, true) ?: []) : (array)($r->parsed_data ?? []);
+                if (!$explicitType && !empty($parsed['invoice_type'])) {
+                    $explicitType = $parsed['invoice_type'];
+                }
+                if (!empty($parsed['is_manual'])) {
+                    $isManualFlag = true;
+                }
+            } else {
+                $rawDesc = trim((string)$item->item_description);
+            }
+        } elseif ($item instanceof \App\Models\IncomeRecord) {
+            $rawFs = trim((string)($item->receipt_no ?: $item->income_no));
+            $rawMrc = trim((string)($item->mrc_no ?? ''));
+            $rawCategory = trim((string)($item->receipt_category ?: $item->category));
+            $receiptUsed = trim((string)($item->receipt_used ?? ''));
+            if (preg_match('/manual/i', $receiptUsed) || preg_match('/manual/i', $rawCategory)) {
+                return 'M';
+            }
+            if (preg_match('/fiscal|cash\s*register/i', $receiptUsed) || preg_match('/fiscal/i', $rawCategory)) {
+                return 'FS';
+            }
+        } elseif ($item instanceof \App\Models\ExpenseRequest) {
+            $rawRef = trim((string)($item->payment_reference ?: $item->request_number));
+            $rawDesc = trim((string)$item->description);
+        }
+
+        // Also check linked receipt if passed separately
+        if ($receipt && empty($rawMrc)) {
+            $rawMrc = trim((string)($receipt->mrc_no ?? ''));
+        }
+        if ($receipt && empty($rawFs)) {
+            $rawFs = trim((string)($receipt->fs_no_raw ?: ($receipt->fs_no ?: $receipt->receipt_number)));
+        }
+        if ($receipt && empty($explicitType) && !empty($receipt->invoice_type)) {
+            $explicitType = $receipt->invoice_type;
+        }
+
+        if (!empty($explicitType)) {
+            $uType = strtoupper(trim((string)$explicitType));
+            if ($uType === 'M' || $uType === 'MANUAL') return 'M';
+            if ($uType === 'FS' || $uType === 'FISCAL') return 'FS';
+        }
+
+        $combined = strtoupper($rawFs . ' ' . $rawRef . ' ' . $rawCategory . ' ' . $rawDesc);
+
+        // Explicit Manual signals:
+        // Starts with M (and not MRC), e.g. M000123, M-1234, M:1234, M 1234, MANUAL
+        if (preg_match('/^M[:\s#\-_]*\d+/i', $rawFs)
+            || preg_match('/^M\d{3,}/i', $rawFs)
+            || preg_match('/\bM[:\s#\-_]+\d+/i', $rawRef)
+            || preg_match('/\bMANUAL\b/i', $combined)
+            || $isManualFlag) {
+            return 'M';
+        }
+
+        // Explicit FS signals:
+        // Starts with FS e.g. FS000123, FS-123, FS:123, FS 123
+        if (preg_match('/^FS[:\s#\-_]*/i', $rawFs)
+            || preg_match('/\bF[\/\.]?S\b/i', $combined)
+            || preg_match('/\bFS[:\s#\-_]*\d+/i', $rawRef)) {
+            return 'FS';
+        }
+
+        // Has valid Cash Register Machine Serial / MRC -> Fiscal machine receipt (FS)
+        if (!empty($rawMrc) && $rawMrc !== '-' && strlen($rawMrc) >= 3 && strtoupper($rawMrc) !== 'N/A') {
+            return 'FS';
+        }
+
+        // Standard 8-digit fiscal slip without M prefix -> FS
+        $digits = preg_replace('/\D/', '', $rawFs);
+        if (strlen($digits) === 8 && !empty($rawFs) && !preg_match('/^M/i', $rawFs)) {
+            return 'FS';
+        }
+
+        if (preg_match('/fiscal|cash\s*register/i', $rawCategory)) {
+            return 'FS';
+        }
+
+        if (preg_match('/manual|pad|booklet|handwritten/i', $combined)) {
+            return 'M';
+        }
+
+        // Default fallback:
+        if (str_starts_with(strtoupper($rawFs), 'M')) {
+            return 'M';
+        }
+
+        return (!empty($rawMrc) && $rawMrc !== '-') ? 'FS' : (empty($rawFs) || $rawFs === '-' ? 'M' : 'FS');
+    }
+
+    /**
+     * Format receipt / invoice number: if type is FS show "FS...", if manual show "M...".
+     */
+    public function formatReceiptNoWithFsOrM(string $rawNumber, string $type): string
+    {
+        $clean = trim($rawNumber);
+        if ($clean === '' || $clean === '-') {
+            return ($type === 'M') ? 'M' : 'FS';
+        }
+
+        if ($type === 'M') {
+            if (preg_match('/^m[:\s#\-_]*/i', $clean)) {
+                $num = preg_replace('/^m[:\s#\-_]*/i', '', $clean);
+                return 'M' . (preg_match('/^\d+$/', $num) ? str_pad($num, 8, '0', STR_PAD_LEFT) : $num);
+            }
+            if (preg_match('/^manual[:\s#\-_]*/i', $clean)) {
+                $num = preg_replace('/^manual[:\s#\-_]*/i', '', $clean);
+                return 'M' . ($num ?: '');
+            }
+            if (preg_match('/^fs[:\s#\-_]*/i', $clean)) {
+                $num = preg_replace('/^fs[:\s#\-_]*/i', '', $clean);
+                return 'M' . (preg_match('/^\d+$/', $num) ? str_pad($num, 8, '0', STR_PAD_LEFT) : $num);
+            }
+            if (preg_match('/^\d+$/', $clean)) {
+                return 'M' . str_pad($clean, 8, '0', STR_PAD_LEFT);
+            }
+            return 'M-' . $clean;
+        } else {
+            // FS
+            if (preg_match('/^fs[:\s#\-_]*/i', $clean)) {
+                $num = preg_replace('/^fs[:\s#\-_]*/i', '', $clean);
+                return 'FS' . (preg_match('/^\d+$/', $num) ? str_pad($num, 8, '0', STR_PAD_LEFT) : $num);
+            }
+            if (preg_match('/^m[:\s#\-_]*/i', $clean)) {
+                $num = preg_replace('/^m[:\s#\-_]*/i', '', $clean);
+                return 'FS' . (preg_match('/^\d+$/', $num) ? str_pad($num, 8, '0', STR_PAD_LEFT) : $num);
+            }
+            if (preg_match('/^\d+$/', $clean)) {
+                return 'FS' . str_pad($clean, 8, '0', STR_PAD_LEFT);
+            }
+            return 'FS ' . $clean;
+        }
     }
 
     /**
@@ -5762,6 +5969,7 @@ class FinanceTaxReportController extends Controller
             'Purchaser TIN',
             'Seller TIN',
             'Amount',
+            'Invoice Type (FS / M)',
             'Receipt No',
             'Receipt Date',
             'Encoding Date',
@@ -5918,21 +6126,16 @@ class FinanceTaxReportController extends Controller
                 $amountVal = round((float)($item['total_amount'] ?? ($item['gross_amount'] ?? (($item['base_amount'] ?? 0) + ($item['vat_amount'] ?? 0)))), 2);
                 $totalAmount += $amountVal;
 
-                $receiptNo = '';
+                $invType = $this->resolveReceiptInvoiceType($item);
+                $rawFs = '';
                 if (!empty($item['fs_no']) && $item['fs_no'] !== '-') {
-                    $cleanFs = trim($item['fs_no']);
-                    if (preg_match('/^fs/i', $cleanFs)) {
-                        $receiptNo = strtoupper($cleanFs);
-                    } elseif (preg_match('/^\d+$/', $cleanFs)) {
-                        $receiptNo = 'FS' . str_pad($cleanFs, 8, '0', STR_PAD_LEFT);
-                    } else {
-                        $receiptNo = $cleanFs;
-                    }
+                    $rawFs = trim($item['fs_no']);
                 } elseif (!empty($item['payment_reference']) && $item['payment_reference'] !== '-') {
-                    $receiptNo = trim($item['payment_reference']);
+                    $rawFs = trim($item['payment_reference']);
                 } else {
-                    $receiptNo = trim($item['request_number'] ?? '');
+                    $rawFs = trim($item['request_number'] ?? '');
                 }
+                $receiptNo = $this->formatReceiptNoWithFsOrM($rawFs, $invType);
 
                 $rawDate = $item['raw_date'] ?? ($item['date_gc'] ?? null);
                 $ecDate  = $item['receipt_date_ec'] ?? ($item['date_ec'] ?? null);
@@ -5946,6 +6149,7 @@ class FinanceTaxReportController extends Controller
                     $purchaserTinVal,
                     $sellerTinVal,
                     $amountVal,
+                    $invType,
                     $receiptNo,
                     $receiptDate,
                     $encodingDate,
@@ -5960,6 +6164,7 @@ class FinanceTaxReportController extends Controller
                     'TOTAL',
                     '',
                     round($totalAmount, 2),
+                    '',
                     '',
                     '',
                     '',
@@ -6055,22 +6260,11 @@ class FinanceTaxReportController extends Controller
             }
             $amountVal = round($amountVal, 2);
 
+            $invType = $this->resolveReceiptInvoiceType($item, $r);
             $receiptNo = '';
             if ($r) {
-                if (!empty($r->fs_no_raw)) {
-                    $receiptNo = trim($r->fs_no_raw);
-                } elseif (!empty($r->fs_no)) {
-                    $cleanFs = trim($r->fs_no);
-                    if (preg_match('/^fs/i', $cleanFs)) {
-                        $receiptNo = strtoupper($cleanFs);
-                    } elseif (preg_match('/^\d+$/', $cleanFs)) {
-                        $receiptNo = 'FS' . str_pad($cleanFs, 8, '0', STR_PAD_LEFT);
-                    } else {
-                        $receiptNo = $cleanFs;
-                    }
-                } else {
-                    $receiptNo = trim((string)$r->receipt_number);
-                }
+                $rawFs = !empty($r->fs_no_raw) ? trim($r->fs_no_raw) : (!empty($r->fs_no) ? trim($r->fs_no) : trim((string)$r->receipt_number));
+                $receiptNo = $this->formatReceiptNoWithFsOrM($rawFs, $invType);
             }
 
             $parsed = is_string($r->parsed_data ?? null) ? (json_decode($r->parsed_data, true) ?: []) : (array)($r->parsed_data ?? []);
@@ -6101,6 +6295,7 @@ class FinanceTaxReportController extends Controller
                 $purchaserTinVal,
                 $sellerTinVal,
                 $amountVal,
+                $invType,
                 $receiptNo,
                 $receiptDate,
                 $encodingDate,
@@ -6122,10 +6317,9 @@ class FinanceTaxReportController extends Controller
 
             $amountVal = round((float)$r->total_amount, 2);
 
-            $receiptNo = trim((string)($r->fs_no_raw ?: ($r->fs_no ?: ($parsed['receipt_no'] ?? $r->receipt_number))));
-            if (!empty($r->fs_no) && preg_match('/^\d+$/', $r->fs_no)) {
-                $receiptNo = 'FS' . str_pad($r->fs_no, 8, '0', STR_PAD_LEFT);
-            }
+            $invType = $this->resolveReceiptInvoiceType($r);
+            $rawFs = trim((string)($r->fs_no_raw ?: ($r->fs_no ?: ($parsed['receipt_no'] ?? $r->receipt_number))));
+            $receiptNo = $this->formatReceiptNoWithFsOrM($rawFs, $invType);
 
             $rawDate = $r->receipt_date ?: $r->created_at;
             $rawEcDate = !empty($parsed['receipt_date']) ? $parsed['receipt_date'] : null;
@@ -6147,6 +6341,7 @@ class FinanceTaxReportController extends Controller
                 $purchaserTinVal,
                 $sellerTinVal,
                 $amountVal,
+                $invType,
                 $receiptNo,
                 $receiptDate,
                 $encodingDate,
@@ -6182,11 +6377,15 @@ class FinanceTaxReportController extends Controller
 
             foreach ($expenses as $exp) {
                 $gross = (float)($exp->gross_amount > 0 ? $exp->gross_amount : $exp->amount);
+                $invType = $this->resolveReceiptInvoiceType($exp);
+                $rawFs = $exp->payment_reference ?: $exp->request_number;
+                $receiptNo = $this->formatReceiptNoWithFsOrM($rawFs, $invType);
                 $rows[] = [
                     $defaultPurchaserDigits,
                     '',
                     round($gross, 2),
-                    $exp->payment_reference ?: $exp->request_number,
+                    $invType,
+                    $receiptNo,
                     $this->formatExportDate($exp->paid_at ?: $exp->created_at, null, $userCalendar, '-'),
                     $this->formatExportDate($exp->created_at ?: now(), null, $userCalendar, '-'),
                     '',
@@ -6206,6 +6405,7 @@ class FinanceTaxReportController extends Controller
                 'TOTAL',
                 '',
                 round($totalAmount, 2),
+                '',
                 '',
                 '',
                 '',
@@ -6237,6 +6437,7 @@ class FinanceTaxReportController extends Controller
             'Seller name (if Seller has no TIN or item is not locally purchased) This field is not mandatory.',
             'Date of purchase/Customs Declaration No.  Dispatched Date (Please use  dd/mm/yyyy date format).  This field is mandatory.',
             'MRC Number..This field is not mandatory.',
+            'Invoice Type (FS / M)',
             'Vat receipt number/ Customs Declaration Number.This field is mandatory.',
             'Description.This field is mandatory.',
             'Unit of Measure (type ID 2-10). 2 KG 3 ML 4 GM 5 LIT 6 MT 7 PCS 8 CT 9 OTHER 10 PC This field is mandatory.',
@@ -6597,11 +6798,13 @@ class FinanceTaxReportController extends Controller
             $rawMrc = $r ? trim((string)$r->mrc_no) : '';
             $mrcVal = ($rawMrc !== '' && $rawMrc !== '-' && strtoupper($rawMrc) !== 'N/A') ? $rawMrc : '';
 
-            // 8. VAT receipt number / Customs Declaration Number
+            // 8. VAT receipt number / Customs Declaration Number & Invoice Type (FS / M)
+            $invType = $this->resolveReceiptInvoiceType($item, $r);
             $rawFs = $r ? trim((string)($r->fs_no ?: ($r->fs_no_raw ?: ($r->receipt_number ?: '')))) : '';
             if ($rawFs === '' || $rawFs === '-') {
-                $rawFs = $r ? trim((string)$r->receipt_number) : 'FS00000000';
+                $rawFs = $r ? trim((string)$r->receipt_number) : '';
             }
+            $formattedFs = $this->formatReceiptNoWithFsOrM($rawFs, $invType);
 
             // 9. Description
             $desc = trim((string)($item->item_description ?: ($r?->description ?: 'Purchased Goods')));
@@ -6698,7 +6901,8 @@ class FinanceTaxReportController extends Controller
                 $seller,
                 $dateFormatted,
                 $mrcVal,
-                $rawFs,
+                $invType,
+                $formattedFs,
                 $desc,
                 $uomId,
                 $qtyVal,
@@ -6741,6 +6945,10 @@ class FinanceTaxReportController extends Controller
                 $date = $exp->paid_at ?: $exp->created_at;
                 $dateFormatted = $date ? Carbon::parse($date)->format('d/m/Y') : now()->format('d/m/Y');
 
+                $invType = $this->resolveReceiptInvoiceType($exp);
+                $rawFs = (string)($exp->payment_reference ?: $exp->request_number);
+                $formattedFs = $this->formatReceiptNoWithFsOrM($rawFs, $invType);
+
                 $totalQty += 1;
                 $totalBase += $base;
                 $totalVat += $vatAmount;
@@ -6754,7 +6962,8 @@ class FinanceTaxReportController extends Controller
                     $exp->account_name ?: ($exp->user?->name ?: 'Vendor'),
                     $dateFormatted,
                     '',
-                    (string)($exp->payment_reference ?: $exp->request_number),
+                    $invType,
+                    $formattedFs,
                     (string)($exp->description ?: 'Purchased Goods'),
                     9,
                     1,
@@ -6766,7 +6975,7 @@ class FinanceTaxReportController extends Controller
             }
         }
 
-        // Add TOTAL summary row at the bottom of the Excel sheet
+        // Add TOTAL summary row at the bottom of the Excel sheet (16 columns)
         if (!empty($rows)) {
             $rows[] = [
                 'TOTAL',
@@ -6784,6 +6993,7 @@ class FinanceTaxReportController extends Controller
                 round($totalBase, 2),
                 round($totalVat, 2),
                 round($totalAfterVat, 2),
+                '',
             ];
         }
 
@@ -7267,6 +7477,7 @@ class FinanceTaxReportController extends Controller
 
         $validated = $request->validate([
             'receipt_date'       => 'required|date',
+            'invoice_type'       => 'nullable|string|max:10',
             'fs_no'              => 'nullable|string',
             'mrc_no'             => 'nullable|string',
             'vendor_name'        => 'nullable|string',
@@ -7364,6 +7575,13 @@ class FinanceTaxReportController extends Controller
             $vendorName = ($validated['vendor_name'] ?? '') ?: ($category === 'fuel' ? 'Fuel Station' : 'General Merchant');
             $itemDesc   = ($validated['description'] ?? '') ?: ($category === 'fuel' ? 'Vehicle Fuel Receipt' : 'Purchased Materials / VAT Invoice');
 
+            $rawInvType = $request->input('invoice_type');
+            if (!empty($rawInvType)) {
+                $invType = str_starts_with(strtoupper(trim($rawInvType)), 'M') ? 'M' : 'FS';
+            } else {
+                $invType = (str_starts_with(strtoupper($fsNoRaw), 'M') || str_contains(strtolower($category), 'manual')) ? 'M' : 'FS';
+            }
+
             // 1. Create Receipt (for ERCA Line 100 / Line 6 VAT declaration)
             $receipt = new Receipt([
                 'receipt_number'   => $receiptNumber,
@@ -7373,6 +7591,7 @@ class FinanceTaxReportController extends Controller
                 'vendor_tin'       => $validated['vendor_tin'] ?? null,
                 'tin_valid'        => true,
                 'buyer_tin'        => ($validated['buyer_tin'] ?? '') ?: '38480010',
+                'invoice_type'     => $invType,
                 'fs_no'            => $fsNo,
                 'fs_no_raw'        => $fsNoRaw,
                 'fs_no_valid'      => true,
@@ -7522,6 +7741,7 @@ class FinanceTaxReportController extends Controller
             'receipt_id'                 => 'nullable',
             'expense_request_id'         => 'nullable',
             'request_number'             => 'nullable|string|max:100',
+            'invoice_type'               => 'nullable|string|max:10',
             'receipt_file'               => 'nullable|file|mimes:jpeg,jpg,png,webp,pdf|max:25600',
             'receipt_path'               => 'nullable|string|max:500',
             'seller_name'                => 'nullable|string|max:255',
@@ -7863,6 +8083,7 @@ class FinanceTaxReportController extends Controller
                     'receipt_number'   => $candidateReceiptNo,
                     'vendor_name'      => $request->seller_name ?: $defaultVendor,
                     'vendor_tin'       => $request->supplier_tin ?: null,
+                    'invoice_type'     => ($request->invoice_type && str_starts_with(strtoupper($request->invoice_type), 'M')) ? 'M' : 'FS',
                     'fs_no'            => $request->fs_no ?: null,
                     'fs_no_raw'        => $request->fs_no ?: null,
                     'mrc_no'           => $request->mrc_no ?: null,
@@ -7982,6 +8203,27 @@ class FinanceTaxReportController extends Controller
                 $receiptUpdates['fs_no']       = $cleanFs ?: trim((string)$request->fs_no);
                 $receiptUpdates['fs_no_raw']   = trim((string)$request->fs_no);
                 $receiptUpdates['fs_no_valid'] = (strlen($cleanFs) === 8);
+            }
+            if ($request->has('invoice_type')) {
+                $rawInvType = strtoupper(trim((string)$request->input('invoice_type')));
+                $invType = (str_starts_with($rawInvType, 'M')) ? 'M' : 'FS';
+                if (Schema::hasColumn('receipts', 'invoice_type')) {
+                    $receiptUpdates['invoice_type'] = $invType;
+                }
+                $parsed['invoice_type'] = $invType;
+            } elseif ($request->has('fs_no')) {
+                $cleanFsStr = trim((string)$request->fs_no);
+                if (preg_match('/^m/i', $cleanFsStr)) {
+                    if (Schema::hasColumn('receipts', 'invoice_type')) {
+                        $receiptUpdates['invoice_type'] = 'M';
+                    }
+                    $parsed['invoice_type'] = 'M';
+                } elseif (preg_match('/^fs/i', $cleanFsStr)) {
+                    if (Schema::hasColumn('receipts', 'invoice_type')) {
+                        $receiptUpdates['invoice_type'] = 'FS';
+                    }
+                    $parsed['invoice_type'] = 'FS';
+                }
             }
             $rawEcDate  = trim((string)$request->input('receipt_date_ec'));
             $rawGcDate  = trim((string)$request->input('receipt_date'));
@@ -8620,6 +8862,7 @@ class FinanceTaxReportController extends Controller
                     'vendor_tin'                 => $receipt->vendor_tin ?: '-',
                     'seller_tin'                 => $receipt->vendor_tin ?: '-',
                     'tin_valid'                  => (bool)($receipt->tin_valid ?? (strlen(preg_replace('/\D/', '', $receipt->vendor_tin ?? '')) === 10)),
+                    'invoice_type'               => $receipt->invoice_type ?: ($parsed['invoice_type'] ?? $this->resolveReceiptInvoiceType($receipt)),
                     'fs_no'                      => $receipt->fs_no ?: '-',
                     'fs_no_raw'                  => $receipt->fs_no_raw ?: ($receipt->fs_no ?: '-'),
                     'fs_no_valid'                => (bool)($receipt->fs_no_valid ?? (strlen(preg_replace('/\D/', '', $receipt->fs_no ?? '')) === 8)),

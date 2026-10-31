@@ -1509,6 +1509,7 @@ class OCRReceiptScannerController extends Controller
                     'Seller name (if Seller has no TIN or item is not locally purchased) This field is not mandatory.',
                     'Date of purchase/Customs Declaration No.  Dispatched Date (Please use  dd/mm/yyyy date format).  This field is mandatory.',
                     'MRC Number..This field is not mandatory.',
+                    'Invoice Type (FS / M)',
                     'Vat receipt number/ Customs Declaration Number.This field is mandatory.',
                     'Description.This field is mandatory.',
                     'Unit of Measure (type ID 2-10). 2 KG 3 ML 4 GM 5 LIT 6 MT 7 PCS 8 CT 9 OTHER 10 PC This field is mandatory.',
@@ -1553,10 +1554,12 @@ class OCRReceiptScannerController extends Controller
                     $rawMrc = $r ? trim((string)$r->mrc_no) : '';
                     $mrcVal = ($rawMrc !== '' && $rawMrc !== '-' && strtoupper($rawMrc) !== 'N/A') ? $rawMrc : '';
 
+                    $invType = $this->resolveReceiptInvoiceType($item, $r);
                     $rawFs = $r ? trim((string)($r->fs_no ?: ($r->fs_no_raw ?: ($r->receipt_number ?: '')))) : '';
                     if ($rawFs === '' || $rawFs === '-') {
-                        $rawFs = $r ? trim((string)$r->receipt_number) : 'FS00000000';
+                        $rawFs = $r ? trim((string)$r->receipt_number) : '';
                     }
+                    $formattedFs = $this->formatReceiptNoWithFsOrM($rawFs, $invType);
 
                     $desc = trim((string)($item->item_description ?: ($r?->description ?: 'Purchased Goods')));
 
@@ -1635,7 +1638,8 @@ class OCRReceiptScannerController extends Controller
                         Cell::fromValue($seller),
                         Cell::fromValue($dateFormatted),
                         Cell::fromValue($mrcVal),
-                        Cell::fromValue($rawFs),
+                        Cell::fromValue($invType),
+                        Cell::fromValue($formattedFs),
                         Cell::fromValue($desc),
                         Cell::fromValue($uomId),
                         Cell::fromValue($qtyVal),
@@ -1647,7 +1651,7 @@ class OCRReceiptScannerController extends Controller
                     $writer->addRow(new Row($rowCells));
                 }
 
-                // Add TOTAL summary row at the bottom of the Excel sheet
+                // Add TOTAL summary row at the bottom of the Excel sheet (16 columns)
                 if ($items->isNotEmpty()) {
                     $summaryCells = [
                         Cell::fromValue('TOTAL'),
@@ -1665,15 +1669,17 @@ class OCRReceiptScannerController extends Controller
                         Cell::fromValue(round($totalBase, 2)),
                         Cell::fromValue(round($totalVat, 2)),
                         Cell::fromValue(round($totalAfterVat, 2)),
+                        Cell::fromValue(''),
                     ];
                     $writer->addRow(new Row($summaryCells));
                 }
             } else {
-                // e-Tax Purchase Declaration Form (Exact 9 Columns: Purchaser TIN | Seller TIN | Amount | Receipt No | Receipt Date | Encoding Date | MRC | PurcType | Encoded By)
+                // e-Tax Purchase Declaration Form (10 Columns: Purchaser TIN | Seller TIN | Amount | Invoice Type (FS / M) | Receipt No | Receipt Date | Encoding Date | MRC | PurcType | Encoded By)
                 $headerCells = [
                     Cell::fromValue('Purchaser TIN'),
                     Cell::fromValue('Seller TIN'),
                     Cell::fromValue('Amount'),
+                    Cell::fromValue('Invoice Type (FS / M)'),
                     Cell::fromValue('Receipt No'),
                     Cell::fromValue('Receipt Date'),
                     Cell::fromValue('Encoding Date'),
@@ -1703,23 +1709,12 @@ class OCRReceiptScannerController extends Controller
                     $amountVal = round($amountVal, 2);
                     $totalAmount += $amountVal;
 
-                    // Col D: Receipt No (e.g. FS00003898, FS00016506)
+                    // Col D: Invoice Type & Receipt No
+                    $invType = $this->resolveReceiptInvoiceType($item, $r);
                     $receiptNo = '';
                     if ($r) {
-                        if (!empty($r->fs_no_raw)) {
-                            $receiptNo = trim($r->fs_no_raw);
-                        } elseif (!empty($r->fs_no)) {
-                            $cleanFs = trim($r->fs_no);
-                            if (preg_match('/^fs/i', $cleanFs)) {
-                                $receiptNo = strtoupper($cleanFs);
-                            } elseif (preg_match('/^\d+$/', $cleanFs)) {
-                                $receiptNo = 'FS' . str_pad($cleanFs, 8, '0', STR_PAD_LEFT);
-                            } else {
-                                $receiptNo = $cleanFs;
-                            }
-                        } else {
-                            $receiptNo = trim((string)$r->receipt_number);
-                        }
+                        $rawFs = !empty($r->fs_no_raw) ? trim($r->fs_no_raw) : (!empty($r->fs_no) ? trim($r->fs_no) : trim((string)$r->receipt_number));
+                        $receiptNo = $this->formatReceiptNoWithFsOrM($rawFs, $invType);
                     }
 
                     // Col E: Receipt Date (Format: DD/MM/YYYY EC or DD-MM-YYYY GC)
@@ -1763,6 +1758,7 @@ class OCRReceiptScannerController extends Controller
                         Cell::fromValue($purchaserTinVal),
                         Cell::fromValue($sellerTinVal),
                         Cell::fromValue($amountVal),
+                        Cell::fromValue($invType),
                         Cell::fromValue($receiptNo),
                         Cell::fromValue($receiptDate),
                         Cell::fromValue($encodingDate),
@@ -1773,12 +1769,13 @@ class OCRReceiptScannerController extends Controller
                     $writer->addRow(new Row($rowCells));
                 }
 
-                // Add TOTAL summary row at the bottom of the Excel sheet
+                // Add TOTAL summary row at the bottom of the Excel sheet (10 columns)
                 if ($items->isNotEmpty()) {
                     $summaryCells = [
                         Cell::fromValue('TOTAL'),
                         Cell::fromValue(''),
                         Cell::fromValue(round($totalAmount, 2)),
+                        Cell::fromValue(''),
                         Cell::fromValue(''),
                         Cell::fromValue(''),
                         Cell::fromValue(''),
@@ -1801,6 +1798,94 @@ class OCRReceiptScannerController extends Controller
             // Fallback to CSV with Excel compatibility
             return $this->exportCsv($request);
         }
+    }
+
+    /**
+     * Resolve whether an invoice/receipt is a Fiscal Register Slip ('FS') or Manual Voucher ('M').
+     */
+    public function resolveReceiptInvoiceType($item, $receipt = null): string
+    {
+        $r = $receipt ?: ($item instanceof Receipt ? $item : ($item instanceof ReceiptItem ? $item->receipt : null));
+        $data = is_array($item) ? $item : [];
+        $parsed = is_string($r?->parsed_data ?? null) ? (json_decode($r->parsed_data, true) ?: []) : (array)($r?->parsed_data ?? []);
+
+        $explicitType = $r?->invoice_type
+            ?: ($data['invoice_type'] ?? null)
+            ?: ($parsed['invoice_type'] ?? null);
+
+        if (!empty($explicitType)) {
+            $u = strtoupper(trim((string)$explicitType));
+            if ($u === 'M' || str_starts_with($u, 'MANUAL')) {
+                return 'M';
+            }
+            if ($u === 'FS' || str_starts_with($u, 'FISCAL')) {
+                return 'FS';
+            }
+        }
+
+        $fsCandidate = (string)(
+            $r?->fs_no_raw
+            ?: ($r?->fs_no
+            ?: ($data['fs_no'] ?? null)
+            ?: ($data['payment_reference'] ?? null)
+            ?: ($parsed['receipt_no'] ?? ($parsed['fs_no'] ?? '')))
+        );
+
+        $cleanFs = strtoupper(trim($fsCandidate));
+        if (str_starts_with($cleanFs, 'M') && !str_starts_with($cleanFs, 'MRC')) {
+            return 'M';
+        }
+        if (str_contains($cleanFs, 'MANUAL') || str_contains($cleanFs, 'VOUCHER') || str_contains($cleanFs, 'PAD')) {
+            return 'M';
+        }
+        if (str_starts_with($cleanFs, 'FS')) {
+            return 'FS';
+        }
+
+        $mrc = trim((string)($r?->mrc_no ?: ($data['mrc_no'] ?? ($parsed['mrc'] ?? ''))));
+        if (!empty($mrc) && $mrc !== '-' && strtoupper($mrc) !== 'N/A') {
+            return 'FS';
+        }
+
+        $digits = preg_replace('/\D/', '', $cleanFs);
+        if (strlen($digits) === 8) {
+            return 'FS';
+        }
+
+        $category = strtolower((string)($r?->category ?: ($data['category'] ?? '')));
+        if (str_contains($category, 'manual') || str_contains($category, 'voucher') || str_contains($category, 'petty')) {
+            return 'M';
+        }
+
+        return 'FS';
+    }
+
+    /**
+     * Format a receipt / invoice number with either 'FS' or 'M' prefix.
+     */
+    public function formatReceiptNoWithFsOrM(?string $rawNumber, string $type = 'FS'): string
+    {
+        $raw = trim((string)$rawNumber);
+        if ($raw === '' || $raw === '-') {
+            return '-';
+        }
+
+        $isManual = (strtoupper($type) === 'M');
+        $clean = preg_replace('/^(FS|M)[:\s_#-]*\s*/i', '', $raw);
+
+        if (preg_match('/^\d+$/', $clean)) {
+            $padded = str_pad($clean, 8, '0', STR_PAD_LEFT);
+            return $isManual ? ('M' . $padded) : ('FS' . $padded);
+        }
+
+        if (preg_match('/^fs/i', $raw)) {
+            return $isManual ? ('M' . substr($raw, 2)) : strtoupper($raw);
+        }
+        if (preg_match('/^m/i', $raw)) {
+            return $isManual ? strtoupper($raw) : ('FS' . substr($raw, 1));
+        }
+
+        return ($isManual ? 'M' : 'FS') . $raw;
     }
 
     /**

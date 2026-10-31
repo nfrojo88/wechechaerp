@@ -1525,7 +1525,14 @@
                                         @endif
                                     </td>
                                     <td>
-                                        <span class="badge bg-light text-primary border font-monospace cell-tas-fs">{{ $tas['fs_no'] ?: ($tas['request_number'] ?? '-') }}</span>
+                                        <div class="d-flex align-items-center gap-1.5 flex-wrap">
+                                            @if(($tas['invoice_type'] ?? '') === 'M')
+                                                <span class="badge bg-warning text-dark border border-warning-subtle font-monospace px-1.5 py-0.5 cell-tas-inv-type" title="Manual Invoice / Voucher">M</span>
+                                            @else
+                                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle font-monospace px-1.5 py-0.5 cell-tas-inv-type" title="Fiscal Register Slip (FS)">FS</span>
+                                            @endif
+                                            <span class="badge bg-light text-primary border font-monospace cell-tas-fs">{{ $tas['fs_no'] ?: ($tas['request_number'] ?? '-') }}</span>
+                                        </div>
                                         @if(!empty($tas['request_number']) && $tas['request_number'] !== ($tas['fs_no'] ?? ''))
                                             <small class="text-muted d-block font-monospace" style="font-size:0.7rem;">{{ $tas['request_number'] }}</small>
                                         @endif
@@ -1870,6 +1877,11 @@
                                     </td>
                                     <td>
                                         <div class="d-flex align-items-center gap-1.5 flex-wrap">
+                                            @if(($ocr['invoice_type'] ?? '') === 'M')
+                                                <span class="badge bg-warning text-dark border border-warning-subtle font-monospace px-1.5 py-0.5 cell-inv-type" title="Manual Invoice / Voucher">M</span>
+                                            @else
+                                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle font-monospace px-1.5 py-0.5 cell-inv-type" title="Fiscal Register Slip (FS)">FS</span>
+                                            @endif
                                             <span class="badge bg-light text-primary border font-monospace cell-fs">{{ $ocr['fs_no'] ?? '-' }}</span>
                                             @if(!empty($ocr['has_duplicates_blocked']))
                                                 <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill small fw-semibold px-2 py-0.5 d-inline-flex align-items-center gap-1" title="First original receipt preserved; {{ $ocr['blocked_duplicates_count'] ?? 1 }} double receipt(s) immediately blocked">
@@ -2623,6 +2635,30 @@
                                     <input type="hidden" id="movement_edit_receipt_file_path" name="receipt_path">
                                     <input type="file" id="movementSlipFileInput" name="receipt_file" class="d-none" accept=".jpg,.jpeg,.png,.webp,.pdf" onchange="if(this.files &amp;&amp; this.files[0]) handleMovementReceiptFileSelect(this.files[0])">
                                     <input type="file" id="movementSlipCameraInput" class="d-none" accept="image/*" capture="environment" onchange="if(this.files &amp;&amp; this.files[0]) handleMovementReceiptFileSelect(this.files[0])">
+
+                                    {{-- Invoice Type (FS vs Manual M) Selector --}}
+                                    <div class="mb-2.5 p-2 bg-light bg-opacity-75 rounded-2 border">
+                                        <div class="d-flex align-items-center justify-content-between mb-1.5">
+                                            <label class="form-label small fw-bold text-dark mb-0">
+                                                <i class="fa-solid fa-file-invoice text-primary me-1"></i>Invoice Type (FS / M) <span class="text-danger">*</span>
+                                            </label>
+                                            <span class="badge bg-primary text-white font-monospace px-2 py-0.5" id="movement_invoice_type_badge" style="font-size:0.7rem;">FS - Cash Register</span>
+                                        </div>
+                                        <div class="d-flex align-items-center gap-3">
+                                            <div class="form-check form-check-inline mb-0">
+                                                <input class="form-check-input" type="radio" name="invoice_type" id="movement_inv_type_fs" value="FS" checked onchange="handleMovementInvoiceTypeChange('FS')">
+                                                <label class="form-check-label small fw-bold text-dark" for="movement_inv_type_fs">
+                                                    <span class="badge bg-primary text-white me-1">FS</span> Fiscal Cash Register Slip
+                                                </label>
+                                            </div>
+                                            <div class="form-check form-check-inline mb-0">
+                                                <input class="form-check-input" type="radio" name="invoice_type" id="movement_inv_type_m" value="M" onchange="handleMovementInvoiceTypeChange('M')">
+                                                <label class="form-check-label small fw-bold text-dark" for="movement_inv_type_m">
+                                                    <span class="badge bg-warning text-dark me-1">M</span> Manual Invoice / Voucher
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
 
                                     {{-- Supplier Name --}}
                                     <div class="mb-2.5">
@@ -4247,6 +4283,9 @@
             statusBadge.textContent = 'Manual Invoice';
         }
 
+        // Set default invoice type to Manual (M)
+        handleMovementInvoiceTypeChange('M');
+
         // Reset inputs
         const sellerName = document.getElementById('movement_edit_seller_name');
         if (sellerName) sellerName.value = '';
@@ -4427,6 +4466,9 @@
 
         const fsDisplay = document.getElementById('movementModalFsNoDisplay');
         if (fsDisplay) fsDisplay.textContent = ocr.fs_no && ocr.fs_no !== '-' ? ('FS #' + ocr.fs_no) : (ocr.id ? ('Invoice #' + ocr.id) : 'Receipt Inspector');
+
+        const ocrInvType = ocr.invoice_type || ((ocr.fs_no && ocr.fs_no.toUpperCase().startsWith('M')) ? 'M' : 'FS');
+        handleMovementInvoiceTypeChange(ocrInvType);
 
         const sellerName = document.getElementById('movement_edit_seller_name');
         if (sellerName) sellerName.value = ocr.vendor_name || '';
@@ -4645,6 +4687,9 @@
         if (badgeId) badgeId.textContent = tas.request_number || ('TAS #' + (idx + 1));
 
         const isVatItem = !!(tas.is_vat_purchase || cleanNum(tas.vat_amount) > 0);
+
+        const tasInvType = tas.invoice_type || ((tas.fs_no && tas.fs_no.toUpperCase().startsWith('M')) ? 'M' : 'FS');
+        handleMovementInvoiceTypeChange(tasInvType);
 
         const fsDisplay = document.getElementById('movementModalFsNoDisplay');
         if (fsDisplay) {
@@ -5153,6 +5198,9 @@
                 ? ('FS #' + exp.fs_no + ' (' + (exp.request_number || 'Expense') + ')') 
                 : (exp.request_number ? (exp.request_number + ' Expense Inspector') : 'Expense Inspector');
         }
+
+        const expInvType = exp.invoice_type || ((exp.fs_no && exp.fs_no.toUpperCase().startsWith('M')) ? 'M' : 'FS');
+        handleMovementInvoiceTypeChange(expInvType);
 
         const sellerName = document.getElementById('movement_edit_seller_name');
         if (sellerName) sellerName.value = exp.payee || exp.seller_name || '';
@@ -6660,18 +6708,52 @@
         }
     }
 
+    function handleMovementInvoiceTypeChange(type) {
+        const isM = (type === 'M');
+        const fsRadio = document.getElementById('movement_inv_type_fs');
+        const mRadio = document.getElementById('movement_inv_type_m');
+        if (fsRadio) fsRadio.checked = !isM;
+        if (mRadio) mRadio.checked = isM;
+
+        const badge = document.getElementById('movement_invoice_type_badge');
+        if (badge) {
+            badge.className = isM ? 'badge bg-warning text-dark font-monospace px-2 py-0.5' : 'badge bg-primary text-white font-monospace px-2 py-0.5';
+            badge.textContent = isM ? 'M - Manual Voucher' : 'FS - Cash Register';
+        }
+
+        const fsHint = document.getElementById('movement_edit_fs_hint');
+        if (fsHint) {
+            fsHint.innerHTML = isM 
+                ? '<span class="text-warning-emphasis fw-semibold"><i class="fa-solid fa-file-lines me-1"></i>Manual Invoice / Voucher (Paper Booklet)</span>' 
+                : '<span class="text-muted">Standard 8-digit fiscal slip (FS)</span>';
+        }
+    }
+
     function validateMovementFs(val) {
-        const clean = (val || '').replace(/\D/g, '');
+        const str = (val || '').trim();
+        if (str.toUpperCase().startsWith('M') && !str.toUpperCase().startsWith('MRC')) {
+            handleMovementInvoiceTypeChange('M');
+        } else if (str.toUpperCase().startsWith('FS')) {
+            handleMovementInvoiceTypeChange('FS');
+        }
+
+        const clean = str.replace(/\D/g, '');
         const badge = document.getElementById('movement_edit_fs_badge');
         const hint = document.getElementById('movement_edit_fs_hint');
         if (!badge) return;
 
-        if (clean.length === 8) {
+        const mRadio = document.getElementById('movement_inv_type_m');
+        const isM = mRadio ? mRadio.checked : false;
+
+        if (clean.length === 8 && !isM) {
             badge.innerHTML = '<i class="fa-solid fa-circle-check text-success"></i>';
             if (hint) hint.innerHTML = '<span class="text-success"><i class="fa-solid fa-check me-1"></i>Valid 8-Digit FS #</span>';
         } else if (clean.length === 0) {
             badge.innerHTML = '<i class="fa-solid fa-minus text-muted"></i>';
-            if (hint) hint.innerText = 'Standard 8-digit fiscal slip';
+            if (hint) hint.innerHTML = isM ? '<span class="text-warning-emphasis fw-semibold"><i class="fa-solid fa-file-lines me-1"></i>Manual Voucher</span>' : 'Standard 8-digit fiscal slip';
+        } else if (isM) {
+            badge.innerHTML = '<i class="fa-solid fa-file-lines text-warning"></i>';
+            if (hint) hint.innerHTML = `<span class="text-warning-emphasis fw-semibold"><i class="fa-solid fa-check me-1"></i>Manual Receipt #${str}</span>`;
         } else {
             badge.innerHTML = '<i class="fa-solid fa-info-circle text-info"></i>';
             if (hint) hint.innerHTML = `<span class="text-info">${clean.length} digits</span>`;
@@ -7067,6 +7149,19 @@
                     const cellFs = tr.querySelector('.cell-fs');
                     if (cellFs) cellFs.textContent = itm.fs_no || '—';
 
+                    const cellInvType = tr.querySelector('.cell-inv-type');
+                    if (cellInvType && itm.invoice_type) {
+                        if (itm.invoice_type === 'M') {
+                            cellInvType.className = 'badge bg-warning text-dark border border-warning-subtle font-monospace px-1.5 py-0.5 cell-inv-type';
+                            cellInvType.textContent = 'M';
+                            cellInvType.title = 'Manual Invoice / Voucher';
+                        } else {
+                            cellInvType.className = 'badge bg-primary-subtle text-primary border border-primary-subtle font-monospace px-1.5 py-0.5 cell-inv-type';
+                            cellInvType.textContent = 'FS';
+                            cellInvType.title = 'Fiscal Register Slip (FS)';
+                        }
+                    }
+
                     const cellMrc = tr.querySelector('.cell-mrc');
                     if (cellMrc) {
                         if (itm.mrc_no && itm.mrc_no !== '-') {
@@ -7138,6 +7233,9 @@
                             </td>
                             <td>
                                 <div class="d-flex align-items-center gap-1.5 flex-wrap">
+                                    ${itm.invoice_type === 'M' 
+                                        ? '<span class="badge bg-warning text-dark border border-warning-subtle font-monospace px-1.5 py-0.5 cell-inv-type" title="Manual Invoice / Voucher">M</span>' 
+                                        : '<span class="badge bg-primary-subtle text-primary border border-primary-subtle font-monospace px-1.5 py-0.5 cell-inv-type" title="Fiscal Register Slip (FS)">FS</span>'}
                                     <span class="badge bg-light text-primary border font-monospace cell-fs">${itm.fs_no || '—'}</span>
                                 </div>
                                 <small class="text-muted d-block cell-receipt-no" style="font-size:0.75rem;">${itm.receipt_number || ''}</small>
@@ -7204,6 +7302,7 @@
 
                     if (matchById || matchByFs || matchByExp) {
                         const fsBadge = tasTr.querySelector('.cell-tas-fs');
+                        const invTypeBadge = tasTr.querySelector('.cell-tas-inv-type');
                         const tinBadge = tasTr.querySelector('.cell-tas-tin');
                         const sellerName = tasTr.querySelector('.cell-tas-vendor');
                         const amtCell = tasTr.querySelector('.cell-tas-amount');
@@ -7213,6 +7312,17 @@
                         const actionBtn = tasTr.querySelector('.cell-tas-action-btn');
 
                         if (fsBadge && itm.fs_no && itm.fs_no !== '-') fsBadge.textContent = itm.fs_no;
+                        if (invTypeBadge && itm.invoice_type) {
+                            if (itm.invoice_type === 'M') {
+                                invTypeBadge.className = 'badge bg-warning text-dark border border-warning-subtle font-monospace px-1.5 py-0.5 cell-tas-inv-type';
+                                invTypeBadge.textContent = 'M';
+                                invTypeBadge.title = 'Manual Invoice / Voucher';
+                            } else {
+                                invTypeBadge.className = 'badge bg-primary-subtle text-primary border border-primary-subtle font-monospace px-1.5 py-0.5 cell-tas-inv-type';
+                                invTypeBadge.textContent = 'FS';
+                                invTypeBadge.title = 'Fiscal Register Slip (FS)';
+                            }
+                        }
                         if (sellerName && itm.vendor_name) sellerName.textContent = itm.vendor_name;
                         if (amtCell && itm.total_value !== undefined) amtCell.textContent = 'ETB ' + parseFloat(itm.total_value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                         if (mrcBadge && itm.mrc_no && itm.mrc_no !== '-') mrcBadge.textContent = itm.mrc_no;
@@ -7268,6 +7378,7 @@
                             if (itm.vendor_name) tp.payee = itm.vendor_name;
                             if (itm.fs_no) tp.fs_no = itm.fs_no;
                             if (itm.mrc_no) tp.mrc_no = itm.mrc_no;
+                            if (itm.invoice_type) tp.invoice_type = itm.invoice_type;
                         }
                     });
                 }

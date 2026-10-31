@@ -20,6 +20,7 @@ class Receipt extends Model
         'fs_no',
         'fs_no_raw',
         'fs_no_valid',
+        'invoice_type',
         'mrc_no',
         'receipt_date',
         'subtotal',
