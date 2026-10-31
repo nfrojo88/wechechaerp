@@ -10,7 +10,7 @@
     <h1 class="h3 mb-0 me-2">{{ $project->name }}</h1>
 
     @php
-        $mainBadgeColor = match($project->status) {
+        $mainBadgeColors = [
             'active'    => 'success',
             'planning'  => 'info',
             'bidding'   => 'warning',
@@ -18,18 +18,19 @@
             'completed' => 'primary',
             'cancelled' => 'danger',
             'handover'  => 'dark',
-            default     => 'secondary',
-        };
+        ];
+        $mainBadgeColor = $mainBadgeColors[$project->status] ?? 'secondary';
+
         $phaseStatus = $project->planning_phase_status ?? 'draft';
-        $phaseInfo = match($phaseStatus) {
+        $phaseInfoMap = [
             'submitted'                  => ['label' => 'Submitted for Review', 'color' => '#6366f1'],
             'planning_manager_approved'  => ['label' => 'Plng. Mgr Approved', 'color' => '#0891b2'],
             'coordinator_approved'       => ['label' => 'Coordinator Approved', 'color' => '#0891b2'],
             'technical_manager_approved' => ['label' => 'Tech. Mgr Approved', 'color' => '#0891b2'],
             'gm_approved'               => ['label' => 'GM Approved ✔', 'color' => '#16a34a'],
             'rejected'                  => ['label' => 'Plan Rejected', 'color' => '#dc2626'],
-            default                     => null,
-        };
+        ];
+        $phaseInfo = $phaseInfoMap[$phaseStatus] ?? null;
     @endphp
 
     <span class="badge bg-{{ $mainBadgeColor }} fs-6">{{ ucfirst(str_replace('_', ' ', $project->status)) }}</span>
@@ -100,8 +101,8 @@
                     <tr><td class="text-muted w-50">Client Name</td><td class="fw-semibold">{{ $project->client_name ?? '—' }}</td></tr>
                     <tr><td class="text-muted">Client Contact</td><td class="fw-semibold">{{ $project->client_contact ?? '—' }}</td></tr>
                     <tr><td class="text-muted">Location</td><td class="fw-semibold">{{ $project->location ?? '—' }}</td></tr>
-                    <tr><td class="text-muted">Start Date</td><td class="fw-semibold">{{ $project->start_date->format('d M Y') ?? '—' }}</td></tr>
-                    <tr><td class="text-muted">End Date</td><td class="fw-semibold">{{ $project->end_date->format('d M Y') ?? '—' }}</td></tr>
+                    <tr><td class="text-muted">Start Date</td><td class="fw-semibold">{{ $project->start_date ? $project->start_date->format('d M Y') : '—' }}</td></tr>
+                    <tr><td class="text-muted">End Date</td><td class="fw-semibold">{{ $project->end_date ? $project->end_date->format('d M Y') : '—' }}</td></tr>
                     <tr><td class="text-muted">Created By</td><td class="fw-semibold">{{ $project->creator->name ?? '—' }}</td></tr>
                 </table>
                 @if($project->description)
@@ -167,11 +168,7 @@
                 @php
                     $pct    = $project->budgetUtilizationPercent();
                     $bstatus = $project->budgetStatus();
-                    $barColor = match($bstatus) {
-                        'blocked' => '#dc2626',
-                        'at_risk' => '#f97316',
-                        default   => '#16a34a',
-                    };
+                    $barColor = $bstatus === 'blocked' ? '#dc2626' : ($bstatus === 'at_risk' ? '#f97316' : '#16a34a');
                 @endphp
                 <div class="mb-3">
                     <div class="d-flex justify-content-between mb-1" style="font-size:.8rem;">

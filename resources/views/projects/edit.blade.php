@@ -85,11 +85,11 @@
                 </div>
                 <div class="col-md-3">
                     <label class="form-label">Start Date</label>
-                    <input type="date" name="start_date" class="form-control" value="{{ old('start_date', $project->start_date->format('Y-m-d')) }}">
+                    <input type="date" name="start_date" class="form-control" value="{{ old('start_date', $project->start_date ? $project->start_date->format('Y-m-d') : '') }}">
                 </div>
                 <div class="col-md-3">
                     <label class="form-label">End Date</label>
-                    <input type="date" name="end_date" class="form-control" value="{{ old('end_date', $project->end_date->format('Y-m-d')) }}">
+                    <input type="date" name="end_date" class="form-control" value="{{ old('end_date', $project->end_date ? $project->end_date->format('Y-m-d') : '') }}">
                 </div>
                 <div class="col-md-4">
                     <label class="form-label">Contract Value (ETB)</label>

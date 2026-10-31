@@ -435,7 +435,7 @@
                 <div class="plan-meta">
                     <div class="meta-chip">
                         <i class="fa-solid fa-calendar-range"></i>
-                        <span>{{ $schedule->start_date->format('d M Y') }} → {{ $schedule->end_date->format('d M Y') }}</span>
+                        <span>{{ $schedule->start_date ? $schedule->start_date->format('d M Y') : '—' }} → {{ $schedule->end_date ? $schedule->end_date->format('d M Y') : '—' }}</span>
                     </div>
                 </div>
 

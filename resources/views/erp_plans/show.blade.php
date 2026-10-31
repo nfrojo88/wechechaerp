@@ -165,7 +165,7 @@
             Project: <strong>{{ $erp_plan->project->name ?? '—' }}</strong>
             &nbsp;|&nbsp; Created by {{ $erp_plan->creator->name ?? '—' }}
             @if($erp_plan->plan_start_date)
-            &nbsp;|&nbsp; {{ $erp_plan->plan_start_date->format('d M Y') }} → {{ $erp_plan->plan_end_date->format('d M Y') }}
+            &nbsp;|&nbsp; {{ $erp_plan->plan_start_date->format('d M Y') }} → {{ $erp_plan->plan_end_date ? $erp_plan->plan_end_date->format('d M Y') : '—' }}
             @endif
         </p>
     </div>
@@ -341,8 +341,8 @@
                             <span class="fw-semibold">{{ $task->name }}</span>
                             @if($isLate2)<span class="late-badge ms-1">Late</span>@endif
                         </td>
-                        <td class="small text-muted">{{ $task->start_date->format('d M Y') ?? '—' }}</td>
-                        <td class="small text-muted">{{ $task->end_date->format('d M Y') ?? '—' }}</td>
+                        <td class="small text-muted">{{ $task->start_date ? $task->start_date->format('d M Y') : '—' }}</td>
+                        <td class="small text-muted">{{ $task->end_date ? $task->end_date->format('d M Y') : '—' }}</td>
                         <td class="small">{{ $task->duration_days ? $task->duration_days.'d' : '—' }}</td>
                         <td>
                             <span class="status-badge sb-{{ $task->status ?? 'pending' }}">

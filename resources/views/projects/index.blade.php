@@ -108,7 +108,7 @@
                                 </span>
                             @endif
                         </td>
-                        <td>{{ $project->start_date->format('d M Y') ?? '—' }}</td>
+                        <td>{{ $project->start_date ? $project->start_date->format('d M Y') : '—' }}</td>
                         <td>{{ number_format($project->contract_value, 2) }}</td>
                         <td class="text-end">
                             @can('projects.edit')
