@@ -768,7 +768,7 @@ class AttendanceController extends Controller
 
         $employees = Employee::activeRoster()->orderBy('full_name')->get();
         $projects  = \App\Models\Project::orderBy('name')->get();
-        $decidedUsers = \App\Models\User::whereHas('roles', function($r) {
+        $decidedUsers = \App\Models\User::with('roles')->whereHas('roles', function($r) {
             $r->whereIn('name', [
                 'planning_manager', 'planning', 'coordinator', 'finance_head',
                 'finance_manager', 'hr', 'hr_manager', 'hr_officer', 'gm',
