@@ -1260,11 +1260,12 @@ class DashboardController extends Controller
         }, 0);
 
         $taxData = $this->getTaxComplianceReportData();
+        $pendingExpenses = $pendingGmExpenses;
 
         return view('dashboard.gm', compact(
             'kpi', 'projectStatus', 'recentProjects', 'pendingEmployees', 'recentExpenses',
             'projectExpenses', 'materialConsumptionReport', 'monthlyExpenseTrend', 'expenseCategoryBreakdown',
-            'pendingGmPrs', 'unassignedStagePrs', 'pendingGmExpenses', 'taxData', 'categoryDataByPeriod'
+            'pendingGmPrs', 'unassignedStagePrs', 'pendingGmExpenses', 'pendingExpenses', 'taxData', 'categoryDataByPeriod'
         ));
     }
 

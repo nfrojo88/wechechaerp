@@ -4,6 +4,14 @@
 <div class="wc-container py-3 py-md-4">
     {{-- Top Executive Header --}}
     @php
+        $pendingExpenses = $pendingExpenses ?? $pendingGmExpenses ?? collect();
+        $pendingGmPrs = $pendingGmPrs ?? collect();
+        $pendingEmployees = $pendingEmployees ?? collect();
+        $projectStatus = $projectStatus ?? collect();
+        $projectExpenses = $projectExpenses ?? collect();
+        $materialConsumptionReport = $materialConsumptionReport ?? collect();
+        $monthlyExpenseTrend = $monthlyExpenseTrend ?? [];
+
         $gmPendingMaintApprovals = 0;
         try {
             $gmPendingMaintApprovals = \App\Models\ExpenseRequest::where(function($q) {
@@ -326,11 +334,11 @@
                         </div>
                     </div>
                     <a href="{{ route('expenses.index', ['tab' => 'pending_gm']) }}" class="btn btn-sm btn-outline-warning text-dark rounded-pill px-3" style="min-height: 34px; display: inline-flex; align-items: center;">
-                        View All ({{ $pendingExpenses->count() }})
+                        View All ({{ ($pendingExpenses ?? collect())->count() }})
                     </a>
                 </div>
                 <div class="card-body p-0">
-                    @if($pendingExpenses->isEmpty())
+                    @if(($pendingExpenses ?? collect())->isEmpty())
                         <div class="text-center py-5">
                             <i class="fa-solid fa-circle-check fa-2x text-success mb-2"></i>
                             <h6 class="fw-bold text-dark mb-1">No Pending Expenses for GM</h6>
@@ -349,7 +357,7 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    @foreach($pendingExpenses as $exp)
+                                    @foreach(($pendingExpenses ?? collect()) as $exp)
                                     <tr>
                                         <td data-label="Req #" class="ps-3 fw-bold text-primary">#{{ $exp->request_number ?? $exp->id }}</td>
                                         <td data-label="Project">
