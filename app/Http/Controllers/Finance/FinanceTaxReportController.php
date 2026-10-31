@@ -1777,13 +1777,13 @@ class FinanceTaxReportController extends Controller
 
                     $ext = strtolower(pathinfo($candidate, PATHINFO_EXTENSION));
                     if (in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'pdf'])) {
-                        $mime = match ($ext) {
+                        $mimeMap = [
                             'png'  => 'image/png',
                             'webp' => 'image/webp',
                             'gif'  => 'image/gif',
                             'pdf'  => 'application/pdf',
-                            default => 'image/jpeg',
-                        };
+                        ];
+                        $mime = $mimeMap[$ext] ?? 'image/jpeg';
                         $data = file_get_contents($candidate);
                         if ($data !== false && strlen($data) > 0) {
                             return 'data:' . $mime . ';base64,' . base64_encode($data);
@@ -3972,6 +3972,10 @@ class FinanceTaxReportController extends Controller
                 'item_description'   => $ocr->item_description ?: ($r?->description ?: 'Purchased Goods/Services'),
                 'vat_category'       => $ocr->vat_category ?: 'G',
                 'purchase_type'      => (int)($ocr->purchase_type ?: 3),
+                'uom'                => (string)($ocr->uom ?: (!empty($parsed['uom']) ? $parsed['uom'] : '9')),
+                'qty'                => (float)($ocr->qty ?: (!empty($parsed['qty']) ? $parsed['qty'] : 1.0)),
+                'unit_price'         => (float)($ocr->unit_price ?: (!empty($parsed['unit_price']) ? $parsed['unit_price'] : ($baseVal > 0 ? $baseVal : $afterVal))),
+                'calendar_type'      => (string)($ocr->calendar_type ?: (!empty($parsed['calendar_type']) ? $parsed['calendar_type'] : 'G')),
                 'tin_valid'          => (bool)($r?->tin_valid ?? (strlen(preg_replace('/\D/', '', $r?->vendor_tin ?? '')) === 10)),
                 'fs_no_valid'        => (bool)($r?->fs_no_valid ?? (strlen(preg_replace('/\D/', '', $r?->fs_no ?? '')) === 8)),
                 'base_value'         => $baseVal,
@@ -5272,6 +5276,8 @@ class FinanceTaxReportController extends Controller
             return $this->exportPurchaseTasExcel($request, $startDate, $endDate, $year, $month, $monthSuffix);
         } elseif ($type === 'withholding' || $type === 'wht') {
             return $this->exportWithholdingExcel($request, $startDate, $endDate, $year, $month, $monthSuffix);
+        } elseif (in_array($type, ['scanned_receipts', 'scanned', 'ocr', 'receipts', 'all_receipts', 'invoices', 'receipt_items', 'erca_invoices'])) {
+            return $this->exportScannedReceiptsExcel($request, $startDate, $endDate, $year, $month, $monthSuffix);
         } else {
             return $this->exportPurchaseVatExcel($request, $startDate, $endDate, $year, $month, $monthSuffix);
         }
@@ -5523,6 +5529,225 @@ class FinanceTaxReportController extends Controller
     }
 
     /**
+     * Export all Scanned Receipts (ERCA Invoices) matching the Financial Movements screen.
+     * Includes all latest information, edited values, deduplicated records, sorted latest first.
+     */
+    protected function exportScannedReceiptsExcel(Request $request, string $startDate, string $endDate, int $year, ?int $month, string $monthSuffix)
+    {
+        $userCalendar = $this->resolveCalendarOption($request) ?: 'E';
+        $calSuffix = ($userCalendar === 'G') ? '_GC' : '_EC';
+        $filename = 'Scanned_Receipts_ERCA' . $calSuffix . $monthSuffix . '_' . now()->format('Ymd_His') . '.xlsx';
+        $tempPath = storage_path('app/scanned_rcp_' . uniqid() . '.xlsx');
+
+        $headers = [
+            '#',
+            'Receipt / FS No',
+            'MRC Number',
+            'Receipt Date (' . ($userCalendar === 'G' ? 'GC' : 'EC') . ')',
+            'Receipt Date (' . ($userCalendar === 'G' ? 'EC' : 'GC') . ')',
+            'Vendor / Supplier Name',
+            'Seller TIN',
+            'Purchaser TIN',
+            'Project Name',
+            'Expense Category',
+            'Item Description',
+            'Tax Classification',
+            'Calendar Type',
+            'Purchase Type Code',
+            'Unit of Measure',
+            'Quantity',
+            'Unit Price (ETB)',
+            'Taxable Base Amount (ETB)',
+            'VAT Amount (ETB)',
+            'Total Value After VAT (ETB)',
+            'Encoded By',
+            'Status / Deduplication Note',
+        ];
+
+        $effectiveMonth = ($month && $month >= 1 && $month <= 13) ? $month : (EthiopianDate::toEthiopian(now())['month'] ?? 1);
+        $movements = $this->calculateMonthMovementsData($year, $effectiveMonth, false);
+
+        $ocrList = collect($movements['all_ocr_items'] ?? ($movements['ocr_items'] ?? []));
+
+        // Category filter if requested
+        $isTasFiltered = ($request->input('category') === 'tas')
+            || ($request->input('filter') === 'tas')
+            || ($request->input('purchase_category') === 'tas')
+            || $request->boolean('tas_only');
+
+        $isVatFiltered = ($request->input('category') === 'vat')
+            || ($request->input('filter') === 'vat')
+            || ($request->input('purchase_category') === 'vat')
+            || $request->boolean('vat_only');
+
+        if ($isTasFiltered) {
+            $ocrList = $ocrList->filter(function ($it) {
+                return empty($it['is_vat_receipt']);
+            });
+        } elseif ($isVatFiltered) {
+            $ocrList = $ocrList->filter(function ($it) {
+                return !empty($it['is_vat_receipt']);
+            });
+        }
+
+        // Search filter if requested
+        if ($request->filled('search')) {
+            $s = strtolower(trim((string)$request->search));
+            $ocrList = $ocrList->filter(function ($item) use ($s) {
+                return str_contains(strtolower((string)($item['item_description'] ?? '')), $s)
+                    || str_contains(strtolower((string)($item['fs_no'] ?? '')), $s)
+                    || str_contains(strtolower((string)($item['vendor_name'] ?? '')), $s)
+                    || str_contains(strtolower((string)($item['seller_tin'] ?? '')), $s)
+                    || str_contains(strtolower((string)($item['mrc_no'] ?? '')), $s);
+            });
+        }
+
+        // Sort latest information first:
+        // Highest priority to manually inspected/edited records, then recent database updates, then receipt date, then ID descending
+        $ocrList = $ocrList->sortByDesc(function ($item) {
+            $editTs = (int)($item['manually_edited_at'] ?? 0);
+            $upTs   = (int)($item['updated_timestamp'] ?? 0);
+            $crTs   = (int)($item['created_timestamp'] ?? 0);
+            $rcTs   = (int)($item['receipt_timestamp'] ?? 0);
+            $id     = (int)($item['id'] ?? 0);
+            return sprintf('%012d_%012d_%012d_%010d', max($editTs, $upTs), $rcTs, $crTs, $id);
+        })->values();
+
+        $rows = [];
+        $totalQty = 0.0;
+        $totalBase = 0.0;
+        $totalVat = 0.0;
+        $totalGross = 0.0;
+
+        foreach ($ocrList as $idx => $ocr) {
+            $fsNo = (!empty($ocr['fs_no']) && $ocr['fs_no'] !== '-') ? trim((string)$ocr['fs_no']) : (trim((string)($ocr['receipt_number'] ?? '')) ?: '-');
+            $mrcNo = (!empty($ocr['mrc_no']) && $ocr['mrc_no'] !== '-') ? trim((string)$ocr['mrc_no']) : '-';
+
+            $rawDate = $ocr['receipt_date_ymd'] ?? null;
+            $rawEcDate = $ocr['receipt_date_ec'] ?? ($ocr['date_ec'] ?? null);
+
+            $primaryDate = $this->formatExportDate($rawDate, $rawEcDate, $userCalendar, '/');
+            $secondaryCalendar = ($userCalendar === 'G') ? 'E' : 'G';
+            $secondaryDate = $this->formatExportDate($rawDate, $rawEcDate, $secondaryCalendar, '/');
+
+            $vendorName = trim((string)($ocr['vendor_name'] ?? 'Vendor'));
+            $sellerTin = (!empty($ocr['seller_tin']) && $ocr['seller_tin'] !== '-') ? trim((string)$ocr['seller_tin']) : '-';
+            $purchaserTin = (!empty($ocr['purchaser_tin']) && $ocr['purchaser_tin'] !== '-') ? trim((string)$ocr['purchaser_tin']) : '38480010';
+
+            $projectName = trim((string)($ocr['project_name'] ?? 'General'));
+            $category = ucfirst(str_replace('_', ' ', trim((string)($ocr['category'] ?? 'General'))));
+            $description = trim((string)($ocr['item_description'] ?? 'Purchased Goods/Services'));
+
+            $isVatReceipt = !empty($ocr['is_vat_receipt']) || ((float)($ocr['vat_amount'] ?? 0) > 0);
+            $taxClass = $isVatReceipt ? 'VAT Purchase (15%)' : 'TAS Purchase (0% VAT)';
+
+            $calType = strtoupper(trim((string)($ocr['calendar_type'] ?? 'G')));
+            $pType = (int)($ocr['purchase_type'] ?? ($isVatReceipt ? 3 : 6));
+
+            $uomRaw = strtoupper(trim((string)($ocr['uom'] ?? '9')));
+            $uomLabel = $this->resolveUomLabel($uomRaw);
+
+            $qty = (float)($ocr['qty'] ?? 1.0);
+            if ($qty <= 0) $qty = 1.0;
+
+            $baseVal = round((float)($ocr['base_value'] ?? 0), 2);
+            $vatVal = round((float)($ocr['vat_amount'] ?? 0), 2);
+            $afterVal = round((float)($ocr['value_after_vat'] ?? ($ocr['total_value'] ?? ($baseVal + $vatVal))), 2);
+            $unitPrice = round((float)($ocr['unit_price'] ?? ($qty > 0 ? $baseVal / $qty : $baseVal)), 2);
+
+            $encodedBy = trim((string)($ocr['encoded_by'] ?? 'wechacha'));
+
+            $statusNotes = [];
+            if (!empty($ocr['has_duplicates_blocked'])) {
+                $statusNotes[] = 'Original Preserved (Duplicates Blocked)';
+            }
+            if (!empty($ocr['needs_manual_review'])) {
+                $statusNotes[] = 'Needs manual review';
+            }
+            if (empty($statusNotes)) {
+                $statusNotes[] = 'Verified ERCA Invoice';
+            }
+            $statusStr = implode(' | ', $statusNotes);
+
+            $totalQty += $qty;
+            $totalBase += $baseVal;
+            $totalVat += $vatVal;
+            $totalGross += $afterVal;
+
+            $rows[] = [
+                $idx + 1,
+                $fsNo,
+                $mrcNo,
+                $primaryDate,
+                $secondaryDate,
+                $vendorName,
+                $sellerTin,
+                $purchaserTin,
+                $projectName,
+                $category,
+                $description,
+                $taxClass,
+                $calType,
+                $pType,
+                $uomLabel,
+                $qty,
+                $unitPrice,
+                $baseVal,
+                $vatVal,
+                $afterVal,
+                $encodedBy,
+                $statusStr,
+            ];
+        }
+
+        if (!empty($rows)) {
+            $rows[] = [
+                'TOTAL',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                '',
+                round($totalQty, 4),
+                '',
+                round($totalBase, 2),
+                round($totalVat, 2),
+                round($totalGross, 2),
+                '',
+                count($rows) . ' receipts verified & deduplicated',
+            ];
+        }
+
+        return $this->writeExcelFile($headers, $rows, $tempPath, $filename);
+    }
+
+    /**
+     * Resolve human-readable ERCA UOM label.
+     */
+    protected function resolveUomLabel(string $uomRaw): string
+    {
+        $uomRaw = strtoupper(trim($uomRaw));
+        if ($uomRaw === '2' || str_contains($uomRaw, 'KG') || str_contains($uomRaw, 'KILO')) return '2 (KG)';
+        if ($uomRaw === '3' || str_contains($uomRaw, 'ML')) return '3 (ML)';
+        if ($uomRaw === '4' || str_contains($uomRaw, 'GM') || str_contains($uomRaw, 'GRAM')) return '4 (GM)';
+        if ($uomRaw === '5' || str_contains($uomRaw, 'LIT') || str_contains($uomRaw, 'LTR') || $uomRaw === 'L') return '5 (LIT)';
+        if ($uomRaw === '6' || str_contains($uomRaw, 'MT') || str_contains($uomRaw, 'TON')) return '6 (MT)';
+        if ($uomRaw === '7' || str_contains($uomRaw, 'PCS') || str_contains($uomRaw, 'PIECE')) return '7 (PCS)';
+        if ($uomRaw === '8' || str_contains($uomRaw, 'CT') || str_contains($uomRaw, 'CARTON') || str_contains($uomRaw, 'BOX')) return '8 (CT)';
+        if ($uomRaw === '10' || $uomRaw === 'PC') return '10 (PC)';
+        return '9 (OTHER)';
+    }
+
+    /**
      * Export Purchase TAS Excel (9 Columns e-Tax format).
      * Purchaser TIN | Seller TIN | Amount | Receipt No | Receipt Date | Encoding Date | MRC | PurcType | Encoded By
      */
@@ -5622,18 +5847,62 @@ class FinanceTaxReportController extends Controller
         if ($month && $month >= 1 && $month <= 13) {
             $movements = $this->calculateMonthMovementsData($year, $month, false);
             $tasPurchases = collect($movements['tas_purchases'] ?? []);
+            $tasOcrItems  = collect($movements['tas_ocr_items'] ?? []);
+
+            // Merge any 0% TAS scanned receipts from the Scanned Receipts (ERCA Invoices) table
+            $existingReceiptIds = $tasPurchases->pluck('receipt_id')->filter()->all();
+            $existingFsNumbers = $tasPurchases->pluck('fs_no')->filter()->map(function ($f) {
+                return strtoupper(preg_replace('/[^0-9A-Z]/i', '', (string)$f));
+            })->all();
+
+            foreach ($tasOcrItems as $ocr) {
+                $ocrRId = $ocr['receipt_id'] ?? $ocr['id'];
+                $cleanFs = strtoupper(preg_replace('/[^0-9A-Z]/i', '', (string)($ocr['fs_no'] ?? '')));
+                if (in_array($ocrRId, $existingReceiptIds) || ($cleanFs && in_array($cleanFs, $existingFsNumbers))) {
+                    continue;
+                }
+
+                $tasPurchases->push([
+                    'id'                 => 'OCR-' . $ocr['id'],
+                    'request_number'     => $ocr['request_number'] ?: ('REC-' . $ocr['id']),
+                    'purchaser_tin'      => $ocr['purchaser_tin'] ?? $defaultPurchaserDigits,
+                    'seller_tin'         => $ocr['seller_tin'] ?? '-',
+                    'total_amount'       => $ocr['total_value'] ?? ($ocr['base_value'] ?? 0),
+                    'gross_amount'       => $ocr['total_value'] ?? ($ocr['base_value'] ?? 0),
+                    'base_amount'        => $ocr['base_value'] ?? 0,
+                    'vat_amount'         => $ocr['vat_amount'] ?? 0,
+                    'fs_no'              => $ocr['fs_no'] ?? '-',
+                    'mrc_no'             => $ocr['mrc_no'] ?? '-',
+                    'raw_date'           => $ocr['receipt_date_ymd'] ?? '',
+                    'date_gc'            => $ocr['date_gc'] ?? '',
+                    'receipt_date_ec'    => $ocr['receipt_date_ec'] ?? ($ocr['date_ec'] ?? ''),
+                    'encoding_date_ec'   => $ocr['encoding_date_ec'] ?? '',
+                    'purc_type'          => $ocr['purc_type'] ?? 'PUR_GD',
+                    'encoded_by'         => $ocr['encoded_by'] ?? 'wechacha',
+                    'receipt_id'         => $ocrRId,
+                    'is_vat_purchase'    => false,
+                    'is_tas_purchase'    => true,
+                    'manually_edited_at' => $ocr['manually_edited_at'] ?? 0,
+                    'updated_timestamp'  => $ocr['updated_timestamp'] ?? 0,
+                    'created_timestamp'  => $ocr['created_timestamp'] ?? 0,
+                ]);
+            }
+
             if ($isTasFiltered) {
                 $tasPurchases = $tasPurchases->filter(fn($it) => empty($it['is_vat_purchase']) || !empty($it['is_tas_purchase']));
             } elseif ($isVatFiltered) {
                 $tasPurchases = $tasPurchases->filter(fn($it) => !empty($it['is_vat_purchase']));
             }
 
-            // Sort latest information first (date descending, then id descending)
+            // Sort latest information first (manually inspected/edited, updated timestamp, date, then id)
             $tasPurchases = $tasPurchases->sortByDesc(function ($item) {
+                $editTs = (int)($item['manually_edited_at'] ?? 0);
+                $upTs   = (int)($item['updated_timestamp'] ?? 0);
+                $crTs   = (int)($item['created_timestamp'] ?? 0);
                 $d = $item['raw_date'] ?? ($item['date_gc'] ?? ($item['disbursement_date'] ?? ($item['created_at'] ?? '')));
                 $ts = $d ? Carbon::parse($d)->timestamp : 0;
                 $id = (int)($item['id'] ?? 0);
-                return sprintf('%012d_%010d', $ts, $id);
+                return sprintf('%012d_%012d_%010d', max($editTs, $upTs), max($ts, $crTs), $id);
             })->values();
 
             $totalAmount = 0.0;
@@ -6342,17 +6611,25 @@ class FinanceTaxReportController extends Controller
             if (is_numeric($uomRaw) && (int)$uomRaw >= 2 && (int)$uomRaw <= 10) {
                 $uomId = (int)$uomRaw;
             } else {
-                $uomId = match (true) {
-                    str_contains($uomRaw, 'KG') || str_contains($uomRaw, 'KILO') => 2,
-                    str_contains($uomRaw, 'ML') => 3,
-                    str_contains($uomRaw, 'GM') || str_contains($uomRaw, 'GRAM') => 4,
-                    str_contains($uomRaw, 'LIT') || str_contains($uomRaw, 'LTR') || $uomRaw === 'L' => 5,
-                    str_contains($uomRaw, 'MT') || str_contains($uomRaw, 'TON') => 6,
-                    str_contains($uomRaw, 'PCS') || str_contains($uomRaw, 'PIECE') || str_contains($uomRaw, 'PCS.') => 7,
-                    str_contains($uomRaw, 'CT') || str_contains($uomRaw, 'CARTON') || str_contains($uomRaw, 'BOX') => 8,
-                    $uomRaw === 'PC' => 10,
-                    default => 9, // 9 = OTHER
-                };
+                if (str_contains($uomRaw, 'KG') || str_contains($uomRaw, 'KILO')) {
+                    $uomId = 2;
+                } elseif (str_contains($uomRaw, 'ML')) {
+                    $uomId = 3;
+                } elseif (str_contains($uomRaw, 'GM') || str_contains($uomRaw, 'GRAM')) {
+                    $uomId = 4;
+                } elseif (str_contains($uomRaw, 'LIT') || str_contains($uomRaw, 'LTR') || $uomRaw === 'L') {
+                    $uomId = 5;
+                } elseif (str_contains($uomRaw, 'MT') || str_contains($uomRaw, 'TON')) {
+                    $uomId = 6;
+                } elseif (str_contains($uomRaw, 'PCS') || str_contains($uomRaw, 'PIECE') || str_contains($uomRaw, 'PCS.')) {
+                    $uomId = 7;
+                } elseif (str_contains($uomRaw, 'CT') || str_contains($uomRaw, 'CARTON') || str_contains($uomRaw, 'BOX')) {
+                    $uomId = 8;
+                } elseif ($uomRaw === 'PC') {
+                    $uomId = 10;
+                } else {
+                    $uomId = 9; // 9 = OTHER
+                }
             }
 
             // Amounts calculation
@@ -6789,12 +7066,12 @@ class FinanceTaxReportController extends Controller
                 $totalWht += $wht;
                 $totalNet += $net;
 
-                $vatLabel = match ($item->vat_type) {
+                $vatLabels = [
                     'exclusive' => '15% VAT Added',
                     'inclusive' => '15% VAT Included',
                     'vat_b'     => '15% VAT B (Non-creditable)',
-                    default     => 'No VAT (0%)',
-                };
+                ];
+                $vatLabel = $vatLabels[$item->vat_type] ?? 'No VAT (0%)';
 
                 $dateEc = $item->created_at ? EthiopianDate::formatDateEc($item->created_at, 'DD/MM/YYYY EC') : 'N/A';
                 $paidAtEc = $item->paid_at ? EthiopianDate::formatDateEc($item->paid_at, 'DD/MM/YYYY EC') : 'Pending';

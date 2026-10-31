@@ -174,6 +174,27 @@
                                     <span class="fw-semibold text-dark">4. Withholding Tax Excel</span>
                                 </a>
                             </li>
+
+                            <li><hr class="dropdown-divider my-1"></li>
+
+                            {{-- Scanned Receipts / ERCA Invoices --}}
+                            <li class="px-2 pt-1 pb-0.5">
+                                <span class="small fw-semibold text-dark d-flex align-items-center gap-1.5">
+                                    <i class="fa-solid fa-receipt text-success"></i> 5. Scanned Receipts (ERCA Invoices)
+                                </span>
+                            </li>
+                            <li>
+                                <a class="dropdown-item rounded-2 py-1 px-2.5 d-flex align-items-center justify-content-between small text-success fw-semibold" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'scanned_receipts', 'calendar' => 'ec', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
+                                    <span><i class="fa-solid fa-file-excel me-1.5 text-success"></i>All Invoices (EC Format)</span>
+                                    <span class="badge bg-success text-white rounded-pill font-monospace" style="font-size: 0.65rem;">EC</span>
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item rounded-2 py-1 px-2.5 d-flex align-items-center justify-content-between small text-primary" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'scanned_receipts', 'calendar' => 'gc', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
+                                    <span><i class="fa-solid fa-globe me-1.5 text-primary"></i>All Invoices (GC Format)</span>
+                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">GC</span>
+                                </a>
+                            </li>
                         </ul>
                     </div>
 
@@ -522,6 +543,29 @@
                             <span class="badge bg-info-subtle text-info rounded-pill ms-0.5" id="filterCountVerifiedNoReceipt">{{ $movementsData['summary']['verified_no_receipt_count'] ?? count($movementsData['verified_no_receipt'] ?? []) }}</span>
                         </button>
                         <div class="btn-group shadow-xs rounded-pill overflow-hidden">
+                            {{-- All Scanned Receipts / ERCA Invoices --}}
+                            <div class="btn-group">
+                                <button type="button" class="btn btn-sm btn-success text-white fw-semibold px-2.5 text-nowrap dropdown-toggle d-inline-flex align-items-center gap-1" data-bs-toggle="dropdown" aria-expanded="false" title="Export all scanned receipts & ERCA invoices in this table to Excel">
+                                    <i class="fa-solid fa-file-excel"></i>
+                                    <span>Export Invoices</span>
+                                </button>
+                                <ul class="dropdown-menu dropdown-menu-end shadow-sm border rounded-3 p-2 small" style="min-width: 250px;">
+                                    <li class="dropdown-header small text-uppercase text-muted fw-bold px-2 py-1">Scanned ERCA Invoices (22 Cols)</li>
+                                    <li>
+                                        <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center justify-content-between text-success fw-semibold" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'scanned_receipts', 'calendar' => 'ec', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
+                                            <span><i class="fa-solid fa-calendar-day text-success me-1.5"></i>All Ethiopian Calendar</span>
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">EC</span>
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center justify-content-between text-primary" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'scanned_receipts', 'calendar' => 'gc', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
+                                            <span><i class="fa-solid fa-globe text-primary me-1.5"></i>All Gregorian Calendar</span>
+                                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">GC</span>
+                                        </a>
+                                    </li>
+                                </ul>
+                            </div>
+
                             {{-- Purchase TAS with Calendar options --}}
                             <div class="btn-group">
                                 <button type="button" class="btn btn-sm btn-outline-primary fw-semibold px-2.5 text-nowrap dropdown-toggle d-inline-flex align-items-center gap-1" data-bs-toggle="dropdown" aria-expanded="false">
@@ -1619,6 +1663,29 @@
                             </button>
                         </div>
                         <div class="btn-group shadow-xs rounded-pill overflow-hidden">
+                            {{-- All Scanned Receipts / ERCA Invoices --}}
+                            <div class="btn-group">
+                                <button type="button" class="btn btn-sm btn-success text-white fw-semibold px-2.5 text-nowrap dropdown-toggle d-inline-flex align-items-center gap-1" data-bs-toggle="dropdown" aria-expanded="false" title="Export all scanned receipts & ERCA invoices in this table to Excel">
+                                    <i class="fa-solid fa-file-excel"></i>
+                                    <span>Export Invoices</span>
+                                </button>
+                                <ul class="dropdown-menu dropdown-menu-end shadow-sm border rounded-3 p-2 small" style="min-width: 250px;">
+                                    <li class="dropdown-header small text-uppercase text-muted fw-bold px-2 py-1">Scanned ERCA Invoices (22 Cols)</li>
+                                    <li>
+                                        <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center justify-content-between text-success fw-semibold" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'scanned_receipts', 'calendar' => 'ec', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
+                                            <span><i class="fa-solid fa-calendar-day text-success me-1.5"></i>All Ethiopian Calendar</span>
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">EC</span>
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item py-1.5 px-2.5 rounded-2 d-flex align-items-center justify-content-between text-primary" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'scanned_receipts', 'calendar' => 'gc', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
+                                            <span><i class="fa-solid fa-globe text-primary me-1.5"></i>All Gregorian Calendar</span>
+                                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">GC</span>
+                                        </a>
+                                    </li>
+                                </ul>
+                            </div>
+
                             {{-- Purchase TAS with Calendar options --}}
                             <div class="btn-group">
                                 <button type="button" class="btn btn-sm btn-outline-primary fw-semibold px-2.5 text-nowrap dropdown-toggle d-inline-flex align-items-center gap-1" data-bs-toggle="dropdown" aria-expanded="false">

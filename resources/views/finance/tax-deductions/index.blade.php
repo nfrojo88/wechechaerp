@@ -228,6 +228,42 @@
                                         <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">GC</span>
                                     </a>
                                 </li>
+
+                                <li><hr class="dropdown-divider my-1"></li>
+
+                                {{-- Withholding Tax Excel --}}
+                                <li class="px-2 pt-1 pb-0.5">
+                                    <span class="small fw-bold text-dark d-flex align-items-center gap-1.5 px-2">
+                                        <i class="fa-solid fa-hand-holding-dollar text-warning"></i> 4. Withholding Tax Excel
+                                    </span>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item rounded-3 py-1 px-3 d-flex align-items-center justify-content-between small" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'withholding', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
+                                        <span><i class="fa-solid fa-file-excel text-warning me-1.5"></i>Withholding Tax Report</span>
+                                        <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">WHT</span>
+                                    </a>
+                                </li>
+
+                                <li><hr class="dropdown-divider my-1"></li>
+
+                                {{-- Scanned Receipts / ERCA Invoices --}}
+                                <li class="px-2 pt-1 pb-0.5">
+                                    <span class="small fw-bold text-dark d-flex align-items-center gap-1.5 px-2">
+                                        <i class="fa-solid fa-receipt text-success"></i> 5. Scanned Receipts (ERCA Invoices)
+                                    </span>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item rounded-3 py-1 px-3 d-flex align-items-center justify-content-between small text-success fw-semibold" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'scanned_receipts', 'calendar' => 'ec', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
+                                        <span><i class="fa-solid fa-calendar-day text-success me-1.5"></i>All in Ethiopian Calendar</span>
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">EC</span>
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item rounded-3 py-1 px-3 d-flex align-items-center justify-content-between small text-primary" href="{{ route('finance.tax-deductions.export-excel', ['type' => 'scanned_receipts', 'calendar' => 'gc', 'ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $selectedEthMonth]) }}">
+                                        <span><i class="fa-solid fa-globe text-primary me-1.5"></i>All in Gregorian Calendar</span>
+                                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill font-monospace" style="font-size: 0.65rem;">GC</span>
+                                    </a>
+                                </li>
                             </ul>
                         </div>
                         <button type="button" class="btn btn-outline-success btn-sm rounded-pill px-3 py-2 shadow-xs fw-semibold d-inline-flex align-items-center gap-1.5" onclick="openDateExportModal('{{ $tab }}', 'csv')" title="Select Date Range & Export">
