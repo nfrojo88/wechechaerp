@@ -85,8 +85,7 @@ class ProjectAssociatedCostService
             ->whereNotExists(function ($sub) {
                 $sub->select(DB::raw(1))
                     ->from('credit_store_ledgers as csl')
-                    ->whereColumn('csl.purchase_request_id', 'pr.id')
-                    ->whereNull('csl.deleted_at');
+                    ->whereColumn('csl.purchase_request_id', 'pr.id');
             })
             ->select([
                 DB::raw("'procurement' AS source_type"),
@@ -123,7 +122,6 @@ class ProjectAssociatedCostService
         $creditStoreSql = DB::table('credit_store_ledgers as csl')
             ->leftJoin('purchase_requests as pr', 'pr.id', '=', 'csl.purchase_request_id')
             ->where('csl.project_id', $projectId)
-            ->whereNull('csl.deleted_at')
             ->where('csl.credit_amount', '>', 0)
             ->whereIn('csl.status', ['outstanding', 'partially_paid', 'fully_paid'])
             ->where(function ($q) {
