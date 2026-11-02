@@ -701,7 +701,7 @@
                                         <a href="{{ route('general-service.maintenance.show', $mReq->id) }}" class="fw-bold text-dark font-monospace text-decoration-none">
                                             {{ $mReq->request_no }}
                                         </a>
-                                        <div class="text-muted" style="font-size:0.75rem;">{{ $mReq->created_at->format('d M Y') }}</div>
+                                        <div class="text-muted" style="font-size:0.75rem;">{{ $mReq->created_at ? $mReq->created_at->format('d M Y') : '—' }}</div>
                                     </td>
 
                                     {{-- Asset & Reporter --}}
@@ -884,7 +884,7 @@
                                                 @endif
                                             </td>
                                             <td class="text-end pe-4 small text-muted">
-                                                {{ $dExp->updated_at->format('d M Y') }}
+                                                {{ $dExp->updated_at ? $dExp->updated_at->format('d M Y') : '—' }}
                                             </td>
                                         </tr>
                                         @endforeach
@@ -943,7 +943,7 @@
                                                 @endif
                                             </td>
                                             <td class="text-end pe-4 small text-muted">
-                                                {{ $dMat->updated_at->format('d M Y') }}
+                                                {{ $dMat->updated_at ? $dMat->updated_at->format('d M Y') : '—' }}
                                             </td>
                                         </tr>
                                         @endforeach
@@ -1288,38 +1288,41 @@
                         </div>
                     </div>
 
+                    @php
+                        $assetUnit = $mReq->fixedAssetUnit;
+                    @endphp
                     {{-- Detailed Asset Specifications Grid --}}
                     <div class="row g-2 mb-3" style="font-size: 0.85rem;">
                         <div class="col-sm-6 col-md-3">
                             <div class="p-2 rounded bg-light border h-100">
                                 <span class="text-muted small d-block text-uppercase fw-semibold" style="font-size: 0.7rem;">Catalog Asset</span>
-                                <strong class="text-dark">{{ $mReq->fixedAssetUnit->parentAsset->name ?? 'Direct Item' }}</strong>
-                                <small class="text-muted d-block" style="font-size:0.75rem;">Category: {{ $mReq->fixedAssetUnit->parentAsset->category ?? 'General Asset' }}</small>
+                                <strong class="text-dark">{{ ($assetUnit && $assetUnit->parentAsset) ? $assetUnit->parentAsset->name : 'Direct Item' }}</strong>
+                                <small class="text-muted d-block" style="font-size:0.75rem;">Category: {{ ($assetUnit && $assetUnit->parentAsset) ? $assetUnit->parentAsset->category : 'General Asset' }}</small>
                             </div>
                         </div>
                         <div class="col-sm-6 col-md-3">
                             <div class="p-2 rounded bg-light border h-100">
                                 <span class="text-muted small d-block text-uppercase fw-semibold" style="font-size: 0.7rem;">Brand &amp; Model</span>
-                                <strong class="text-dark">{{ $mReq->fixedAssetUnit->brand ?? 'N/A' }} {{ $mReq->fixedAssetUnit->model ?? '' }}</strong>
-                                <small class="text-muted d-block font-monospace" style="font-size:0.75rem;">Serial: {{ $mReq->fixedAssetUnit->serial_number ?? ($mReq->fixedAssetUnit->unit_code ?? 'N/A') }}</small>
+                                <strong class="text-dark">{{ $assetUnit ? (trim(($assetUnit->brand ?? '') . ' ' . ($assetUnit->model ?? '')) ?: 'N/A') : 'N/A' }}</strong>
+                                <small class="text-muted d-block font-monospace" style="font-size:0.75rem;">Serial: {{ $assetUnit ? ($assetUnit->serial_number ?: ($assetUnit->unit_code ?: 'N/A')) : 'N/A' }}</small>
                             </div>
                         </div>
                         <div class="col-sm-6 col-md-3">
                             <div class="p-2 rounded bg-light border h-100">
                                 <span class="text-muted small d-block text-uppercase fw-semibold" style="font-size: 0.7rem;">Location &amp; Station</span>
-                                <strong class="text-dark">{{ $mReq->fixedAssetUnit->current_location ?? ($mReq->employee->department ?? 'General Service') }}</strong>
-                                @if($mReq->fixedAssetUnit->plate_number)
-                                    <small class="text-muted d-block" style="font-size:0.75rem;">Plate: {{ $mReq->fixedAssetUnit->plate_number }}</small>
+                                <strong class="text-dark">{{ ($assetUnit && $assetUnit->current_location) ? $assetUnit->current_location : ($mReq->employee->department ?? 'General Service') }}</strong>
+                                @if($assetUnit && $assetUnit->plate_number)
+                                    <small class="text-muted d-block" style="font-size:0.75rem;">Plate: {{ $assetUnit->plate_number }}</small>
                                 @else
-                                    <small class="text-muted d-block" style="font-size:0.75rem;">User: {{ $mReq->fixedAssetUnit->assignedEmployee->full_name ?? ($mReq->employee->full_name ?? 'Staff') }}</small>
+                                    <small class="text-muted d-block" style="font-size:0.75rem;">User: {{ ($assetUnit && $assetUnit->assignedEmployee) ? $assetUnit->assignedEmployee->full_name : ($mReq->employee->full_name ?? 'Staff') }}</small>
                                 @endif
                             </div>
                         </div>
                         <div class="col-sm-6 col-md-3">
                             <div class="p-2 rounded bg-light border h-100">
                                 <span class="text-muted small d-block text-uppercase fw-semibold" style="font-size: 0.7rem;">Purchase / Warranty</span>
-                                <strong class="text-dark">{{ $mReq->fixedAssetUnit->purchase_price ? number_format($mReq->fixedAssetUnit->purchase_price, 2) . ' ETB' : 'N/A' }}</strong>
-                                <small class="text-muted d-block" style="font-size:0.75rem;">Warranty: {{ $mReq->fixedAssetUnit->warranty_expiry ? $mReq->fixedAssetUnit->warranty_expiry->format('d M Y') : 'N/A' }}</small>
+                                <strong class="text-dark">{{ ($assetUnit && $assetUnit->purchase_price) ? number_format($assetUnit->purchase_price, 2) . ' ETB' : 'N/A' }}</strong>
+                                <small class="text-muted d-block" style="font-size:0.75rem;">Warranty: {{ ($assetUnit && $assetUnit->warranty_expiry) ? $assetUnit->warranty_expiry->format('d M Y') : 'N/A' }}</small>
                             </div>
                         </div>
                     </div>
@@ -1331,7 +1334,7 @@
                                 <i class="fa-solid fa-triangle-exclamation text-warning me-1"></i>Reported Issue &amp; Repair Details
                             </span>
                             <small class="text-muted" style="font-size:0.75rem;">
-                                Reported by <strong>{{ $mReq->reportedBy->name ?? ($mReq->employee->full_name ?? 'Staff') }}</strong> &bull; Reported to <strong>{{ $mReq->assignedTo->name ?? 'Wondimagnhu Siyum' }}</strong> on {{ $mReq->created_at->format('M d, Y h:i A') }}
+                                Reported by <strong>{{ $mReq->reportedBy->name ?? ($mReq->employee->full_name ?? 'Staff') }}</strong> &bull; Reported to <strong>{{ $mReq->assignedTo->name ?? 'Wondimagnhu Siyum' }}</strong> on {{ $mReq->created_at ? $mReq->created_at->format('M d, Y h:i A') : '—' }}
                             </small>
                         </div>
                         <div class="text-dark" style="white-space: pre-wrap; font-size: 0.92rem; line-height: 1.5;">{{ $mReq->description }}</div>
@@ -1388,7 +1391,7 @@
                                     @endphp
                                     <tr>
                                         <td class="ps-3 font-monospace fw-bold text-primary">{{ $hTick->request_no }}</td>
-                                        <td class="text-muted text-nowrap">{{ $hTick->created_at->format('M d, Y') }}</td>
+                                        <td class="text-muted text-nowrap">{{ $hTick->created_at ? $hTick->created_at->format('M d, Y') : '—' }}</td>
                                         <td>
                                             <div class="fw-semibold text-dark">{{ $hTick->issue_type_label }}</div>
                                             <small class="text-muted text-truncate d-block" style="max-width: 220px;" title="{{ $hTick->description }}">
