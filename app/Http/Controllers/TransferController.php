@@ -174,8 +174,10 @@ class TransferController extends Controller
 
                 $smsMessage = "ConstructPro Dispatch: Transfer #{$transfer->transfer_no} has been assigned to you.\nFrom: {$fromStoreName}\nTo: {$toStoreName}\nTime: {$timeSent}\nItems: {$materialsList}";
 
-                $smsService = app(\App\Services\SmsEthiopiaService::class);
-                $smsService->sendMessage($driver->phone, $smsMessage);
+                if (config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', false))) {
+                    $smsService = app(\App\Services\SmsEthiopiaService::class);
+                    $smsService->sendMessage($driver->phone, $smsMessage);
+                }
             } catch (\Throwable $e) {
                 \Illuminate\Support\Facades\Log::error('Transfer Driver SMS error: ' . $e->getMessage());
             }

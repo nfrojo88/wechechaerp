@@ -971,8 +971,10 @@ class StoreManagerController extends Controller
                 })->implode(', ');
 
                 $smsMessage = "ConstructPro: Transfer #{$transfer->transfer_no} has been assigned to you.\nPickup: {$fromStoreName}\nDelivery To: {$toStoreName}\nItems: {$itemsList}";
-                $smsService = app(\App\Services\SmsEthiopiaService::class);
-                $smsService->sendMessage($driver->phone, $smsMessage);
+                if (config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', false))) {
+                    $smsService = app(\App\Services\SmsEthiopiaService::class);
+                    $smsService->sendMessage($driver->phone, $smsMessage);
+                }
             } catch (\Throwable $e) {
                 \Illuminate\Support\Facades\Log::error('Transfer Driver SMS error: ' . $e->getMessage());
             }
@@ -1729,8 +1731,10 @@ class StoreManagerController extends Controller
                         })->implode(', ');
 
                         $smsMessage = "ConstructPro: Consolidated Transfer #{$targetTransfer->transfer_no} has been assigned to you.\nPickup: {$fromStoreName}\nDelivery To: {$toStoreName}\nItems: {$itemsList}";
-                        $smsService = app(\App\Services\SmsEthiopiaService::class);
-                        $smsService->sendMessage($driver->phone, $smsMessage);
+                        if (config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', false))) {
+                            $smsService = app(\App\Services\SmsEthiopiaService::class);
+                            $smsService->sendMessage($driver->phone, $smsMessage);
+                        }
                     } catch (\Throwable $e) {
                         \Illuminate\Support\Facades\Log::error('Transfer Driver SMS error: ' . $e->getMessage());
                     }
@@ -1942,8 +1946,10 @@ class StoreManagerController extends Controller
                         })->implode(', ');
 
                         $smsMessage = "ConstructPro: Transfer #{$transfer->transfer_no} has been assigned to you.\nPickup: {$fromStoreName}\nDelivery To: {$toStoreName}\nItems: {$itemsList}";
-                        $smsService = app(\App\Services\SmsEthiopiaService::class);
-                        $smsService->sendMessage($driver->phone, $smsMessage);
+                        if (config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', false))) {
+                            $smsService = app(\App\Services\SmsEthiopiaService::class);
+                            $smsService->sendMessage($driver->phone, $smsMessage);
+                        }
                     } catch (\Throwable $e) {
                         \Illuminate\Support\Facades\Log::error('Transfer Driver SMS error: ' . $e->getMessage());
                     }
@@ -2048,8 +2054,10 @@ class StoreManagerController extends Controller
                         })->implode(', ');
 
                         $smsMessage = "ConstructPro: Split Transfer #{$newTransfer->transfer_no} has been assigned to you.\nPickup: {$fromStoreName}\nDelivery To: {$toStoreName}\nItems: {$itemsList}";
-                        $smsService = app(\App\Services\SmsEthiopiaService::class);
-                        $smsService->sendMessage($driver->phone, $smsMessage);
+                        if (config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', false))) {
+                            $smsService = app(\App\Services\SmsEthiopiaService::class);
+                            $smsService->sendMessage($driver->phone, $smsMessage);
+                        }
                     } catch (\Throwable $e) {
                         \Illuminate\Support\Facades\Log::error('Transfer Driver SMS error: ' . $e->getMessage());
                     }

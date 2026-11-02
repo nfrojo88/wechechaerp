@@ -35,6 +35,10 @@ class ProcurementTransitionNotifier
         ?User $actor = null,
         array $extraContext = []
     ): void {
+        if (config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', false)) === false) {
+            return;
+        }
+
         $runner = function () use ($model, $newStatus, $oldStatus, $actor, $extraContext) {
             try {
                 $this->statusOwnerService->dispatchStatusChangeSms(

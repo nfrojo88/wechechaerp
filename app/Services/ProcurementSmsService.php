@@ -46,7 +46,7 @@ class ProcurementSmsService
     public function send(int $purchaseRequestId, string $phone, string $recipientRole, string $message): void
     {
         // Admin master switch check (default ON)
-        if (config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', true)) === false) {
+        if (config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', false)) === false) {
             Log::info("Procurement SMS is globally disabled by master switch. Skipping send to {$phone}.");
             return;
         }
@@ -138,7 +138,7 @@ class ProcurementSmsService
     public function notifyRole(int $purchaseRequestId, string $roleName, string $message, ?int $projectId = null, ?int $storeId = null): void
     {
         try {
-            if (config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', true)) === false) {
+            if (config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', false)) === false) {
                 return;
             }
 

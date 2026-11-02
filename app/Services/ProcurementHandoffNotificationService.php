@@ -41,7 +41,7 @@ class ProcurementHandoffNotificationService
     public function triggerHandoff(string $handoffKey, Model $requestModel, array $context = []): void
     {
         // When procurement SMS is disabled, do not queue or execute any handoffs
-        if (config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', true)) === false) {
+        if (config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', false)) === false) {
             return;
         }
 
@@ -68,7 +68,7 @@ class ProcurementHandoffNotificationService
      */
     public function executeHandoffNotification(string $handoffKey, Model $requestModel, array $context = []): array
     {
-        if (config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', true)) === false) {
+        if (config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', false)) === false) {
             Log::info("Procurement SMS handoff is globally disabled. Skipping handoff key [{$handoffKey}].");
             return [];
         }

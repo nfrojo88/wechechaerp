@@ -54,7 +54,7 @@ class ProcurementLifecycleService
     public function notifyStageRole(int $purchaseRequestId, string $roleName, string $message, ?int $projectId = null, ?int $storeId = null): void
     {
         try {
-            if (config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', true)) === false) {
+            if (config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', false)) === false) {
                 return;
             }
             $this->sms->notifyRole($purchaseRequestId, $roleName, $message, $projectId, $storeId);
@@ -86,7 +86,7 @@ class ProcurementLifecycleService
         ?int $assignedEmployeeId = null
     ): void {
         try {
-            if (config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', true)) === false) {
+            if (config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', false)) === false) {
                 return;
             }
 

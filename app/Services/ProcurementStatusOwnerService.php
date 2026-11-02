@@ -638,7 +638,7 @@ class ProcurementStatusOwnerService
         array $extraContext = []
     ): void {
         // Global switch check
-        if (config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', true)) === false) {
+        if (config('procurement_handoffs.enabled', env('PROCUREMENT_SMS_ENABLED', false)) === false) {
             Log::info("Procurement SMS globally disabled. Skipping dispatch for " . class_basename($model) . " #{$model->getKey()} [{$newStatus}].");
             return;
         }
