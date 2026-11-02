@@ -24,7 +24,9 @@ class PlanWorkflowController extends Controller
             'creator', 'planningManager', 'coordinator', 'techManager', 'gm', 'rejector'
         ])->first();
 
-        return view('plan-workflow.show', compact('project', 'workflow'));
+        $associatedCostSummary = app(\App\Services\ProjectAssociatedCostService::class)->getSummary($project);
+
+        return view('plan-workflow.show', compact('project', 'workflow', 'associatedCostSummary'));
     }
 
     // ── Budget check API (JSON for JS live bar) ───────────────────────────

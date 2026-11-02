@@ -267,6 +267,24 @@
                 @else
                     <p class="text-muted small mb-0">No budget allocated yet. GM must approve the plan.</p>
                 @endif
+
+                @if(!empty($associatedCostSummary['total_associated_cost']) && $associatedCostSummary['total_associated_cost'] > 0)
+                <div class="mt-3 pt-3 border-top">
+                    <div class="d-flex justify-content-between align-items-center mb-1 small">
+                        <span class="text-muted">Expenses Without Budget:</span>
+                        <span class="fw-bold text-warning-emphasis font-monospace">{{ number_format($associatedCostSummary['total_associated_cost'], 2) }} ETB</span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center mb-1 small">
+                        <span class="fw-bold text-dark">Total Real Project Cost:</span>
+                        <span class="fw-bold text-primary font-monospace">{{ number_format($associatedCostSummary['total_real_cost'], 2) }} ETB</span>
+                    </div>
+                    <div class="small text-muted mt-1" style="font-size: 0.72rem;">
+                        <a href="{{ route('projects.show', $project) }}#associated-costs-section" class="text-decoration-none">
+                            <i class="fa-solid fa-receipt me-1"></i>View {{ $associatedCostSummary['total_count'] ?? 0 }} unbudgeted entries on project &rarr;
+                        </a>
+                    </div>
+                </div>
+                @endif
             </div>
         </div>
         @endcan

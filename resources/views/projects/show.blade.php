@@ -148,11 +148,42 @@
                             @endcan
                         </td>
                     </tr>
+                    <tr>
+                        <td class="text-muted">
+                            Expenses Without Budget
+                            <div class="small text-muted" style="font-size: 0.72rem;">(Associated Costs)</div>
+                        </td>
+                        <td class="fw-semibold">
+                            <span class="text-warning-emphasis fw-bold font-monospace">
+                                {{ number_format($associatedCostSummary['total_associated_cost'] ?? 0, 2) }} ETB
+                            </span>
+                            <span class="badge bg-secondary-subtle text-secondary rounded-pill small ms-1" style="font-size: 0.68rem;">Not in budget meter</span>
+                            <div class="small text-muted mt-0.5" style="font-size: 0.73rem;">
+                                <a href="#associated-costs-section" class="text-decoration-none">
+                                    <i class="fa-solid fa-list-check me-1"></i>{{ $associatedCostSummary['total_count'] ?? 0 }} unbudgeted entries
+                                </a>
+                                <span class="mx-1">&bull;</span>
+                                Mat: {{ number_format($associatedCostSummary['total_material_cost'] ?? 0, 2) }} | Cash: {{ number_format($associatedCostSummary['total_cash_cost'] ?? 0, 2) }}
+                            </div>
+                        </td>
+                    </tr>
+                    <tr class="border-top">
+                        <td class="text-dark fw-bold pt-2">
+                            Total Real Project Cost
+                            <div class="small text-muted fw-normal" style="font-size: 0.72rem;">(Budgeted + Without Budget)</div>
+                        </td>
+                        <td class="fw-bold text-primary fs-6 pt-2 font-monospace">
+                            {{ number_format($associatedCostSummary['total_real_cost'] ?? ($project->budget_consumed + ($associatedCostSummary['total_associated_cost'] ?? 0)), 2) }} ETB
+                            <div class="text-muted fw-normal" style="font-size: 0.72rem;">
+                                Metered: {{ number_format($associatedCostSummary['budget_consumed'] ?? $project->budget_consumed, 2) }} + Without Budget: {{ number_format($associatedCostSummary['total_associated_cost'] ?? 0, 2) }}
+                            </div>
+                        </td>
+                    </tr>
                     @php $pca = $project->pettyCashAccount; @endphp
                     @if($pca)
-                    <tr>
-                        <td class="text-muted">Site Petty Cash</td>
-                        <td class="fw-semibold">
+                    <tr class="border-top">
+                        <td class="text-muted pt-2">Site Petty Cash</td>
+                        <td class="fw-semibold pt-2">
                             <span class="badge bg-success-subtle text-success border border-success-subtle">
                                 <i class="fa-solid fa-wallet me-1"></i>{{ $pca->name }} [{{ $pca->code }}]
                             </span>
