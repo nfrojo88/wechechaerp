@@ -93,7 +93,7 @@ class ProjectAssociatedCostService
                 'pp.id AS source_id',
                 DB::raw("COALESCE(pp.paid_at, pp.created_at) AS cost_date"),
                 DB::raw("COALESCE(pr.pr_no, CONCAT('PR-', pr.id)) AS reference_no"),
-                DB::raw("COALESCE(pr.title, 'Material Purchase via Procurement') AS description"),
+                DB::raw("COALESCE(pr.justification, pp.notes, 'Material Purchase via Procurement') AS description"),
                 DB::raw("'Material' AS category"),
                 'pp.amount AS amount',
                 'pp.status AS status',

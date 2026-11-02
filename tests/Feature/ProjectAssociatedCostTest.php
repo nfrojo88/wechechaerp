@@ -94,7 +94,7 @@ class ProjectAssociatedCostTest extends TestCase
         $pr = PurchaseRequest::create([
             'project_id'   => $this->guardedProject->id,
             'requested_by' => $this->adminUser->id,
-            'title'        => 'Steel rebar procurement',
+            'justification' => 'Steel rebar procurement',
             'status'       => 'completed',
         ]);
 
@@ -206,7 +206,7 @@ class ProjectAssociatedCostTest extends TestCase
         $creditPr = PurchaseRequest::create([
             'project_id'   => $this->guardedProject->id,
             'requested_by' => $this->adminUser->id,
-            'title'        => 'Stage Lifecycle PR for Cement',
+            'justification' => 'Stage Lifecycle PR for Cement',
             'status'       => 'draft',
         ]);
 
