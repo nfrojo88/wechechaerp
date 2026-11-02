@@ -73,7 +73,6 @@ class ProjectAssociatedCostService
     protected function buildBaseQuery(Project $project, array $filters = [])
     {
         $projectId = (int) $project->id;
-        $isGuarded = $project->hasBudgetAllocated();
 
         // 1. Procurement Payments (Cash-disbursed vendor payments, excluding credit-settled PRs)
         $procurementSql = DB::table('procurement_payments as pp')
@@ -120,7 +119,7 @@ class ProjectAssociatedCostService
                 DB::raw("CONCAT('/petty-cash-material-purchases/', pcmp.id) AS view_url"),
             ]);
 
-        // 3. Credit Store Ledger (Materials delivered on credit; excluding draft/pending/rejected PRs)
+        // 3. Credit Store Ledger (Materials delivered on credit; strictly gated by actual physical goods receipt)
         $creditStoreSql = DB::table('credit_store_ledgers as csl')
             ->leftJoin('purchase_requests as pr', 'pr.id', '=', 'csl.purchase_request_id')
             ->where('csl.project_id', $projectId)
@@ -128,10 +127,11 @@ class ProjectAssociatedCostService
             ->where('csl.credit_amount', '>', 0)
             ->whereIn('csl.status', ['outstanding', 'partially_paid', 'fully_paid'])
             ->where(function ($q) {
-                // Either entered directly with authorized date, OR linked to a PR that has completed intake/delivery
+                // Direct ledger entry: must be authorized
                 $q->where(function ($directQ) {
                     $directQ->whereNull('csl.purchase_request_id')
                             ->whereNotNull('csl.authorized_at');
+                // Linked to PR: physical goods MUST be received on site first
                 })->orWhere(function ($prQ) {
                     $prQ->whereNotNull('csl.purchase_request_id')
                         ->where(function ($subPr) {
@@ -139,23 +139,8 @@ class ProjectAssociatedCostService
                                   ->orWhereExists(function ($drSub) {
                                       $drSub->select(DB::raw(1))
                                             ->from('delivery_receipts as dr')
-                                            ->whereColumn('dr.purchase_request_id', 'csl.purchase_request_id');
-                                  })
-                                  ->orWhere(function ($authPr) {
-                                      $authPr->whereNotNull('csl.authorized_at')
-                                             ->whereNotIn('pr.status', [
-                                                 'draft',
-                                                 'pending_planning',
-                                                 'pending_hr_approval',
-                                                 'pending_store_review',
-                                                 'pending_proc_manager',
-                                                 'pending_proc_team',
-                                                 'pending_marketing_review',
-                                                 'pending_proforma_selection',
-                                                 'pending_gm_decision',
-                                                 'rejected',
-                                                 'cancelled'
-                                             ]);
+                                            ->whereColumn('dr.purchase_request_id', 'csl.purchase_request_id')
+                                            ->where('dr.status', 'verified');
                                   });
                         });
                 });
@@ -178,21 +163,21 @@ class ProjectAssociatedCostService
             ->where('er.status', 'Paid')
             ->whereNull('er.deleted_at')
             ->where('er.amount', '>', 0)
+            // Primary exclusion: indexed foreign keys to other modules
             ->whereNull('er.credit_store_ledger_id')
-            ->where(function ($q) {
-                $q->whereNull('er.category')
-                  ->orWhere('er.category', 'not like', '%Credit Settlement%');
-            })
+            ->whereNull('er.purchase_request_id')
+            ->whereNull('er.petty_cash_owner_id')
+            // Secondary exclusion: defined constants where FK might be unlinked historically
             ->where(function ($q) {
                 $q->whereNull('er.other_reason')
-                  ->orWhere(function ($sub) {
-                      $sub->where('er.other_reason', '!=', 'Credit Store Purchase Settlement')
-                          ->where('er.other_reason', '!=', 'Petty Cash Replenishment');
-                  });
+                  ->orWhereNotIn('er.other_reason', [
+                      \App\Models\ExpenseRequest::REASON_CREDIT_SETTLEMENT,
+                      \App\Models\ExpenseRequest::REASON_PETTY_REPLENISHMENT,
+                  ]);
             })
             ->where(function ($q) {
-                $q->whereNull('er.description')
-                  ->orWhere('er.description', 'not like', '%Petty Cash Replenishment%');
+                $q->whereNull('er.category')
+                  ->orWhere('er.category', '!=', 'Credit Settlement');
             })
             ->select([
                 DB::raw("'expense_request' AS source_type"),
@@ -211,21 +196,19 @@ class ProjectAssociatedCostService
             ->where('e.project_id', $projectId)
             ->where('e.status', 'approved')
             ->where('e.amount', '>', 0)
-            ->where(function ($q) use ($isGuarded) {
-                // If project has no budget allocated, NO expenses were consumed
-                if (!$isGuarded) {
-                    $q->whereRaw('1 = 1');
-                } else {
-                    // If project has budget, only expenses that bypassed BudgetGuard (budget_status is null)
-                    $q->whereNull('e.budget_status');
-                }
+            // Save-time fact: only expenses that were NOT consumed into the budget meter
+            ->whereNull('e.budget_consumed_at')
+            ->where(function ($q) {
+                $q->whereNull('e.budget_status')
+                  ->orWhere('e.budget_status', 'unguarded');
             })
             // Exclude mirror/duplicate records of PRs or Credit Store
             ->where(function ($q) {
                 $q->whereNull('e.description')
                   ->orWhere(function ($sub) {
-                      $sub->where('e.description', 'not like', '%Material Purchase for PR%')
-                          ->where('e.description', 'not like', '%Credit Purchase Payment%')
+                      $sub->where('e.description', 'not like', '%' . \App\Models\Expense::EXCLUDED_PR_MARKER . '%')
+                          ->where('e.description', 'not like', '%' . \App\Models\Expense::EXCLUDED_CREDIT_MARKER . '%')
+                          ->where('e.description', 'not like', '%' . \App\Models\Expense::EXCLUDED_CREDIT_PAYMENT_MARKER . '%')
                           ->where('e.description', 'not like', '%PR #%');
                   });
             })

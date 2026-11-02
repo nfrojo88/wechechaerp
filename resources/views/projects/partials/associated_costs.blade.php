@@ -5,10 +5,13 @@
                 <span class="badge bg-warning bg-opacity-10 text-dark border border-warning rounded-pill px-2.5 py-1 fw-bold small">
                     <i class="fa-solid fa-receipt me-1 text-warning"></i>Associated Costs
                 </span>
-                <span class="badge bg-secondary-subtle text-secondary rounded-pill small">Not covered by budget</span>
+                <span class="badge bg-secondary-subtle text-secondary rounded-pill small">Not counted in budget meter</span>
             </div>
             <p class="text-muted small mb-0 mt-1">
-                Real expenses charged to this project that bypassed or were not counted into the project budget cap.
+                Real expenses charged to this project that bypassed or were not counted into the project budget meter.
+                <span class="d-block mt-0.5" style="font-size: 0.75rem;">
+                    <i class="fa-solid fa-circle-info me-1 text-primary"></i>Procurement is counted when paid; credit is counted when goods are physically received on site.
+                </span>
             </p>
         </div>
         <div class="d-flex align-items-center gap-2">
@@ -70,7 +73,7 @@
                         <span class="fw-semibold">Budgeted:</span> ETB {{ number_format($associatedCostSummary['budget_consumed'] ?? 0, 2) }} + 
                         <span class="fw-semibold">Unbudgeted:</span> ETB {{ number_format($associatedCostSummary['total_associated_cost'] ?? 0, 2) }}
                         <div class="text-muted mt-0.5" style="font-style: italic;">
-                            *Budgeted cost currently includes only records from the expenses table.
+                            *Budgeted cost currently includes only records from the expenses table. Procurement is counted when paid and credit when goods are received.
                         </div>
                     </div>
                 </div>

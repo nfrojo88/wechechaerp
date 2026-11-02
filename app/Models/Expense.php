@@ -11,7 +11,7 @@ class Expense extends Model
 
     protected $fillable = [
         'project_id', 'category', 'description', 'amount',
-        'expense_date', 'status', 'created_by', 'approved_by',
+        'expense_date', 'status', 'budget_status', 'budget_consumed_at', 'created_by', 'approved_by',
         'approved_at', 'notes',
         'receipt_path',
         'audit_receipt_status',
@@ -23,10 +23,15 @@ class Expense extends Model
     ];
 
     protected $casts = [
-        'expense_date' => 'date',
-        'approved_at'  => 'datetime',
-        'amount'       => 'decimal:2',
+        'expense_date'       => 'date',
+        'approved_at'        => 'datetime',
+        'budget_consumed_at' => 'datetime',
+        'amount'             => 'decimal:2',
     ];
+
+    public const EXCLUDED_PR_MARKER = 'Material Purchase for PR';
+    public const EXCLUDED_CREDIT_MARKER = 'Credit Settlement: PR';
+    public const EXCLUDED_CREDIT_PAYMENT_MARKER = 'Credit Purchase Payment';
 
     public const CATEGORIES = [
         'labour'        => 'Labour',

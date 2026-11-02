@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use Tests\TestCase;
 use App\Models\CreditStoreLedger;
+use App\Models\DeliveryReceipt;
 use App\Models\Expense;
 use App\Models\ExpenseRequest;
 use App\Models\PettyCashMaterialPurchase;
@@ -67,13 +68,15 @@ class ProjectAssociatedCostTest extends TestCase
     public function test_unguarded_project_expense_appears_in_associated_costs(): void
     {
         $expense = Expense::create([
-            'project_id'   => $this->unguardedProject->id,
-            'category'     => 'material',
-            'description'  => 'Emergency Sand on Unguarded Site',
-            'amount'       => 4500.00,
-            'expense_date' => now()->toDateString(),
-            'status'       => 'approved',
-            'created_by'   => $this->adminUser->id,
+            'project_id'         => $this->unguardedProject->id,
+            'category'           => 'material',
+            'description'        => 'Emergency Sand on Unguarded Site',
+            'amount'             => 4500.00,
+            'expense_date'       => now()->toDateString(),
+            'status'             => 'approved',
+            'budget_status'      => 'unguarded',
+            'budget_consumed_at' => null,
+            'created_by'         => $this->adminUser->id,
         ]);
 
         $paginated = $this->costService->getPaginated($this->unguardedProject);
@@ -84,20 +87,57 @@ class ProjectAssociatedCostTest extends TestCase
     }
 
     /**
-     * Test 2: An expense counted in budget_consumed must NOT appear in Associated Costs (no double counting).
+     * Test 2: Save-time fact preservation: A later GM budget increase does NOT make old expenses vanish.
+     */
+    public function test_unguarded_expense_remains_in_associated_costs_after_later_gm_budget_increase(): void
+    {
+        // 1. Create unguarded project expense
+        $expense = Expense::create([
+            'project_id'         => $this->unguardedProject->id,
+            'category'           => 'material',
+            'description'        => 'Historical Timber on Unguarded Site',
+            'amount'             => 8200.00,
+            'expense_date'       => now()->toDateString(),
+            'status'             => 'approved',
+            'budget_status'      => 'unguarded',
+            'budget_consumed_at' => null,
+            'created_by'         => $this->adminUser->id,
+        ]);
+
+        $this->assertTrue(
+            collect($this->costService->getPaginated($this->unguardedProject)->items())->contains('reference_no', 'EXP-' . $expense->id)
+        );
+
+        // 2. GM later allocates budget to this project
+        $this->unguardedProject->update([
+            'budget_allocated' => 750000.00,
+            'status'           => 'active',
+        ]);
+
+        // 3. Confirm expense still remains in Associated Costs because save-time fact has budget_consumed_at = NULL
+        $paginatedAfter = $this->costService->getPaginated($this->unguardedProject);
+        $this->assertTrue(
+            collect($paginatedAfter->items())->contains('reference_no', 'EXP-' . $expense->id),
+            'Old unguarded expense must not vanish after a subsequent GM budget allocation'
+        );
+    }
+
+    /**
+     * Test 3: An expense counted in budget_consumed must NOT appear in Associated Costs (no double counting).
      */
     public function test_expense_counted_in_budget_consumed_must_not_appear(): void
     {
-        // An expense created on guarded project with budget_status = 'safe'
+        // An expense created on guarded project with budget_consumed_at set
         $budgetedExpense = Expense::create([
-            'project_id'    => $this->guardedProject->id,
-            'category'      => 'overhead',
-            'description'   => 'Office Printing Consumed in Budget',
-            'amount'        => 3000.00,
-            'expense_date'  => now()->toDateString(),
-            'status'        => 'approved',
-            'budget_status' => 'safe', // Recorded through BudgetGuard
-            'created_by'    => $this->adminUser->id,
+            'project_id'         => $this->guardedProject->id,
+            'category'           => 'overhead',
+            'description'        => 'Office Printing Consumed in Budget',
+            'amount'             => 3000.00,
+            'expense_date'       => now()->toDateString(),
+            'status'             => 'approved',
+            'budget_status'      => 'safe',
+            'budget_consumed_at' => now(),
+            'created_by'         => $this->adminUser->id,
         ]);
 
         $paginated = $this->costService->getPaginated($this->guardedProject);
@@ -106,106 +146,158 @@ class ProjectAssociatedCostTest extends TestCase
     }
 
     /**
-     * Test 3: A credit purchase that is pending does NOT appear in Associated Costs.
+     * Test 4: Credit PR stage-by-stage lifecycle test:
+     * Confirms that a Credit PR is excluded at each pending/draft/rejected stage,
+     * and only enters Associated Costs when goods are actually received on site (intake_complete / verified DR).
      */
-    public function test_credit_purchase_that_is_pending_does_not_appear(): void
+    public function test_credit_pr_stage_by_stage_lifecycle_and_goods_receipt_gate(): void
     {
-        // A PR still pending planning review
-        $pendingPr = PurchaseRequest::create([
+        // 1. All pending, draft, and rejected stages where goods have NOT been received
+        $unreceivedStages = [
+            'draft',
+            'pending_planning',
+            'pending_planning_approval',
+            'pending_hr_approval',
+            'pending_store_review',
+            'pending_procurement_manager',
+            'pending_procurement_team',
+            'pending_marketing_review',
+            'pending_proforma_selection',
+            'pending_gm_decision',
+            'pending_finance',
+            'pending_payment',
+            'pending_receipt_upload',
+            'pending_receipt_verification',
+            'pending_driver_booking',
+            'rejected',
+            'cancelled',
+        ];
+
+        $creditPr = PurchaseRequest::create([
             'project_id'   => $this->guardedProject->id,
             'requested_by' => $this->adminUser->id,
-            'title'        => 'Pending PR for Bricks',
-            'status'       => 'pending_planning',
+            'title'        => 'Stage Lifecycle PR for Cement',
+            'status'       => 'draft',
         ]);
 
-        // A Credit Store Ledger entry linked to the pending PR with no authorized date
-        $pendingCredit = CreditStoreLedger::create([
-            'purchase_request_id' => $pendingPr->id,
-            'pr_no'               => 'PR-' . $pendingPr->id,
+        $ledger = CreditStoreLedger::create([
+            'purchase_request_id' => $creditPr->id,
+            'pr_no'               => 'PR-' . $creditPr->id,
             'project_id'          => $this->guardedProject->id,
-            'supplier_name'       => 'Pending Supplier Ltd',
-            'credit_amount'       => 85000.00,
-            'status'              => 'outstanding',
-            'authorized_at'       => null,
-            'created_by'          => $this->adminUser->id,
-        ]);
-
-        $paginated = $this->costService->getPaginated($this->guardedProject);
-
-        $this->assertFalse(collect($paginated->items())->contains('reference_no', 'PR-' . $pendingPr->id));
-    }
-
-    /**
-     * Test 4: A realized credit purchase where goods are received appears in Associated Costs.
-     */
-    public function test_credit_purchase_with_received_goods_appears(): void
-    {
-        $receivedPr = PurchaseRequest::create([
-            'project_id'   => $this->guardedProject->id,
-            'requested_by' => $this->adminUser->id,
-            'title'        => 'Received Concrete Blocks on Credit',
-            'status'       => 'intake_complete', // Store intake confirmed
-        ]);
-
-        $validCredit = CreditStoreLedger::create([
-            'purchase_request_id' => $receivedPr->id,
-            'pr_no'               => 'PR-' . $receivedPr->id,
-            'project_id'          => $this->guardedProject->id,
-            'supplier_name'       => 'Reliable Block Suppliers',
-            'credit_amount'       => 62000.00,
+            'supplier_name'       => 'Dangote Cement Credit Depot',
+            'credit_amount'       => 150000.00,
             'status'              => 'outstanding',
             'authorized_at'       => now(),
             'created_by'          => $this->adminUser->id,
         ]);
 
-        $paginated = $this->costService->getPaginated($this->guardedProject);
-        $summary = $this->costService->getSummary($this->guardedProject);
+        // Verify credit PR is excluded at every unreceived stage
+        foreach ($unreceivedStages as $stage) {
+            $creditPr->update(['status' => $stage]);
+            $items = collect($this->costService->getPaginated($this->guardedProject)->items());
+            $this->assertFalse(
+                $items->contains('reference_no', 'PR-' . $creditPr->id),
+                "Credit PR at stage '{$stage}' must NOT enter Associated Costs before physical goods receipt."
+            );
+        }
 
-        $this->assertTrue(collect($paginated->items())->contains('reference_no', 'PR-' . $receivedPr->id));
-        $this->assertGreaterThanOrEqual(62000.00, $summary['total_associated_cost']);
-        $this->assertGreaterThanOrEqual(62000.00, $summary['total_material_cost']);
+        // 2. Stage: intake_complete (Goods physically received on site by Store Keeper)
+        $creditPr->update(['status' => 'intake_complete']);
+        $itemsIntake = collect($this->costService->getPaginated($this->guardedProject)->items());
+        $this->assertTrue(
+            $itemsIntake->contains('reference_no', 'PR-' . $creditPr->id),
+            "Credit PR at stage 'intake_complete' MUST enter Associated Costs as goods are received on site."
+        );
+
+        // 3. Stage: completed (Full procurement workflow finalized)
+        $creditPr->update(['status' => 'completed']);
+        $itemsCompleted = collect($this->costService->getPaginated($this->guardedProject)->items());
+        $this->assertTrue(
+            $itemsCompleted->contains('reference_no', 'PR-' . $creditPr->id),
+            "Credit PR at stage 'completed' MUST remain in Associated Costs."
+        );
+
+        // 4. In-flight stage (e.g. pending_receipt_verification) BUT verified DeliveryReceipt exists on site
+        $creditPr->update(['status' => 'pending_receipt_verification']);
+        
+        $store = Store::firstOrCreate(
+            ['project_id' => $this->guardedProject->id],
+            ['name' => 'Main Site Store', 'code' => 'MSS-' . uniqid()]
+        );
+
+        DeliveryReceipt::create([
+            'dr_no'               => 'DR-' . uniqid(),
+            'purchase_request_id' => $creditPr->id,
+            'store_id'            => $store->id,
+            'received_by'         => $this->adminUser->id,
+            'received_date'       => now()->toDateString(),
+            'status'              => 'verified',
+        ]);
+
+        $itemsWithDr = collect($this->costService->getPaginated($this->guardedProject)->items());
+        $this->assertTrue(
+            $itemsWithDr->contains('reference_no', 'PR-' . $creditPr->id),
+            "Credit PR with verified DeliveryReceipt MUST enter Associated Costs."
+        );
     }
 
     /**
-     * Test 5: Double counting prevention: Credit settlements and float top-ups are excluded.
+     * Test 5: Double counting prevention: Foreign keys and model constants.
      */
-    public function test_credit_settlement_and_float_top_up_are_excluded(): void
+    public function test_foreign_key_and_constant_exclusions_prevent_double_counting(): void
     {
-        // 1. Credit settlement ExpenseRequest
-        $creditSettlementReq = ExpenseRequest::create([
-            'request_number'            => 'EXP-CR-TEST-99',
+        // 1. Credit settlement ExpenseRequest (linked via credit_store_ledger_id foreign key)
+        $creditSettlementFk = ExpenseRequest::create([
+            'request_number'            => 'EXP-CR-FK-01',
             'user_id'                   => $this->adminUser->id,
             'project_id'                => $this->guardedProject->id,
             'category'                  => 'Material (Credit Settlement)',
-            'other_reason'              => 'Credit Store Purchase Settlement',
+            'other_reason'              => ExpenseRequest::REASON_CREDIT_SETTLEMENT,
             'description'               => 'Settling credit balance for supplier',
-            'amount'                    => 20000.00,
-            'credit_store_ledger_id'    => 999, // Linked to ledger
+            'amount'                    => 25000.00,
+            'credit_store_ledger_id'    => 1234, // Foreign key set
             'status'                    => 'Paid',
             'paid_at'                   => now(),
         ]);
 
-        // 2. Petty cash float top-up ExpenseRequest
-        $floatTopUpReq = ExpenseRequest::create([
-            'request_number'            => 'EXP-PCR-TEST-88',
+        // 2. PR payment ExpenseRequest (linked via purchase_request_id foreign key)
+        $prPaymentFk = ExpenseRequest::create([
+            'request_number'            => 'EXP-PR-FK-02',
+            'user_id'                   => $this->adminUser->id,
+            'project_id'                => $this->guardedProject->id,
+            'category'                  => 'Material',
+            'description'               => 'Procurement PR payment voucher',
+            'amount'                    => 35000.00,
+            'purchase_request_id'       => 5678, // Foreign key set
+            'status'                    => 'Paid',
+            'paid_at'                   => now(),
+        ]);
+
+        // 3. Petty cash float top-up ExpenseRequest (linked via petty_cash_owner_id / constant)
+        $floatTopUpFk = ExpenseRequest::create([
+            'request_number'            => 'EXP-PCR-FK-03',
             'user_id'                   => $this->adminUser->id,
             'project_id'                => $this->guardedProject->id,
             'category'                  => 'Other',
-            'other_reason'              => 'Petty Cash Replenishment',
+            'other_reason'              => ExpenseRequest::REASON_PETTY_REPLENISHMENT,
             'description'               => 'Site Petty Cash Replenishment float top up',
-            'amount'                    => 50000.00,
+            'amount'                    => 40000.00,
+            'petty_cash_owner_id'       => $this->adminUser->id, // Foreign key set
             'status'                    => 'Paid',
             'paid_at'                   => now(),
         ]);
 
-        // 3. Normal site expense (e.g. municipal site permit)
-        $normalExpenseReq = ExpenseRequest::create([
-            'request_number'            => 'EXP-PERMIT-01',
+        // 4. Genuine operational cash voucher (no module FKs)
+        $operationalVoucher = ExpenseRequest::create([
+            'request_number'            => 'EXP-OPS-01',
             'user_id'                   => $this->adminUser->id,
             'project_id'                => $this->guardedProject->id,
-            'category'                  => 'Site Permits',
-            'description'               => 'Municipal Construction Site Permit Fee',
-            'amount'                    => 7500.00,
+            'category'                  => ExpenseRequest::CATEGORY_TRANSPORT,
+            'description'               => 'Excavator lowbed trailer transport to site',
+            'amount'                    => 12000.00,
+            'credit_store_ledger_id'    => null,
+            'purchase_request_id'       => null,
+            'petty_cash_owner_id'       => null,
             'status'                    => 'Paid',
             'paid_at'                   => now(),
         ]);
@@ -213,13 +305,50 @@ class ProjectAssociatedCostTest extends TestCase
         $paginated = $this->costService->getPaginated($this->guardedProject);
         $items = collect($paginated->items());
 
-        $this->assertFalse($items->contains('reference_no', 'EXP-CR-TEST-99'), 'Credit settlement must be excluded to prevent double counting');
-        $this->assertFalse($items->contains('reference_no', 'EXP-PCR-TEST-88'), 'Float top-up must be excluded to prevent double counting');
-        $this->assertTrue($items->contains('reference_no', 'EXP-PERMIT-01'), 'Normal site expense must appear');
+        $this->assertFalse($items->contains('reference_no', 'EXP-CR-FK-01'), 'Credit settlement FK must be excluded');
+        $this->assertFalse($items->contains('reference_no', 'EXP-PR-FK-02'), 'PR payment FK must be excluded');
+        $this->assertFalse($items->contains('reference_no', 'EXP-PCR-FK-03'), 'Petty cash top-up FK must be excluded');
+        $this->assertTrue($items->contains('reference_no', 'EXP-OPS-01'), 'Independent operational voucher must appear');
     }
 
     /**
-     * Test 6: Cross-project isolation: Project B expenses never appear under Project A.
+     * Test 6: Direct Expense exclusions: PR markers and Credit Settlement markers in expenses table.
+     */
+    public function test_direct_expense_markers_are_excluded(): void
+    {
+        // 1. Mirror expense created for PR
+        $prExpenseMirror = Expense::create([
+            'project_id'         => $this->guardedProject->id,
+            'category'           => 'material',
+            'description'        => Expense::EXCLUDED_PR_MARKER . ' #1042',
+            'amount'             => 48000.00,
+            'expense_date'       => now()->toDateString(),
+            'status'             => 'approved',
+            'budget_status'      => 'unguarded',
+            'created_by'         => $this->adminUser->id,
+        ]);
+
+        // 2. Mirror expense created for credit settlement
+        $creditExpenseMirror = Expense::create([
+            'project_id'         => $this->guardedProject->id,
+            'category'           => 'material',
+            'description'        => Expense::EXCLUDED_CREDIT_MARKER . '1042 (Supplier)',
+            'amount'             => 32000.00,
+            'expense_date'       => now()->toDateString(),
+            'status'             => 'approved',
+            'budget_status'      => 'unguarded',
+            'created_by'         => $this->adminUser->id,
+        ]);
+
+        $paginated = $this->costService->getPaginated($this->guardedProject);
+        $items = collect($paginated->items());
+
+        $this->assertFalse($items->contains('reference_no', 'EXP-' . $prExpenseMirror->id));
+        $this->assertFalse($items->contains('reference_no', 'EXP-' . $creditExpenseMirror->id));
+    }
+
+    /**
+     * Test 7: Cross-project isolation: Project B expenses never appear under Project A.
      */
     public function test_cross_project_isolation(): void
     {

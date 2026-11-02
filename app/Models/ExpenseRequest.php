@@ -136,6 +136,10 @@ class ExpenseRequest extends Model
     public const CATEGORY_MAINTENANCE = 'Maintenance';
     public const CATEGORY_OTHER = 'Other';
 
+    // System Reason Constants (Exclusions & Automation)
+    public const REASON_CREDIT_SETTLEMENT = 'Credit Store Purchase Settlement';
+    public const REASON_PETTY_REPLENISHMENT = 'Petty Cash Replenishment';
+
     /**
      * Categories list with icons and descriptions
      */

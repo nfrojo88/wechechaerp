@@ -75,15 +75,19 @@ class ExpenseController extends Controller
                 ->withErrors(['amount' => $budgetCheck['message']]);
         }
 
-        $validated['created_by']    = auth()->id();
-        $validated['budget_status'] = $budgetCheck['status']; // 'safe' | 'at_risk'
+        $validated['created_by'] = auth()->id();
 
-        $expense = Expense::create($validated);
-
-        // Atomically consume budget
+        // Atomically consume budget if guarded (record save-time fact)
         if ($budgetCheck['guarded']) {
             $this->budgetGuard->consume($project, (float) $validated['amount']);
+            $validated['budget_status'] = $budgetCheck['status']; // 'safe' | 'at_risk'
+            $validated['budget_consumed_at'] = now();
+        } else {
+            $validated['budget_status'] = 'unguarded';
+            $validated['budget_consumed_at'] = null;
         }
+
+        $expense = Expense::create($validated);
 
         $warningMsg = $budgetCheck['status'] === 'at_risk'
             ? ' ⚠️ Warning: ' . $budgetCheck['message']
@@ -147,9 +151,10 @@ class ExpenseController extends Controller
 
         $expense->update(['status' => 'rejected']);
 
-        // Release the consumed budget back to the project
-        if ($expense->project_id && $expense->budget_status !== null) {
+        // Release the consumed budget back to the project if consumed at save-time
+        if ($expense->project_id && ($expense->budget_consumed_at !== null || in_array($expense->budget_status, ['safe', 'at_risk']))) {
             app(BudgetGuardService::class)->release($expense->project, (float) $expense->amount);
+            $expense->update(['budget_consumed_at' => null]);
         }
 
         return back()->with('success', 'Expense rejected and budget released.');
