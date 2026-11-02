@@ -54,14 +54,21 @@ class ProcurementLifecycleController extends Controller
                     $aMr->load('purchaseRequests');
                 }
                 foreach ($aMr->purchaseRequests as $aPr) {
-                    if (in_array($aPr->status, [PurchaseRequest::STATUS_PENDING_PLANNING, 'pending_planning', PurchaseRequest::STATUS_DRAFT])) {
-                        $aPr->update([
-                            'status'             => PurchaseRequest::STATUS_PENDING_HR_APPROVAL,
-                            'current_owner_role' => 'coordinator',
-                        ]);
-                    } elseif (!in_array($aPr->status, [PurchaseRequest::STATUS_PENDING_HR_APPROVAL, 'pending_hr_approval'])) {
-                        // The companion PR has already moved beyond coordinator (e.g. dispatched to store, PM, payment, completed, etc.)
-                        // Sync the MR status so it does not keep showing in coordinator emergency queue
+                    $hasCoordinatorDispatched = $aPr->workflowLogs()
+                        ->where('action', 'coordinator_dispatch_to_store')
+                        ->where('actor_role', 'coordinator')
+                        ->exists();
+
+                    if (!$hasCoordinatorDispatched) {
+                        // Coordinator has NOT dispatched yet: PR and MR must strictly wait at Coordinator stage
+                        if (in_array($aPr->status, [PurchaseRequest::STATUS_PENDING_PLANNING, 'pending_planning', PurchaseRequest::STATUS_DRAFT, PurchaseRequest::STATUS_PENDING_STORE_REVIEW])) {
+                            $aPr->update([
+                                'status'             => PurchaseRequest::STATUS_PENDING_HR_APPROVAL,
+                                'current_owner_role' => 'coordinator',
+                            ]);
+                        }
+                    } else {
+                        // Coordinator genuinely dispatched this companion PR to store: sync MR status
                         if ($aMr->status === 'planning_approved') {
                             $aMr->update(['status' => 'sent_to_store_manager']);
                         }
@@ -409,9 +416,9 @@ class ProcurementLifecycleController extends Controller
             if ($isCoordinator) {
                 $mrQuery->whereIn('status', ['planning_approved', 'sent_to_store_manager', 'needs_purchase', 'pending']);
             } elseif ($isStoreManager) {
-                $mrQuery->whereIn('status', ['sent_to_store_manager', 'planning_approved', 'needs_purchase']);
+                $mrQuery->whereIn('status', ['sent_to_store_manager', 'needs_purchase']);
             } else {
-                $mrQuery->whereIn('status', ['sent_to_store_manager', 'needs_purchase', 'planning_approved']);
+                $mrQuery->whereIn('status', ['sent_to_store_manager', 'needs_purchase']);
             }
         } else {
             $mrQuery->whereIn('status', ['sent_to_store_manager', 'planning_approved', 'needs_purchase', 'pending', 'submitted']);

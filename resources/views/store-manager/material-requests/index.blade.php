@@ -171,7 +171,7 @@
                                     <i class="fas fa-eye me-1"></i>Items
                                 </button>
 
-                                @if(in_array($req->status, ['pending', 'sent_to_store_manager']))
+                                @if($req->status === 'sent_to_store_manager')
                                     {{-- Store Keeper Direct Issue Action --}}
                                     @if($isStoreKeeper)
                                     <form action="{{ route('store-manager.material-requests.issue', $req) }}" method="POST" class="d-inline" onsubmit="return confirm('Confirm issuing materials to the Site Engineer / Technician? Stock will be deducted from your store.');">

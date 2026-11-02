@@ -334,32 +334,6 @@ class PurchaseRequestController extends Controller
             }
         }
 
-        // Auto-heal: If linked Material Request is already sent to Store Manager, advance PR to store review
-        if ($purchaseRequest->status === PurchaseRequest::STATUS_PENDING_HR_APPROVAL && $purchaseRequest->materialRequest) {
-            $mr = $purchaseRequest->materialRequest;
-            if (in_array($mr->status, ['sent_to_store_manager', 'sent_to_pr', 'needs_purchase'])) {
-                $targetRole = $this->lifecycle->resolveOwnerRole('store_manager', $purchaseRequest);
-                $purchaseRequest->update([
-                    'status'             => PurchaseRequest::STATUS_PENDING_STORE_REVIEW,
-                    'current_owner_role' => $targetRole,
-                ]);
-
-                try {
-                    PrWorkflowLog::create([
-                        'purchase_request_id' => $purchaseRequest->id,
-                        'from_stage'          => PurchaseRequest::STATUS_PENDING_HR_APPROVAL,
-                        'to_stage'            => PurchaseRequest::STATUS_PENDING_STORE_REVIEW,
-                        'action'              => 'coordinator_dispatch_to_store',
-                        'actor_role'          => 'system',
-                        'actor_id'            => Auth::id(),
-                        'notes'               => "Auto-synchronized: Linked Material Request #{$mr->reference_number} was already dispatched to Store Manager by Coordinator.",
-                        'created_at'          => now(),
-                    ]);
-                } catch (\Throwable $e) {}
-
-                $purchaseRequest->refresh();
-            }
-        }
 
         $purchaseRequest->load([
             'project', 'store', 'requestedBy', 'items.product',

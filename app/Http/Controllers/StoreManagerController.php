@@ -2156,6 +2156,13 @@ class StoreManagerController extends Controller
 
         $query = MaterialRequest::with(['project', 'requestedBy', 'items.product', 'maintenanceRequest', 'purchaseRequests']);
 
+        $isAdmin = $user && $user->hasAnyRole(['admin', 'global_admin']);
+        $isAuditor = $user && $user->hasAnyRole(['auditor', 'audit']);
+        if (!$isAdmin && !$isAuditor && !$request->filled('status')) {
+            // Store Manager and Store Keeper only receive requests dispatched to them by the Coordinator
+            $query->whereIn('status', ['sent_to_store_manager', 'needs_purchase', 'processed', 'issued', 'transferred']);
+        }
+
         if ($isStoreKeeper) {
             $assignedStore = $user->store
                 ?? Store::where('manager_id', $user->id)->first()

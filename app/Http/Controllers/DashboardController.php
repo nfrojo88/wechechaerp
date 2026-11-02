@@ -1737,10 +1737,11 @@ class DashboardController extends Controller
                 ->take(10)
                 ->get(), collect());
 
-            // Site Material Requests for this store
-            $kpi['pending_requests'] = $this->safe(fn() => \App\Models\MaterialRequest::where('destination_store_id', $storeId)->whereIn('status', ['pending', 'sent_to_store_manager'])->count(), 0);
+            // Site Material Requests dispatched to this store by Coordinator
+            $kpi['pending_requests'] = $this->safe(fn() => \App\Models\MaterialRequest::where('destination_store_id', $storeId)->where('status', 'sent_to_store_manager')->count(), 0);
             $materialRequests = $this->safe(fn() => \App\Models\MaterialRequest::with(['project', 'requestedBy', 'items.product'])
                 ->where('destination_store_id', $storeId)
+                ->whereIn('status', ['sent_to_store_manager', 'processed', 'issued', 'transferred'])
                 ->latest()
                 ->take(8)
                 ->get(), collect());

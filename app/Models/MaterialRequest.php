@@ -110,18 +110,20 @@ class MaterialRequest extends Model
             $prNo = PurchaseRequest::generatePrNo();
 
             // Determine initial status & owner based on current MR state
-            $initialStatus = PurchaseRequest::STATUS_PENDING_STORE_REVIEW;
-            $initialOwner = 'store_manager';
-
-            if (in_array($this->status, ['pending_planning', 'submitted', 'pending']) && $this->planning_approval_status !== 'approved') {
-                $initialStatus = PurchaseRequest::STATUS_PENDING_PLANNING;
-                $initialOwner = 'planning';
-            } elseif ($this->status === 'planning_approved' || $this->planning_approval_status === 'approved') {
-                $initialStatus = PurchaseRequest::STATUS_PENDING_HR_APPROVAL;
-                $initialOwner = 'coordinator';
+            if ($this->status === 'sent_to_store_manager') {
+                $initialStatus = PurchaseRequest::STATUS_PENDING_STORE_REVIEW;
+                $initialOwner = 'store_manager';
             } elseif (in_array($this->status, ['needs_purchase', 'sent_to_pr'])) {
                 $initialStatus = PurchaseRequest::STATUS_PENDING_MARKETING;
                 $initialOwner = 'purchase_manager';
+            } elseif ($this->status === 'planning_approved' || $this->planning_approval_status === 'approved') {
+                // Planning approved -> wait strictly for Coordinator review & dispatch
+                $initialStatus = PurchaseRequest::STATUS_PENDING_HR_APPROVAL;
+                $initialOwner = 'coordinator';
+            } else {
+                // New or unapproved request -> must start with Planning review
+                $initialStatus = PurchaseRequest::STATUS_PENDING_PLANNING;
+                $initialOwner = 'planning';
             }
 
             $creatorId = $this->created_by ?: ($actorId ?: (\Illuminate\Support\Facades\Auth::id() ?: 1));
@@ -163,9 +165,6 @@ class MaterialRequest extends Model
                 ]);
             }
 
-            if (!in_array($this->status, ['pending_planning', 'planning_approved', 'sent_to_pr', 'issued', 'processed'])) {
-                $this->update(['status' => 'sent_to_pr']);
-            }
 
             try {
                 PrWorkflowLog::create([
