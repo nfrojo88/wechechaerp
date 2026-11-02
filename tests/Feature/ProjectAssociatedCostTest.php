@@ -87,6 +87,36 @@ class ProjectAssociatedCostTest extends TestCase
     }
 
     /**
+     * Test: A paid procurement payment appears in Associated Costs.
+     */
+    public function test_procurement_payment_appears_in_associated_costs(): void
+    {
+        $pr = PurchaseRequest::create([
+            'project_id'   => $this->guardedProject->id,
+            'requested_by' => $this->adminUser->id,
+            'title'        => 'Steel rebar procurement',
+            'status'       => 'completed',
+        ]);
+
+        $payment = ProcurementPayment::create([
+            'purchase_request_id' => $pr->id,
+            'method'              => 'cash',
+            'amount'              => 75000.00,
+            'status'              => 'paid',
+            'paid_at'             => now(),
+            'created_by'          => $this->adminUser->id,
+        ]);
+
+        $paginated = $this->costService->getPaginated($this->guardedProject);
+        $summary = $this->costService->getSummary($this->guardedProject);
+
+        $items = collect($paginated->items());
+        $this->assertTrue($items->contains('source_id', $payment->id));
+        $this->assertTrue($items->contains('reference_no', 'PR-' . $pr->id));
+        $this->assertGreaterThanOrEqual(75000.00, $summary['total_associated_cost']);
+    }
+
+    /**
      * Test 2: Save-time fact preservation: A later GM budget increase does NOT make old expenses vanish.
      */
     public function test_unguarded_expense_remains_in_associated_costs_after_later_gm_budget_increase(): void
