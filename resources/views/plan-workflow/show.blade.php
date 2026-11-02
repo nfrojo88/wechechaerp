@@ -361,7 +361,7 @@
         @endif
 
         {{-- Planning Team: Submit --}}
-        @if(!$workflow || $workflow->status === 'rejected')
+        @if(!$workflow || ($workflow && $workflow->status === 'rejected'))
         @can('plan_workflow.submit')
         <div class="card border-0 shadow-sm mb-4">
             <div class="card-header bg-white py-3">
@@ -376,7 +376,7 @@
                         <textarea name="notes" rows="2" class="form-control form-control-sm"></textarea>
                     </div>
                     <button class="btn btn-primary btn-sm w-100"><i class="fas fa-paper-plane me-1"></i>
-                        {{ $workflow->status === 'rejected' ? 'Resubmit for Review' : 'Submit for Review' }}
+                        {{ ($workflow && $workflow->status === 'rejected') ? 'Resubmit for Review' : 'Submit for Review' }}
                     </button>
                 </form>
             </div>
