@@ -1763,6 +1763,7 @@ Route::middleware(['auth'])->group(function () {
     Route::resource('users', UserController::class)->except(['show']);
 
     // Projects
+    Route::get('projects/{project}/associated-costs', [App\Http\Controllers\ProjectAssociatedCostController::class, 'index'])->name('projects.associated-costs');
     Route::resource('projects', ProjectController::class);
 
     // Stores

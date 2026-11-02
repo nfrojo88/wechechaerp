@@ -242,6 +242,9 @@
     <button class="plan-tab" onclick="switchTab('material',this)">
         <i class="fa-solid fa-boxes-stacked"></i> Material Schedule
     </button>
+    <button class="plan-tab" onclick="switchTab('associated-costs',this)">
+        <i class="fa-solid fa-receipt text-warning"></i> Associated Costs
+    </button>
 </div>
 
 {{-- ════════════════════════════════════════ --}}
@@ -405,6 +408,13 @@
 {{-- ════════════════════════════════════════ --}}
 <div class="tab-pane" id="tab-material">
     @include('erp_plans.partials.resource-schedule', ['resourceType' => 'material', 'title' => 'Material Schedule', 'icon' => 'fa-boxes-stacked', 'color' => '#3b82f6', 'tasks' => $tasks])
+</div>
+
+{{-- ════════════════════════════════════════ --}}
+{{--  TAB 7: ASSOCIATED (UNBUDGETED) COSTS    --}}
+{{-- ════════════════════════════════════════ --}}
+<div class="tab-pane" id="tab-associated-costs">
+    @include('projects.partials.associated_costs', ['project' => $erp_plan->project])
 </div>
 
 @endsection

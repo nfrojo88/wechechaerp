@@ -236,4 +236,8 @@
         </div>
     </div>
 </div>
+
+{{-- Associated Costs Section (Unbudgeted Costs) --}}
+@include('projects.partials.associated_costs')
+
 @endsection

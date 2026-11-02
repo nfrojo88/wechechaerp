@@ -113,17 +113,25 @@ class ProjectController extends Controller
         return redirect()->route('projects.index')->with('success', 'Project created successfully along with ' . $store->name . $pcaCode . '.');
     }
 
-    public function show(Project $project)
+    public function show(Project $project, Request $request)
     {
+        $costService = app(\App\Services\ProjectAssociatedCostService::class);
+        $associatedCostSummary = $costService->getSummary($project);
+        $associatedCosts = $costService->getPaginated(
+            $project,
+            $request->only(['category', 'source_type', 'date_from', 'date_to', 'search']),
+            10
+        );
+
         $erp_plan = \App\Models\ErpPlanHeader::where('project_id', $project->id)->latest()->first();
 
         if ($erp_plan) {
             $erp_plan->load('tasks.dependencies', 'tasks.resources', 'baselines', 'project', 'creator');
-            return view('erp_plans.show', compact('erp_plan'));
+            return view('erp_plans.show', compact('erp_plan', 'associatedCostSummary', 'associatedCosts'));
         }
 
         $project->load(['defaultStore.pettyCashAccount', 'stores.pettyCashAccount', 'creator']);
-        return view('projects.show', compact('project'));
+        return view('projects.show', compact('project', 'associatedCostSummary', 'associatedCosts'));
     }
 
     public function edit(Project $project)
