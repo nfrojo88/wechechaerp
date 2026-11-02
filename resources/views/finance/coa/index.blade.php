@@ -97,7 +97,14 @@
                             <td>{{ optional($a->parent)->name ?? '-' }}</td>
                             <td>{!! $a->manager ? '<span class="badge bg-info text-dark"><i class="fas fa-user me-1"></i>'.$a->manager->name.'</span>' : '<span class="text-muted small">-</span>' !!}</td>
                             <td><span class="badge bg-{{ $typeColors[$a->type] ?? 'secondary' }}">{{ ucfirst($a->type) }}</span></td>
-                            <td class="text-end font-monospace fw-bold {{ $a->current_balance < 0 ? 'text-danger' : 'text-dark' }}">{{ number_format($a->current_balance, 2) }}</td>
+                            <td class="text-end font-monospace fw-bold">
+                                <span class="{{ $a->current_balance < 0 ? 'text-danger' : 'text-dark' }}">
+                                    {{ number_format($a->current_balance, 2) }}
+                                </span>
+                                @if($a->current_balance < 0)
+                                    <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 ms-1" style="font-size: 0.65rem;">Debt</span>
+                                @endif
+                            </td>
                             <td>{!! $a->is_active ? '<span class="badge bg-success">Yes</span>' : '<span class="badge bg-secondary">No</span>' !!}</td>
                             <td class="text-center">
                                 <div class="btn-group" role="group">

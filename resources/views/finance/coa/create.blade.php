@@ -34,12 +34,14 @@
                         <!-- Assets -->
                         <button type="button" class="btn rounded-pill cat-btn" data-type="asset" data-subtype="Cash and Bank" style="background-color: #d1f4e0; color: #0d9446; border: 1px solid transparent; font-weight: 500; font-size: 0.85rem;"><i class="fas fa-plus-circle me-1"></i> Add Cash and Bank</button>
                         <button type="button" class="btn rounded-pill cat-btn" data-type="asset" data-subtype="Receivables" style="background-color: #dbeafe; color: #1e3a8a; border: 1px solid transparent; font-weight: 500; font-size: 0.85rem;"><i class="fas fa-plus-circle me-1"></i> Add Receivables</button>
+                        <button type="button" class="btn rounded-pill cat-btn" data-type="asset" data-subtype="Debtors" style="background-color: #ede9fe; color: #5b21b6; border: 1px solid transparent; font-weight: 500; font-size: 0.85rem;"><i class="fas fa-plus-circle me-1"></i> Add Debtors & Advances</button>
                         <button type="button" class="btn rounded-pill cat-btn" data-type="asset" data-subtype="Inventory" style="background-color: #cffafe; color: #0891b2; border: 1px solid transparent; font-weight: 500; font-size: 0.85rem;"><i class="fas fa-plus-circle me-1"></i> Add Inventory</button>
                         <button type="button" class="btn rounded-pill cat-btn" data-type="asset" data-subtype="Other current Asset" style="background-color: #e0f2fe; color: #0369a1; border: 1px solid transparent; font-weight: 500; font-size: 0.85rem;"><i class="fas fa-plus-circle me-1"></i> Add Other current Asset</button>
                         <button type="button" class="btn rounded-pill cat-btn" data-type="asset" data-subtype="Fixed Assets" style="background-color: #f3e8ff; color: #7e22ce; border: 1px solid transparent; font-weight: 500; font-size: 0.85rem;"><i class="fas fa-plus-circle me-1"></i> Add Fixed Assets</button>
                         
                         <!-- Liabilities -->
                         <button type="button" class="btn rounded-pill cat-btn" data-type="liability" data-subtype="Liabilities" style="background-color: #ffe4e6; color: #e11d48; border: 1px solid transparent; font-weight: 500; font-size: 0.85rem;"><i class="fas fa-plus-circle me-1"></i> Add Liabilities</button>
+                        <button type="button" class="btn rounded-pill cat-btn" data-type="liability" data-subtype="Debt & Borrowings" style="background-color: #fee2e2; color: #b91c1c; border: 1px solid transparent; font-weight: 500; font-size: 0.85rem;"><i class="fas fa-plus-circle me-1"></i> Add Debt / Borrowings</button>
                         <button type="button" class="btn rounded-pill cat-btn" data-type="liability" data-subtype="Account payable" style="background-color: #fecdd3; color: #9f1239; border: 1px solid transparent; font-weight: 500; font-size: 0.85rem;"><i class="fas fa-plus-circle me-1"></i> Add Acount payeble</button>
                         <button type="button" class="btn rounded-pill cat-btn" data-type="liability" data-subtype="Other current liability" style="background-color: #ffe4e6; color: #881337; border: 1px solid transparent; font-weight: 500; font-size: 0.85rem;"><i class="fas fa-plus-circle me-1"></i> Add Other current liablity</button>
                         
@@ -71,9 +73,11 @@
                 </div>
                 
                 <div class="mb-4">
-                    <label class="form-label fw-bold text-dark" style="font-size: 0.9rem;">Opening Balance</label>
-                    <input type="number" name="opening_balance" class="form-control form-control-lg border-0 bg-light" step="0.01" value="{{ old('opening_balance', 0) }}" style="border-radius: 12px; font-size: 0.95rem;">
-                    <small class="text-muted d-block mt-1">This is a one-time setup and cannot be changed later.</small>
+                    <label class="form-label fw-bold text-dark" style="font-size: 0.9rem;">Opening Balance (ETB)</label>
+                    <input type="number" name="opening_balance" class="form-control form-control-lg border-0 bg-light" step="0.01" value="{{ old('opening_balance', 0) }}" placeholder="e.g. 0.00 or -50000.00 for debt" style="border-radius: 12px; font-size: 0.95rem;">
+                    <small class="text-muted d-block mt-1">
+                        <i class="fas fa-info-circle me-1 text-primary"></i>This is a one-time setup. For Debt / Debtor / Payable accounts with an outstanding negative balance, enter a negative amount (e.g. <code>-50000.00</code>).
+                    </small>
                 </div>
                 
                 <div class="row g-3 mb-4 d-none">

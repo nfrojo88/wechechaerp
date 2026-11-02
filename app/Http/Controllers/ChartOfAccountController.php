@@ -41,6 +41,9 @@ class ChartOfAccountController extends Controller
         // Auto-reconcile and deduct any historical/pending paid requests from COA
         \App\Services\FinanceCoaReconciliationService::reconcileHistoricalPayments();
 
+        // Auto-ensure OLANA Debt Account exists
+        $this->ensureOlanaDebtAccount();
+
         $accounts = ChartOfAccount::with(['parent', 'manager', 'bankAccounts'])->orderBy('code')->paginate(50);
 
         $stats = [
@@ -70,6 +73,9 @@ class ChartOfAccountController extends Controller
 
         // Auto-reconcile and deduct any historical/pending paid requests from COA
         \App\Services\FinanceCoaReconciliationService::reconcileHistoricalPayments();
+
+        // Auto-ensure OLANA Debt Account exists
+        $this->ensureOlanaDebtAccount();
 
         $accounts = ChartOfAccount::with(['parent', 'manager', 'bankAccounts'])
             ->where('is_active', true)
@@ -380,5 +386,35 @@ class ChartOfAccountController extends Controller
         $totalCount = $stats['expense_requests_count'] + $stats['office_requests_count'] + $stats['replenishments_count'];
 
         return redirect()->route('coa.index')->with('success', "✅ Reconciled {$totalCount} paid requests (Total: ETB " . number_format($totalAmt, 2) . ") and deducted from Chart of Accounts.");
+    }
+
+    /**
+     * Auto-ensure the OLANA Debt Account exists in Chart of Accounts.
+     */
+    private function ensureOlanaDebtAccount(): void
+    {
+        if (!ChartOfAccount::where('name', 'OLANA')->exists()) {
+            $targetCode = '2004';
+            if (ChartOfAccount::where('code', $targetCode)->exists()) {
+                $targetCode = '2803';
+            }
+            if (ChartOfAccount::where('code', $targetCode)->exists()) {
+                $maxCode = ChartOfAccount::whereBetween('code', ['2000', '2999'])->max('code');
+                $targetCode = (string) (((int) $maxCode) + 1);
+            }
+
+            ChartOfAccount::create([
+                'code'            => $targetCode,
+                'name'            => 'OLANA',
+                'type'            => 'liability',
+                'subtype'         => 'debt',
+                'description'     => 'Debt / Debtor Account — OLANA (Negative balance tracking)',
+                'opening_balance' => 0.00,
+                'current_balance' => 0.00,
+                'is_active'       => true,
+                'is_system'       => false,
+                'sort_order'      => (int) $targetCode,
+            ]);
+        }
     }
 }

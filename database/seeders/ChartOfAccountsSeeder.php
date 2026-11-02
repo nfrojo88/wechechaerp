@@ -37,6 +37,7 @@ class ChartOfAccountsSeeder extends Seeder
             ['code' => '2001', 'name' => 'Accounts Payable',                     'category' => 'Liabilities',               'balance' => -1087039.34,  'nature' => 'CREDIT'],
             ['code' => '2002', 'name' => 'Short-term Loans',                     'category' => 'Liabilities',               'balance' => 0.00,         'nature' => 'CREDIT'],
             ['code' => '2003', 'name' => 'Accrued Expenses',                     'category' => 'Liabilities',               'balance' => 0.00,         'nature' => 'CREDIT'],
+            ['code' => '2004', 'name' => 'OLANA',                                'category' => 'Liabilities',               'balance' => 0.00,         'nature' => 'CREDIT'],
             ['code' => '1010', 'name' => 'Petty Cash',                           'category' => 'Cash and Bank',             'balance' => -742800.00,   'nature' => 'DEBIT'],
             ['code' => '1100', 'name' => 'Saving Addis Capital',                 'category' => 'Cash and Bank',             'balance' => 0.00,         'nature' => 'DEBIT'],
             ['code' => '1330', 'name' => 'Dump Truck',                           'category' => 'Fixed Assets',              'balance' => 0.00,         'nature' => 'DEBIT'],
