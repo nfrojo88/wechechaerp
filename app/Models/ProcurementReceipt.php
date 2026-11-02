@@ -24,7 +24,7 @@ class ProcurementReceipt extends Model
         'withholding_amount' => 'decimal:2',
     ];
 
-    public function purchaseRequest() { return $this->belongsTo(PurchaseRequest::class); }
+    public function purchaseRequest() { return $this->belongsTo(PurchaseRequest::class)->withTrashed(); }
     public function uploadedBy()      { return $this->belongsTo(User::class, 'uploaded_by'); }
     public function verifiedBy()      { return $this->belongsTo(User::class, 'verified_by'); }
 

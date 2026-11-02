@@ -27,6 +27,6 @@ class DeliveryReceipt extends Model
 
     public function purchaseRequest()
     {
-        return $this->belongsTo(PurchaseRequest::class);
+        return $this->belongsTo(PurchaseRequest::class)->withTrashed();
     }
 }

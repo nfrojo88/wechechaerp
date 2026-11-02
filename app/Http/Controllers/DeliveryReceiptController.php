@@ -402,7 +402,10 @@ class DeliveryReceiptController extends Controller
         ]);
 
         $statusText = $request->verification_status === 'verified' ? 'verified and approved' : 'marked as rejected';
-        return back()->with('success', "Vendor Purchase Receipt for PR #{$procurementReceipt->purchaseRequest?->pr_no} has been {$statusText} by Finance.");
+        $prIdentifier = $procurementReceipt->purchaseRequest?->pr_no
+            ? "PR #{$procurementReceipt->purchaseRequest->pr_no}"
+            : "Receipt #{$procurementReceipt->id}";
+        return back()->with('success', "Vendor Purchase Receipt for {$prIdentifier} has been {$statusText} by Finance.");
     }
 
     public function verifyDeliveryReceipt(Request $request, DeliveryReceipt $deliveryReceipt)

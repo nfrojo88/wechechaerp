@@ -213,7 +213,8 @@
                                 $pr = $rec->purchaseRequest;
                                 $fileUrl = \App\Services\FileUploadService::url($rec->file_path);
                                 $isPdf = strtolower(pathinfo($rec->file_path, PATHINFO_EXTENSION)) === 'pdf';
-                                $amount = $pr->payment->amount ?? $pr->direct_buy_amount ?? 0;
+                                $amount = $pr?->payment?->amount ?? $pr?->direct_buy_amount ?? 0;
+                                $prNoDisplay = $pr?->pr_no ?? ($rec->purchase_request_id ? $rec->purchase_request_id : $rec->id);
                             @endphp
                             <tr>
                                 <!-- PR & Reference -->
@@ -224,10 +225,10 @@
                                         </div>
                                         <div>
                                             <a href="{{ $pr ? route('purchase-requests.show', $pr->id) : '#' }}" class="fw-bold text-primary font-monospace text-decoration-none">
-                                                PR #{{ $pr->pr_no ?? $rec->purchase_request_id }}
+                                                PR #{{ $prNoDisplay }}
                                             </a>
                                             <div class="small text-muted text-truncate" style="max-width: 180px;">
-                                                {{ $pr->title ?? 'Material Purchase' }}
+                                                {{ $pr?->title ?? 'Material Purchase' }}
                                             </div>
                                         </div>
                                     </div>
@@ -235,9 +236,9 @@
 
                                 <!-- Project & Supplier -->
                                 <td>
-                                    <div class="fw-semibold text-dark">{{ $pr->project->name ?? 'General' }}</div>
+                                    <div class="fw-semibold text-dark">{{ $pr?->project?->name ?? 'General' }}</div>
                                     <small class="text-muted">
-                                        <i class="fas fa-store me-1"></i>{{ $pr->supplier->name ?? ($pr->proformaInvoices()->where('gm_selected', true)->first()->supplier_name ?? 'Vendor') }}
+                                        <i class="fas fa-store me-1"></i>{{ $pr?->supplier?->name ?? ($pr ? ($pr->proformaInvoices()->where('gm_selected', true)->first()?->supplier_name ?? 'Vendor') : 'Vendor') }}
                                     </small>
                                 </td>
 
@@ -245,14 +246,14 @@
                                 <td>
                                     <div class="fw-bold text-success fs-6">ETB {{ number_format($amount, 2) }}</div>
                                     <small class="text-muted">
-                                        <i class="fas fa-wallet me-1"></i>{{ $pr->payment->coaAccount->name ?? 'COA Assigned' }}
+                                        <i class="fas fa-wallet me-1"></i>{{ $pr?->payment?->coaAccount?->name ?? 'COA Assigned' }}
                                     </small>
                                 </td>
 
                                 <!-- Uploaded By -->
                                 <td>
-                                    <div class="fw-semibold text-dark">{{ $rec->uploadedBy->name ?? 'Procurement' }}</div>
-                                    <small class="text-muted">{{ $rec->created_at->format('M d, Y h:i A') }}</small>
+                                    <div class="fw-semibold text-dark">{{ $rec->uploadedBy?->name ?? 'Procurement' }}</div>
+                                    <small class="text-muted">{{ $rec->created_at?->format('M d, Y h:i A') }}</small>
                                 </td>
 
                                 <!-- Document Preview / Download -->
@@ -311,7 +312,7 @@
                                         @if($rec->verification_status === 'receipt_requested')
                                             <button type="button" class="btn btn-sm btn-dark rounded-pill px-3 fw-semibold shadow-sm"
                                                     data-bs-toggle="modal"
-                                                    data-bs-target="#uploadInquiredModal_pr_{{ $pr->id ?? $rec->purchase_request_id }}">
+                                                    data-bs-target="#uploadInquiredModal_pr_{{ $pr?->id ?? $rec->purchase_request_id }}">
                                                 <i class="fas fa-upload me-1"></i> Add Receipt
                                             </button>
                                         @elseif($rec->verification_status !== 'verified')
@@ -397,16 +398,16 @@
                                     @endif
                                 </td>
                                 <td>
-                                    <div class="fw-semibold text-dark">{{ $dr->purchaseOrder->supplier->name ?? 'N/A' }}</div>
+                                    <div class="fw-semibold text-dark">{{ $dr->purchaseOrder?->supplier?->name ?? 'N/A' }}</div>
                                     @if($dr->vehicle_no)
                                         <small class="text-muted"><i class="fas fa-truck me-1"></i>{{ $dr->vehicle_no }}</small>
                                     @endif
                                 </td>
                                 <td>
-                                    <span class="badge bg-primary-subtle text-primary border">{{ $dr->store->name ?? 'General Store' }}</span>
+                                    <span class="badge bg-primary-subtle text-primary border">{{ $dr->store?->name ?? 'General Store' }}</span>
                                 </td>
                                 <td>
-                                    <div class="fw-semibold text-dark">{{ $dr->receivedBy->name ?? 'Store Keeper' }}</div>
+                                    <div class="fw-semibold text-dark">{{ $dr->receivedBy?->name ?? 'Store Keeper' }}</div>
                                     <small class="text-muted">{{ $dr->received_date ? $dr->received_date->format('M d, Y') : '-' }}</small>
                                 </td>
                                 <td class="text-center">
@@ -483,14 +484,14 @@
                                     @if($cRec->purchaseRequest)
                                         <div>
                                             <a href="{{ route('purchase-requests.show', $cRec->purchaseRequest->id) }}" class="small text-primary text-decoration-none">
-                                                PR #{{ $cRec->purchaseRequest->pr_no }}
+                                                PR #{{ $cRec->purchaseRequest?->pr_no ?? $cRec->purchase_request_id }}
                                             </a>
                                         </div>
                                     @endif
                                 </td>
                                 <td>
                                     <div class="fw-semibold text-dark">{{ $cRec->supplier_name ?? 'Supplier' }}</div>
-                                    <small class="text-muted">{{ $cRec->project->name ?? $cRec->purchaseRequest->project->name ?? 'General' }}</small>
+                                    <small class="text-muted">{{ $cRec->project?->name ?? $cRec->purchaseRequest?->project?->name ?? 'General' }}</small>
                                 </td>
                                 <td>
                                     <div class="fw-bold text-dark">ETB {{ number_format($cRec->credit_amount, 2) }}</div>
@@ -741,7 +742,8 @@
         $pr = $rec->purchaseRequest;
         $fileUrl = \App\Services\FileUploadService::url($rec->file_path);
         $isPdf = strtolower(pathinfo($rec->file_path, PATHINFO_EXTENSION)) === 'pdf';
-        $amount = $pr->payment->amount ?? $pr->direct_buy_amount ?? 0;
+        $amount = $pr?->payment?->amount ?? $pr?->direct_buy_amount ?? 0;
+        $prNoDisplay = $pr?->pr_no ?? ($rec->purchase_request_id ? $rec->purchase_request_id : $rec->id);
     @endphp
 
     <!-- 1. Document Preview Modal -->
@@ -753,7 +755,7 @@
                         <i class="fas fa-file-invoice text-primary fs-5"></i>
                         <div>
                             <h5 class="modal-title fw-bold text-dark mb-0" id="previewModalLabel{{ $rec->id }}">
-                                Vendor Receipt: PR #{{ $pr->pr_no ?? $rec->purchase_request_id }}
+                                Vendor Receipt: PR #{{ $prNoDisplay }}
                             </h5>
                             <small class="text-muted">Total: <strong>ETB {{ number_format($amount, 2) }}</strong> &bull; File: {{ $rec->original_filename }}</small>
                         </div>
@@ -774,7 +776,7 @@
                 </div>
                 <div class="modal-footer bg-white border-top py-2 px-4 d-flex justify-content-between">
                     <div class="small text-muted">
-                        Uploaded by <strong>{{ $rec->uploadedBy->name ?? 'Procurement' }}</strong> on {{ $rec->created_at->format('M d, Y h:i A') }}
+                        Uploaded by <strong>{{ $rec->uploadedBy?->name ?? 'Procurement' }}</strong> on {{ $rec->created_at?->format('M d, Y h:i A') }}
                     </div>
                     <div>
                         @if($rec->verification_status !== 'verified')
@@ -799,7 +801,7 @@
                         <div class="d-flex align-items-center gap-2">
                             <i class="fas fa-stamp fs-5"></i>
                             <h5 class="modal-title fw-bold mb-0" id="verifyModalLabel{{ $rec->id }}">
-                                Verify Vendor Receipt (PR #{{ $pr->pr_no }})
+                                Verify Vendor Receipt (PR #{{ $prNoDisplay }})
                             </h5>
                         </div>
                         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -808,7 +810,7 @@
                         <div class="alert alert-info py-2 px-3 small mb-3 border-start border-4 border-info">
                             <div class="d-flex justify-content-between mb-1">
                                 <span class="text-muted">Purchase Request:</span>
-                                <strong class="text-dark">PR #{{ $pr->pr_no }}</strong>
+                                <strong class="text-dark">PR #{{ $prNoDisplay }}</strong>
                             </div>
                             <div class="d-flex justify-content-between mb-1">
                                 <span class="text-muted">Receipt Amount:</span>
@@ -816,7 +818,7 @@
                             </div>
                             <div class="d-flex justify-content-between">
                                 <span class="text-muted">Funding Account:</span>
-                                <strong class="text-dark">{{ $pr->payment->coaAccount->name ?? 'COA' }}</strong>
+                                <strong class="text-dark">{{ $pr?->payment?->coaAccount?->name ?? 'COA' }}</strong>
                             </div>
                         </div>
 
