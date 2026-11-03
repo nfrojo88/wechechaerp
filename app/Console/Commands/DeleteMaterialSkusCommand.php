@@ -62,6 +62,7 @@ class DeleteMaterialSkusCommand extends Command
         'FA-PVCP',
         'FA-SEG2',
         'FA-SHA2',
+        'FA-Shar',
         'FA-SKIR',
         'FA-SPAC',
         'FA-SPIR',
@@ -121,95 +122,19 @@ class DeleteMaterialSkusCommand extends Command
             ? array_filter(array_map('trim', explode(',', $rawSkus)))
             : self::DEFAULT_SKUS;
 
-        $this->info("Starting deletion for " . count($skus) . " material SKU code(s)...");
+        $this->info("Starting complete permanent deletion for " . count($skus) . " material SKU code(s)...");
 
-        // 1. Delete associated FixedAssets and Units if matching FA- prefix
-        $deletedFaCount = 0;
-        if (Schema::hasTable('fixed_assets')) {
-            $faPrefixes = [];
-            foreach ($skus as $sku) {
-                if (str_starts_with(strtoupper($sku), 'FA-')) {
-                    $prefix = substr($sku, 3);
-                    $faPrefixes[] = $prefix;
-                    $faPrefixes[] = strtolower($prefix);
-                    $faPrefixes[] = $sku;
-                    $faPrefixes[] = strtolower($sku);
-                }
-            }
-
-            if (!empty($faPrefixes)) {
-                $matchingFa = DB::table('fixed_assets')->where(function ($q) use ($faPrefixes) {
-                    $q->whereIn('code_prefix', $faPrefixes)
-                      ->orWhereIn(DB::raw('LOWER(code_prefix)'), array_map('strtolower', $faPrefixes));
-                })->get();
-
-                foreach ($matchingFa as $fa) {
-                    if (Schema::hasTable('fixed_asset_units')) {
-                        DB::table('fixed_asset_units')->where('fixed_asset_id', $fa->id)->delete();
-                    }
-                    if (Schema::hasTable('fixed_asset_assignments')) {
-                        DB::table('fixed_asset_assignments')->where('fixed_asset_id', $fa->id)->delete();
-                    }
-                    try {
-                        DB::table('fixed_assets')->where('id', $fa->id)->delete();
-                    } catch (\Throwable $e) {
-                        if (Schema::hasColumn('fixed_assets', 'deleted_at')) {
-                            DB::table('fixed_assets')->where('id', $fa->id)->update(['deleted_at' => now()]);
-                        }
-                    }
-                    $deletedFaCount++;
-                }
-            }
-        }
-
-        // 2. Delete / Archive Products matching these SKUs
-        $deletedProductsCount = 0;
-        $archivedProductsCount = 0;
-
-        if (Schema::hasTable('products')) {
-            $lowerSkus = array_map('strtolower', $skus);
-
-            $matchingProducts = DB::table('products')
-                ->where(function ($q) use ($skus, $lowerSkus) {
-                    $q->whereIn('sku', $skus)
-                      ->orWhereIn(DB::raw('LOWER(TRIM(sku))'), $lowerSkus);
-                })
-                ->get();
-
-            foreach ($matchingProducts as $prod) {
-                if (Schema::hasTable('inventories')) {
-                    DB::table('inventories')->where('product_id', $prod->id)->delete();
-                }
-                if (Schema::hasTable('rebar_dia_products')) {
-                    DB::table('rebar_dia_products')->where('product_id', $prod->id)->delete();
-                }
-                if (Schema::hasTable('material_prices')) {
-                    DB::table('material_prices')->where('product_id', $prod->id)->delete();
-                }
-
-                try {
-                    DB::table('products')->where('id', $prod->id)->delete();
-                    $deletedProductsCount++;
-                } catch (\Throwable $e) {
-                    $update = [];
-                    if (Schema::hasColumn('products', 'deleted_at')) {
-                        $update['deleted_at'] = now();
-                    }
-                    if (Schema::hasColumn('products', 'sku')) {
-                        $update['sku'] = $prod->sku . '_DELETED_' . time() . '_' . $prod->id;
-                    }
-                    if (!empty($update)) {
-                        DB::table('products')->where('id', $prod->id)->update($update);
-                    }
-                    $archivedProductsCount++;
-                }
-            }
-        }
+        $purgeService = app(\App\Services\ProductPurgeService::class);
+        $result = $purgeService->purgeSkus($skus);
 
         $this->info("Completed material SKU cleanup:");
-        $this->line(" - Fixed Assets cleaned: {$deletedFaCount}");
-        $this->line(" - Products permanently deleted: {$deletedProductsCount}");
-        $this->line(" - Products archived/cleared: {$archivedProductsCount}");
+        $this->line(" - Successfully deleted: {$result['deleted_count']}");
+        if (!empty($result['deleted_skus'])) {
+            $this->line(" - Purged SKUs: " . implode(', ', $result['deleted_skus']));
+        }
+        if (!empty($result['failed_skus'])) {
+            $this->warn(" - Not found / skipped: " . implode('; ', $result['failed_skus']));
+        }
 
         return Command::SUCCESS;
     }

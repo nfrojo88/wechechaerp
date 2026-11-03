@@ -397,4 +397,64 @@ class ProductCompleteDeleteBySkuTest extends TestCase
         $this->assertEquals(0, DB::table('fixed_asset_units')->where('id', $unitId)->count());
         $this->assertEquals(0, DB::table('fixed_asset_assignments')->where('fixed_asset_unit_id', $unitId)->count());
     }
+
+    public function test_purge_service_completely_purges_materials_from_error_doc_with_all_relations()
+    {
+        $purgeService = app(\App\Services\ProductPurgeService::class);
+
+        // Create sample products from error.doc
+        $p1 = Product::create(['name' => 'Diamond Saw Blade 350mm', 'sku' => 'FA-BLA3', 'category' => 'Fixed Asset']);
+        $p2 = Product::create(['name' => 'HDPE Pipe 32mm PN16', 'sku' => 'FA-HDPE', 'category' => 'Fixed Asset']);
+        $p3 = Product::create(['name' => 'Chisel 68-777 Heavy', 'sku' => 'CHI-68-777', 'category' => 'Tools & Equipment']);
+        $p4 = Product::create(['name' => 'Special Material Shar', 'sku' => 'FA-Shar', 'category' => 'Fixed Asset']);
+
+        // Set up inventory & movements
+        $inv1 = DB::table('inventory')->insertGetId([
+            'store_id'         => 1,
+            'product_id'       => $p1->id,
+            'quantity_on_hand' => 15.0,
+            'unit_cost'        => 350.0,
+        ]);
+        DB::table('inventory_movements')->insert([
+            'inventory_id' => $inv1,
+            'type'         => 'in',
+            'quantity'     => 15.0,
+            'performed_by' => 1,
+        ]);
+
+        // Set up Fixed Asset matching code_prefix and product_id
+        $fa2 = DB::table('fixed_assets')->insertGetId([
+            'name'        => 'HDPE Machine Line',
+            'code_prefix' => 'HDPE',
+            'description' => 'Auto-synced from Store Inventory (Product SKU: FA-HDPE)',
+        ]);
+        $unit2 = DB::table('fixed_asset_units')->insertGetId([
+            'fixed_asset_id' => $fa2,
+            'unit_code'      => 'HDPE-01',
+        ]);
+        DB::table('fixed_asset_assignments')->insert([
+            'fixed_asset_unit_id' => $unit2,
+            'action'              => 'assigned',
+        ]);
+
+        // Execute bulk purge on error.doc SKUs
+        $targetSkus = ['FA-BLA3', 'FA-HDPE', 'CHI-68-777', 'FA-Shar'];
+        $result = $purgeService->purgeSkus($targetSkus);
+
+        $this->assertEquals(4, $result['deleted_count']);
+        $this->assertEmpty($result['failed_skus']);
+
+        // Verify products are completely purged
+        foreach ($targetSkus as $sku) {
+            $this->assertNull(Product::withTrashed()->where('sku', $sku)->first());
+            $this->assertEquals(0, DB::table('products')->where('sku', $sku)->count());
+        }
+
+        // Verify child tables are completely cleaned
+        $this->assertEquals(0, DB::table('inventory')->where('product_id', $p1->id)->count());
+        $this->assertEquals(0, DB::table('inventory_movements')->where('inventory_id', $inv1)->count());
+        $this->assertEquals(0, DB::table('fixed_assets')->where('id', $fa2)->count());
+        $this->assertEquals(0, DB::table('fixed_asset_units')->where('id', $unit2)->count());
+        $this->assertEquals(0, DB::table('fixed_asset_assignments')->where('fixed_asset_unit_id', $unit2)->count());
+    }
 }

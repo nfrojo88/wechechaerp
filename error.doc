@@ -1,15 +1,80 @@
-/home/wecheccc/public_html/
-Illuminate\Database\QueryException
-SQLSTATE[42S22]: Column not found: 1054 Unknown column 'csl.deleted_at' in 'WHERE' (SQL: select COUNT(*) as total_count, COALESCE(SUM(amount), 0) as total_associated_cost, COALESCE(SUM(CASE WHEN category = "Material" THEN amount ELSE 0 END), 0) as total_material_cost, COALESCE(SUM(CASE WHEN category = "Cash" THEN amount ELSE 0 END), 0) as total_cash_cost from (select * from ((select 'procurement' AS source_type, `pp`.`id` as `source_id`, COALESCE(pp.paid_at, pp.created_at) AS cost_date, COALESCE(pr.pr_no, CONCAT('PR-', pr.id)) AS reference_no, COALESCE(pr.justification, pp.notes, 'Material Purchase via Procurement') AS description, 'Material' AS category, `pp`.`amount` as `amount`, `pp`.`status` as `status`, CONCAT('/purchase-requests/', pr.id) AS view_url from `procurement_payments` as `pp` inner join `purchase_requests` as `pr` on `pr`.`id` = `pp`.`purchase_request_id` where `pr`.`project_id` = 3 and `pp`.`status` = paid and (`pp`.`method` is null or `pp`.`method` != credit) and not exists (select 1 from `credit_store_ledgers` as `csl` where `csl`.`purchase_request_id` = `pr`.`id` and `csl`.`deleted_at` is null)) union all (select 'petty_cash' AS source_type, `pcmp`.`id` as `source_id`, COALESCE(pcmp.purchase_date, pcmp.created_at) AS cost_date, COALESCE(pcmp.purchase_no, CONCAT('PC-', pcmp.id)) AS reference_no, COALESCE(pcmp.notes, CONCAT('Site Petty Cash Purchase - ', COALESCE(pcmp.supplier_name, 'Supplier'))) AS description, 'Material' AS category, `pcmp`.`total_amount` as `amount`, `pcmp`.`status` as `status`, CONCAT('/petty-cash-material-purchases/', pcmp.id) AS view_url from `petty_cash_material_purchases` as `pcmp` inner join `stores` as `s` on `s`.`id` = `pcmp`.`store_id` where `s`.`project_id` = 3 and `pcmp`.`status` = completed and `pcmp`.`deleted_at` is null and `pcmp`.`total_amount` > 0) union all (select 'credit_store' AS source_type, `csl`.`id` as `source_id`, COALESCE(csl.authorized_at, csl.created_at) AS cost_date, COALESCE(csl.pr_no, CONCAT('CR-', csl.id)) AS reference_no, CONCAT('Credit Purchase from ', COALESCE(csl.supplier_name, 'Supplier')) AS description, 'Material' AS category, `csl`.`credit_amount` as `amount`, `csl`.`status` as `status`, CONCAT('/finance/credit-store/', csl.id) AS view_url from `credit_store_ledgers` as `csl` left join `purchase_requests` as `pr` on `pr`.`id` = `csl`.`purchase_request_id` where `csl`.`project_id` = 3 and `csl`.`deleted_at` is null and `csl`.`credit_amount` > 0 and `csl`.`status` in (outstanding, partially_paid, fully_paid) and ((`csl`.`purchase_request_id` is null and `csl`.`authorized_at` is not null) or (`csl`.`purchase_request_id` is not null and (`pr`.`status` in (intake_complete, completed, delivered) or exists (select 1 from `delivery_receipts` as `dr` where `dr`.`purchase_request_id` = `csl`.`purchase_request_id` and `dr`.`status` = verified))))) union all (select 'expense_request' AS source_type, `er`.`id` as `source_id`, COALESCE(er.paid_at, er.created_at) AS cost_date, `er`.`request_number` as `reference_no`, COALESCE(er.description, er.category) AS description, 'Cash' AS category, `er`.`amount` as `amount`, `er`.`status` as `status`, CONCAT('/expense-requests/', er.id) AS view_url from `expense_requests` as `er` where `er`.`project_id` = 3 and `er`.`status` = Paid and `er`.`deleted_at` is null and `er`.`amount` > 0 and `er`.`credit_store_ledger_id` is null and `er`.`purchase_request_id` is null and `er`.`petty_cash_owner_id` is null and (`er`.`other_reason` is null or `er`.`other_reason` not in (Credit Store Purchase Settlement, Petty Cash Replenishment)) and (`er`.`category` is null or `er`.`category` != Credit Settlement)) union all (select 'expense' AS source_type, `e`.`id` as `source_id`, COALESCE(e.expense_date, e.created_at) AS cost_date, CONCAT('EXP-', e.id) AS reference_no, COALESCE(e.description, e.category) AS description, CASE WHEN e.category = 'material' THEN 'Material' ELSE 'Cash' END AS category, `e`.`amount` as `amount`, `e`.`status` as `status`, CONCAT('/expenses/', e.id) AS view_url from `expenses` as `e` where `e`.`project_id` = 3 and `e`.`status` = approved and `e`.`amount` > 0 and `e`.`budget_consumed_at` is null and (`e`.`budget_status` is null or `e`.`budget_status` = unguarded) and (`e`.`description` is null or (`e`.`description` not like %Material Purchase for PR% and `e`.`description` not like %Credit Settlement: PR% and `e`.`description` not like %Credit Purchase Payment% and `e`.`description` not like %PR #%)))) as `unbudgeted_costs`) as `sub` limit 1)
-https://wechechaconstruction.com/projects/3
-Hide solutions
-A column was not found
-You might have forgotten to run your migrations. You can run your migrations using php artisan migrate.
-
-Pressing the button below will try to run your migrations.
-
-
-
-Run migrations
-Read more
-Database: Running Migrations docs
+	DELETE
+1	FA-117B
+2	FA-402B
+3	MAT-1208
+4	FA-BALD
+5	FA-BLA3
+6	FA-BLA4
+7	FA-BLA6
+8	FA-BLA8
+9	FA-BMTT
+10	MAT-0140
+11	CHI-68-777
+12	CHI-67-652
+13	FA-DOU2
+14	MAT-1175
+15	FA-GEN3
+16	FA-HDPE
+17	FA-HDP3
+18	FA-HDP2
+19	JER-201-540
+20	MAT-0569
+21	FA-DAMP
+22	FA-LAST
+23	FA-MAN3
+24	MAT-0774
+25	FA-NAI2
+26	FA-NAI3
+27	MAT-0535
+28	MAT-053
+29	MAT-0081
+30	FA-PORC
+31	MAT-0085
+32	MAT-0581
+33	FA-PPR2
+34	FA-PPR9
+35	FA-PPR8
+36	FA-PPR3
+37	FA-PPR5
+38	FA-PPR4
+39	MAT-0678
+40	FA-PPR2
+41	FA-PPR7
+42	FA-PPR6
+43	MAT-0082
+44	FA-PPRP
+45	MAT-0668
+46	MAT-0658
+47	MAT-0086
+48	MAT-0584
+49	FA-PREC
+50	MAT-0482
+51	FA-PVCP
+52	MAT-0263
+53	FA-PVC2
+54	FA-PVCP
+55	MAT-0080
+56	MAT-0040
+57	MAT-0037
+58	MAT-0283
+59	MAT-0284
+60	MAT-0284
+61	MAT-0285
+62	MAT-0286
+63	MAT-0287
+64	MAT-0537
+65	FA-SEG2
+66	FA-SHA2
+67	MAT-0183
+68	FA-SKIR
+69	FA-SPAC
+70	FA-SPIR
+71	FA-TIM1
+72	FA-TIM2
+73	FA-TVAR
+74	FA-WAT6
+75	FA-WAT2
+76	FA-WAT11
+77	FA-WIRE
+78	FA-YPPC
+FA-Shar
