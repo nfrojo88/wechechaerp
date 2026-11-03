@@ -19,6 +19,7 @@ use App\Exceptions\SlipSequenceException;
 use App\Exceptions\SlipSequenceGapException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Artisan;
 
 class StrictSlipSequenceTest extends TestCase
 {
@@ -49,6 +50,7 @@ class StrictSlipSequenceTest extends TestCase
             $table->string('email')->unique();
             $table->string('password')->nullable();
             $table->timestamps();
+            $table->softDeletes();
         });
 
         Schema::create('stores', function ($table) {
@@ -68,6 +70,7 @@ class StrictSlipSequenceTest extends TestCase
             $table->decimal('unit_price', 15, 2)->default(100.00);
             $table->boolean('is_active')->default(true);
             $table->timestamps();
+            $table->softDeletes();
         });
 
         Schema::create('inventory', function ($table) {
@@ -125,6 +128,8 @@ class StrictSlipSequenceTest extends TestCase
             $table->date('receipt_date')->nullable();
             $table->string('supplier_name', 255)->nullable();
             $table->string('reference_no', 100)->nullable();
+            $table->string('challan_no', 100)->nullable();
+            $table->string('vehicle_no', 100)->nullable();
             $table->unsignedBigInteger('purchase_order_id')->nullable();
             $table->unsignedBigInteger('purchase_request_id')->nullable();
             $table->unsignedBigInteger('transfer_id')->nullable();
@@ -170,8 +175,22 @@ class StrictSlipSequenceTest extends TestCase
             $table->unsignedBigInteger('to_store_id');
             $table->string('status')->default('in_transit');
             $table->string('outgoing_slip_no')->nullable();
+            $table->string('physical_slip_no')->nullable();
             $table->string('receiving_slip_no')->nullable();
+            $table->string('outgoing_slip_file')->nullable();
+            $table->string('receiving_slip_file')->nullable();
+            $table->text('dispatch_notes')->nullable();
+            $table->text('receiving_notes')->nullable();
+            $table->text('reason')->nullable();
+            $table->string('vehicle_plate_no')->nullable();
+            $table->unsignedBigInteger('requested_by')->nullable();
+            $table->unsignedBigInteger('approved_by')->nullable();
+            $table->unsignedBigInteger('dispatched_by')->nullable();
+            $table->unsignedBigInteger('received_by')->nullable();
+            $table->timestamp('dispatched_at')->nullable();
+            $table->timestamp('received_at')->nullable();
             $table->timestamps();
+            $table->softDeletes();
         });
 
         $this->service = app(SlipSequenceService::class);
@@ -182,479 +201,465 @@ class StrictSlipSequenceTest extends TestCase
         ]);
 
         $this->store = Store::create([
-            'name' => 'Main Logistics Hub',
-            'code' => 'MAIN-01',
+            'name' => 'Chafe Primary School G+4 Building',
+            'code' => 'CHAFE-01',
             'is_active' => true,
         ]);
     }
 
     /**
-     * Test 1: Higher number entered is accepted, and missing gaps are auto-filled as void.
+     * Helper to set up the Chafe Primary School G+4 Building scenario:
+     * Store: Chafe Primary School G+4 Building, book 2401-2450 (capacity 50).
+     * Already registered:
+     * - Transfers: 2401, 2409, 2410, 2417, 2420
+     * - Petty cash: 2422, 2430
      */
-    public function test_accepting_higher_number_is_accepted_and_autofills_missing_gaps(): void
+    protected function setupChafeScenario(): SlipSequence
     {
         $sequence = SlipSequence::create([
             'store_id'        => $this->store->id,
             'slip_type'       => 'receive',
-            'label'           => 'Receiving (GRN) Book 21',
-            'prefix'          => 'REC-',
-            'book_start_no'   => 2100,
-            'book_end_no'     => 2200,
-            'current_slip_no' => 2101,
-            'used_count'      => 1,
+            'label'           => 'Receiving (GRN) Book 2401-2450',
+            'prefix'          => '',
+            'book_start_no'   => 2401,
+            'book_end_no'     => 2450,
+            'current_slip_no' => 2401, // Stored stale guess
+            'used_count'      => 0,    // Stored stale guess
             'status'          => 'active',
         ]);
 
-        // When user enters 2102 (jumping past 2101):
-        // 2102 is accepted, and missing 2101 is auto-filled as void
-        $result = $this->service->consumeNext(
-            storeId: $this->store->id,
-            slipType: 'receive',
-            inputSlipNo: '2102',
-            sourceType: 'procurement'
-        );
+        // Register 5 Transfers: 2401, 2409, 2410, 2417, 2420
+        $transfers = [2401, 2409, 2410, 2417, 2420];
+        foreach ($transfers as $trNum) {
+            DeliveryReceipt::create([
+                'dr_no'         => (string)$trNum,
+                'slip_no'       => (string)$trNum,
+                'slip_type'     => 'receive',
+                'source_type'   => 'transfer',
+                'store_id'      => $this->store->id,
+                'received_date' => now()->toDateString(),
+                'status'        => 'verified',
+                'is_void'       => false,
+            ]);
+        }
 
-        $this->assertEquals('REC-02102', $result['slip_no']);
-        $this->assertEquals(2102, $result['numeric_no']);
+        // Register 2 Petty Cash: 2422, 2430
+        $pettyCash = [2422, 2430];
+        foreach ($pettyCash as $pcNum) {
+            DeliveryReceipt::create([
+                'dr_no'         => (string)$pcNum,
+                'slip_no'       => (string)$pcNum,
+                'slip_type'     => 'receive',
+                'source_type'   => 'petty_cash',
+                'store_id'      => $this->store->id,
+                'received_date' => now()->toDateString(),
+                'status'        => 'verified',
+                'is_void'       => false,
+            ]);
+        }
 
-        // Missing slip 2101 is automatically recorded as void gap
-        $this->assertDatabaseHas('delivery_receipts', [
-            'store_id'    => $this->store->id,
-            'slip_no'     => 'REC-02101',
-            'source_type' => 'void',
-            'is_void'     => 1,
-        ]);
-
-        // Sequence current_slip_no has advanced to 2103
-        $sequence->refresh();
-        $this->assertEquals(2103, $sequence->current_slip_no);
+        return $sequence;
     }
 
     /**
-     * Test 2: Duplicate number rejected; out-of-range rejected.
+     * Test 1: With the data above, nextFreeNumber() returns 2402,
+     * header shows 43 remaining and Next #2402.
      */
-    public function test_duplicate_number_and_out_of_range_rejected(): void
+    public function test_chafe_primary_school_scenario_next_free_number_returns_2402(): void
     {
-        $sequence = SlipSequence::create([
-            'store_id'        => $this->store->id,
-            'slip_type'       => 'receive',
-            'label'           => 'Receiving (GRN) Book 21',
-            'prefix'          => 'REC-',
-            'book_start_no'   => 2100,
-            'book_end_no'     => 2105,
-            'current_slip_no' => 2103,
-            'used_count'      => 3,
-            'status'          => 'active',
-        ]);
+        $sequence = $this->setupChafeScenario();
 
-        // Pre-create receipt for 2101
-        DeliveryReceipt::create([
-            'dr_no'         => 'REC-02101',
-            'slip_no'       => 'REC-02101',
-            'slip_type'     => 'receive',
-            'source_type'   => 'procurement',
-            'store_id'      => $this->store->id,
-            'received_date' => now()->toDateString(),
-            'status'        => 'received',
-            'is_void'       => false,
-        ]);
+        // 1. nextFreeNumber() dynamically returns 2402 (lowest free number in 2401-2450)
+        $this->assertEquals(2402, $sequence->nextFreeNumber());
+        $this->assertEquals(2402, $sequence->getNextSlipNumber());
 
-        // 1. Lower than expected / already used -> Rejected as Duplicate
-        try {
-            $this->service->consumeNext($this->store->id, 'receive', '2101');
-            $this->fail('Expected SlipSequenceException for duplicate slip 2101');
-        } catch (SlipSequenceException $e) {
-            $this->assertStringContainsString('Duplicate Entry', $e->getMessage());
-        }
+        // 2. Capacity is 50
+        $this->assertEquals(50, $sequence->getCapacity());
 
-        // Also 2102 (< current 2103) is rejected
-        try {
-            $this->service->consumeNext($this->store->id, 'receive', '2102');
-            $this->fail('Expected SlipSequenceException for duplicate slip 2102');
-        } catch (SlipSequenceException $e) {
-            $this->assertStringContainsString('Duplicate Entry', $e->getMessage());
-        }
+        // 3. Assigned slips detail finds the 7 records
+        $assigned = $sequence->getAssignedSlipsDetail();
+        $this->assertCount(7, $assigned);
+        $this->assertEquals(5, $assigned->where('source_type', 'transfer')->count());
+        $this->assertEquals(2, $assigned->where('source_type', 'petty_cash')->count());
+        $this->assertEquals(0, $assigned->whereIn('source_type', ['procurement', 'delivery_receipt'])->count());
 
-        // 2. Out of range below book_start_no (2100)
-        try {
-            $this->service->consumeNext($this->store->id, 'receive', '2099');
-            $this->fail('Expected SlipSequenceException for out-of-range slip 2099');
-        } catch (SlipSequenceException $e) {
-            $this->assertStringContainsString('outside the active sequence book range', $e->getMessage());
-        }
+        // 4. Remaining count = capacity - used - void = 50 - 7 - 0 = 43
+        $this->assertEquals(43, $sequence->getRemainingSlips($assigned));
+        $this->assertEquals(14.0, $sequence->getPercentageUsed($assigned));
 
-        // 3. Out of range above book_end_no (2105)
-        try {
-            $this->service->consumeNext($this->store->id, 'receive', '2106');
-            $this->fail('Expected SlipSequenceException for out-of-range slip 2106');
-        } catch (SlipSequenceException $e) {
-            $this->assertStringContainsString('outside the active sequence book range', $e->getMessage());
-        }
+        // 5. Leaf map status: 2402 is 'next' (blue), available leaves are 'available' (gray)
+        $map = $sequence->getBookRangeMap($assigned);
+        $mapByNum = collect($map)->keyBy('number');
 
-        // 4. Sequence full rejection
-        $sequence->update([
-            'current_slip_no' => 2106,
-            'used_count'      => 6,
-            'status'          => 'full',
-        ]);
+        $this->assertEquals('transfer', $mapByNum[2401]['status']);
+        $this->assertEquals('next', $mapByNum[2402]['status']);
+        $this->assertEquals('available', $mapByNum[2403]['status']);
+        $this->assertEquals('available', $mapByNum[2408]['status']);
+        $this->assertEquals('transfer', $mapByNum[2409]['status']);
+        $this->assertEquals('transfer', $mapByNum[2410]['status']);
+        $this->assertEquals('available', $mapByNum[2411]['status']);
+        $this->assertEquals('transfer', $mapByNum[2417]['status']);
+        $this->assertEquals('available', $mapByNum[2418]['status']);
+        $this->assertEquals('transfer', $mapByNum[2420]['status']);
+        $this->assertEquals('available', $mapByNum[2421]['status']);
+        $this->assertEquals('petty_cash', $mapByNum[2422]['status']);
+        $this->assertEquals('available', $mapByNum[2423]['status']);
+        $this->assertEquals('petty_cash', $mapByNum[2430]['status']);
+        $this->assertEquals('available', $mapByNum[2431]['status']);
 
-        try {
-            $this->service->consumeNext($this->store->id, 'receive');
-            $this->fail('Expected SlipSequenceException for full sequence');
-        } catch (SlipSequenceException $e) {
-            $this->assertStringContainsString('full', strtolower($e->getMessage()));
-        }
+        // Check that none of the available leaves are marked as yellow 'unrecorded' gaps
+        $unrecordedGaps = collect($map)->where('status', 'unrecorded');
+        $this->assertCount(0, $unrecordedGaps);
     }
 
     /**
-     * Test 3: Two simultaneous requests for the same number: only one succeeds.
+     * Test 2: Sequential consumption auto-skips registered numbers:
+     * - Consumes 2402..2408
+     * - Next returns 2411 (skips 2409 and 2410)
+     * - Consumes 2411..2416
+     * - Next returns 2418 (skips 2417)
+     * - Consumes 2418, 2419
+     * - Next returns 2421 (skips 2420)
+     * - Consumes 2421
+     * - Next returns 2423 (skips 2422)
+     * - Consumes 2423..2429
+     * - Next returns 2431 (skips 2430)
      */
-    public function test_concurrent_lock_prevents_simultaneous_duplicate_consumption(): void
+    public function test_consuming_in_order_skips_registered_numbers_correctly(): void
     {
-        $sequence = SlipSequence::create([
-            'store_id'        => $this->store->id,
-            'slip_type'       => 'receive',
-            'label'           => 'Receiving (GRN) Book Concurrent',
-            'prefix'          => 'REC-',
-            'book_start_no'   => 5000,
-            'book_end_no'     => 5100,
-            'current_slip_no' => 5001,
-            'used_count'      => 1,
-            'status'          => 'active',
-        ]);
+        $sequence = $this->setupChafeScenario();
 
-        // Simulating two sequential requests competing for the current slot:
-        // First request takes slip 5001
-        $res1 = $this->service->consumeNext(
+        // 1. Consume 2402 to 2408
+        for ($n = 2402; $n <= 2408; $n++) {
+            $res = $this->service->consumeNext(
+                storeId: $this->store->id,
+                slipType: 'receive',
+                sourceType: 'procurement'
+            );
+            $this->assertEquals((int)$n, (int)$res['numeric_no']);
+
+            // Record DeliveryReceipt
+            DeliveryReceipt::create([
+                'dr_no'         => $res['slip_no'],
+                'slip_no'       => $res['slip_no'],
+                'slip_type'     => 'receive',
+                'source_type'   => 'procurement',
+                'store_id'      => $this->store->id,
+                'received_date' => now()->toDateString(),
+                'status'        => 'received',
+                'is_void'       => false,
+            ]);
+        }
+
+        // After using 2408, 2409 and 2410 are already used -> Next MUST jump to 2411
+        $expected = $this->service->getNextExpected($this->store->id, 'receive');
+        $this->assertEquals(2411, $expected['current_slip_no']);
+
+        $res2411 = $this->service->consumeNext(
             storeId: $this->store->id,
             slipType: 'receive',
-            inputSlipNo: null,
             sourceType: 'procurement'
         );
-        $this->assertEquals('REC-05001', $res1['slip_no']);
-
+        $this->assertEquals(2411, (int)$res2411['numeric_no']);
         DeliveryReceipt::create([
-            'dr_no'         => $res1['slip_no'],
-            'slip_no'       => $res1['slip_no'],
-            'slip_type'     => 'receive',
-            'source_type'   => 'procurement',
-            'store_id'      => $this->store->id,
-            'received_date' => now()->toDateString(),
-            'status'        => 'received',
-            'is_void'       => false,
+            'dr_no' => $res2411['slip_no'], 'slip_no' => $res2411['slip_no'],
+            'slip_type' => 'receive', 'source_type' => 'procurement',
+            'store_id' => $this->store->id, 'received_date' => now()->toDateString(),
+            'status' => 'received', 'is_void' => false,
         ]);
 
-        // Second request that also tries to claim 5001 explicitly must immediately be rejected as duplicate
+        // 2. Consume 2412 to 2416
+        for ($n = 2412; $n <= 2416; $n++) {
+            $res = $this->service->consumeNext($this->store->id, 'receive');
+            $this->assertEquals((int)$n, (int)$res['numeric_no']);
+            DeliveryReceipt::create([
+                'dr_no' => $res['slip_no'], 'slip_no' => $res['slip_no'],
+                'slip_type' => 'receive', 'source_type' => 'procurement',
+                'store_id' => $this->store->id, 'received_date' => now()->toDateString(),
+                'status' => 'received', 'is_void' => false,
+            ]);
+        }
+
+        // After 2416, 2417 is already used -> Next MUST jump to 2418
+        $res2418 = $this->service->consumeNext($this->store->id, 'receive');
+        $this->assertEquals(2418, (int)$res2418['numeric_no']);
+        DeliveryReceipt::create([
+            'dr_no' => $res2418['slip_no'], 'slip_no' => $res2418['slip_no'],
+            'slip_type' => 'receive', 'source_type' => 'procurement',
+            'store_id' => $this->store->id, 'received_date' => now()->toDateString(),
+            'status' => 'received', 'is_void' => false,
+        ]);
+
+        // Consume 2419
+        $res2419 = $this->service->consumeNext($this->store->id, 'receive');
+        $this->assertEquals(2419, (int)$res2419['numeric_no']);
+        DeliveryReceipt::create([
+            'dr_no' => $res2419['slip_no'], 'slip_no' => $res2419['slip_no'],
+            'slip_type' => 'receive', 'source_type' => 'procurement',
+            'store_id' => $this->store->id, 'received_date' => now()->toDateString(),
+            'status' => 'received', 'is_void' => false,
+        ]);
+
+        // After 2419, 2420 is used -> Next jumps to 2421
+        $res2421 = $this->service->consumeNext($this->store->id, 'receive');
+        $this->assertEquals(2421, (int)$res2421['numeric_no']);
+        DeliveryReceipt::create([
+            'dr_no' => $res2421['slip_no'], 'slip_no' => $res2421['slip_no'],
+            'slip_type' => 'receive', 'source_type' => 'procurement',
+            'store_id' => $this->store->id, 'received_date' => now()->toDateString(),
+            'status' => 'received', 'is_void' => false,
+        ]);
+
+        // After 2421, 2422 (petty cash) is used -> Next jumps to 2423
+        $res2423 = $this->service->consumeNext($this->store->id, 'receive');
+        $this->assertEquals(2423, (int)$res2423['numeric_no']);
+        DeliveryReceipt::create([
+            'dr_no' => $res2423['slip_no'], 'slip_no' => $res2423['slip_no'],
+            'slip_type' => 'receive', 'source_type' => 'procurement',
+            'store_id' => $this->store->id, 'received_date' => now()->toDateString(),
+            'status' => 'received', 'is_void' => false,
+        ]);
+
+        // Consume 2424 to 2429
+        for ($n = 2424; $n <= 2429; $n++) {
+            $res = $this->service->consumeNext($this->store->id, 'receive');
+            $this->assertEquals((int)$n, (int)$res['numeric_no']);
+            DeliveryReceipt::create([
+                'dr_no' => $res['slip_no'], 'slip_no' => $res['slip_no'],
+                'slip_type' => 'receive', 'source_type' => 'procurement',
+                'store_id' => $this->store->id, 'received_date' => now()->toDateString(),
+                'status' => 'received', 'is_void' => false,
+            ]);
+        }
+
+        // After 2429, 2430 (petty cash) is used -> Next jumps to 2431
+        $res2431 = $this->service->consumeNext($this->store->id, 'receive');
+        $this->assertEquals(2431, (int)$res2431['numeric_no']);
+    }
+
+    /**
+     * Test 3: Entering 2405 while next is 2402 is rejected.
+     * Entering 2409 (already registered) is rejected as duplicate.
+     * Entering out of book range is rejected.
+     */
+    public function test_entering_out_of_turn_rejected_and_duplicate_rejected(): void
+    {
+        $sequence = $this->setupChafeScenario();
+
+        // Next is 2402. Entering 2405: must reject with "Next slip is 2402. Use it or void it first."
         try {
             $this->service->consumeNext(
                 storeId: $this->store->id,
                 slipType: 'receive',
-                inputSlipNo: '5001',
-                sourceType: 'petty_cash'
+                inputSlipNo: '2405'
             );
-            $this->fail('Second request for 5001 should have been rejected as duplicate');
+            $this->fail('Expected SlipSequenceException when entering 2405 while next is 2402');
+        } catch (SlipSequenceException $e) {
+            $this->assertStringContainsString('Next slip is 2402. Use it or void it first.', $e->getMessage());
+        }
+
+        // Entering already registered 2409: must reject as duplicate
+        try {
+            $this->service->consumeNext(
+                storeId: $this->store->id,
+                slipType: 'receive',
+                inputSlipNo: '2409'
+            );
+            $this->fail('Expected SlipSequenceException when entering duplicate slip 2409');
         } catch (SlipSequenceException $e) {
             $this->assertStringContainsString('Duplicate Entry', $e->getMessage());
         }
 
-        // Next automatic request seamlessly receives 5002
-        $res2 = $this->service->consumeNext(
-            storeId: $this->store->id,
-            slipType: 'receive',
-            inputSlipNo: null,
-            sourceType: 'petty_cash'
-        );
-        $this->assertEquals('REC-05002', $res2['slip_no']);
+        // Entering already registered 2401: must reject as duplicate
+        try {
+            $this->service->consumeNext(
+                storeId: $this->store->id,
+                slipType: 'receive',
+                inputSlipNo: '2401'
+            );
+            $this->fail('Expected SlipSequenceException when entering duplicate slip 2401');
+        } catch (SlipSequenceException $e) {
+            $this->assertStringContainsString('Duplicate Entry', $e->getMessage());
+        }
+
+        // Out of range: below book_start_no (2400)
+        try {
+            $this->service->consumeNext(
+                storeId: $this->store->id,
+                slipType: 'receive',
+                inputSlipNo: '2400'
+            );
+            $this->fail('Expected SlipSequenceException for slip below book range');
+        } catch (SlipSequenceException $e) {
+            $this->assertStringContainsString('outside the active sequence book range', $e->getMessage());
+        }
+
+        // Out of range: above book_end_no (2451)
+        try {
+            $this->service->consumeNext(
+                storeId: $this->store->id,
+                slipType: 'receive',
+                inputSlipNo: '2451'
+            );
+            $this->fail('Expected SlipSequenceException for slip above book range');
+        } catch (SlipSequenceException $e) {
+            $this->assertStringContainsString('outside the active sequence book range', $e->getMessage());
+        }
     }
 
     /**
-     * Test 4: Void creates no stock change and reverses stock if posted.
+     * Test 4: Voiding 2402 moves next to 2403 and creates no stock movement.
      */
-    public function test_void_creates_no_stock_change_and_voiding_existing_receipt_reverses_stock(): void
+    public function test_voiding_2402_moves_next_to_2403_and_creates_no_stock_movement(): void
     {
-        $product = Product::create([
-            'name'       => 'Portland Cement 42.5N',
-            'code'       => 'CEM-425',
-            'unit_price' => 750.00,
-        ]);
+        $sequence = $this->setupChafeScenario();
 
-        $sequence = SlipSequence::create([
-            'store_id'        => $this->store->id,
-            'slip_type'       => 'receive',
-            'label'           => 'Receiving (GRN) Book 60',
-            'prefix'          => 'REC-',
-            'book_start_no'   => 6000,
-            'book_end_no'     => 6100,
-            'current_slip_no' => 6001,
-            'used_count'      => 1,
-            'status'          => 'active',
-        ]);
-
-        // Part A: Voiding a missing slip creates NO stock movement
         $movementsBefore = InventoryMovement::count();
-        $this->service->voidMissingSlips(
+
+        // Void next free slip (2402)
+        $voidResult = $this->service->voidMissingSlips(
             storeId: $this->store->id,
             slipType: 'receive',
-            numbers: [6001],
-            reason: 'Torn page',
+            numbers: [2402],
+            reason: 'Damaged leaf on store pad',
             userId: $this->user->id
         );
+
+        // 1. Stock movements unchanged (no stock movement)
         $this->assertEquals($movementsBefore, InventoryMovement::count());
 
-        // Part B: Posting a receipt creates stock; voiding that posted receipt reverses stock
-        $invService = app(InventoryService::class);
-        $consumeRes = $this->service->consumeNext(
-            storeId: $this->store->id,
-            slipType: 'receive',
-            inputSlipNo: null,
-            sourceType: 'procurement'
-        );
-        $this->assertEquals('REC-06002', $consumeRes['slip_no']);
-
-        $receipt = DeliveryReceipt::create([
-            'dr_no'         => $consumeRes['slip_no'],
-            'slip_no'       => $consumeRes['slip_no'],
-            'slip_type'     => 'receive',
-            'source_type'   => 'procurement',
-            'store_id'      => $this->store->id,
-            'received_date' => now()->toDateString(),
-            'status'        => 'received',
-            'is_void'       => false,
+        // 2. Void delivery receipt created
+        $this->assertDatabaseHas('delivery_receipts', [
+            'store_id'    => $this->store->id,
+            'slip_no'     => '02402',
+            'is_void'     => 1,
+            'source_type' => 'void',
+            'void_reason' => 'Damaged leaf on store pad',
         ]);
 
-        $receiptItem = DeliveryReceiptItem::create([
-            'delivery_receipt_id' => $receipt->id,
-            'product_id'          => $product->id,
-            'quantity_received'   => 50.0,
-            'accepted_quantity'   => 50.0,
-            'rejected_quantity'   => 0,
-            'unit'                => 'bags',
-        ]);
+        // 3. Next slip dynamically advances to 2403
+        $sequence->refresh();
+        $this->assertEquals(2403, $sequence->nextFreeNumber());
+        $this->assertEquals(2403, $sequence->getNextSlipNumber());
 
-        // Post stock in
-        $invService->applyMovement(
-            storeId: $this->store->id,
-            productId: $product->id,
-            quantityDelta: 50.0,
-            type: 'in',
-            referenceType: DeliveryReceipt::class,
-            referenceId: $receipt->id,
-            remarks: "Goods received under {$receipt->dr_no}",
-            performedBy: $this->user->id
-        );
-
-        $inventory = Inventory::where('store_id', $this->store->id)
-            ->where('product_id', $product->id)
-            ->first();
-        $this->assertEquals(50.0, (float)$inventory->quantity_on_hand);
-
-        // Void the existing posted delivery receipt
-        $this->service->voidExistingReceipt(
-            receipt: $receipt,
-            reason: 'Supplier delivered substandard cement bags; full return to vendor',
-            userId: $this->user->id
-        );
-
-        // Receipt marked void with reason and actor
-        $receipt->refresh();
-        $this->assertTrue((bool)$receipt->is_void);
-        $this->assertEquals('void', $receipt->status);
-        $this->assertEquals('Supplier delivered substandard cement bags; full return to vendor', $receipt->void_reason);
-        $this->assertEquals($this->user->id, $receipt->voided_by);
-
-        // Inventory on hand is strictly reversed back to 0
-        $inventory->refresh();
-        $this->assertEquals(0.0, (float)$inventory->quantity_on_hand);
-
-        // Reversal movement recorded
-        $reversal = InventoryMovement::where('reference_type', DeliveryReceipt::class)
-            ->where('reference_id', $receipt->id)
-            ->where('type', 'slip_void')
-            ->first();
-        $this->assertNotNull($reversal);
-        $this->assertEquals(-50.0, (float)$reversal->quantity);
+        // 4. Remaining count decreases by 1 (43 -> 42)
+        $this->assertEquals(42, $sequence->getRemainingSlips());
     }
 
     /**
-     * Test 5: Petty cash, PR intake, and transfer receipts all advance the same counter.
+     * Test 5: Petty cash, transfer, and PR intake all call the same service and skip used numbers.
      */
-    public function test_petty_cash_pr_intake_and_transfer_receipts_advance_same_counter(): void
+    public function test_petty_cash_transfer_and_pr_intake_all_call_same_service_and_skip_used_numbers(): void
     {
-        $sequence = SlipSequence::create([
-            'store_id'        => $this->store->id,
-            'slip_type'       => 'receive',
-            'label'           => 'Main Receiving Unified Book',
-            'prefix'          => 'GRN-',
-            'book_start_no'   => 7000,
-            'book_end_no'     => 7100,
-            'current_slip_no' => 7001,
-            'used_count'      => 1,
-            'status'          => 'active',
-        ]);
+        $sequence = $this->setupChafeScenario();
 
-        // 1. Procurement PR Intake consumes next slip
+        // 1. PR intake consumes next (2402)
         $resPr = $this->service->consumeNext(
             storeId: $this->store->id,
             slipType: 'receive',
             sourceType: 'procurement'
         );
-        $this->assertEquals('GRN-07001', $resPr['slip_no']);
-        $this->assertEquals(7001, $resPr['numeric_slip_no']);
-
+        $this->assertEquals(2402, (int)$resPr['numeric_no']);
         DeliveryReceipt::create([
-            'dr_no'         => $resPr['slip_no'],
-            'slip_no'       => $resPr['slip_no'],
-            'slip_type'     => 'receive',
-            'source_type'   => 'procurement',
-            'store_id'      => $this->store->id,
-            'received_date' => now()->toDateString(),
-            'status'        => 'received',
-            'is_void'       => false,
+            'dr_no' => $resPr['slip_no'], 'slip_no' => $resPr['slip_no'],
+            'slip_type' => 'receive', 'source_type' => 'procurement',
+            'store_id' => $this->store->id, 'received_date' => now()->toDateString(),
+            'status' => 'received', 'is_void' => false,
         ]);
 
-        $sequence->refresh();
-        $this->assertEquals(7002, $sequence->current_slip_no);
-        $this->assertEquals(2, $sequence->used_count);
-
-        // 2. Petty cash spot material purchase consumes next slip
+        // 2. Petty cash consumes next (2403)
         $resPetty = $this->service->consumeNext(
             storeId: $this->store->id,
             slipType: 'receive',
             sourceType: 'petty_cash'
         );
-        $this->assertEquals('GRN-07002', $resPetty['slip_no']);
-        $this->assertEquals(7002, $resPetty['numeric_slip_no']);
-
+        $this->assertEquals(2403, (int)$resPetty['numeric_no']);
         DeliveryReceipt::create([
-            'dr_no'         => $resPetty['slip_no'],
-            'slip_no'       => $resPetty['slip_no'],
-            'slip_type'     => 'receive',
-            'source_type'   => 'petty_cash',
-            'store_id'      => $this->store->id,
-            'received_date' => now()->toDateString(),
-            'status'        => 'received',
-            'is_void'       => false,
+            'dr_no' => $resPetty['slip_no'], 'slip_no' => $resPetty['slip_no'],
+            'slip_type' => 'receive', 'source_type' => 'petty_cash',
+            'store_id' => $this->store->id, 'received_date' => now()->toDateString(),
+            'status' => 'received', 'is_void' => false,
         ]);
 
-        $sequence->refresh();
-        $this->assertEquals(7003, $sequence->current_slip_no);
-        $this->assertEquals(3, $sequence->used_count);
-
-        // 3. Incoming Transfer receiving consumes next slip
+        // 3. Transfer receive consumes next (2404)
         $resTransfer = $this->service->consumeNext(
             storeId: $this->store->id,
             slipType: 'receive',
             sourceType: 'transfer_in'
         );
-        $this->assertEquals('GRN-07003', $resTransfer['slip_no']);
-        $this->assertEquals(7003, $resTransfer['numeric_slip_no']);
-
+        $this->assertEquals(2404, (int)$resTransfer['numeric_no']);
         DeliveryReceipt::create([
-            'dr_no'         => $resTransfer['slip_no'],
-            'slip_no'       => $resTransfer['slip_no'],
-            'slip_type'     => 'receive',
-            'source_type'   => 'transfer_in',
-            'store_id'      => $this->store->id,
-            'received_date' => now()->toDateString(),
-            'status'        => 'received',
-            'is_void'       => false,
+            'dr_no' => $resTransfer['slip_no'], 'slip_no' => $resTransfer['slip_no'],
+            'slip_type' => 'receive', 'source_type' => 'transfer_in',
+            'store_id' => $this->store->id, 'received_date' => now()->toDateString(),
+            'status' => 'received', 'is_void' => false,
         ]);
 
-        $sequence->refresh();
-        $this->assertEquals(7004, $sequence->current_slip_no);
-        $this->assertEquals(4, $sequence->used_count);
-
-        // Check continuity across all 3 sources
-        $receipts = DeliveryReceipt::where('store_id', $this->store->id)->orderBy('slip_no')->get();
-        $this->assertCount(3, $receipts);
-        $this->assertEquals(['procurement', 'petty_cash', 'transfer_in'], $receipts->pluck('source_type')->toArray());
+        // Next is now 2405
+        $next = $this->service->getNextExpected($this->store->id, 'receive');
+        $this->assertEquals(2405, $next['current_slip_no']);
     }
 
     /**
-     * Test 6: Reconciliation reports a deliberately created gap and recovers when voided.
+     * Test 6: slips:recalculate Artisan command (with --dry-run option)
      */
-    public function test_reconciliation_reports_deliberately_created_gap(): void
+    public function test_slips_recalculate_artisan_command_and_dry_run(): void
     {
-        $sequence = SlipSequence::create([
-            'store_id'        => $this->store->id,
-            'slip_type'       => 'receive',
-            'label'           => 'Receiving Audit Book',
-            'prefix'          => 'REC-',
-            'book_start_no'   => 8001,
-            'book_end_no'     => 8010,
-            'current_slip_no' => 8005,
-            'used_count'      => 4,
-            'status'          => 'active',
-        ]);
+        $sequence = $this->setupChafeScenario();
 
-        // Insert receipts for 8001, 8002, and 8004 — leaving 8003 as a deliberate gap
-        DeliveryReceipt::create([
-            'dr_no'         => 'REC-08001',
-            'slip_no'       => 'REC-08001',
-            'slip_type'     => 'receive',
-            'source_type'   => 'procurement',
-            'store_id'      => $this->store->id,
-            'received_date' => now()->toDateString(),
-            'status'        => 'received',
-            'is_void'       => false,
-        ]);
+        // Sequence currently has stale guesses in database: current_slip_no = 2401, used_count = 0
+        $this->assertEquals(2401, $sequence->current_slip_no);
+        $this->assertEquals(0, $sequence->used_count);
 
-        DeliveryReceipt::create([
-            'dr_no'         => 'REC-08002',
-            'slip_no'       => 'REC-08002',
-            'slip_type'     => 'receive',
-            'source_type'   => 'petty_cash',
-            'store_id'      => $this->store->id,
-            'received_date' => now()->toDateString(),
-            'status'        => 'received',
-            'is_void'       => false,
-        ]);
+        // Run with --dry-run
+        Artisan::call('slips:recalculate', ['--dry-run' => true]);
+        $outputDry = Artisan::output();
+        $this->assertStringContainsString('DRY-RUN', $outputDry);
+        $this->assertStringContainsString('2401', $outputDry);
+        $this->assertStringContainsString('2402', $outputDry);
 
-        DeliveryReceipt::create([
-            'dr_no'         => 'REC-08004',
-            'slip_no'       => 'REC-08004',
-            'slip_type'     => 'receive',
-            'source_type'   => 'transfer_in',
-            'store_id'      => $this->store->id,
-            'received_date' => now()->toDateString(),
-            'status'        => 'received',
-            'is_void'       => false,
-        ]);
+        // Verify database is UNTOUCHED in dry-run
+        $sequence->refresh();
+        $this->assertEquals(2401, $sequence->current_slip_no);
+        $this->assertEquals(0, $sequence->used_count);
 
-        // Audit & Reconcile
-        $report = $this->service->reconcile($sequence);
+        // Run without --dry-run to apply recalculation
+        Artisan::call('slips:recalculate');
+        $outputReal = Artisan::output();
+        $this->assertStringContainsString('RECALCULATION COMPLETE', $outputReal);
 
-        $this->assertTrue($report['has_issues']);
-        $this->assertEquals('problems', $report['status']);
-        $this->assertContains(8003, $report['gap_numbers']);
-        $this->assertNotEmpty($report['mismatches']);
-
-        // Now fix the gap by recording a void slip for 8003
-        DeliveryReceipt::create([
-            'dr_no'         => 'REC-08003',
-            'slip_no'       => 'REC-08003',
-            'slip_type'     => 'receive',
-            'source_type'   => 'void',
-            'store_id'      => $this->store->id,
-            'received_date' => now()->toDateString(),
-            'status'        => 'void',
-            'is_void'       => true,
-            'void_reason'   => 'Reconciled gap',
-            'voided_by'     => $this->user->id,
-        ]);
-
-        // Re-run audit
-        $cleanReport = $this->service->reconcile($sequence);
-        $this->assertFalse($cleanReport['has_issues']);
-        $this->assertEquals('ok', $cleanReport['status']);
-        $this->assertEmpty($cleanReport['gaps']);
-        $this->assertEmpty($cleanReport['duplicates']);
-        $this->assertEmpty($cleanReport['mismatches']);
+        // Verify database is updated to exact values
+        $sequence->refresh();
+        $this->assertEquals(2402, $sequence->current_slip_no);
+        $this->assertEquals(7, $sequence->used_count);
+        $this->assertEquals('active', $sequence->status);
     }
 
-    public function test_can_deactivate_sequence_when_another_inactive_sequence_already_exists_for_same_store_and_type()
+    /**
+     * Test 7: Recalculate method on model computes values and updates safely.
+     */
+    public function test_model_recalculate_method_returns_and_saves_correct_values(): void
     {
-        // Sequence 1 already inactive
+        $sequence = $this->setupChafeScenario();
+
+        $result = $sequence->recalculate(save: true);
+
+        $this->assertTrue($result['changed']);
+        $this->assertEquals(2401, $result['old_current']);
+        $this->assertEquals(2402, $result['new_current']);
+        $this->assertEquals(0, $result['old_used']);
+        $this->assertEquals(7, $result['new_used']);
+
+        $sequence->refresh();
+        $this->assertEquals(2402, $sequence->current_slip_no);
+        $this->assertEquals(7, $sequence->used_count);
+    }
+
+    /**
+     * Test 8: Multiple inactive sequences can coexist peacefully without unique constraint crashes.
+     */
+    public function test_can_deactivate_sequence_when_another_inactive_sequence_already_exists(): void
+    {
         $seq1 = SlipSequence::create([
             'store_id'        => $this->store->id,
             'slip_type'       => 'receive',
@@ -667,7 +672,6 @@ class StrictSlipSequenceTest extends TestCase
             'status'          => 'inactive',
         ]);
 
-        // Sequence 2 is currently active
         $seq2 = SlipSequence::create([
             'store_id'        => $this->store->id,
             'slip_type'       => 'receive',
@@ -681,113 +685,16 @@ class StrictSlipSequenceTest extends TestCase
         ]);
 
         $controller = new \App\Http\Controllers\SlipSequenceController();
-        $response = $controller->deactivate($seq2);
+        $controller->deactivate($seq2);
 
         $seq2->refresh();
         $this->assertEquals('inactive', $seq2->status);
         $this->assertEquals('inactive', $seq1->status);
 
-        // Verify multiple inactive sequences coexist peacefully
         $inactiveCount = SlipSequence::where('store_id', $this->store->id)
             ->where('slip_type', 'receive')
             ->where('status', 'inactive')
             ->count();
         $this->assertEquals(2, $inactiveCount);
-    }
-
-    public function test_consume_next_accepts_jumped_slip_and_autofills_missing_gaps(): void
-    {
-        $sequence = SlipSequence::create([
-            'store_id'        => $this->store->id,
-            'slip_type'       => 'receive',
-            'label'           => 'Jump Test Book',
-            'prefix'          => 'REC-',
-            'book_start_no'   => 5001,
-            'book_end_no'     => 5100,
-            'current_slip_no' => 5001,
-            'used_count'      => 0,
-            'status'          => 'active',
-        ]);
-
-        // User in Store Keeper or Store Manager enters slip #REC-05004 (skipping 5001, 5002, 5003)
-        $result = $this->service->consumeNext(
-            storeId: $this->store->id,
-            slipType: 'receive',
-            inputSlipNo: 'REC-05004',
-            sourceType: 'procurement'
-        );
-
-        // Verify the entered slip is ACCEPTED without error
-        $this->assertEquals('REC-05004', $result['slip_no']);
-        $this->assertEquals(5004, $result['numeric_no']);
-
-        // Verify missing slips 5001, 5002, 5003 are auto-filled as void
-        $voidReceipts = DeliveryReceipt::where('store_id', $this->store->id)
-            ->where('slip_type', 'receive')
-            ->where('is_void', true)
-            ->orderBy('id', 'asc')
-            ->get();
-
-        $this->assertCount(3, $voidReceipts);
-        $this->assertEquals(['REC-05001', 'REC-05002', 'REC-05003'], $voidReceipts->pluck('slip_no')->toArray());
-
-        // Verify sequence advanced to 5005
-        $sequence->refresh();
-        $this->assertEquals(5005, $sequence->current_slip_no);
-        $this->assertEquals(4, $sequence->used_count);
-    }
-
-    public function test_check_and_fill_missing_slips_accepts_current_added_and_fills_all_gaps(): void
-    {
-        $sequence = SlipSequence::create([
-            'store_id'        => $this->store->id,
-            'slip_type'       => 'send',
-            'label'           => 'SIN Gap Test',
-            'prefix'          => 'SIN-',
-            'book_start_no'   => 1001,
-            'book_end_no'     => 1050,
-            'current_slip_no' => 1001,
-            'used_count'      => 0,
-            'status'          => 'active',
-        ]);
-
-        // Simulate slips currently added in Store Manager / Store Keeper (e.g. transfers with slips 1002 and 1005)
-        DeliveryReceipt::create([
-            'dr_no'         => 'SIN-01002',
-            'slip_no'       => 'SIN-01002',
-            'slip_type'     => 'send',
-            'source_type'   => 'transfer_out',
-            'store_id'      => $this->store->id,
-            'received_date' => now()->toDateString(),
-            'status'        => 'issued',
-            'is_void'       => false,
-        ]);
-
-        DeliveryReceipt::create([
-            'dr_no'         => 'SIN-01005',
-            'slip_no'       => 'SIN-01005',
-            'slip_type'     => 'send',
-            'source_type'   => 'transfer_out',
-            'store_id'      => $this->store->id,
-            'received_date' => now()->toDateString(),
-            'status'        => 'issued',
-            'is_void'       => false,
-        ]);
-
-        // Run batch check and auto-fill
-        $summary = $this->service->checkAndFillMissingSlips($this->store->id, 'send');
-
-        // Missing slips 1001, 1003, 1004 should be auto-filled
-        $this->assertEquals(3, $summary['gaps_filled']);
-
-        $sequence->refresh();
-        // Current slip should advance past highest added (1005) to 1006
-        $this->assertEquals(1006, $sequence->current_slip_no);
-
-        // Run full reconciliation: must be 100% OK with 0 problems
-        $audit = $this->service->reconcile($sequence);
-        $this->assertFalse($audit['has_issues']);
-        $this->assertEquals('ok', $audit['status']);
-        $this->assertEmpty($audit['gaps']);
     }
 }

@@ -1,48 +1,45 @@
-TASK: Enforce strict sequential slip numbering across the whole ERP, add an optional "void slip" path, and make every receiving source use the same sequence check.
+TASK: Fix slip sequence "next number" logic so it is calculated from the real used numbers, skipping any number that is already registered. Keep existing data untouched.
 
-CONTEXT
-Slip Sequences mirror physical paper books (book_start_no to book_end_no, current_slip_no, used_count). Receiving slips (Model 19 / GRN) and outgoing slips (SIN) are currently created in several places. Relevant files: SlipSequenceController.php, SlipSequence.php, StoreManagerController.php (slip + void logic), ProcurementLifecycleService.php (Stage 9 store intake), and the transfers flow.
+CURRENT PROBLEM
+Store: Chafe Primary School G+4 Building, book 2401-2450 (capacity 50).
+Already registered (from the leaf map): 
+- Transfers: 2401, 2409, 2410, 2417, 2420
+- Petty cash: 2422, 2430
+The header still shows "Next: #2401" and "50 Remaining", and the counter does not match the used leaves. These numbers were registered out of order before the strict rule existed.
 
-1. STRICT SEQUENCE RULE (no skipping)
-- A slip number may only be accepted if it equals the store's next expected number (current_slip_no). Example: slip 2103 must be rejected if 2102 has not been used or voided.
-- This applies to manual entry and auto-fill alike. Remove the old behavior that "jumps" the counter past a manually entered number.
-- If a number is higher than expected, reject with a clear message that lists every missing number, e.g. "Slip 2103 can't be saved. 2101 and 2102 are not recorded yet. Record or void them first."
-- If a number is lower than expected or already used, reject as a duplicate.
-- A number outside book_start_no..book_end_no is rejected. When the book is full, block saving and prompt "Next Book".
-- Enforce this in ONE place: a SlipSequenceService method, e.g. consumeNext(store_id, type, number), that runs inside a DB transaction with lockForUpdate() on the sequence row, so two storekeepers cannot take the same number at the same time.
-- Add a unique index on (store_id, slip_type, slip_no) as a database-level guard.
+EXPECTED BEHAVIOR
+1. Next slip = the lowest number in book_start_no..book_end_no that is NOT used and NOT void. It must not rely only on current_slip_no.
+   With the data above:
+   - Next is 2402, then 2403, 2404, ... 2408.
+   - After 2408 is used, the system JUMPS over 2409 and 2410 (already used) and gives 2411.
+   - Then 2412 ... 2416, jump over 2417, give 2418, 2419, jump over 2420, give 2421, jump over 2422, give 2423 ... 2429, jump over 2430, give 2431 ... 2450.
+2. Already registered numbers stay filled (green / indigo / teal) and keep their source type, document link, and date. Do not modify or delete them.
+3. Unused numbers below the highest used number (2402-2408, 2411-2416, 2418-2419, 2421, 2423-2429) are NOT gaps and must NOT be shown as yellow. They are "Available" (gray) and are filled in order starting from the lowest one. Only mark a number as a gap in future when a higher number is accepted while a lower free number exists (which the strict rule now blocks).
+4. Strict rule still applies to all new entries: only the computed next free number is accepted.
+   - Typing 2405 when next is 2402: reject with "Next slip is 2402. Use it or void it first."
+   - Typing an already used number (e.g. 2409): reject as duplicate.
+   - Auto-skip only applies to numbers that are already used or void, never to free numbers.
+5. Remaining count = capacity - used - void. Here: 50 - 7 - 0 = 43.
+   Header badges must match: 0 GRN, 5 Transfers, 2 Petty Cash, Next #2402, 43 Remaining.
+6. current_slip_no and used_count must be recalculated from the real rows (not stored guesses). Add a method SlipSequence::nextFreeNumber() and SlipSequence::recalculate() and use them everywhere: header badges, leaf map "Next Slip" highlight, the API /api/slip-sequences/{store_id}/receive, PR Stage 9 intake, petty cash receive, transfer receive, and the Slips create form.
 
-2. OPTIONAL VOID SLIP
-- Voiding is optional, never automatic. A storekeeper can void the next expected slip (spoiled, torn, cancelled paper) so the sequence can move on.
-- When a higher number is rejected, show a "Void missing slips" action listing the missing numbers, so the user can void them in one step and then save the slip they wanted.
-- Void requires a reason (required text field) and permission check. Record who voided it and when.
-- A void slip: counts as used in the sequence, creates NO stock movement, reverses any stock effect if it was previously posted, and shows as a red/void leaf on the leaf map.
-- Voided numbers can never be reused.
+IMPLEMENTATION NOTES
+- Build the set of used numbers from all slip sources for that store and book: purchase receipts (GRN), petty cash receipts, transfer out (SIN), transfer in (receiving slip), manual slips, plus void slips.
+- nextFreeNumber(): loop from book_start_no to book_end_no, return the first number not in the used set. If none, return null and mark the book as full (show "Next Book").
+- Run inside a DB transaction with lockForUpdate() on the sequence row so two users cannot take the same number.
+- Keep the unique index on (store_id, slip_type, slip_no) as the database guard.
+- Add a one-time artisan command or migration "slips:recalculate" that recomputes current_slip_no and used_count for every sequence from existing data, with a dry-run option that only prints what would change. Existing numbers must not be edited.
+- Keep the optional Void Slip action: voiding the next free number marks it void (reason required) and the next number moves on.
+- Leaf map colors: green = GRN purchase, indigo = transfer, teal = petty cash, blue = next, red = void, gray = available.
 
-3. RECEIVABLE SLIP SOURCES (all must use the same service)
-Every receivable slip must call SlipSequenceService, never write numbers on its own:
-  a) Purchase intake: Stage 9 Store Intake on a Purchase Request. Pre-fill the next number from /api/slip-sequences/{store_id}/receive and validate on submit.
-  b) Petty cash purchase: add a receive path for items bought with petty cash (no PR or supplier PO). Add source_type = "petty_cash" on the receipt, link it to the petty cash voucher or expense record, take a GRN number from the store's active receiving sequence, and increase stock through InventoryService.
-  c) Transfer receipt: when the destination store receives a transfer, record the receiving slip (receiving_slip_no) from the destination store's sequence. The outgoing slip (SIN / waybill) uses the origin store's outgoing sequence.
-- Keep a source_type column (procurement, petty_cash, transfer_in, transfer_out, manual) on the receipt so the leaf map and history can show where each slip came from.
-
-4. CROSS-CHECK ACROSS ALL SOURCES
-- Receipts from purchase intake, petty cash, and transfers share the same book per store, so numbers must be continuous across all three.
-- Add a reconciliation check per sequence that verifies: every number from book_start_no to current_slip_no - 1 is either used (with a source) or void; no duplicates; no gaps; used_count matches the actual rows.
-- Add a "Cross-check" button on the Slip Sequence details page and a section in Slip History that shows OK / problems per book, with the list of any gap numbers or mismatches.
-- Include a one-off command or migration check that scans existing data and reports old gaps or duplicates without changing them.
-
-5. UI CHANGES
-- Slips page, PR Stage 9, petty cash receive form, and transfer receive form: show "Next slip: NNNN" and block submit with an inline error when the number is wrong.
-- Leaf map colors: green = GRN (purchase), indigo = transfer, teal = petty cash, blue = next, red = void, yellow = gap (legacy only), gray = available.
-
-6. TESTS (write them)
-- Accepting 2102 before 2101 is rejected; after voiding 2101 it is accepted.
-- Duplicate number rejected; out-of-range rejected.
-- Two simultaneous requests for the same number: only one succeeds.
-- Void creates no stock change and reverses stock if posted.
-- Petty cash, PR intake, and transfer receipts all advance the same counter.
-- Reconciliation reports a deliberately created gap.
+TESTS
+- With the data above, nextFreeNumber() returns 2402.
+- After using 2402-2408, next returns 2411 (skips 2409 and 2410).
+- After using up to 2416, next returns 2418 (skips 2417); after 2419, next returns 2421 (skips 2420); after 2421, next returns 2423 (skips 2422).
+- Entering 2405 while next is 2402 is rejected. Entering 2409 is rejected as duplicate.
+- Header shows 43 remaining and Next #2402 for this book.
+- Voiding 2402 moves next to 2403 and creates no stock movement.
+- Petty cash, transfer, and PR intake all call the same service and skip used numbers.
 
 DELIVERABLES
-Migration(s), SlipSequenceService, controller and form updates, the reconciliation check, tests, and a short summary of every file changed. Do not remove existing slip history data.
+Model methods, service update, recalculation command (with dry run), updated header and leaf map view, tests, and a summary of changed files. Do not delete or rewrite any existing slip record.

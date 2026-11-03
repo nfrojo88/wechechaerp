@@ -622,7 +622,10 @@ class PurchaseRequestController extends Controller
                 ->where('status', 'active')
                 ->first();
             if ($receiveSlipSequence) {
-                $nextReceiveSlipNo = $receiveSlipSequence->formatSlipNumber((int)$receiveSlipSequence->current_slip_no);
+                $nextFree = $receiveSlipSequence->nextFreeNumber();
+                $nextReceiveSlipNo = $nextFree !== null
+                    ? $receiveSlipSequence->formatSlipNumber($nextFree)
+                    : $receiveSlipSequence->formatSlipNumber((int)$receiveSlipSequence->current_slip_no);
             }
         }
 

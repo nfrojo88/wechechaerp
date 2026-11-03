@@ -275,22 +275,18 @@
                 <span class="badge bg-success" title="{{ $procurementSlipsCount }} Procurement GRN">
                     {{ $procurementSlipsCount }} GRN
                 </span>
-                @if($transferSlipsCount > 0)
-                <span class="badge text-white" style="background-color: #6366f1;">
+                <span class="badge text-white" style="background-color: #6366f1;" title="{{ $transferSlipsCount }} Transfers">
                     <i class="fas fa-truck me-1"></i>{{ $transferSlipsCount }} Transfers
                 </span>
-                @endif
-                @if($pettyCashSlipsCount > 0)
-                <span class="badge text-white" style="background-color: #0d9488;">
+                <span class="badge text-white" style="background-color: #0d9488;" title="{{ $pettyCashSlipsCount }} Petty Cash">
                     <i class="fas fa-cart-shopping me-1"></i>{{ $pettyCashSlipsCount }} Petty Cash
                 </span>
-                @endif
                 @if($voidSlipsCount > 0)
                 <span class="badge bg-danger">
                     <i class="fas fa-ban me-1"></i>{{ $voidSlipsCount }} Void
                 </span>
                 @endif
-                <span class="badge bg-primary">Next: #{{ $slipSequence->getNextSlipNumber() }}</span>
+                <span class="badge bg-primary">Next #{{ $slipSequence->getNextSlipNumber() }}</span>
                 <span class="badge bg-secondary">{{ $slipSequence->getRemainingSlips() }} Remaining</span>
                 <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#bookMapCollapse" aria-expanded="true" aria-controls="bookMapCollapse">
                     <i class="fas fa-th me-1"></i>Book Map

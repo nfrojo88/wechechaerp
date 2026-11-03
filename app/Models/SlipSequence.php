@@ -61,12 +61,118 @@ class SlipSequence extends Model
     }
 
     /**
-     * Get next slip number (raw numeric value)
+     * Get total book capacity (total number of leaves in sequence range)
      * @return int
      */
-    public function getNextSlipNumber(): int
+    public function getCapacity(): int
     {
-        return $this->current_slip_no;
+        return max(0, (int)$this->book_end_no - (int)$this->book_start_no + 1);
+    }
+
+    /**
+     * Get next available free slip number in this sequence book.
+     * Skips any numbers that are already registered or voided.
+     *
+     * @param int|null $fromNumber Optional minimum number to start checking from
+     * @param \Illuminate\Support\Collection|null $assignedSlips Optional pre-loaded assigned slips
+     * @return int|null Next free integer slip number, or null if book is full
+     */
+    public function nextFreeNumber(?int $fromNumber = null, ?\Illuminate\Support\Collection $assignedSlips = null): ?int
+    {
+        if ($assignedSlips === null) {
+            $assignedSlips = $this->getAssignedSlipsDetail();
+        }
+
+        $usedSet = $assignedSlips->pluck('numeric_no')
+            ->filter(fn($n) => $n !== null)
+            ->map(fn($n) => (int)$n)
+            ->flip()
+            ->all();
+
+        $start = (int)$this->book_start_no;
+        if ($fromNumber !== null) {
+            $start = max($start, $fromNumber);
+        }
+        $end = (int)$this->book_end_no;
+
+        for ($num = $start; $num <= $end; $num++) {
+            if (!isset($usedSet[$num])) {
+                return $num;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Recalculate current_slip_no, used_count, and status from real registered rows.
+     * Does NOT modify any transaction or slip document.
+     *
+     * @param bool $save Whether to persist the changes to the database
+     * @return array Array of recalculated values
+     */
+    public function recalculate(bool $save = true): array
+    {
+        $assignedSlips = $this->getAssignedSlipsDetail();
+        
+        $bookStart = (int) $this->book_start_no;
+        $bookEnd = (int) $this->book_end_no;
+        
+        $validLeaves = $assignedSlips->filter(function ($item) use ($bookStart, $bookEnd) {
+            $num = $item['numeric_no'] ?? null;
+            return $num !== null && $num >= $bookStart && $num <= $bookEnd;
+        })->unique('numeric_no');
+
+        $usedCount = $validLeaves->count();
+        $nextFree = $this->nextFreeNumber(null, $assignedSlips);
+
+        $oldCurrent = (int) $this->current_slip_no;
+        $oldUsed = (int) $this->used_count;
+        $oldStatus = (string) $this->status;
+
+        if ($nextFree !== null) {
+            $newCurrent = $nextFree;
+            $newStatus = ($oldStatus === 'inactive') ? 'inactive' : 'active';
+        } else {
+            $newCurrent = $bookEnd + 1;
+            $newStatus = 'full';
+        }
+
+        $changed = ($oldCurrent !== $newCurrent || $oldUsed !== $usedCount || $oldStatus !== $newStatus);
+
+        if ($save && $changed) {
+            $this->updateQuietly([
+                'current_slip_no' => $newCurrent,
+                'used_count'      => $usedCount,
+                'status'          => $newStatus,
+            ]);
+        }
+
+        return [
+            'sequence_id' => $this->id,
+            'label'       => $this->label,
+            'store_id'    => $this->store_id,
+            'slip_type'   => $this->slip_type,
+            'book_range'  => "{$bookStart} - {$bookEnd}",
+            'old_current' => $oldCurrent,
+            'new_current' => $newCurrent,
+            'old_used'    => $oldUsed,
+            'new_used'    => $usedCount,
+            'old_status'  => $oldStatus,
+            'new_status'  => $newStatus,
+            'changed'     => $changed,
+        ];
+    }
+
+    /**
+     * Get next slip number (raw numeric value)
+     * @param \Illuminate\Support\Collection|null $assignedSlips
+     * @return int
+     */
+    public function getNextSlipNumber(?\Illuminate\Support\Collection $assignedSlips = null): int
+    {
+        $next = $this->nextFreeNumber(null, $assignedSlips);
+        return $next !== null ? $next : (int)$this->current_slip_no;
     }
 
     /**
@@ -88,23 +194,10 @@ class SlipSequence extends Model
      */
     public function generateSlipNumber(): string
     {
-        // For receive slips, ensure current_slip_no is advanced past any records already in delivery_receipts
-        if ($this->slip_type === 'receive') {
-            while ($this->current_slip_no <= $this->book_end_no) {
-                $testFormatted = $this->formatSlipNumber($this->current_slip_no);
-                $exists = \App\Models\DeliveryReceipt::where('dr_no', $testFormatted)
-                    ->orWhere('dr_no', (string)$this->current_slip_no)
-                    ->exists();
-                if (!$exists) {
-                    break;
-                }
-                $this->current_slip_no++;
-                $this->used_count++;
-            }
-        }
+        $nextFree = $this->nextFreeNumber();
 
         // Check if book is full
-        if ($this->current_slip_no > $this->book_end_no) {
+        if ($nextFree === null) {
             try {
                 $this->update(['status' => 'full']);
             } catch (\Illuminate\Database\QueryException $e) {
@@ -120,12 +213,16 @@ class SlipSequence extends Model
             throw new \Exception('Slip sequence book is full. Cannot generate more slips.');
         }
 
-        $formatted = $this->formatSlipNumber($this->current_slip_no);
+        $formatted = $this->formatSlipNumber($nextFree);
+        $followingFree = $this->nextFreeNumber($nextFree + 1);
+        $newCurrent = $followingFree ?? ((int)$this->book_end_no + 1);
+        $newStatus = ($followingFree === null) ? 'full' : 'active';
 
         // Increment for next call
         $this->update([
-            'current_slip_no' => $this->current_slip_no + 1,
-            'used_count' => $this->used_count + 1,
+            'current_slip_no' => $newCurrent,
+            'used_count'      => (int)$this->used_count + 1,
+            'status'          => $newStatus,
         ]);
 
         return $formatted;
@@ -133,24 +230,37 @@ class SlipSequence extends Model
 
     /**
      * Get percentage of book used
+     * @param \Illuminate\Support\Collection|null $assignedSlips
      * @return float
      */
-    public function getPercentageUsed(): float
+    public function getPercentageUsed(?\Illuminate\Support\Collection $assignedSlips = null): float
     {
-        $total = $this->book_end_no - $this->book_start_no + 1;
-        if ($total === 0) {
-            return 0;
+        $capacity = $this->getCapacity();
+        if ($capacity === 0) {
+            return 0.0;
         }
-        return round(($this->used_count / $total) * 100, 2);
+        $remaining = $this->getRemainingSlips($assignedSlips);
+        $used = $capacity - $remaining;
+        return round(($used / $capacity) * 100, 2);
     }
 
     /**
-     * Get remaining slips in book
+     * Get remaining slips in book (capacity - used - void)
+     * @param \Illuminate\Support\Collection|null $assignedSlips
      * @return int
      */
-    public function getRemainingSlips(): int
+    public function getRemainingSlips(?\Illuminate\Support\Collection $assignedSlips = null): int
     {
-        return max(0, $this->book_end_no - $this->current_slip_no + 1);
+        $capacity = $this->getCapacity();
+        if ($assignedSlips !== null) {
+            $used = $assignedSlips->filter(function ($item) {
+                $num = $item['numeric_no'] ?? null;
+                return $num !== null && $num >= (int)$this->book_start_no && $num <= (int)$this->book_end_no;
+            })->unique('numeric_no')->count();
+            return max(0, $capacity - $used);
+        }
+
+        return max(0, $capacity - (int)$this->used_count);
     }
 
     /**
@@ -683,7 +793,7 @@ class SlipSequence extends Model
         $map = [];
         $start = (int) $this->book_start_no;
         $end = (int) $this->book_end_no;
-        $current = (int) $this->current_slip_no;
+        $nextFree = $this->nextFreeNumber(null, $assignedSlips);
 
         for ($num = $start; $num <= $end; $num++) {
             $isAssigned = $assignedByNumber->has($num);
@@ -700,10 +810,8 @@ class SlipSequence extends Model
                 } else {
                     $status = 'procurement';
                 }
-            } elseif ($num === $current) {
+            } elseif ($nextFree !== null && $num === $nextFree) {
                 $status = 'next';
-            } elseif ($num < $current) {
-                $status = 'unrecorded'; // gap
             } else {
                 $status = 'available';
             }

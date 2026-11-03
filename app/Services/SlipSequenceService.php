@@ -60,8 +60,10 @@ class SlipSequenceService
             ];
         }
 
-        $isFull = $sequence->status === 'full' || (int)$sequence->current_slip_no > (int)$sequence->book_end_no;
-        $expectedInt = (int)$sequence->current_slip_no;
+        $assignedSlips = $sequence->getAssignedSlipsDetail();
+        $nextFree = $sequence->nextFreeNumber(null, $assignedSlips);
+        $isFull = ($sequence->status === 'full') || ($nextFree === null);
+        $expectedInt = $nextFree ?? (int)$sequence->current_slip_no;
         $formatted = $sequence->formatSlipNumber($expectedInt);
 
         return [
@@ -73,11 +75,11 @@ class SlipSequenceService
             'book_end_no'     => (int)$sequence->book_end_no,
             'current_slip_no' => $expectedInt,
             'formatted_slip'  => $formatted,
-            'remaining'       => $sequence->getRemainingSlips(),
-            'percentage_used' => $sequence->getPercentageUsed(),
-            'used_count'      => (int)$sequence->used_count,
+            'remaining'       => $sequence->getRemainingSlips($assignedSlips),
+            'percentage_used' => $sequence->getPercentageUsed($assignedSlips),
+            'used_count'      => $assignedSlips->unique('numeric_no')->count(),
             'is_full'         => $isFull,
-            'status'          => $sequence->status,
+            'status'          => $isFull ? 'full' : $sequence->status,
         ];
     }
 
@@ -123,17 +125,17 @@ class SlipSequenceService
                 throw new SlipSequenceException("No active slip sequence configured for this store and slip type ({$typeLabel}). Please configure an active sequence book in Slip Sequences.");
             }
 
-            if ($sequence->status === 'full' || (int)$sequence->current_slip_no > (int)$sequence->book_end_no) {
+            $assignedSlips = $sequence->getAssignedSlipsDetail();
+            $nextFree = $sequence->nextFreeNumber(null, $assignedSlips);
+
+            if ($nextFree === null || $sequence->status === 'full') {
+                $sequence->updateQuietly(['status' => 'full']);
                 throw new SlipSequenceException("Slip sequence book '{$sequence->label}' (#{$sequence->book_start_no}–#{$sequence->book_end_no}) is full. Cannot issue more slips. Please activate the Next Book first.");
             }
 
-            $expectedInt = (int)$sequence->current_slip_no;
-            $expectedFormatted = $sequence->formatSlipNumber($expectedInt);
+            $targetInt = $nextFree;
 
-            $targetInt = $expectedInt;
-            $targetFormatted = $expectedFormatted;
-
-            // If user supplied a slip number, accept it and auto-fill any missing gap parts
+            // If user supplied a slip number, enforce strict rules:
             if (!empty($inputSlipNo) && trim((string)$inputSlipNo) !== '') {
                 $rawInput = trim((string)$inputSlipNo);
                 $parsedInt = $this->extractNumeric($rawInput, $sequence);
@@ -142,96 +144,26 @@ class SlipSequenceService
                     throw new SlipSequenceException("Invalid slip number '{$rawInput}'. Must contain numeric digits matching the book sequence.");
                 }
 
-                // If outside active sequence book range, check if another book for this store covers it
+                // 1. Book range validation
                 if ($parsedInt < (int)$sequence->book_start_no || $parsedInt > (int)$sequence->book_end_no) {
-                    $altSeq = SlipSequence::where('store_id', $storeId)
-                        ->where('slip_type', $slipType)
-                        ->where('book_start_no', '<=', $parsedInt)
-                        ->where('book_end_no', '>=', $parsedInt)
-                        ->first();
-                    if ($altSeq) {
-                        $sequence = $altSeq;
-                        $expectedInt = (int)$sequence->current_slip_no;
-                    } else {
-                        throw new SlipSequenceException("Slip number #{$rawInput} is outside the active sequence book range (#{$sequence->book_start_no}–#{$sequence->book_end_no}).");
-                    }
+                    throw new SlipSequenceException("Slip number #{$rawInput} is outside the active sequence book range (#{$sequence->book_start_no}–#{$sequence->book_end_no}).");
                 }
 
-                // Rule: Lower than expected / already used -> Duplicate unless claiming a void gap
-                if ($parsedInt < $expectedInt) {
-                    $claimed = false;
-                    try {
-                        $existingVoid = DeliveryReceipt::where('store_id', $storeId)
-                            ->where('slip_type', $slipType)
-                            ->where('is_void', true)
-                            ->where('source_type', 'void')
-                            ->where(function ($q) use ($sequence, $parsedInt, $rawInput) {
-                                $fmt = $sequence->formatSlipNumber($parsedInt);
-                                $q->where('dr_no', $fmt)
-                                  ->orWhere('dr_no', (string)$parsedInt)
-                                  ->orWhere('slip_no', $fmt)
-                                  ->orWhere('slip_no', (string)$parsedInt)
-                                  ->orWhere('slip_no', $rawInput);
-                            })
-                            ->first();
-                        if ($existingVoid) {
-                            $existingVoid->delete();
-                            $claimed = true;
-                        }
-                    } catch (\Throwable $e) {}
-
-                    if (!$claimed) {
-                        throw new SlipSequenceException("Duplicate Entry: Slip number #{$rawInput} has already been used or passed in sequence. The next expected slip for this book is #{$expectedFormatted}.");
-                    }
+                // 2. Duplicate validation: is this number already registered in this book?
+                if ($assignedSlips->contains('numeric_no', $parsedInt)) {
+                    throw new SlipSequenceException("Duplicate Entry: Slip number #{$rawInput} has already been registered in this book.");
                 }
 
-                // Rule: Higher than expected -> User jumped ahead in physical book.
-                // ACCEPT IT and AUTOMATICALLY FILL all missing gaps between expectedInt and parsedInt - 1!
-                if ($parsedInt > $expectedInt) {
-                    $missingNumbers = range($expectedInt, $parsedInt - 1);
-                    $today = now()->toDateString();
-                    $actorId = Auth::id() ?: 1;
-
-                    foreach ($missingNumbers as $missNum) {
-                        $formattedMiss = $sequence->formatSlipNumber($missNum);
-                        $alreadyRecorded = DeliveryReceipt::where('store_id', $storeId)
-                            ->where('slip_type', $slipType)
-                            ->where(function ($q) use ($formattedMiss, $missNum) {
-                                $q->where('dr_no', $formattedMiss)
-                                  ->orWhere('dr_no', (string)$missNum)
-                                  ->orWhere('slip_no', $formattedMiss)
-                                  ->orWhere('slip_no', (string)$missNum);
-                            })
-                            ->exists();
-
-                        if (!$alreadyRecorded) {
-                            try {
-                                DeliveryReceipt::create([
-                                    'dr_no'           => $formattedMiss,
-                                    'slip_no'         => $formattedMiss,
-                                    'slip_type'       => $slipType,
-                                    'source_type'     => 'void',
-                                    'store_id'        => $storeId,
-                                    'received_date'   => $today,
-                                    'receipt_date'    => $today,
-                                    'received_by'     => $actorId,
-                                    'created_by'      => $actorId,
-                                    'status'          => 'void',
-                                    'is_void'         => true,
-                                    'void_reason'     => "Auto-filled missing slip gap: skipped when Slip #{$rawInput} was recorded in {$sourceType}",
-                                    'voided_by'       => $actorId,
-                                    'voided_at'       => now(),
-                                    'sequence_status' => 'valid',
-                                    'notes'           => "Auto-filled missing gap #{$formattedMiss}",
-                                ]);
-                            } catch (\Throwable $e) {}
-                        }
-                    }
+                // 3. Strict rule: only the next free number is accepted!
+                // Per pro.doc: Typing 2405 when next is 2402: reject with "Next slip is 2402. Use it or void it first."
+                if ($parsedInt !== $nextFree) {
+                    throw new SlipSequenceException("Next slip is {$nextFree}. Use it or void it first.");
                 }
 
                 $targetInt = $parsedInt;
-                $targetFormatted = $sequence->formatSlipNumber($targetInt);
             }
+
+            $targetFormatted = $sequence->formatSlipNumber($targetInt);
 
             // Database duplicate check across active non-void delivery receipts
             $dupQuery = DeliveryReceipt::where('store_id', $storeId)
@@ -256,15 +188,13 @@ class SlipSequenceService
                 throw new SlipSequenceException("Duplicate Entry: Slip #{$targetFormatted} is already recorded in delivery receipt #{$duplicateExists->id} (recorded on {$duplicateExists->received_date}).");
             }
 
-            // Advance the sequence counter past the highest used number
-            $newCurrent = max($expectedInt, $targetInt) + 1;
-            $newUsed = (int)$sequence->used_count + 1;
-            if ($targetInt > $expectedInt) {
-                $newUsed = (int)$sequence->used_count + ($targetInt - $expectedInt) + 1;
-            }
-            $newStatus = ($newCurrent > (int)$sequence->book_end_no) ? 'full' : 'active';
+            // Advance the sequence counter to the next free number after $targetInt
+            $followingFree = $sequence->nextFreeNumber($targetInt + 1, $assignedSlips);
+            $newCurrent = $followingFree ?? ((int)$sequence->book_end_no + 1);
+            $newStatus = ($followingFree === null) ? 'full' : 'active';
+            $newUsed = $assignedSlips->unique('numeric_no')->count() + 1;
 
-            $sequence->update([
+            $sequence->updateQuietly([
                 'current_slip_no' => $newCurrent,
                 'used_count'      => $newUsed,
                 'status'          => $newStatus,
@@ -325,8 +255,11 @@ class SlipSequenceService
                 throw new SlipSequenceException("No active slip sequence found to void.");
             }
 
+            $assignedSlips = $sequence->getAssignedSlipsDetail();
+            $nextFree = $sequence->nextFreeNumber(null, $assignedSlips);
+            $expected = $nextFree ?? (int)$sequence->current_slip_no;
+
             sort($numbers);
-            $expected = (int)$sequence->current_slip_no;
 
             // Ensure the numbers to void start at expected sequence
             if (empty($numbers) || $numbers[0] !== $expected) {
@@ -338,7 +271,7 @@ class SlipSequenceService
                 if ($numbers[$i] !== $expected + $i) {
                     throw new SlipSequenceException("Void slip numbers must be contiguous without gaps.");
                 }
-                if ($numbers[$i] > (int)$sequence->book_end_no) {
+                if ($numbers[$i] > (int)$sequence->book_end_no || $numbers[$i] < (int)$sequence->book_start_no) {
                     throw new SlipSequenceException("Slip number {$numbers[$i]} is beyond the sequence book range.");
                 }
             }
@@ -372,12 +305,14 @@ class SlipSequenceService
                 $voidedReceipts[] = $receipt;
             }
 
-            $lastNum = end($numbers);
-            $newCurrent = $lastNum + 1;
-            $newUsed = (int)$sequence->used_count + count($numbers);
-            $newStatus = ($newCurrent > (int)$sequence->book_end_no) ? 'full' : 'active';
+            $lastNum = max($numbers);
+            $updatedAssigned = $sequence->getAssignedSlipsDetail();
+            $followingFree = $sequence->nextFreeNumber($lastNum + 1, $updatedAssigned);
+            $newCurrent = $followingFree ?? ((int)$sequence->book_end_no + 1);
+            $newStatus = ($followingFree === null) ? 'full' : 'active';
+            $newUsed = $updatedAssigned->unique('numeric_no')->count();
 
-            $sequence->update([
+            $sequence->updateQuietly([
                 'current_slip_no' => $newCurrent,
                 'used_count'      => $newUsed,
                 'status'          => $newStatus,
@@ -387,7 +322,7 @@ class SlipSequenceService
                 'voided_count'    => count($voidedReceipts),
                 'voided_numbers'  => $numbers,
                 'voided_receipts' => $voidedReceipts,
-                'next_expected'   => $sequence->formatSlipNumber($newCurrent),
+                'next_expected'   => $newCurrent <= (int)$sequence->book_end_no ? $sequence->formatSlipNumber($newCurrent) : null,
                 'sequence'        => $sequence,
             ];
         });
