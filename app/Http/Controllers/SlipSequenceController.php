@@ -204,7 +204,12 @@ class SlipSequenceController extends Controller
             $allSlips = collect();
         }
 
-        return view('slip-sequences.history', compact('stores', 'sequences', 'allSlips', 'filters'));
+        $reconciliationReports = [];
+        try {
+            $reconciliationReports = app(\App\Services\SlipSequenceService::class)->reconcileAll();
+        } catch (\Throwable $e) {}
+
+        return view('slip-sequences.history', compact('stores', 'sequences', 'allSlips', 'filters', 'reconciliationReports'));
     }
 
     /**
@@ -268,56 +273,89 @@ class SlipSequenceController extends Controller
     }
 
     /**
+     * Cross-check / Reconcile sequence book continuity
+     */
+    public function crossCheck(SlipSequence $slipSequence)
+    {
+        $slipService = app(\App\Services\SlipSequenceService::class);
+        $report = $slipService->reconcile($slipSequence);
+
+        if (request()->wantsJson() || request()->ajax()) {
+            return response()->json($report);
+        }
+
+        return back()->with('cross_check_report', $report);
+    }
+
+    /**
+     * Void missing slips to allow sequence to advance
+     */
+    public function voidMissing(Request $request)
+    {
+        $request->validate([
+            'store_id'  => 'required|exists:stores,id',
+            'slip_type' => 'required|in:receive,send',
+            'numbers'   => 'required|array|min:1',
+            'numbers.*' => 'required|integer',
+            'reason'    => 'required|string|max:500',
+        ]);
+
+        try {
+            $slipService = app(\App\Services\SlipSequenceService::class);
+            $result = $slipService->voidMissingSlips(
+                (int)$request->store_id,
+                $request->slip_type,
+                $request->numbers,
+                $request->reason,
+                \Illuminate\Support\Facades\Auth::id()
+            );
+
+            if ($request->wantsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => "Successfully voided {$result['voided_count']} slip(s).",
+                    'data'    => $result,
+                ]);
+            }
+
+            return back()->with('success', "Successfully voided {$result['voided_count']} slip(s). Next expected slip is now #{$result['next_expected']}.");
+        } catch (\Throwable $e) {
+            if ($request->wantsJson() || $request->ajax()) {
+                return response()->json(['success' => false, 'error' => $e->getMessage()], 422);
+            }
+            return back()->with('error', $e->getMessage());
+        }
+    }
+
+    /**
      * Get next available slip for store + type (API)
      */
     public function getNextSlip($storeId, $slipType)
     {
-        $sequence = SlipSequence::where('store_id', $storeId)
-            ->where('slip_type', $slipType)
-            ->where('status', 'active')
-            ->first();
+        $slipService = app(\App\Services\SlipSequenceService::class);
+        $data = $slipService->getNextExpected((int)$storeId, $slipType);
 
-        if (!$sequence) {
+        if (!$data['has_sequence']) {
             return response()->json([
                 'has_sequence' => false,
-                'error'        => 'No active slip sequence configured for this store.',
+                'error'        => $data['error'] ?? 'No active slip sequence configured for this store.',
             ], 200);
-        }
-
-        // Advance current_slip_no past any numbers already recorded in delivery_receipts
-        if ($slipType === 'receive') {
-            $curr = (int)$sequence->current_slip_no;
-            while ($curr <= (int)$sequence->book_end_no) {
-                $testFormatted = $sequence->formatSlipNumber($curr);
-                $exists = DeliveryReceipt::where('dr_no', $testFormatted)
-                    ->orWhere('dr_no', (string)$curr)
-                    ->exists();
-                if (!$exists) {
-                    break;
-                }
-                $curr++;
-            }
-            if ($curr !== (int)$sequence->current_slip_no) {
-                $sequence->update([
-                    'current_slip_no' => $curr,
-                    'used_count'      => max($sequence->used_count, $curr - $sequence->book_start_no),
-                ]);
-            }
         }
 
         return response()->json([
             'has_sequence'    => true,
-            'id'              => $sequence->id,
-            'next_slip_no'    => $sequence->getNextSlipNumber(),
-            'formatted_slip'  => $sequence->formatSlipNumber($sequence->current_slip_no),
-            'prefix'          => $sequence->prefix,
-            'label'           => $sequence->label,
-            'book_start_no'   => $sequence->book_start_no,
-            'book_end_no'     => $sequence->book_end_no,
-            'current_slip_no' => $sequence->current_slip_no,
-            'used_count'      => $sequence->used_count,
-            'remaining'       => $sequence->getRemainingSlips(),
-            'percentage_used' => $sequence->getPercentageUsed(),
+            'id'              => $data['sequence_id'] ?? null,
+            'next_slip_no'    => $data['current_slip_no'],
+            'formatted_slip'  => $data['formatted_slip'],
+            'prefix'          => $data['prefix'],
+            'label'           => $data['label'],
+            'book_start_no'   => $data['book_start_no'],
+            'book_end_no'     => $data['book_end_no'],
+            'current_slip_no' => $data['current_slip_no'],
+            'used_count'      => $data['used_count'],
+            'remaining'       => $data['remaining'],
+            'percentage_used' => $data['percentage_used'],
+            'is_full'         => $data['is_full'],
         ]);
     }
 }

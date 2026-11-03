@@ -1,34 +1,48 @@
-Before you implement, please fix these points:
+TASK: Enforce strict sequential slip numbering across the whole ERP, add an optional "void slip" path, and make every receiving source use the same sequence check.
 
-1. NO-BUDGET RULE: Use one single rule. An expense is "budgeted" if it was
-   counted into projects.budget_consumed (i.e. it went through
-   BudgetGuardService). An expense is "associated" if it has this project_id
-   but was NOT counted there. Show me exactly where and when budget_consumed
-   is incremented for each source, and base the filter on that. Do not use
-   budget_status IS NULL as the rule.
+CONTEXT
+Slip Sequences mirror physical paper books (book_start_no to book_end_no, current_slip_no, used_count). Receiving slips (Model 19 / GRN) and outgoing slips (SIN) are currently created in several places. Relevant files: SlipSequenceController.php, SlipSequence.php, StoreManagerController.php (slip + void logic), ProcurementLifecycleService.php (Stage 9 store intake), and the transfers flow.
 
-2. DOUBLE COUNTING: Check whether MaterialUsage (warehouse dispatch) is the
-   same material already counted through ProcurementPayment, PettyCash, or
-   CreditStore. If so, do not add both. Tell me your decision and why.
-   Also check whether a paid ExpenseRequest creates an Expense row, and make
-   sure each real expense appears only once.
+1. STRICT SEQUENCE RULE (no skipping)
+- A slip number may only be accepted if it equals the store's next expected number (current_slip_no). Example: slip 2103 must be rejected if 2102 has not been used or voided.
+- This applies to manual entry and auto-fill alike. Remove the old behavior that "jumps" the counter past a manually entered number.
+- If a number is higher than expected, reject with a clear message that lists every missing number, e.g. "Slip 2103 can't be saved. 2101 and 2102 are not recorded yet. Record or void them first."
+- If a number is lower than expected or already used, reject as a duplicate.
+- A number outside book_start_no..book_end_no is rejected. When the book is full, block saving and prompt "Next Book".
+- Enforce this in ONE place: a SlipSequenceService method, e.g. consumeNext(store_id, type, number), that runs inside a DB transaction with lockForUpdate() on the sequence row, so two storekeepers cannot take the same number at the same time.
+- Add a unique index on (store_id, slip_type, slip_no) as a database-level guard.
 
-3. SOURCES: The status table lists 6 sources but Step 1 lists 5. Confirm the
-   final list. Include Expense only if it is not a duplicate of ExpenseRequest.
+2. OPTIONAL VOID SLIP
+- Voiding is optional, never automatic. A storekeeper can void the next expected slip (spoiled, torn, cancelled paper) so the sequence can move on.
+- When a higher number is rejected, show a "Void missing slips" action listing the missing numbers, so the user can void them in one step and then save the slip they wanted.
+- Void requires a reason (required text field) and permission check. Record who voided it and when.
+- A void slip: counts as used in the sequence, creates NO stock movement, reverses any stock effect if it was previously posted, and shows as a red/void leaf on the leaf map.
+- Voided numbers can never be reused.
 
-4. STATUS TIMING: Use the same status/moment that the budget uses to consume
-   budget, so nothing falls between "budgeted" and "associated". For
-   CreditStoreLedger, state whether you use the paid amount or the full amount.
+3. RECEIVABLE SLIP SOURCES (all must use the same service)
+Every receivable slip must call SlipSequenceService, never write numbers on its own:
+  a) Purchase intake: Stage 9 Store Intake on a Purchase Request. Pre-fill the next number from /api/slip-sequences/{store_id}/receive and validate on submit.
+  b) Petty cash purchase: add a receive path for items bought with petty cash (no PR or supplier PO). Add source_type = "petty_cash" on the receipt, link it to the petty cash voucher or expense record, take a GRN number from the store's active receiving sequence, and increase stock through InventoryService.
+  c) Transfer receipt: when the destination store receives a transfer, record the receiving slip (receiving_slip_no) from the destination store's sequence. The outgoing slip (SIN / waybill) uses the origin store's outgoing sequence.
+- Keep a source_type column (procurement, petty_cash, transfer_in, transfer_out, manual) on the receipt so the leaf map and history can show where each slip came from.
 
-5. PERFORMANCE: Do filtering, sorting, and pagination in SQL (UNION or
-   per-source queries with limits), not by loading everything into a PHP
-   collection.
+4. CROSS-CHECK ACROSS ALL SOURCES
+- Receipts from purchase intake, petty cash, and transfers share the same book per store, so numbers must be continuous across all three.
+- Add a reconciliation check per sequence that verifies: every number from book_start_no to current_slip_no - 1 is either used (with a source) or void; no duplicates; no gaps; used_count matches the actual rows.
+- Add a "Cross-check" button on the Slip Sequence details page and a section in Slip History that shows OK / problems per book, with the list of any gap numbers or mismatches.
+- Include a one-off command or migration check that scans existing data and reports old gaps or duplicates without changing them.
 
-6. FILES: Name the exact Blade files you will edit (the plan lists
-   show.blade.php twice).
+5. UI CHANGES
+- Slips page, PR Stage 9, petty cash receive form, and transfer receive form: show "Next slip: NNNN" and block submit with an inline error when the number is wrong.
+- Leaf map colors: green = GRN (purchase), indigo = transfer, teal = petty cash, blue = next, red = void, yellow = gap (legacy only), gray = available.
 
-7. TESTS: Add one more test: an expense counted in budget_consumed must NOT
-   appear in Associated Costs (no double counting).
+6. TESTS (write them)
+- Accepting 2102 before 2101 is rejected; after voiding 2101 it is accepted.
+- Duplicate number rejected; out-of-range rejected.
+- Two simultaneous requests for the same number: only one succeeds.
+- Void creates no stock change and reverses stock if posted.
+- Petty cash, PR intake, and transfer receipts all advance the same counter.
+- Reconciliation reports a deliberately created gap.
 
-Show me the final "no budget" rule and the source list, then proceed.
-Keep Labor, IPCs, and Fuel out for now.
+DELIVERABLES
+Migration(s), SlipSequenceService, controller and form updates, the reconciliation check, tests, and a short summary of every file changed. Do not remove existing slip history data.

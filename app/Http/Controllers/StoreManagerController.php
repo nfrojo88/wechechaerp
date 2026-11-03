@@ -937,7 +937,11 @@ class StoreManagerController extends Controller
             self::syncTransferInventory($transfer);
         }
 
-        return view('store-manager.transfers.show', compact('transfer', 'isStoreKeeper', 'assignedStore', 'drivers', 'compatibleTransfers', 'products'));
+        $slipService = app(\App\Services\SlipSequenceService::class);
+        $nextOutgoingSlip = $slipService->getNextExpected((int)$transfer->from_store_id, 'send');
+        $nextReceivingSlip = $slipService->getNextExpected((int)$transfer->to_store_id, 'receive');
+
+        return view('store-manager.transfers.show', compact('transfer', 'isStoreKeeper', 'assignedStore', 'drivers', 'compatibleTransfers', 'products', 'nextOutgoingSlip', 'nextReceivingSlip'));
     }
 
     /**
@@ -1025,26 +1029,81 @@ class StoreManagerController extends Controller
             }
         }
 
-        DB::transaction(function () use ($request, $transfer, $outgoingSlipUrl) {
-            $transfer->load('items');
+        try {
+            DB::transaction(function () use ($request, $transfer, $outgoingSlipUrl) {
+                $transfer->load(['items', 'toStore', 'fromStore']);
 
-            foreach ($transfer->items as $item) {
-                $sentQty = (float)($request->input("items.{$item->id}.sent_qty", $item->requested_quantity));
-                $item->update(['sent_quantity' => $sentQty]);
-            }
+                // Strictly consume next slip from origin store's outgoing ('send') sequence
+                $slipService = app(\App\Services\SlipSequenceService::class);
+                $slipResult = $slipService->consumeNext(
+                    storeId: (int)$transfer->from_store_id,
+                    slipType: 'send',
+                    inputSlipNo: $request->outgoing_slip_no ?: null,
+                    sourceType: 'transfer_out',
+                    metadata: ['transfer_id' => $transfer->id]
+                );
+                $outgoingSlipNo = $slipResult['slip_no'];
 
-            $transfer->update([
-                'outgoing_slip_no'   => $request->outgoing_slip_no,
-                'physical_slip_no'   => $request->outgoing_slip_no,
-                'outgoing_slip_file' => $outgoingSlipUrl,
-                'vehicle_plate_no'   => $request->vehicle_plate_no ?? $transfer->vehicle_plate_no,
-                'dispatched_by'      => Auth::id(),
-                'dispatched_at'      => now(),
-                'status'             => 'in_transit',
-            ]);
+                foreach ($transfer->items as $item) {
+                    $sentQty = (float)($request->input("items.{$item->id}.sent_qty", $item->requested_quantity));
+                    $item->update(['sent_quantity' => $sentQty]);
+                }
 
-            self::syncTransferInventory($transfer);
-        });
+                $transfer->update([
+                    'outgoing_slip_no'   => $outgoingSlipNo,
+                    'physical_slip_no'   => $outgoingSlipNo,
+                    'outgoing_slip_file' => $outgoingSlipUrl,
+                    'vehicle_plate_no'   => $request->vehicle_plate_no ?? $transfer->vehicle_plate_no,
+                    'dispatched_by'      => Auth::id(),
+                    'dispatched_at'      => now(),
+                    'status'             => 'in_transit',
+                ]);
+
+                // Create unified DeliveryReceipt for outgoing transfer slip
+                $receipt = DeliveryReceipt::create([
+                    'dr_no'             => $outgoingSlipNo,
+                    'slip_no'           => $outgoingSlipNo,
+                    'slip_type'         => 'send',
+                    'source_type'       => 'transfer_out',
+                    'store_id'          => $transfer->from_store_id,
+                    'to_store_id'       => $transfer->to_store_id,
+                    'transfer_id'       => $transfer->id,
+                    'received_date'     => now()->toDateString(),
+                    'receipt_date'      => now()->toDateString(),
+                    'reference_no'      => $transfer->transfer_no,
+                    'received_by'       => Auth::id() ?? 1,
+                    'created_by'        => Auth::id() ?? 1,
+                    'status'            => 'verified',
+                    'is_void'           => false,
+                    'sequence_status'   => 'valid',
+                    'notes'             => "Outgoing transfer slip #{$outgoingSlipNo} (TR-{$transfer->transfer_no}) to " . ($transfer->toStore->name ?? 'Destination Store'),
+                ]);
+
+                foreach ($transfer->items as $item) {
+                    $receipt->items()->create([
+                        'product_id'        => $item->product_id,
+                        'quantity_received' => (float)$item->sent_quantity,
+                        'accepted_quantity' => (float)$item->sent_quantity,
+                        'unit'              => $item->product?->unit ?? 'pcs',
+                    ]);
+                }
+
+                self::syncTransferInventory($transfer);
+            });
+        } catch (\App\Exceptions\SlipSequenceGapException $e) {
+            return back()->withInput()->withErrors(['outgoing_slip_no' => $e->getMessage()])
+                ->with('error', $e->getMessage())
+                ->with('slip_gap_info', [
+                    'store_id'          => $e->getStoreId(),
+                    'slip_type'         => $e->getSlipType(),
+                    'expected_number'   => $e->getExpectedNumber(),
+                    'given_number'      => $e->getGivenNumber(),
+                    'missing_numbers'   => $e->getMissingNumbers(),
+                    'missing_formatted' => $e->getMissingFormatted(),
+                ]);
+        } catch (\App\Exceptions\SlipSequenceException $e) {
+            return back()->withInput()->withErrors(['outgoing_slip_no' => $e->getMessage()])->with('error', $e->getMessage());
+        }
 
         return back()->with('success', 'Transfer dispatched successfully! Outgoing slip recorded and inventory deducted from origin store.');
     }
@@ -1094,25 +1153,80 @@ class StoreManagerController extends Controller
 
         \App\Models\FixedAssetAssignment::ensureSchema();
 
-        DB::transaction(function () use ($request, $transfer, $receivingSlipUrl) {
-            $transfer->load('items');
+        try {
+            DB::transaction(function () use ($request, $transfer, $receivingSlipUrl) {
+                $transfer->load(['items', 'toStore', 'fromStore']);
 
-            foreach ($transfer->items as $item) {
-                $receivedQty = (float)($request->input("items.{$item->id}.received_qty", $item->sent_quantity > 0 ? $item->sent_quantity : $item->requested_quantity));
-                $item->update(['received_quantity' => $receivedQty]);
-            }
+                // Strictly consume next slip from destination store's receiving ('receive') sequence
+                $slipService = app(\App\Services\SlipSequenceService::class);
+                $slipResult = $slipService->consumeNext(
+                    storeId: (int)$transfer->to_store_id,
+                    slipType: 'receive',
+                    inputSlipNo: $request->receiving_slip_no ?: null,
+                    sourceType: 'transfer_in',
+                    metadata: ['transfer_id' => $transfer->id]
+                );
+                $receivingSlipNo = $slipResult['slip_no'];
 
-            $transfer->update([
-                'receiving_slip_no'   => $request->receiving_slip_no,
-                'receiving_slip_file' => $receivingSlipUrl,
-                'receiving_notes'     => $request->receiving_notes,
-                'received_by'         => Auth::id(),
-                'received_at'         => now(),
-                'status'              => 'completed',
-            ]);
+                foreach ($transfer->items as $item) {
+                    $receivedQty = (float)($request->input("items.{$item->id}.received_qty", $item->sent_quantity > 0 ? $item->sent_quantity : $item->requested_quantity));
+                    $item->update(['received_quantity' => $receivedQty]);
+                }
 
-            self::syncTransferInventory($transfer);
-        });
+                $transfer->update([
+                    'receiving_slip_no'   => $receivingSlipNo,
+                    'receiving_slip_file' => $receivingSlipUrl,
+                    'receiving_notes'     => $request->receiving_notes,
+                    'received_by'         => Auth::id(),
+                    'received_at'         => now(),
+                    'status'              => 'completed',
+                ]);
+
+                // Create unified DeliveryReceipt for receiving transfer slip
+                $receipt = DeliveryReceipt::create([
+                    'dr_no'             => $receivingSlipNo,
+                    'slip_no'           => $receivingSlipNo,
+                    'slip_type'         => 'receive',
+                    'source_type'       => 'transfer_in',
+                    'store_id'          => $transfer->to_store_id,
+                    'to_store_id'       => $transfer->from_store_id,
+                    'transfer_id'       => $transfer->id,
+                    'received_date'     => now()->toDateString(),
+                    'receipt_date'      => now()->toDateString(),
+                    'reference_no'      => $transfer->transfer_no,
+                    'received_by'       => Auth::id() ?? 1,
+                    'created_by'        => Auth::id() ?? 1,
+                    'status'            => 'verified',
+                    'is_void'           => false,
+                    'sequence_status'   => 'valid',
+                    'notes'             => "Receiving transfer slip #{$receivingSlipNo} (TR-{$transfer->transfer_no}) from " . ($transfer->fromStore->name ?? 'Origin Store'),
+                ]);
+
+                foreach ($transfer->items as $item) {
+                    $receipt->items()->create([
+                        'product_id'        => $item->product_id,
+                        'quantity_received' => (float)$item->received_quantity,
+                        'accepted_quantity' => (float)$item->received_quantity,
+                        'unit'              => $item->product?->unit ?? 'pcs',
+                    ]);
+                }
+
+                self::syncTransferInventory($transfer);
+            });
+        } catch (\App\Exceptions\SlipSequenceGapException $e) {
+            return back()->withInput()->withErrors(['receiving_slip_no' => $e->getMessage()])
+                ->with('error', $e->getMessage())
+                ->with('slip_gap_info', [
+                    'store_id'          => $e->getStoreId(),
+                    'slip_type'         => $e->getSlipType(),
+                    'expected_number'   => $e->getExpectedNumber(),
+                    'given_number'      => $e->getGivenNumber(),
+                    'missing_numbers'   => $e->getMissingNumbers(),
+                    'missing_formatted' => $e->getMissingFormatted(),
+                ]);
+        } catch (\App\Exceptions\SlipSequenceException $e) {
+            return back()->withInput()->withErrors(['receiving_slip_no' => $e->getMessage()])->with('error', $e->getMessage());
+        }
 
         return back()->with('success', 'Transfer confirmed and received! Materials have been added to destination store inventory.');
     }
@@ -2560,73 +2674,18 @@ class StoreManagerController extends Controller
     /**
      * Mark Slip as Void and reverse associated inventory movements.
      */
-    public function voidSlip(DeliveryReceipt $slip)
+    public function voidSlip(Request $request, DeliveryReceipt $slip)
     {
-        if ($slip->is_void) {
-            return back()->with('error', 'Slip is already voided.');
+        $reason = trim((string)$request->input('void_reason', $request->input('reason', '')));
+        if (empty($reason)) {
+            return back()->with('error', 'A void reason is required when voiding a slip.');
         }
 
         try {
-            DB::transaction(function () use ($slip) {
-                $slip->loadMissing(['items', 'store', 'toStore']);
-                $inventoryService = app(\App\Services\InventoryService::class);
-
-                foreach ($slip->items as $item) {
-                    $qty = (float) ($item->accepted_quantity ?: $item->quantity_received ?: 0);
-                    if ($qty <= 0) continue;
-
-                    if ($slip->slip_type === 'receive') {
-                        // Voiding a receive slip: reverse receipt by deducting stock
-                        $inventoryService->applyMovement(
-                            storeId: $slip->store_id,
-                            productId: $item->product_id,
-                            quantityDelta: -$qty,
-                            type: 'slip_void',
-                            referenceType: DeliveryReceipt::class,
-                            referenceId: $slip->id,
-                            remarks: "Reversal for voided receive slip {$slip->dr_no}",
-                            performedBy: Auth::id() ?? 1
-                        );
-                    } elseif ($slip->slip_type === 'send') {
-                        // Voiding a send slip: restore stock to issuing store
-                        $inventoryService->applyMovement(
-                            storeId: $slip->store_id,
-                            productId: $item->product_id,
-                            quantityDelta: +$qty,
-                            type: 'slip_void',
-                            referenceType: DeliveryReceipt::class,
-                            referenceId: $slip->id,
-                            remarks: "Reversal for voided send slip {$slip->dr_no} (restored to issuing store)",
-                            performedBy: Auth::id() ?? 1
-                        );
-
-                        // If it was transferred to another store, deduct from destination store
-                        if ($slip->to_store_id) {
-                            $inventoryService->applyMovement(
-                                storeId: $slip->to_store_id,
-                                productId: $item->product_id,
-                                quantityDelta: -$qty,
-                                type: 'slip_void',
-                                referenceType: DeliveryReceipt::class,
-                                referenceId: $slip->id,
-                                remarks: "Reversal for voided send slip {$slip->dr_no} (deducted from destination store)",
-                                performedBy: Auth::id() ?? 1
-                            );
-                        }
-                    }
-                }
-
-                $slip->update([
-                    'is_void' => true,
-                    'status'  => 'void',
-                ]);
-            });
-
+            app(\App\Services\SlipSequenceService::class)->voidExistingReceipt($slip, $reason, Auth::id());
             return back()->with('success', "Slip {$slip->dr_no} marked as void and inventory movements reversed.");
-        } catch (\InvalidArgumentException $e) {
-            return back()->with('error', 'Cannot void slip: ' . $e->getMessage());
         } catch (\Throwable $e) {
-            return back()->with('error', 'Failed to void slip: ' . $e->getMessage());
+            return back()->with('error', 'Cannot void slip: ' . $e->getMessage());
         }
     }
 
@@ -2670,23 +2729,15 @@ class StoreManagerController extends Controller
                 $slipType = $request->slip_type;
                 $storeId = (int) $request->store_id;
                 
-                // Get slip number from sequence or manual entry
-                $slipNo = null;
-                
-                if (!empty($request->slip_no)) {
-                    $slipNo = $request->slip_no;
-                } else {
-                    $sequence = SlipSequence::where('store_id', $storeId)
-                        ->where('slip_type', $slipType)
-                        ->where('status', 'active')
-                        ->first();
-
-                    if (!$sequence) {
-                        throw new \Exception("No active slip sequence configured for this store and type. Please configure a sequence first.");
-                    }
-
-                    $slipNo = $sequence->generateSlipNumber();
-                }
+                // Strictly consume slip number from sequence
+                $slipService = app(\App\Services\SlipSequenceService::class);
+                $slipResult = $slipService->consumeNext(
+                    storeId: $storeId,
+                    slipType: $slipType,
+                    inputSlipNo: $request->slip_no ?: null,
+                    sourceType: 'manual'
+                );
+                $slipNo = $slipResult['slip_no'];
 
                 $refNumber = 'SYSTEM-' . time();
                 $dummyPo = \App\Models\PurchaseOrder::firstOrCreate(
@@ -2702,7 +2753,9 @@ class StoreManagerController extends Controller
 
                 $receipt = DeliveryReceipt::create([
                     'dr_no'             => $slipNo,
+                    'slip_no'           => $slipNo,
                     'slip_type'         => $slipType,
+                    'source_type'       => 'manual',
                     'store_id'          => $storeId,
                     'to_store_id'       => $request->to_store_id ?? null,
                     'received_date'     => $request->slip_date,
@@ -2714,7 +2767,7 @@ class StoreManagerController extends Controller
                     'created_by'        => Auth::id(),
                     'status'            => 'draft',
                     'is_void'           => false,
-                    'sequence_status'   => 'pending',
+                    'sequence_status'   => 'valid',
                 ]);
 
                 foreach ($request->items as $item) {
@@ -2784,6 +2837,19 @@ class StoreManagerController extends Controller
 
             $type = $request->slip_type === 'receive' ? 'Receive' : 'Send';
             return redirect()->route('store-manager.slips.index')->with('success', "{$type} slip created successfully with auto-generated sequence number.");
+        } catch (\App\Exceptions\SlipSequenceGapException $e) {
+            return back()->withInput()->withErrors(['slip_no' => $e->getMessage()])
+                ->with('error', $e->getMessage())
+                ->with('slip_gap_info', [
+                    'store_id'          => $e->getStoreId(),
+                    'slip_type'         => $e->getSlipType(),
+                    'expected_number'   => $e->getExpectedNumber(),
+                    'given_number'      => $e->getGivenNumber(),
+                    'missing_numbers'   => $e->getMissingNumbers(),
+                    'missing_formatted' => $e->getMissingFormatted(),
+                ]);
+        } catch (\App\Exceptions\SlipSequenceException $e) {
+            return back()->withInput()->withErrors(['slip_no' => $e->getMessage()])->with('error', $e->getMessage());
         } catch (\InvalidArgumentException $e) {
             return back()->withInput()->with('error', 'Cannot create slip: ' . $e->getMessage());
         } catch (\Throwable $e) {

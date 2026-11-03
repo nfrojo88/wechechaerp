@@ -230,23 +230,33 @@ class SlipSequence extends Model
 
                 $isTransferReceipt = ($receipt->slip_type === 'send') 
                     || !empty($receipt->to_store_id) 
+                    || !empty($receipt->transfer_id)
                     || str_contains(strtolower($receipt->supplier_name ?? ''), 'transfer');
 
                 $fromStoreName = $receipt->store?->name ?? 'Origin Store';
                 $toStoreName = $receipt->toStore?->name ?? ($receipt->to_store_id ? 'Destination Store' : null);
 
+                $actualSource = $receipt->source_type ?: ($receipt->is_void ? 'void' : ($isTransferReceipt ? 'transfer' : ($receipt->purchase_request_id ? 'procurement' : 'delivery_receipt')));
+
                 $assignedSlips->push([
-                    'slip_no'             => $receipt->dr_no ?: $this->formatSlipNumber($numeric),
+                    'slip_no'             => $receipt->slip_no ?: ($receipt->dr_no ?: $this->formatSlipNumber($numeric)),
                     'numeric_no'          => $numeric,
-                    'source_type'         => $isTransferReceipt ? 'transfer' : 'delivery_receipt',
+                    'source_type'         => $actualSource,
                     'slip_type'           => $receipt->slip_type ?: ($isTransferReceipt ? 'send' : $slipType),
                     'document_id'         => $receipt->id,
-                    'document_ref'        => $isTransferReceipt 
-                        ? ('Store Issue Note / Transfer Slip #' . ($receipt->dr_no ?: $receipt->id)) 
-                        : ('GRN / Delivery Receipt #' . ($receipt->dr_no ?: $receipt->id)),
+                    'document_ref'        => $actualSource === 'void'
+                        ? ('Voided Slip #' . ($receipt->slip_no ?: $receipt->dr_no))
+                        : ($actualSource === 'petty_cash'
+                            ? ('Petty Cash GRN #' . ($receipt->slip_no ?: $receipt->dr_no))
+                            : ($isTransferReceipt 
+                                ? ('Store Issue Note / Transfer Slip #' . ($receipt->dr_no ?: $receipt->id)) 
+                                : ('GRN / Delivery Receipt #' . ($receipt->dr_no ?: $receipt->id)))),
                     'document_url'        => route('delivery-receipts.show', $receipt->id),
                     'status'              => $receipt->is_void ? 'void' : ($receipt->status ?: 'verified'),
                     'is_void'             => (bool) $receipt->is_void,
+                    'void_reason'         => $receipt->void_reason,
+                    'voided_by'           => $receipt->voidedBy?->name,
+                    'voided_at'           => $receipt->voided_at,
                     'date'                => $receipt->received_date ?: $receipt->receipt_date ?: $receipt->created_at,
                     'store_name'          => $receipt->store?->name ?? 'Store',
                     'from_store_name'     => $fromStoreName,
@@ -642,11 +652,20 @@ class SlipSequence extends Model
             $assignedData = $isAssigned ? $assignedByNumber->get($num) : null;
 
             if ($isAssigned) {
-                $status = 'assigned';
+                $src = $assignedData['source_type'] ?? '';
+                if (!empty($assignedData['is_void']) || $src === 'void') {
+                    $status = 'void';
+                } elseif ($src === 'petty_cash') {
+                    $status = 'petty_cash';
+                } elseif (in_array($src, ['transfer', 'transfer_in', 'transfer_out'])) {
+                    $status = 'transfer';
+                } else {
+                    $status = 'procurement';
+                }
             } elseif ($num === $current) {
                 $status = 'next';
             } elseif ($num < $current) {
-                $status = 'unrecorded';
+                $status = 'unrecorded'; // gap
             } else {
                 $status = 'available';
             }

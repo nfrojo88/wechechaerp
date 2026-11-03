@@ -449,6 +449,9 @@ class PettyCashMaterialPurchaseController extends Controller
 
         $storeKeepers = User::where('is_active', true)->orderBy('name')->get();
 
+        $slipService = app(\App\Services\SlipSequenceService::class);
+        $nextReceivingSlip = $targetStore ? $slipService->getNextExpected((int)$targetStore->id, 'receive') : null;
+
         return view('store-keeper.petty-cash-purchases.create', compact(
             'assignedStore',
             'isStoreKeeper',
@@ -463,7 +466,8 @@ class PettyCashMaterialPurchaseController extends Controller
             'pendingReplenishment',
             'selectedMaterialRequest',
             'prefilledItems',
-            'pendingEmergencyMrs'
+            'pendingEmergencyMrs',
+            'nextReceivingSlip'
         ));
     }
 
@@ -516,7 +520,8 @@ class PettyCashMaterialPurchaseController extends Controller
             $attachmentPath = FileUploadService::upload($request->file('attachment'), 'petty_cash_purchases');
         }
 
-        $purchase = DB::transaction(function () use ($validated, $store, $pettyCashAccount, $attachmentPath, $user) {
+        try {
+            $purchase = DB::transaction(function () use ($validated, $store, $pettyCashAccount, $attachmentPath, $user, $request) {
             $today = date('Ymd');
             $countToday = PettyCashMaterialPurchase::whereDate('created_at', now())->count() + 1;
             $purchaseNo = 'PCMP-' . $today . '-' . str_pad($countToday, 4, '0', STR_PAD_LEFT);
@@ -587,18 +592,23 @@ class PettyCashMaterialPurchaseController extends Controller
                 ]
             );
 
-            // 3. Resolve Slip Sequence for Receive Slip
-            $slipSeq = SlipSequence::where('store_id', $store->id)
-                ->where('slip_type', 'receive')
-                ->where('status', 'active')
-                ->first();
-
-            $drNo = $slipSeq ? $slipSeq->generateSlipNumber() : ('GRN-PC-' . $today . '-' . str_pad($purchase->id, 4, '0', STR_PAD_LEFT));
+            // 3. Strictly consume next slip from store's receiving sequence
+            $slipService = app(\App\Services\SlipSequenceService::class);
+            $slipResult = $slipService->consumeNext(
+                storeId: $store->id,
+                slipType: 'receive',
+                inputSlipNo: $request->input('slip_no') ?: null,
+                sourceType: 'petty_cash',
+                metadata: ['petty_cash_material_purchase_id' => $purchase->id]
+            );
+            $drNo = $slipResult['slip_no'];
 
             // 4. Create Receive Slip (DeliveryReceipt)
             $deliveryReceipt = DeliveryReceipt::create([
                 'dr_no'             => $drNo,
+                'slip_no'           => $drNo,
                 'slip_type'         => 'receive',
+                'source_type'       => 'petty_cash',
                 'store_id'          => $store->id,
                 'received_date'     => $validated['purchase_date'],
                 'receipt_date'      => $validated['purchase_date'],
@@ -783,6 +793,22 @@ class PettyCashMaterialPurchaseController extends Controller
 
             return $purchase;
         });
+        } catch (\App\Exceptions\SlipSequenceGapException $e) {
+            return back()->withInput()->withErrors(['slip_no' => $e->getMessage()])
+                ->with('error', $e->getMessage())
+                ->with('slip_gap_info', [
+                    'store_id'          => $e->getStoreId(),
+                    'slip_type'         => $e->getSlipType(),
+                    'expected_number'   => $e->getExpectedNumber(),
+                    'given_number'      => $e->getGivenNumber(),
+                    'missing_numbers'   => $e->getMissingNumbers(),
+                    'missing_formatted' => $e->getMissingFormatted(),
+                ]);
+        } catch (\App\Exceptions\SlipSequenceException $e) {
+            return back()->withInput()->withErrors(['slip_no' => $e->getMessage()])->with('error', $e->getMessage());
+        } catch (\Throwable $e) {
+            return back()->withInput()->with('error', 'Failed to record purchase: ' . $e->getMessage());
+        }
 
         $successMsg = "Material purchase #{$purchase->purchase_no} recorded successfully! Stock has been added to {$store->name} inventory, GRN slip generated, and Petty Cash ledger updated.";
         if (!empty($validated['material_request_id'])) {

@@ -769,8 +769,16 @@
 
                     <div class="row g-3 mb-3">
                         <div class="col-md-6">
-                            <label class="form-label fw-bold small text-uppercase" style="color: #334155;">Outgoing Physical Slip / Waybill # <span class="text-danger">*</span></label>
-                            <input type="text" name="outgoing_slip_no" class="form-control font-monospace rounded-3" style="border: 1.5px solid #cbd5e1;" placeholder="e.g. SLIP-09823 or WB-2026-44" value="{{ old('outgoing_slip_no', $transfer->outgoing_slip_no ?: $transfer->physical_slip_no) }}" required>
+                            <label class="form-label fw-bold small text-uppercase d-flex justify-content-between align-items-center" style="color: #334155;">
+                                <span>Outgoing Physical Slip / Waybill # <span class="text-danger">*</span></span>
+                                @if(!empty($nextOutgoingSlip['formatted_slip']))
+                                    <span class="badge bg-primary font-monospace">Next: #{{ $nextOutgoingSlip['formatted_slip'] }}</span>
+                                @endif
+                            </label>
+                            <input type="text" name="outgoing_slip_no" class="form-control font-monospace rounded-3 @error('outgoing_slip_no') is-invalid @enderror" style="border: 1.5px solid #cbd5e1;" placeholder="e.g. {{ $nextOutgoingSlip['formatted_slip'] ?? 'SLIP-09823' }}" value="{{ old('outgoing_slip_no', $transfer->outgoing_slip_no ?: ($transfer->physical_slip_no ?: ($nextOutgoingSlip['formatted_slip'] ?? ''))) }}" required>
+                            @error('outgoing_slip_no')
+                                <div class="text-danger small mt-1"><i class="fas fa-exclamation-circle me-1"></i>{{ $message }}</div>
+                            @enderror
                         </div>
                         <div class="col-md-6">
                             <label class="form-label fw-bold small text-uppercase" style="color: #334155;">Vehicle Plate # (Verification)</label>
@@ -868,8 +876,16 @@
 
                     <div class="row g-3 mb-3">
                         <div class="col-md-6">
-                            <label class="form-label fw-bold small text-uppercase" style="color: #334155;">Signed Receiving Slip / GRN # (Optional)</label>
-                            <input type="text" name="receiving_slip_no" class="form-control font-monospace rounded-3" style="border: 1.5px solid #cbd5e1;" placeholder="e.g. GRN-2026-99" value="{{ old('receiving_slip_no', $transfer->receiving_slip_no) }}">
+                            <label class="form-label fw-bold small text-uppercase d-flex justify-content-between align-items-center" style="color: #334155;">
+                                <span>Signed Receiving Slip / GRN # (Optional)</span>
+                                @if(!empty($nextReceivingSlip['formatted_slip']))
+                                    <span class="badge bg-success font-monospace">Next: #{{ $nextReceivingSlip['formatted_slip'] }}</span>
+                                @endif
+                            </label>
+                            <input type="text" name="receiving_slip_no" class="form-control font-monospace rounded-3 @error('receiving_slip_no') is-invalid @enderror" style="border: 1.5px solid #cbd5e1;" placeholder="e.g. {{ $nextReceivingSlip['formatted_slip'] ?? 'GRN-2026-99' }}" value="{{ old('receiving_slip_no', $transfer->receiving_slip_no ?: ($nextReceivingSlip['formatted_slip'] ?? '')) }}">
+                            @error('receiving_slip_no')
+                                <div class="text-danger small mt-1"><i class="fas fa-exclamation-circle me-1"></i>{{ $message }}</div>
+                            @enderror
                         </div>
                         <div class="col-md-6">
                             <label class="form-label fw-bold small text-uppercase" style="color: #334155;">Attach Signed Receiving Document (Optional)</label>
@@ -1530,5 +1546,58 @@ document.addEventListener('DOMContentLoaded', function () {
     @endif
 });
 </script>
+
+@if(session('slip_gap_info'))
+@php $gap = session('slip_gap_info'); @endphp
+<!-- Void Missing Slips Modal for Transfers -->
+<div class="modal fade" id="voidMissingModal" tabindex="-1" aria-labelledby="voidMissingModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow border-0">
+            <form action="{{ route('store-manager.slip-sequences.void-missing') }}" method="POST">
+                @csrf
+                <input type="hidden" name="store_id" value="{{ $gap['store_id'] }}">
+                <input type="hidden" name="slip_type" value="{{ $gap['slip_type'] }}">
+                @foreach($gap['missing_numbers'] as $num)
+                    <input type="hidden" name="numbers[]" value="{{ $num }}">
+                @endforeach
+
+                <div class="modal-header bg-warning text-dark py-2 px-3">
+                    <h6 class="modal-title fw-bold" id="voidMissingModalLabel">
+                        <i class="fas fa-ban me-2"></i>Void Missing Slips ({{ count($gap['missing_numbers']) }})
+                    </h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-3">
+                    <p class="small text-muted mb-2">
+                        You entered slip <strong>#{{ $gap['given_number'] }}</strong>. To preserve strict sequence integrity, void the following unused slip numbers:
+                    </p>
+                    <div class="p-2 bg-light rounded border mb-3 font-monospace fw-bold text-danger text-center">
+                        {{ implode(', ', array_map(fn($f) => '#' . $f, $gap['missing_formatted'])) }}
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small">Reason for Voiding *</label>
+                        <textarea name="reason" class="form-control form-control-sm" rows="3" placeholder="E.g., Paper torn, spoiled in physical book, or skipped" required></textarea>
+                    </div>
+                    <div class="alert alert-info py-2 small mb-0">
+                        <i class="fas fa-info-circle me-1"></i>Voiding records these leaves as cancelled without moving inventory, advances sequence to #{{ $gap['given_number'] }}, and allows your transfer transaction to complete.
+                    </div>
+                </div>
+                <div class="modal-footer bg-light py-2 px-3">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-sm btn-warning fw-bold">
+                        <i class="fas fa-check me-1"></i>Void Slips &amp; Advance
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var vModal = new bootstrap.Modal(document.getElementById('voidMissingModal'));
+    vModal.show();
+});
+</script>
+@endif
 @endsection
 

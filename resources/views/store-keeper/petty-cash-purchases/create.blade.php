@@ -68,6 +68,24 @@
     </div>
     @endif
 
+    @if(session('slip_gap_info'))
+    @php $gap = session('slip_gap_info'); @endphp
+    <div class="alert alert-warning border-start border-4 border-warning shadow-sm rounded-3 mb-4 p-3">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div>
+                <h6 class="fw-bold mb-1 text-dark"><i class="fa-solid fa-triangle-exclamation text-warning me-2"></i>Missing Slips Detected</h6>
+                <div class="small text-dark">
+                    Slip <strong>#{{ $gap['given_number'] }}</strong> cannot be recorded yet because earlier sequence numbers are unrecorded: 
+                    <strong class="font-monospace text-danger">{{ implode(', ', array_map(fn($f) => '#' . $f, $gap['missing_formatted'])) }}</strong>.
+                </div>
+            </div>
+            <button type="button" class="btn btn-warning btn-sm fw-bold shadow-xs text-dark" data-bs-toggle="modal" data-bs-target="#pettyVoidMissingModal">
+                <i class="fa-solid fa-ban me-1"></i>Void Missing Slips &amp; Continue
+            </button>
+        </div>
+    </div>
+    @endif
+
     {{-- Emergency Material Request Pre-fill Alert Banner --}}
     @if(isset($selectedMaterialRequest))
         <div class="card border-0 shadow-sm rounded-3 mb-4 bg-white border-start border-4 border-danger">
@@ -262,6 +280,25 @@
                                 Cash Receipt / Voucher # <span class="text-danger">*</span>
                             </label>
                             <input type="text" name="receipt_no" id="pettyReceiptNo" class="form-control form-control-sm font-monospace" placeholder="e.g. CR-89412, INV-0042" value="{{ old('receipt_no') }}" required>
+                        </div>
+
+                        {{-- Store GRN Slip Number --}}
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold text-dark small d-flex justify-content-between align-items-center">
+                                <span>Store GRN Slip #</span>
+                                @if(!empty($nextReceivingSlip) && $nextReceivingSlip['has_sequence'])
+                                    <span id="pettyNextSlipBadge" class="badge text-white font-monospace" style="background-color: #0d9488;">
+                                        Next: #{{ $nextReceivingSlip['formatted_slip'] }}
+                                    </span>
+                                @endif
+                            </label>
+                            <input type="text" name="slip_no" id="pettySlipNo" class="form-control form-control-sm font-monospace fw-bold @error('slip_no') is-invalid @enderror" placeholder="{{ !empty($nextReceivingSlip) && $nextReceivingSlip['has_sequence'] ? 'Auto: #' . $nextReceivingSlip['formatted_slip'] : 'Auto from sequence' }}" value="{{ old('slip_no') }}">
+                            <small class="text-muted d-block mt-1" style="font-size:0.73rem;">
+                                Leave blank to auto-consume next receiving slip (#{{ $nextReceivingSlip['formatted_slip'] ?? '...' }}). Strict sequential order enforced.
+                            </small>
+                            @error('slip_no')
+                                <div class="text-danger small mt-1"><i class="fas fa-exclamation-circle me-1"></i>{{ $message }}</div>
+                            @enderror
                         </div>
 
                         {{-- Receipt Attachment --}}
@@ -1261,5 +1298,54 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 @endpush
+@if(session('slip_gap_info'))
+@php $gap = session('slip_gap_info'); @endphp
+<div class="modal fade" id="pettyVoidMissingModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-warning text-dark py-3">
+                <h6 class="modal-title fw-bold">
+                    <i class="fa-solid fa-ban me-2"></i>Void Missing Receiving Slips
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="{{ route('api.slip-sequences.void-missing') }}" method="POST" id="pettyVoidMissingForm">
+                @csrf
+                <input type="hidden" name="store_id" value="{{ $gap['store_id'] }}">
+                <input type="hidden" name="slip_type" value="{{ $gap['slip_type'] }}">
+                <input type="hidden" name="target_slip_no" value="{{ $gap['given_number'] }}">
+
+                <div class="modal-body p-4">
+                    <div class="alert alert-warning py-2 px-3 small border-0 mb-3">
+                        <i class="fa-solid fa-triangle-exclamation me-1"></i>
+                        The following missing slip numbers will be marked as <strong>VOID</strong> in the sequential book to allow issuing slip <strong>#{{ $gap['given_number'] }}</strong>:
+                    </div>
+                    
+                    <div class="p-3 bg-light rounded border text-center font-monospace fw-bold text-danger mb-3" style="letter-spacing: 1px;">
+                        {{ implode(', ', array_map(fn($f) => '#' . $f, $gap['missing_formatted'])) }}
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-dark">Reason for Voiding Slips <span class="text-danger">*</span></label>
+                        <textarea name="reason" class="form-control form-control-sm" rows="3" required placeholder="e.g. Spoiled physical leaves, paper torn, skipped accidentally..."></textarea>
+                    </div>
+
+                    <p class="text-muted small mb-0">
+                        <i class="fa-solid fa-shield-halved text-warning me-1"></i>
+                        Voided slips create no stock movements, count towards sequence consumption, and can never be reused.
+                    </p>
+                </div>
+                <div class="modal-footer bg-light py-2">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger btn-sm fw-bold">
+                        <i class="fa-solid fa-ban me-1"></i>Confirm Void &amp; Proceed
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+@endif
+
 @endsection
 

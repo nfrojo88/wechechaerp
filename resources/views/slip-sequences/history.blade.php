@@ -119,6 +119,106 @@
         </div>
     </div>
 
+    <!-- Sequence Books Health & Reconciliation Cross-Check Section -->
+    @if(isset($reconciliationReports['results']) && count($reconciliationReports['results']) > 0)
+    <div class="card shadow-sm mb-4 border-0">
+        <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <h6 class="mb-0 fw-bold text-dark">
+                <i class="fas fa-stethoscope text-primary me-2"></i>Sequence Books Cross-Check & Continuity Audit
+            </h6>
+            <div class="d-flex align-items-center gap-2">
+                @if(($reconciliationReports['problem_count'] ?? 0) === 0)
+                    <span class="badge bg-success px-3 py-2"><i class="fas fa-check-circle me-1"></i>All Books OK & Continuous</span>
+                @else
+                    <span class="badge bg-danger px-3 py-2"><i class="fas fa-exclamation-triangle me-1"></i>{{ $reconciliationReports['problem_count'] }} Book(s) with Problems</span>
+                @endif
+                <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#reconcileCollapse" aria-expanded="false" aria-controls="reconcileCollapse">
+                    <i class="fas fa-chevron-down"></i>
+                </button>
+            </div>
+        </div>
+        <div class="collapse {{ ($reconciliationReports['problem_count'] ?? 0) > 0 ? 'show' : '' }}" id="reconcileCollapse">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover table-sm align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="ps-3">Store</th>
+                                <th>Slip Type</th>
+                                <th>Book Range</th>
+                                <th>Next Slip</th>
+                                <th>Used / Expected</th>
+                                <th>Void Slips</th>
+                                <th>Gaps</th>
+                                <th>Duplicates</th>
+                                <th class="text-end pe-3">Continuity Health</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach($reconciliationReports['results'] as $rep)
+                            <tr class="{{ $rep['status'] === 'problems' ? 'table-warning' : '' }}">
+                                <td class="ps-3 fw-semibold">{{ $rep['store_name'] }}</td>
+                                <td>
+                                    @if($rep['slip_type'] === 'receive')
+                                        <span class="badge bg-success">GRN</span>
+                                    @else
+                                        <span class="badge bg-info">SIN</span>
+                                    @endif
+                                </td>
+                                <td class="font-monospace fw-bold">#{{ $rep['book_range'] }}</td>
+                                <td class="font-monospace text-primary">#{{ $rep['current_slip_no'] }}</td>
+                                <td>
+                                    {{ $rep['actual_used_count'] }} / {{ $rep['expected_used_count'] }}
+                                    @if(!$rep['used_count_matches'])
+                                        <span class="badge bg-danger ms-1" title="Used count counter mismatch">Mismatch</span>
+                                    @endif
+                                </td>
+                                <td>
+                                    @if($rep['void_count'] > 0)
+                                        <span class="badge bg-danger">{{ $rep['void_count'] }} void</span>
+                                    @else
+                                        <span class="text-muted">0</span>
+                                    @endif
+                                </td>
+                                <td>
+                                    @if($rep['gaps_count'] > 0)
+                                        <span class="badge bg-warning text-dark fw-bold" title="{{ implode(', ', array_column($rep['gaps'], 'formatted')) }}">
+                                            {{ $rep['gaps_count'] }} gap(s)
+                                        </span>
+                                    @else
+                                        <span class="text-success"><i class="fas fa-check"></i></span>
+                                    @endif
+                                </td>
+                                <td>
+                                    @if($rep['duplicates_count'] > 0)
+                                        <span class="badge bg-danger fw-bold" title="{{ implode(', ', array_column($rep['duplicates'], 'formatted')) }}">
+                                            {{ $rep['duplicates_count'] }} duplicate(s)
+                                        </span>
+                                    @else
+                                        <span class="text-success"><i class="fas fa-check"></i></span>
+                                    @endif
+                                </td>
+                                <td class="text-end pe-3">
+                                    @if($rep['status'] === 'ok')
+                                        <span class="badge bg-success-subtle text-success border border-success px-2 py-1">
+                                            <i class="fas fa-check-circle me-1"></i>OK
+                                        </span>
+                                    @else
+                                        <span class="badge bg-danger px-2 py-1">
+                                            <i class="fas fa-exclamation-circle me-1"></i>Problems
+                                        </span>
+                                    @endif
+                                </td>
+                            </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    @endif
+
     <!-- Filter & Search Bar Card -->
     <div class="card shadow-sm mb-4">
         <div class="card-body p-3">

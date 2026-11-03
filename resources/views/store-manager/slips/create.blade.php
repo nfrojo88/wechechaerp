@@ -1,4 +1,4 @@
-﻿@extends('layouts.app')
+@extends('layouts.app')
 
 @section('title', 'Create Slip - Store Manager')
 
@@ -56,10 +56,35 @@
                         <input type="date" name="slip_date" class="form-control" value="{{ date('Y-m-d') }}" required>
                     </div>
                     <div class="col-md-4">
-                        <label class="form-label">Slip No * <small class="text-muted">(Auto-generated)</small></label>
-                        <input type="text" name="slip_no" class="form-control" id="slip_no" placeholder="Will auto-generate" readonly style="background-color: #f5f5f5;">
+                        <label class="form-label d-flex justify-content-between align-items-center">
+                            <span>Slip No *</span>
+                            <span id="nextSlipBadge" class="badge bg-primary font-monospace">Next: Checking...</span>
+                        </label>
+                        <input type="text" name="slip_no" class="form-control font-monospace fw-bold @error('slip_no') is-invalid @enderror" id="slip_no" placeholder="Will auto-fetch next slip" value="{{ old('slip_no') }}" oninput="validateSlipSequenceInput()">
+                        <div id="slipSeqAlert" class="small mt-1"></div>
+                        @error('slip_no')
+                            <div class="text-danger small mt-1"><i class="fas fa-exclamation-circle me-1"></i>{{ $message }}</div>
+                        @enderror
                     </div>
                 </div>
+
+                @if(session('slip_gap_info'))
+                @php $gap = session('slip_gap_info'); @endphp
+                <div class="alert alert-warning border-start border-4 border-warning shadow-sm mb-4">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <div>
+                            <h6 class="fw-bold mb-1"><i class="fas fa-exclamation-triangle me-2"></i>Missing Slips Detected</h6>
+                            <div class="small">
+                                Slip <strong>#{{ $gap['given_number'] }}</strong> cannot be recorded yet because earlier numbers are missing: 
+                                <strong class="font-monospace text-dark">{{ implode(', ', array_map(fn($f) => '#' . $f, $gap['missing_formatted'])) }}</strong>.
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-warning btn-sm fw-bold shadow-xs" data-bs-toggle="modal" data-bs-target="#voidMissingModal">
+                            <i class="fas fa-ban me-1"></i>Void Missing Slips & Continue
+                        </button>
+                    </div>
+                </div>
+                @endif
 
                 <!-- Receive Slip Fields -->
                 <div id="receive-fields">
@@ -164,16 +189,94 @@ function toggleSlipType() {
 function updateSlipNo() {
     const storeId = document.querySelector('select[name="store_id"]').value;
     const slipType = document.querySelector('input[name="slip_type"]:checked').value;
+    const slipInput = document.getElementById('slip_no');
+    const badge = document.getElementById('nextSlipBadge');
+    const alertDiv = document.getElementById('slipSeqAlert');
     
     if (!storeId) {
-        document.getElementById('slip_no').value = '';
+        slipInput.value = '';
+        badge.textContent = 'Select Store';
+        badge.className = 'badge bg-secondary font-monospace';
         return;
     }
 
-    const typePrefix = slipType === 'receive' ? 'RS' : 'SS';
-    const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    document.getElementById('slip_no').value = `${typePrefix}-${date}-[SEQ]`;
+    badge.textContent = 'Checking...';
+    badge.className = 'badge bg-info font-monospace';
+
+    fetch(`/api/slip-sequences/${storeId}/${slipType}`)
+        .then(res => res.json())
+        .then(data => {
+            if (data.has_sequence && data.formatted_slip) {
+                badge.textContent = 'Next slip: #' + data.formatted_slip;
+                badge.className = 'badge bg-success font-monospace';
+                
+                slipInput.dataset.expected = data.current_slip_no;
+                slipInput.dataset.formatted = data.formatted_slip;
+                slipInput.dataset.start = data.book_start_no;
+                slipInput.dataset.end = data.book_end_no;
+                slipInput.dataset.prefix = data.prefix || '';
+
+                if (!slipInput.value || slipInput.classList.contains('is-invalid')) {
+                    slipInput.value = data.formatted_slip;
+                    slipInput.classList.remove('is-invalid');
+                }
+
+                alertDiv.innerHTML = `<span class="text-success small"><i class="fas fa-book me-1"></i>Active Book: ${data.label} (#${data.book_start_no}–#${data.book_end_no}) &bull; ${data.remaining} slips left</span>`;
+                validateSlipSequenceInput();
+            } else {
+                badge.textContent = 'No Active Book';
+                badge.className = 'badge bg-warning text-dark font-monospace';
+                alertDiv.innerHTML = `<span class="text-warning small"><i class="fas fa-exclamation-triangle me-1"></i>${data.error || 'No active sequence configured for this store.'}</span>`;
+            }
+        })
+        .catch(err => {
+            badge.textContent = 'Error';
+            badge.className = 'badge bg-danger font-monospace';
+        });
 }
+
+function validateSlipSequenceInput() {
+    const slipInput = document.getElementById('slip_no');
+    const alertDiv = document.getElementById('slipSeqAlert');
+    const val = slipInput.value.trim();
+    const expected = parseInt(slipInput.dataset.expected);
+    const start = parseInt(slipInput.dataset.start);
+    const end = parseInt(slipInput.dataset.end);
+
+    if (!val || !expected) return;
+
+    // Extract digits
+    const digits = val.match(/\d+/);
+    if (!digits) {
+        slipInput.classList.add('is-invalid');
+        alertDiv.innerHTML = '<span class="text-danger small"><i class="fas fa-times-circle me-1"></i>Slip number must contain digits.</span>';
+        return;
+    }
+
+    const num = parseInt(digits[0]);
+
+    if (num < start || num > end) {
+        slipInput.classList.add('is-invalid');
+        alertDiv.innerHTML = `<span class="text-danger small"><i class="fas fa-times-circle me-1"></i>Number #${num} is outside book range (#${start}–#${end}).</span>`;
+    } else if (num < expected) {
+        slipInput.classList.add('is-invalid');
+        alertDiv.innerHTML = `<span class="text-danger small"><i class="fas fa-times-circle me-1"></i>Duplicate: #${num} was already used. Next expected is #${slipInput.dataset.formatted || expected}.</span>`;
+    } else if (num > expected) {
+        slipInput.classList.add('is-invalid');
+        const missingCount = num - expected;
+        alertDiv.innerHTML = `<span class="text-danger small"><i class="fas fa-exclamation-triangle me-1"></i>Cannot skip ${missingCount} slip(s)! Next expected is #${slipInput.dataset.formatted || expected}. Record or void earlier slips first.</span>`;
+    } else {
+        slipInput.classList.remove('is-invalid');
+        alertDiv.innerHTML = `<span class="text-success small"><i class="fas fa-check-circle me-1"></i>Matches expected sequence leaf (#${slipInput.dataset.formatted || expected}).</span>`;
+    }
+}
+
+// Auto-run on load if store is pre-selected
+document.addEventListener('DOMContentLoaded', function() {
+    if (document.querySelector('select[name="store_id"]').value) {
+        updateSlipNo();
+    }
+});
 
 $('#add-item').click(function() {
     const slipType = document.querySelector('input[name="slip_type"]:checked').value;
@@ -216,6 +319,53 @@ $(document).on('change', '.product-select', function() {
     $(this).closest('.item-row').find('.unit-column input').val(unit);
 });
 </script>
+
+@if(session('slip_gap_info'))
+@php $gap = session('slip_gap_info'); @endphp
+<!-- Void Missing Slips Modal -->
+<div class="modal fade" id="voidMissingModal" tabindex="-1" aria-labelledby="voidMissingModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow border-0">
+            <form action="{{ route('store-manager.slip-sequences.void-missing') }}" method="POST">
+                @csrf
+                <input type="hidden" name="store_id" value="{{ $gap['store_id'] }}">
+                <input type="hidden" name="slip_type" value="{{ $gap['slip_type'] }}">
+                @foreach($gap['missing_numbers'] as $num)
+                    <input type="hidden" name="numbers[]" value="{{ $num }}">
+                @endforeach
+
+                <div class="modal-header bg-warning text-dark">
+                    <h6 class="modal-title fw-bold" id="voidMissingModalLabel">
+                        <i class="fas fa-ban me-2"></i>Void Missing Slips ({{ count($gap['missing_numbers']) }})
+                    </h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="small text-muted mb-2">
+                        You are skipping straight to <strong>#{{ $gap['given_number'] }}</strong>. To maintain sequence continuity, the missing slips must be declared as void:
+                    </p>
+                    <div class="p-2 bg-light rounded border mb-3 font-monospace fw-bold text-danger text-center">
+                        {{ implode(', ', array_map(fn($f) => '#' . $f, $gap['missing_formatted'])) }}
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small">Reason for Voiding *</label>
+                        <textarea name="reason" class="form-control form-control-sm" rows="3" placeholder="E.g., Damaged, spoiled, paper torn, or issued outside ERP" required></textarea>
+                    </div>
+                    <div class="alert alert-info py-2 small mb-0">
+                        <i class="fas fa-info-circle me-1"></i>Voiding creates no stock movement, advances the sequence counter to #{{ $gap['given_number'] }}, and allows your transaction to proceed.
+                    </div>
+                </div>
+                <div class="modal-footer bg-light py-2">
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-sm btn-warning fw-bold">
+                        <i class="fas fa-check me-1"></i>Void Slips & Advance
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+@endif
 @endpush
 @endsection
 

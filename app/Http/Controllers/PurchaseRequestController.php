@@ -622,22 +622,7 @@ class PurchaseRequestController extends Controller
                 ->where('status', 'active')
                 ->first();
             if ($receiveSlipSequence) {
-                // Advance current_slip_no past any numbers already recorded in delivery_receipts
-                $curr = (int)$receiveSlipSequence->current_slip_no;
-                while ($curr <= (int)$receiveSlipSequence->book_end_no) {
-                    $testFormatted = $receiveSlipSequence->formatSlipNumber($curr);
-                    if (!DeliveryReceipt::where('dr_no', $testFormatted)->orWhere('dr_no', (string)$curr)->exists()) {
-                        break;
-                    }
-                    $curr++;
-                }
-                if ($curr !== (int)$receiveSlipSequence->current_slip_no) {
-                    $receiveSlipSequence->update([
-                        'current_slip_no' => $curr,
-                        'used_count'      => max($receiveSlipSequence->used_count, $curr - $receiveSlipSequence->book_start_no),
-                    ]);
-                }
-                $nextReceiveSlipNo = $receiveSlipSequence->formatSlipNumber($curr);
+                $nextReceiveSlipNo = $receiveSlipSequence->formatSlipNumber((int)$receiveSlipSequence->current_slip_no);
             }
         }
 
@@ -2331,6 +2316,22 @@ class PurchaseRequestController extends Controller
                 $request->input('items', []),
                 $request->input('notes')
             );
+        } catch (\App\Exceptions\SlipSequenceGapException $e) {
+            return back()->withInput()->withErrors([
+                'slip_no' => $e->getMessage(),
+            ])->with('error', $e->getMessage())
+              ->with('slip_gap_info', [
+                  'store_id'          => $e->getStoreId(),
+                  'slip_type'         => $e->getSlipType(),
+                  'expected_number'   => $e->getExpectedNumber(),
+                  'given_number'      => $e->getGivenNumber(),
+                  'missing_numbers'   => $e->getMissingNumbers(),
+                  'missing_formatted' => $e->getMissingFormatted(),
+              ]);
+        } catch (\App\Exceptions\SlipSequenceException $e) {
+            return back()->withInput()->withErrors([
+                'slip_no' => $e->getMessage(),
+            ])->with('error', $e->getMessage());
         } catch (\Illuminate\Database\QueryException $e) {
             \Illuminate\Support\Facades\Log::error("Store Intake QueryException for PR #{$purchaseRequest->pr_no}: " . $e->getMessage());
             

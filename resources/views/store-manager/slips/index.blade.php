@@ -1,4 +1,4 @@
-﻿@extends('layouts.app')
+@extends('layouts.app')
 
 @section('title', 'Slip Records - Store Manager')
 
@@ -167,10 +167,11 @@
                                 <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modal-{{ $slip->id }}">
                                     <i class="fas fa-eye me-1"></i>View
                                 </button>
-                                @if(!$slip->is_void && in_array($slip->status, ['pending', 'draft']))
-                                <form action="{{ route('store-manager.slips.void', $slip) }}" method="POST" class="d-inline">
+                                @if(!$slip->is_void)
+                                <form action="{{ route('store-manager.slips.void', $slip) }}" method="POST" class="d-inline" onsubmit="let r = prompt('Enter required reason for voiding slip #{{ $slip->dr_no }}:'); if(!r || !r.trim()) { alert('Void reason is required.'); return false; } document.getElementById('void_reason_{{ $slip->id }}').value = r.trim(); return true;">
                                     @csrf
-                                    <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Mark this slip as void?')">
+                                    <input type="hidden" name="void_reason" id="void_reason_{{ $slip->id }}">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Void Slip & Reverse Inventory">
                                         <i class="fas fa-ban"></i>
                                     </button>
                                 </form>

@@ -38,6 +38,9 @@
                 </ul>
             </div>
             @endif
+            <button type="button" class="btn btn-sm btn-outline-info shadow-sm" onclick="runCrossCheck()">
+                <i class="fas fa-stethoscope me-1"></i>Cross-Check
+            </button>
             <button type="button" class="btn btn-sm btn-primary shadow-sm" data-bs-toggle="modal" data-bs-target="#nextBookModal">
                 <i class="fas fa-plus-circle me-1"></i>Next Book
             </button>
@@ -254,17 +257,29 @@
                 </small>
             </div>
             @php
-                $procurementSlipsCount = $assignedSlips->where('source_type', 'delivery_receipt')->count();
-                $transferSlipsCount = $assignedSlips->where('source_type', 'transfer')->count();
+                $procurementSlipsCount = $assignedSlips->whereIn('source_type', ['procurement', 'delivery_receipt'])->count();
+                $transferSlipsCount = $assignedSlips->whereIn('source_type', ['transfer', 'transfer_in', 'transfer_out'])->count();
+                $pettyCashSlipsCount = $assignedSlips->where('source_type', 'petty_cash')->count();
+                $voidSlipsCount = $assignedSlips->where('is_void', true)->count();
                 $unrecordedCount = collect($bookMap)->where('status', 'unrecorded')->count();
             @endphp
             <div class="d-flex align-items-center gap-2 flex-wrap">
-                <span class="badge bg-success" title="{{ $procurementSlipsCount }} Procurement, {{ $transferSlipsCount }} Transfers">
-                    {{ $assignedSlips->count() }} Total Recorded
+                <span class="badge bg-success" title="{{ $procurementSlipsCount }} Procurement GRN">
+                    {{ $procurementSlipsCount }} GRN
                 </span>
                 @if($transferSlipsCount > 0)
-                <span class="badge text-white" style="background-color: #4f46e5;">
+                <span class="badge text-white" style="background-color: #6366f1;">
                     <i class="fas fa-truck me-1"></i>{{ $transferSlipsCount }} Transfers
+                </span>
+                @endif
+                @if($pettyCashSlipsCount > 0)
+                <span class="badge text-white" style="background-color: #0d9488;">
+                    <i class="fas fa-cart-shopping me-1"></i>{{ $pettyCashSlipsCount }} Petty Cash
+                </span>
+                @endif
+                @if($voidSlipsCount > 0)
+                <span class="badge bg-danger">
+                    <i class="fas fa-ban me-1"></i>{{ $voidSlipsCount }} Void
                 </span>
                 @endif
                 <span class="badge bg-primary">Next: #{{ $slipSequence->getNextSlipNumber() }}</span>
@@ -282,34 +297,53 @@
                     <i class="fas fa-bookmark me-1"></i>Book Pad Leaves ({{ $slipSequence->book_start_no }} &ndash; {{ $slipSequence->book_end_no }})
                 </span>
                 <div class="small d-flex gap-3 text-muted flex-wrap">
-                    <span><span class="badge bg-success px-2 py-0">&nbsp;</span> Procurement GRN ({{ $procurementSlipsCount }})</span>
-                    <span><span class="badge px-2 py-0 text-white" style="background-color: #4f46e5;">&nbsp;</span> Store Transfers ({{ $transferSlipsCount }})</span>
+                    <span><span class="badge bg-success px-2 py-0">&nbsp;</span> GRN Purchase ({{ $procurementSlipsCount }})</span>
+                    <span><span class="badge px-2 py-0 text-white" style="background-color: #6366f1;">&nbsp;</span> Transfers ({{ $transferSlipsCount }})</span>
+                    <span><span class="badge px-2 py-0 text-white" style="background-color: #0d9488;">&nbsp;</span> Petty Cash ({{ $pettyCashSlipsCount }})</span>
                     <span><span class="badge bg-primary px-2 py-0">&nbsp;</span> Next Slip (#{{ $slipSequence->getNextSlipNumber() }})</span>
+                    <span><span class="badge bg-danger px-2 py-0">&nbsp;</span> Void ({{ $voidSlipsCount }})</span>
                     @if($unrecordedCount > 0)
-                    <span><span class="badge bg-warning text-dark px-2 py-0">&nbsp;</span> Unrecorded / Gap ({{ $unrecordedCount }})</span>
+                    <span><span class="badge bg-warning text-dark px-2 py-0">&nbsp;</span> Gap ({{ $unrecordedCount }})</span>
                     @endif
                     <span><span class="badge bg-light border text-muted px-2 py-0">&nbsp;</span> Available ({{ $slipSequence->getRemainingSlips() }})</span>
                 </div>
             </div>
             <div class="d-flex flex-wrap gap-1" style="max-height: 180px; overflow-y: auto;">
                 @foreach($bookMap as $leaf)
-                    @if($leaf['status'] === 'assigned')
-                        @php
-                            $isTransferLeaf = ($leaf['assigned_data']['source_type'] ?? '') === 'transfer';
-                            $leafTooltip = 'Slip #' . $leaf['formatted'] . ' - ' . ($isTransferLeaf ? ('Store Transfer #' . ($leaf['assigned_data']['transfer_no'] ?? '')) : 'Procurement GRN') . ' - Click to filter';
-                        @endphp
+                    @if($leaf['status'] === 'void')
                         <button type="button" 
-                                class="btn btn-sm px-2 py-0 font-monospace shadow-sm {{ $isTransferLeaf ? 'text-white' : 'btn-success' }}"
-                                style="font-size: 0.75rem; {{ $isTransferLeaf ? 'background-color: #4f46e5; border-color: #4338ca;' : '' }}"
-                                title="{{ $leafTooltip }}"
+                                class="btn btn-sm btn-danger px-2 py-0 font-monospace shadow-sm"
+                                style="font-size: 0.75rem;"
+                                title="Voided Slip #{{ $leaf['formatted'] }}{{ !empty($leaf['assigned_data']['void_reason']) ? ' - Reason: ' . $leaf['assigned_data']['void_reason'] : '' }}"
                                 onclick="filterSlipRow('{{ $leaf['number'] }}')">
-                            @if($isTransferLeaf)
-                                <i class="fas fa-exchange-alt me-1" style="font-size: 0.65rem;"></i>
-                            @endif
-                            {{ $leaf['formatted'] }}
+                            <i class="fas fa-ban me-1" style="font-size: 0.65rem;"></i>{{ $leaf['formatted'] }}
+                        </button>
+                    @elseif($leaf['status'] === 'petty_cash')
+                        <button type="button" 
+                                class="btn btn-sm text-white px-2 py-0 font-monospace shadow-sm"
+                                style="font-size: 0.75rem; background-color: #0d9488; border-color: #0f766e;"
+                                title="Petty Cash GRN #{{ $leaf['formatted'] }} - Click to filter"
+                                onclick="filterSlipRow('{{ $leaf['number'] }}')">
+                            <i class="fas fa-cart-shopping me-1" style="font-size: 0.65rem;"></i>{{ $leaf['formatted'] }}
+                        </button>
+                    @elseif($leaf['status'] === 'transfer')
+                        <button type="button" 
+                                class="btn btn-sm text-white px-2 py-0 font-monospace shadow-sm"
+                                style="font-size: 0.75rem; background-color: #6366f1; border-color: #4f46e5;"
+                                title="Transfer Slip #{{ $leaf['formatted'] }} - Click to filter"
+                                onclick="filterSlipRow('{{ $leaf['number'] }}')">
+                            <i class="fas fa-exchange-alt me-1" style="font-size: 0.65rem;"></i>{{ $leaf['formatted'] }}
+                        </button>
+                    @elseif($leaf['status'] === 'procurement' || $leaf['status'] === 'assigned')
+                        <button type="button" 
+                                class="btn btn-sm btn-success px-2 py-0 font-monospace shadow-sm"
+                                style="font-size: 0.75rem;"
+                                title="Procurement GRN #{{ $leaf['formatted'] }} - Click to filter"
+                                onclick="filterSlipRow('{{ $leaf['number'] }}')">
+                            <i class="fas fa-check me-1" style="font-size: 0.65rem;"></i>{{ $leaf['formatted'] }}
                         </button>
                     @elseif($leaf['status'] === 'next')
-                        <span class="badge bg-primary px-2 py-1 font-monospace" style="font-size: 0.75rem;" title="Next Slip to Assign">
+                        <span class="badge bg-primary px-2 py-1 font-monospace" style="font-size: 0.75rem;" title="Next Expected Slip to Assign">
                             #{{ $leaf['formatted'] }}
                         </span>
                     @elseif($leaf['status'] === 'unrecorded')
@@ -318,7 +352,7 @@
                                 style="font-size: 0.75rem;"
                                 title="Slip #{{ $leaf['formatted'] }} - Unrecorded gap"
                                 onclick="filterSlipRow('{{ $leaf['number'] }}')">
-                            {{ $leaf['formatted'] }}
+                            <i class="fas fa-exclamation-triangle me-1" style="font-size: 0.65rem;"></i>{{ $leaf['formatted'] }}
                         </button>
                     @else
                         <span class="badge bg-light text-muted border px-2 py-1 font-monospace" style="font-size: 0.75rem;">
@@ -1307,6 +1341,102 @@
         }
         filterSlipCategory('all');
     }
+
+    function runCrossCheck() {
+        var modalEl = document.getElementById('crossCheckModal');
+        var modal = new bootstrap.Modal(modalEl);
+        var body = document.getElementById('crossCheckModalBody');
+        body.innerHTML = '<div class="text-center py-4"><i class="fas fa-spinner fa-spin fa-2x text-primary mb-2"></i><div class="text-muted">Reconciling sequence leaves & cross-checking across all sources...</div></div>';
+        modal.show();
+
+        fetch("{{ route('store-manager.slip-sequences.cross-check', $slipSequence) }}", {
+            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+            var isOk = data.status === 'ok';
+            var html = `
+                <div class="alert ${isOk ? 'alert-success border-success' : 'alert-danger border-danger'} d-flex align-items-center mb-3">
+                    <i class="fas ${isOk ? 'fa-check-circle fa-2x text-success' : 'fa-exclamation-triangle fa-2x text-danger'} me-3"></i>
+                    <div>
+                        <h6 class="fw-bold mb-0">${data.status_label}</h6>
+                        <small class="text-muted">Book Range: #${data.book_range} &bull; Next Expected: #${data.current_slip_no}</small>
+                    </div>
+                </div>
+                <div class="row g-2 mb-3">
+                    <div class="col-4">
+                        <div class="border rounded p-2 text-center bg-light">
+                            <small class="text-muted text-uppercase d-block" style="font-size:0.7rem;">Expected Used</small>
+                            <span class="fs-5 fw-bold text-dark">${data.expected_used_count}</span>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="border rounded p-2 text-center bg-light">
+                            <small class="text-muted text-uppercase d-block" style="font-size:0.7rem;">Actual Recorded</small>
+                            <span class="fs-5 fw-bold ${data.used_count_matches ? 'text-success' : 'text-danger'}">${data.actual_used_count}</span>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="border rounded p-2 text-center bg-light">
+                            <small class="text-muted text-uppercase d-block" style="font-size:0.7rem;">Voided Slips</small>
+                            <span class="fs-5 fw-bold text-danger">${data.void_count}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            if (data.gaps_count > 0) {
+                var gapList = data.gaps.map(function(g) { return '#' + g.formatted; }).join(', ');
+                html += `
+                    <div class="alert alert-warning py-2 mb-3">
+                        <div class="fw-bold text-dark"><i class="fas fa-exclamation-circle me-1"></i>${data.gaps_count} Gap(s) Found:</div>
+                        <div class="small font-monospace mt-1">${gapList}</div>
+                    </div>
+                `;
+            }
+
+            if (data.duplicates_count > 0) {
+                var dupList = data.duplicates.map(function(d) { return '#' + d.formatted + ' (' + d.occurrences + 'x)'; }).join(', ');
+                html += `
+                    <div class="alert alert-danger py-2 mb-3">
+                        <div class="fw-bold text-dark"><i class="fas fa-copy me-1"></i>${data.duplicates_count} Duplicate(s) Found:</div>
+                        <div class="small font-monospace mt-1">${dupList}</div>
+                    </div>
+                `;
+            }
+
+            if (isOk) {
+                html += `
+                    <div class="text-center py-2 text-success">
+                        <i class="fas fa-shield-check me-1"></i>All slip numbers are strictly continuous, unique, and fully accounted for across procurement, transfers, and petty cash.
+                    </div>
+                `;
+            }
+
+            body.innerHTML = html;
+        })
+        .catch(function(err) {
+            body.innerHTML = '<div class="alert alert-danger">Error running cross-check: ' + err.message + '</div>';
+        });
+    }
 </script>
+
+<!-- Cross-Check Modal -->
+<div class="modal fade" id="crossCheckModal" tabindex="-1" aria-labelledby="crossCheckModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow border-0">
+            <div class="modal-header bg-light">
+                <h6 class="modal-title fw-bold" id="crossCheckModalLabel">
+                    <i class="fas fa-stethoscope text-primary me-2"></i>Sequence Cross-Check: {{ $slipSequence->label }}
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="crossCheckModalBody"></div>
+            <div class="modal-footer bg-light py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
 @endpush
 @endsection

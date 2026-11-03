@@ -1927,6 +1927,20 @@
                                         <i class="fas fa-exclamation-circle me-1"></i>{{ $message }}
                                     </div>
                                 @enderror
+                                @if(session('slip_gap_info'))
+                                @php $gap = session('slip_gap_info'); @endphp
+                                <div class="alert alert-warning py-2 px-2 small mb-2 mt-2 border-warning">
+                                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                        <div>
+                                            <i class="fas fa-exclamation-triangle text-warning me-1"></i>
+                                            Missing Slips: <span class="font-monospace fw-bold text-dark">{{ implode(', ', array_map(fn($f) => '#' . $f, $gap['missing_formatted'])) }}</span>
+                                        </div>
+                                        <button type="button" class="btn btn-xs btn-warning fw-bold px-2 py-1 shadow-xs" data-bs-toggle="modal" data-bs-target="#prVoidMissingModal">
+                                            <i class="fas fa-ban me-1"></i>Void Missing Slips
+                                        </button>
+                                    </div>
+                                </div>
+                                @endif
                                 <div id="intakeSlipSequenceBadge">
                                     @if($receiveSlipSequence)
                                         <div class="alert alert-success py-1 px-2 small mb-0 mt-1 d-flex justify-content-between align-items-center border-success">
@@ -6027,5 +6041,52 @@ function confirmDeletePrItem(itemId, productName) {
         </div>
     </div>
 </div>
+
+@if(session('slip_gap_info'))
+@php $gap = session('slip_gap_info'); @endphp
+<!-- Void Missing Slips Modal for PR Intake -->
+<div class="modal fade" id="prVoidMissingModal" tabindex="-1" aria-labelledby="prVoidMissingModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow border-0">
+            <form action="{{ route('store-manager.slip-sequences.void-missing') }}" method="POST">
+                @csrf
+                <input type="hidden" name="store_id" value="{{ $gap['store_id'] }}">
+                <input type="hidden" name="slip_type" value="{{ $gap['slip_type'] }}">
+                @foreach($gap['missing_numbers'] as $num)
+                    <input type="hidden" name="numbers[]" value="{{ $num }}">
+                @endforeach
+
+                <div class="modal-header bg-warning text-dark py-2 px-3">
+                    <h6 class="modal-title fw-bold" id="prVoidMissingModalLabel">
+                        <i class="fas fa-ban me-2"></i>Void Missing Slips ({{ count($gap['missing_numbers']) }})
+                    </h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-3">
+                    <p class="small text-muted mb-2">
+                        You entered slip <strong>#{{ $gap['given_number'] }}</strong>. To preserve strict sequence integrity, void the following unused slip numbers:
+                    </p>
+                    <div class="p-2 bg-light rounded border mb-3 font-monospace fw-bold text-danger text-center">
+                        {{ implode(', ', array_map(fn($f) => '#' . $f, $gap['missing_formatted'])) }}
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small">Reason for Voiding *</label>
+                        <textarea name="reason" class="form-control form-control-sm" rows="3" placeholder="E.g., Paper torn, spoiled in physical book, or skipped" required></textarea>
+                    </div>
+                    <div class="alert alert-info py-2 small mb-0">
+                        <i class="fas fa-info-circle me-1"></i>Voiding records these leaves as cancelled without moving inventory, advances sequence to #{{ $gap['given_number'] }}, and allows your PR intake to complete.
+                    </div>
+                </div>
+                <div class="modal-footer bg-light py-2 px-3">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-sm btn-warning fw-bold">
+                        <i class="fas fa-check me-1"></i>Void Slips &amp; Advance
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+@endif
 
 @endsection

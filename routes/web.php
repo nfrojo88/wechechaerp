@@ -1987,6 +1987,8 @@ Route::middleware(['auth'])->group(function () {
     // Global Slip Sequence Resource & API
     Route::resource('slip-sequences', App\Http\Controllers\SlipSequenceController::class);
     Route::get('api/slip-sequences/{storeId}/{slipType}', [App\Http\Controllers\SlipSequenceController::class, 'getNextSlip'])->name('api.slip-sequences.next');
+    Route::post('api/slip-sequences/void-missing', [App\Http\Controllers\SlipSequenceController::class, 'voidMissing'])->name('api.slip-sequences.void-missing');
+    Route::get('api/slip-sequences/{slipSequence}/cross-check', [App\Http\Controllers\SlipSequenceController::class, 'crossCheck'])->name('api.slip-sequences.cross-check');
 
     // Emergency & Standard MR Planning Approvals & Dispatch
     Route::post('material-requests/{materialRequest}/planning-approve', [App\Http\Controllers\MaterialRequestController::class, 'planningApprove'])->name('material-requests.planning-approve');
@@ -2522,6 +2524,8 @@ Route::middleware(['auth'])->group(function () {
         Route::post('slip-sequences/{slipSequence}/deactivate', [App\Http\Controllers\SlipSequenceController::class, 'deactivate'])->name('slip-sequences.deactivate');
         Route::post('slip-sequences/{slipSequence}/reactivate', [App\Http\Controllers\SlipSequenceController::class, 'reactivate'])->name('slip-sequences.reactivate');
         Route::post('slip-sequences/{slipSequence}/reset', [App\Http\Controllers\SlipSequenceController::class, 'reset'])->name('slip-sequences.reset');
+        Route::get('slip-sequences/{slipSequence}/cross-check', [App\Http\Controllers\SlipSequenceController::class, 'crossCheck'])->name('slip-sequences.cross-check');
+        Route::post('slip-sequences/void-missing', [App\Http\Controllers\SlipSequenceController::class, 'voidMissing'])->name('slip-sequences.void-missing');
         // Store Keeper Assignment Hub
         Route::get('assign-store-keeper', [App\Http\Controllers\StoreManagerController::class, 'assignStoreKeepersIndex'])->name('store-keepers.index');
         Route::post('assign-store-keeper', [App\Http\Controllers\StoreManagerController::class, 'updateStoreKeeperAssignment'])->name('store-keepers.update');
