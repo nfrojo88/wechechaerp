@@ -982,7 +982,7 @@ body.sidebar-open { overflow-y: hidden !important; }
                         @php
                             $authTargetIds = array_filter([
                                 auth()->id(),
-                                auth()->user()->employee->id,
+                                auth()->user()->employee?->id,
                             ]);
                             $allAuthCoas = \App\Models\ChartOfAccount::whereIn('assigned_to', $authTargetIds)->get();
                             $authPettyCash = $allAuthCoas->filter(function ($coa) {

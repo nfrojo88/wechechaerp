@@ -437,7 +437,7 @@
                                     @endif
                                     @if($pr->payment)
                                         <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle font-monospace px-2 py-1">
-                                            <i class="fa-solid fa-money-bill me-1"></i>{{ ucfirst($pr->payment->status ?? 'Payment') }}
+                                            <i class="fa-solid fa-money-bill me-1"></i>{{ ucfirst($pr->payment?->status ?? 'Payment') }}
                                         </span>
                                     @else
                                         <span class="text-muted small">Pending Finance</span>

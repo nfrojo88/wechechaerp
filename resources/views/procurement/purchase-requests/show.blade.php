@@ -208,10 +208,10 @@
                 break;
 
             case \App\Models\PurchaseRequest::STATUS_PENDING_PAYMENT:
-                if (!$purchaseRequest->payment->assigned_finance_staff_id) {
+                if (!$purchaseRequest->payment?->assigned_finance_staff_id) {
                     $canActOnCurrentStage = $isGlobalAdmin || in_array('finance_head', $rawUserRoles) || in_array('finance_manager', $rawUserRoles);
                 } else {
-                    $canActOnCurrentStage = $isGlobalAdmin || in_array('finance_head', $rawUserRoles) || ($authUser && $purchaseRequest->payment->assigned_finance_staff_id === $authUser->id);
+                    $canActOnCurrentStage = $isGlobalAdmin || in_array('finance_head', $rawUserRoles) || ($authUser && $purchaseRequest->payment?->assigned_finance_staff_id === $authUser->id);
                 }
                 break;
 
@@ -1537,7 +1537,7 @@
                         </form>
 
                     <!-- STAGE 7b: Finance Head Payment Assignment -->
-                    @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_PAYMENT && !$purchaseRequest->payment->assigned_finance_staff_id)
+                    @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_PAYMENT && !$purchaseRequest->payment?->assigned_finance_staff_id)
                         <div class="mb-3">
                             <h6 class="fw-bold text-dark mb-1">
                                 <i class="fas fa-wallet text-primary me-1"></i> Finance Payment Assignment
@@ -1560,7 +1560,7 @@
                             </div>
                             <div class="mb-2">
                                 <label class="form-label small fw-bold text-uppercase text-muted">Payment Amount (ETB) <span class="text-danger">*</span></label>
-                                <input type="number" step="0.01" name="amount" id="fundingPaymentAmountInput" class="form-control form-control-sm fw-bold" value="{{ (float)($purchaseRequest->payment->amount ?? $purchaseRequest->direct_buy_amount ?? 0) }}" required>
+                                <input type="number" step="0.01" name="amount" id="fundingPaymentAmountInput" class="form-control form-control-sm fw-bold" value="{{ (float)($purchaseRequest->payment?->amount ?? $purchaseRequest->direct_buy_amount ?? 0) }}" required>
                             </div>
                             <input type="hidden" name="staff_user_id" id="assignFinanceStaffHidden" value="">
                             <div class="mb-3">
@@ -1579,7 +1579,7 @@
                         </div>
 
                     <!-- STAGE 7b: Finance Staff Execute Payment -->
-                    @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_PAYMENT && $purchaseRequest->payment->assigned_finance_staff_id)
+                    @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_PAYMENT && $purchaseRequest->payment?->assigned_finance_staff_id)
                         <div class="mb-3">
                             <h6 class="fw-bold text-success mb-1">
                                 <i class="fas fa-hand-holding-dollar text-success me-1"></i> Payment In Expense Hub
@@ -1590,13 +1590,13 @@
                         <div class="alert alert-info py-2 px-3 small mb-3 border-start border-4 border-info">
                             <div class="d-flex justify-content-between align-items-center mb-1">
                                 <span class="text-muted">Payment Amount:</span>
-                                <strong class="text-primary fs-6">{{ number_format($purchaseRequest->payment->amount, 2) }} ETB</strong>
+                                <strong class="text-primary fs-6">{{ number_format($purchaseRequest->payment?->amount ?? 0, 2) }} ETB</strong>
                             </div>
                             <div class="d-flex justify-content-between align-items-center mb-1">
                                 <span class="text-muted">Funding Account:</span>
-                                <strong class="text-dark">{{ $purchaseRequest->payment->coaAccount->name }} ({{ $purchaseRequest->payment->coaAccount->code }})</strong>
+                                <strong class="text-dark">{{ $purchaseRequest->payment?->coaAccount?->name ?? 'N/A' }} ({{ $purchaseRequest->payment?->coaAccount?->code ?? 'N/A' }})</strong>
                             </div>
-                            @if($purchaseRequest->payment->assignedStaff)
+                            @if($purchaseRequest->payment?->assignedStaff)
                             <div class="d-flex justify-content-between align-items-center">
                                 <span class="text-muted">Assigned Person:</span>
                                 <strong class="text-dark">{{ $purchaseRequest->payment->assignedStaff->name }}</strong>
@@ -1611,7 +1611,7 @@
                         @php
                             $user = auth()->user();
                             $canPayHere = $user && (
-                                (int)$purchaseRequest->payment->assigned_finance_staff_id === (int)$user->id ||
+                                (int)($purchaseRequest->payment?->assigned_finance_staff_id ?? 0) === (int)$user->id ||
                                 $user->hasAnyRole(['admin', 'global_admin', 'Finance head', 'finance_head', 'finance_manager'])
                             );
                         @endphp
@@ -1649,7 +1649,7 @@
                                         <i class="fas fa-forward me-1"></i> Jump Directly to Next Stage (Store Material Intake)
                                     </h6>
                                     <p class="small text-muted mb-0">
-                                        Payment of <strong>{{ number_format($purchaseRequest->payment->amount ?? $purchaseRequest->direct_buy_amount, 2) }} ETB</strong> disbursed. Skip receipt upload and move directly to <strong>Store Keeper Material Intake</strong>.
+                                        Payment of <strong>{{ number_format($purchaseRequest->payment?->amount ?? $purchaseRequest->direct_buy_amount ?? 0, 2) }} ETB</strong> disbursed. Skip receipt upload and move directly to <strong>Store Keeper Material Intake</strong>.
                                     </p>
                                 </div>
                                 <form action="{{ route('purchase-requests.skip-receipt-to-store', $purchaseRequest) }}" method="POST" class="d-inline">
@@ -1731,11 +1731,11 @@
 
                             {{-- Withholding Receipt (Optional / If Available) --}}
                             @php
-                                $paymentHasWithholding = (bool)($purchaseRequest->payment->has_withholding || (float)($purchaseRequest->payment->withholding_amount ?? 0) > 0);
-                                $defaultWithholdingRate = $purchaseRequest->payment->withholding_rate ?? 2.00;
-                                $defaultWithholdingAmount = $purchaseRequest->payment->withholding_amount ?? 0.00;
-                                $existingWithholdingReceipt = $purchaseRequest->payment->withholding_receipt ?? $purchaseRequest->receipt->withholding_receipt_path;
-                                $existingWithholdingNo = $purchaseRequest->payment->withholding_receipt_number ?? $purchaseRequest->receipt->withholding_receipt_number;
+                                $paymentHasWithholding = (bool)(($purchaseRequest->payment?->has_withholding ?? false) || (float)($purchaseRequest->payment?->withholding_amount ?? 0) > 0);
+                                $defaultWithholdingRate = $purchaseRequest->payment?->withholding_rate ?? 2.00;
+                                $defaultWithholdingAmount = $purchaseRequest->payment?->withholding_amount ?? 0.00;
+                                $existingWithholdingReceipt = $purchaseRequest->payment?->withholding_receipt ?? $purchaseRequest->receipt?->withholding_receipt_path;
+                                $existingWithholdingNo = $purchaseRequest->payment?->withholding_receipt_number ?? $purchaseRequest->receipt?->withholding_receipt_number;
                             @endphp
                             <div class="p-2.5 rounded-3 border bg-warning bg-opacity-10 mb-3 border-warning border-opacity-25">
                                 <div class="d-flex justify-content-between align-items-center mb-2">
@@ -3057,7 +3057,7 @@
                     $ext = $purchaseRequest->receipt ? strtolower(pathinfo($purchaseRequest->receipt->file_path, PATHINFO_EXTENSION)) : '';
                     $isImage = in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'gif']);
                     $isPdf = $ext === 'pdf';
-                    $vStatus = $purchaseRequest->receipt->verification_status ?? 'pending';
+                    $vStatus = $purchaseRequest->receipt?->verification_status ?? 'pending';
                     $vBadge = match($vStatus) {
                         'verified' => ['class' => 'bg-success', 'label' => 'Verified & Approved by Finance', 'icon' => 'fa-circle-check'],
                         'rejected' => ['class' => 'bg-danger', 'label' => 'Receipt Rejected', 'icon' => 'fa-circle-xmark'],
@@ -3065,7 +3065,7 @@
                     };
 
                     $withholdingUrl = $purchaseRequest->withholding_receipt_url;
-                    $wPath = $purchaseRequest->receipt->withholding_receipt_path ?? $purchaseRequest->payment->withholding_receipt ?? '';
+                    $wPath = $purchaseRequest->receipt?->withholding_receipt_path ?? $purchaseRequest->payment?->withholding_receipt ?? '';
                     $wExt = strtolower(pathinfo($wPath, PATHINFO_EXTENSION));
                     $wIsImage = in_array($wExt, ['jpg', 'jpeg', 'png', 'webp', 'gif']);
                     $wIsPdf = $wExt === 'pdf';

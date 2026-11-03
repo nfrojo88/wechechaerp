@@ -58,6 +58,7 @@ class AdminMergeSeparatePurchaseRequestTest extends TestCase
             $table->string('code')->nullable();
             $table->string('status')->default('active');
             $table->timestamps();
+            $table->softDeletes();
         });
 
         Schema::create('stores', function ($table) {
@@ -74,6 +75,7 @@ class AdminMergeSeparatePurchaseRequestTest extends TestCase
             $table->string('unit')->default('pcs');
             $table->boolean('is_active')->default(true);
             $table->timestamps();
+            $table->softDeletes();
         });
 
         Schema::create('purchase_requests', function ($table) {
@@ -136,6 +138,31 @@ class AdminMergeSeparatePurchaseRequestTest extends TestCase
             $table->decimal('quantity_requested', 15, 3)->default(1);
             $table->decimal('quantity_fulfilled', 15, 3)->default(0);
             $table->text('notes')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('procurement_payments', function ($table) {
+            $table->id();
+            $table->unsignedBigInteger('purchase_request_id');
+            $table->unsignedBigInteger('assigned_finance_staff_id')->nullable();
+            $table->unsignedBigInteger('coa_account_id')->nullable();
+            $table->decimal('amount', 15, 2)->default(0);
+            $table->string('status')->default('pending');
+            $table->boolean('has_withholding')->default(false);
+            $table->decimal('withholding_rate', 5, 2)->default(2.00);
+            $table->decimal('withholding_amount', 15, 2)->default(0);
+            $table->string('withholding_receipt')->nullable();
+            $table->string('withholding_receipt_number')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('procurement_receipts', function ($table) {
+            $table->id();
+            $table->unsignedBigInteger('purchase_request_id');
+            $table->string('file_path')->nullable();
+            $table->string('verification_status')->default('pending');
+            $table->string('withholding_receipt_path')->nullable();
+            $table->string('withholding_receipt_number')->nullable();
             $table->timestamps();
         });
 
@@ -568,5 +595,60 @@ class AdminMergeSeparatePurchaseRequestTest extends TestCase
         $sourcePr->refresh();
         $this->assertEquals(PurchaseRequest::STATUS_CANCELLED, $sourcePr->status);
         $this->assertEquals($targetPr->id, $sourcePr->merged_into_pr_id);
+    }
+
+    /**
+     * Test PR view renders without error when pending payment and payment record is null.
+     */
+    public function test_pr_show_view_handles_null_payment_when_pending_payment(): void
+    {
+        Auth::login($this->generalAdmin);
+
+        $pr = PurchaseRequest::create([
+            'pr_no'      => 'PR-20261103-0500',
+            'project_id' => $this->project->id,
+            'status'     => PurchaseRequest::STATUS_PENDING_PAYMENT,
+        ]);
+        PurchaseRequestItem::create([
+            'purchase_request_id' => $pr->id,
+            'product_id'          => $this->productA->id,
+            'quantity'            => 10,
+            'unit'                => 'bag',
+        ]);
+        $pr->load('items.product', 'project');
+
+        $this->assertNull($pr->payment);
+
+        $rendered = view('procurement.purchase-requests.show', [
+            'purchaseRequest'      => $pr,
+            'stockAvailability'    => [],
+            'transferAvailability' => [],
+            'prTransfers'          => collect(),
+            'coaAccounts'          => collect(),
+            'financeStaff'         => collect(),
+            'drivers'              => collect(),
+            'suppliers'            => collect(),
+            'stores'               => collect(),
+            'pricingBenchmarks'    => [
+                'items'                  => [],
+                'total_monthly_market'   => 0,
+                'total_last_purchase'    => 0,
+                'total_latest_benchmark' => 0,
+                'has_monthly_data'       => false,
+                'has_purchase_data'      => false,
+            ],
+            'isFinalIntake'        => false,
+            'receiveSlipSequence'  => null,
+            'nextReceiveSlipNo'    => null,
+            'availableProducts'    => collect(),
+            'prDeliveryReceipts'   => collect(),
+            'userStoreId'          => null,
+            'proformaMatrix'       => ['suppliers' => [], 'items' => [], 'grand_totals' => []],
+            'mergeablePrs'         => collect(),
+            'errors'               => new \Illuminate\Support\ViewErrorBag(),
+        ])->render();
+
+        $this->assertStringContainsString('PR-20261103-0500', $rendered);
+        $this->assertStringContainsString('Finance Payment Assignment', $rendered);
     }
 }
