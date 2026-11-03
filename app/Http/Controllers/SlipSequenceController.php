@@ -57,7 +57,16 @@ class SlipSequenceController extends Controller
 
         if ($existing) {
             if ($request->boolean('archive_previous') || $existing->status === 'full' || $existing->current_slip_no > $existing->book_end_no) {
-                $existing->update(['status' => 'full']);
+                try {
+                    $existing->update(['status' => 'full']);
+                } catch (\Illuminate\Database\QueryException $e) {
+                    if (str_contains($e->getMessage(), 'unique_active_per_store_type') || $e->getCode() == 23000) {
+                        $this->dropFlawedUniqueIndexIfPresent();
+                        $existing->update(['status' => 'full']);
+                    } else {
+                        throw $e;
+                    }
+                }
             } else {
                 return back()->withInput()->withErrors([
                     'slip_type' => "Active sequence already exists for {$existing->label} (#{$existing->book_start_no}–#{$existing->book_end_no}). Select 'Archive previous sequence' to activate this new book without deleting any history."
@@ -95,15 +104,32 @@ class SlipSequenceController extends Controller
         ]);
 
         // Archive / mark previous sequence book as full
-        if ($request->boolean('archive_previous', true)) {
-            $slipSequence->update(['status' => 'full']);
-        }
+        try {
+            if ($request->boolean('archive_previous', true)) {
+                $slipSequence->update(['status' => 'full']);
+            }
 
-        // Deactivate any other active sequence for this store + type
-        SlipSequence::where('store_id', $slipSequence->store_id)
-            ->where('slip_type', $slipSequence->slip_type)
-            ->where('status', 'active')
-            ->update(['status' => 'full']);
+            // Deactivate any other active sequence for this store + type
+            SlipSequence::where('store_id', $slipSequence->store_id)
+                ->where('slip_type', $slipSequence->slip_type)
+                ->where('status', 'active')
+                ->where('id', '!=', $slipSequence->id)
+                ->update(['status' => 'full']);
+        } catch (\Illuminate\Database\QueryException $e) {
+            if (str_contains($e->getMessage(), 'unique_active_per_store_type') || $e->getCode() == 23000) {
+                $this->dropFlawedUniqueIndexIfPresent();
+                if ($request->boolean('archive_previous', true)) {
+                    $slipSequence->update(['status' => 'full']);
+                }
+                SlipSequence::where('store_id', $slipSequence->store_id)
+                    ->where('slip_type', $slipSequence->slip_type)
+                    ->where('status', 'active')
+                    ->where('id', '!=', $slipSequence->id)
+                    ->update(['status' => 'full']);
+            } else {
+                throw $e;
+            }
+        }
 
         // Create the new active sequence
         $newSequence = SlipSequence::create([
@@ -233,7 +259,16 @@ class SlipSequenceController extends Controller
      */
     public function deactivate(SlipSequence $slipSequence)
     {
-        $slipSequence->update(['status' => 'inactive']);
+        try {
+            $slipSequence->update(['status' => 'inactive']);
+        } catch (\Illuminate\Database\QueryException $e) {
+            if (str_contains($e->getMessage(), 'unique_active_per_store_type') || $e->getCode() == 23000) {
+                $this->dropFlawedUniqueIndexIfPresent();
+                $slipSequence->update(['status' => 'inactive']);
+            } else {
+                throw $e;
+            }
+        }
         return back()->with('success', 'Slip sequence deactivated.');
     }
 
@@ -246,14 +281,43 @@ class SlipSequenceController extends Controller
             return back()->withErrors(['status' => 'Cannot reactivate a full slip sequence book.']);
         }
 
-        // Deactivate other active sequences for this store + type
-        SlipSequence::where('store_id', $slipSequence->store_id)
-            ->where('slip_type', $slipSequence->slip_type)
-            ->where('status', 'active')
-            ->update(['status' => 'inactive']);
+        try {
+            // Deactivate other active sequences for this store + type
+            SlipSequence::where('store_id', $slipSequence->store_id)
+                ->where('slip_type', $slipSequence->slip_type)
+                ->where('status', 'active')
+                ->where('id', '!=', $slipSequence->id)
+                ->update(['status' => 'inactive']);
 
-        $slipSequence->update(['status' => 'active']);
+            $slipSequence->update(['status' => 'active']);
+        } catch (\Illuminate\Database\QueryException $e) {
+            if (str_contains($e->getMessage(), 'unique_active_per_store_type') || $e->getCode() == 23000) {
+                $this->dropFlawedUniqueIndexIfPresent();
+                SlipSequence::where('store_id', $slipSequence->store_id)
+                    ->where('slip_type', $slipSequence->slip_type)
+                    ->where('status', 'active')
+                    ->where('id', '!=', $slipSequence->id)
+                    ->update(['status' => 'inactive']);
+
+                $slipSequence->update(['status' => 'active']);
+            } else {
+                throw $e;
+            }
+        }
+
         return back()->with('success', 'Slip sequence reactivated.');
+    }
+
+    /**
+     * Safely drop flawed unique_active_per_store_type index if still present in MySQL.
+     */
+    protected function dropFlawedUniqueIndexIfPresent(): void
+    {
+        try {
+            \Illuminate\Support\Facades\DB::statement("ALTER TABLE slip_sequences DROP INDEX unique_active_per_store_type");
+        } catch (\Throwable $e) {
+            // Index already dropped or not present
+        }
     }
 
     /**

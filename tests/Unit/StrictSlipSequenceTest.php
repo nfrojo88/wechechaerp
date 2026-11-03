@@ -688,4 +688,47 @@ class StrictSlipSequenceTest extends TestCase
         $this->assertEmpty($cleanReport['duplicates']);
         $this->assertEmpty($cleanReport['mismatches']);
     }
+
+    public function test_can_deactivate_sequence_when_another_inactive_sequence_already_exists_for_same_store_and_type()
+    {
+        // Sequence 1 already inactive
+        $seq1 = SlipSequence::create([
+            'store_id'        => $this->store->id,
+            'slip_type'       => 'receive',
+            'label'           => 'Receive Book 1 (Past)',
+            'prefix'          => 'REC-',
+            'book_start_no'   => 1,
+            'book_end_no'     => 100,
+            'current_slip_no' => 101,
+            'used_count'      => 100,
+            'status'          => 'inactive',
+        ]);
+
+        // Sequence 2 is currently active
+        $seq2 = SlipSequence::create([
+            'store_id'        => $this->store->id,
+            'slip_type'       => 'receive',
+            'label'           => 'Receive Book 2 (Current)',
+            'prefix'          => 'REC-',
+            'book_start_no'   => 101,
+            'book_end_no'     => 200,
+            'current_slip_no' => 105,
+            'used_count'      => 4,
+            'status'          => 'active',
+        ]);
+
+        $controller = new \App\Http\Controllers\SlipSequenceController();
+        $response = $controller->deactivate($seq2);
+
+        $seq2->refresh();
+        $this->assertEquals('inactive', $seq2->status);
+        $this->assertEquals('inactive', $seq1->status);
+
+        // Verify multiple inactive sequences coexist peacefully
+        $inactiveCount = SlipSequence::where('store_id', $this->store->id)
+            ->where('slip_type', 'receive')
+            ->where('status', 'inactive')
+            ->count();
+        $this->assertEquals(2, $inactiveCount);
+    }
 }

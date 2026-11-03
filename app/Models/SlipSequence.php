@@ -25,6 +25,33 @@ class SlipSequence extends Model
         'status' => 'string',
     ];
 
+    protected static function booted()
+    {
+        static::saving(function (SlipSequence $seq) {
+            // When marking a sequence as active, ensure any other currently active sequence for this store and slip_type is marked inactive
+            if ($seq->status === 'active' && !empty($seq->store_id) && !empty($seq->slip_type)) {
+                try {
+                    static::where('store_id', $seq->store_id)
+                        ->where('slip_type', $seq->slip_type)
+                        ->where('status', 'active')
+                        ->where('id', '!=', $seq->id ?? 0)
+                        ->update(['status' => 'inactive']);
+                } catch (\Illuminate\Database\QueryException $e) {
+                    if (str_contains($e->getMessage(), 'unique_active_per_store_type') || $e->getCode() == 23000) {
+                        try {
+                            \Illuminate\Support\Facades\DB::statement("ALTER TABLE slip_sequences DROP INDEX unique_active_per_store_type");
+                        } catch (\Throwable $dropErr) {}
+                        static::where('store_id', $seq->store_id)
+                            ->where('slip_type', $seq->slip_type)
+                            ->where('status', 'active')
+                            ->where('id', '!=', $seq->id ?? 0)
+                            ->update(['status' => 'inactive']);
+                    }
+                }
+            }
+        });
+    }
+
     /**
      * Relationship: belongs to Store
      */
@@ -78,7 +105,18 @@ class SlipSequence extends Model
 
         // Check if book is full
         if ($this->current_slip_no > $this->book_end_no) {
-            $this->update(['status' => 'full']);
+            try {
+                $this->update(['status' => 'full']);
+            } catch (\Illuminate\Database\QueryException $e) {
+                if (str_contains($e->getMessage(), 'unique_active_per_store_type') || $e->getCode() == 23000) {
+                    try {
+                        \Illuminate\Support\Facades\DB::statement("ALTER TABLE slip_sequences DROP INDEX unique_active_per_store_type");
+                    } catch (\Throwable $dropErr) {}
+                    $this->update(['status' => 'full']);
+                } else {
+                    throw $e;
+                }
+            }
             throw new \Exception('Slip sequence book is full. Cannot generate more slips.');
         }
 

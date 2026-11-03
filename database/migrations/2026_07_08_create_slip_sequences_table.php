@@ -25,10 +25,6 @@ return new class extends Migration
             $table->text('notes')->nullable();
             $table->timestamps();
 
-            // One active sequence per store + slip_type
-            $table->unique(['store_id', 'slip_type', 'status'], 'unique_active_per_store_type')
-                  ->where('status', '=', 'active');
-
             $table->index(['store_id', 'slip_type']);
             $table->index('status');
         });
