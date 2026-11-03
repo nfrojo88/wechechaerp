@@ -11,9 +11,11 @@ use App\Models\PurchaseRequest;
 use App\Models\PrWorkflowLog;
 use App\Services\ProcurementLifecycleService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 class MaterialRequestController extends Controller
 {
@@ -273,7 +275,17 @@ class MaterialRequestController extends Controller
         ]);
         $products = \App\Models\Product::where('is_active', true)->get();
         
-        return view('procurement.requests.show', compact('materialRequest', 'products'));
+        $authUser = Auth::user();
+        $mergeableMrs = collect();
+        if ($authUser && $authUser->isGlobalAdmin()) {
+            $mergeableMrs = MaterialRequest::where('id', '!=', $materialRequest->id)
+                ->whereNotIn('status', ['cancelled', 'rejected'])
+                ->orderByDesc('id')
+                ->limit(100)
+                ->get(['id', 'reference_number', 'status', 'project_id', 'created_at']);
+        }
+
+        return view('procurement.requests.show', compact('materialRequest', 'products', 'mergeableMrs'));
     }
     
     public function updateStatus(Request $request, MaterialRequest $materialRequest)
@@ -1045,6 +1057,235 @@ class MaterialRequestController extends Controller
     public function sendStageSms(Request $request, MaterialRequest $materialRequest)
     {
         return back()->with('info', 'SMS notifications for procurement are disabled.');
+    }
+
+    /**
+     * Admin Merge MR: Merge one or more Material Requests into a target Material Request.
+     * Accessible strictly by General Admin.
+     */
+    public function adminMergeMr(Request $request, MaterialRequest $materialRequest)
+    {
+        if (!Auth::user() || !Auth::user()->isGlobalAdmin()) {
+            abort(403, 'Unauthorized. Merge and Separate features are reserved for General Admin only.');
+        }
+
+        $request->validate([
+            'source_mr_ids'          => 'required|array|min:1',
+            'source_mr_ids.*'        => 'required|integer|exists:material_requests,id',
+            'consolidate_duplicates' => 'nullable|boolean',
+            'merge_notes'            => 'nullable|string|max:1000',
+        ]);
+
+        $consolidate = $request->boolean('consolidate_duplicates', true);
+        $notes = trim($request->input('merge_notes', ''));
+        $sourceIds = array_values(array_diff($request->input('source_mr_ids', []), [$materialRequest->id]));
+
+        if (empty($sourceIds)) {
+            return back()->with('error', 'Please select at least one different material request to merge.');
+        }
+
+        $sourceMrs = MaterialRequest::with('items')->whereIn('id', $sourceIds)->get();
+        if ($sourceMrs->isEmpty()) {
+            return back()->with('error', 'Selected material requests could not be found.');
+        }
+
+        $mergedRefNos = [];
+        $movedItemsCount = 0;
+
+        DB::transaction(function () use ($materialRequest, $sourceMrs, $consolidate, $notes, &$mergedRefNos, &$movedItemsCount) {
+            $adminName = Auth::user()->name ?? 'General Admin';
+
+            foreach ($sourceMrs as $src) {
+                $mergedRefNos[] = $src->reference_number;
+
+                foreach ($src->items as $srcItem) {
+                    $targetItem = null;
+                    if ($consolidate) {
+                        $targetItem = $materialRequest->items()
+                            ->where('product_id', $srcItem->product_id)
+                            ->first();
+                    }
+
+                    if ($targetItem) {
+                        $targetItem->increment('quantity_requested', (float)$srcItem->quantity_requested);
+                        if ($srcItem->notes && !str_contains($targetItem->notes ?? '', $srcItem->notes)) {
+                            $targetItem->update([
+                                'notes' => trim(($targetItem->notes ? $targetItem->notes . ' | ' : '') . $srcItem->notes),
+                            ]);
+                        }
+                        $srcItem->delete();
+                    } else {
+                        $srcItem->update([
+                            'material_request_id' => $materialRequest->id,
+                        ]);
+                    }
+                    $movedItemsCount++;
+                }
+
+                $auditNote = "Merged into MR #{$materialRequest->reference_number} by General Admin {$adminName} on " . now()->format('Y-m-d H:i') . ($notes ? ". Reason: {$notes}" : '');
+
+                $updateData = [
+                    'status' => 'cancelled',
+                    'notes'  => trim(($src->notes ? $src->notes . "\n" : '') . "[MERGED] " . $auditNote),
+                ];
+                if (Schema::hasColumn('material_requests', 'merged_into_mr_id')) {
+                    $updateData['merged_into_mr_id'] = $materialRequest->id;
+                }
+                if (Schema::hasColumn('material_requests', 'merge_notes')) {
+                    $updateData['merge_notes'] = $auditNote;
+                }
+                $src->update($updateData);
+
+                // If source MR had companion PRs, update them as well
+                foreach ($src->purchaseRequests as $cPr) {
+                    $cPr->update([
+                        'status'            => \App\Models\PurchaseRequest::STATUS_CANCELLED,
+                        'rejection_reason'  => "Companion Material Request #{$src->reference_number} merged into MR #{$materialRequest->reference_number}.",
+                        'merged_into_pr_id' => $materialRequest->purchaseRequest?->id,
+                    ]);
+                }
+            }
+
+            // Update target MR notes with merge audit
+            $targetAudit = "[MERGE AUDIT] General Admin {$adminName} merged MR(s) " . implode(', ', $mergedRefNos) . " into this request ({$movedItemsCount} items consolidated/moved)." . ($notes ? " Reason: {$notes}" : '');
+            $materialRequest->update([
+                'notes' => trim(($materialRequest->notes ? $materialRequest->notes . "\n" : '') . $targetAudit),
+            ]);
+        });
+
+        return redirect()->route('material-requests.show', $materialRequest)
+            ->with('success', "Successfully merged Material Request(s) " . implode(', ', $mergedRefNos) . " into MR #{$materialRequest->reference_number}!");
+    }
+
+    /**
+     * Admin Bulk Merge MR from Queue.
+     */
+    public function adminBulkMergeMr(Request $request)
+    {
+        if (!Auth::user() || !Auth::user()->isGlobalAdmin()) {
+            abort(403, 'Unauthorized. Merge and Separate features are reserved for General Admin only.');
+        }
+
+        $request->validate([
+            'target_mr_id'           => 'required|integer|exists:material_requests,id',
+            'source_mr_ids'          => 'required|array|min:1',
+            'source_mr_ids.*'        => 'required|integer|exists:material_requests,id',
+            'consolidate_duplicates' => 'nullable|boolean',
+            'merge_notes'            => 'nullable|string|max:1000',
+        ]);
+
+        $targetMr = MaterialRequest::findOrFail($request->input('target_mr_id'));
+        return $this->adminMergeMr($request, $targetMr);
+    }
+
+    /**
+     * Admin Separate MR: Split specific items or partial item quantities into a new MR.
+     * Accessible strictly by General Admin.
+     */
+    public function adminSeparateMr(Request $request, MaterialRequest $materialRequest)
+    {
+        if (!Auth::user() || !Auth::user()->isGlobalAdmin()) {
+            abort(403, 'Unauthorized. Merge and Separate features are reserved for General Admin only.');
+        }
+
+        $request->validate([
+            'items'                    => 'required|array|min:1',
+            'separate_notes'           => 'nullable|string|max:1000',
+            'new_project_id'           => 'nullable|exists:projects,id',
+            'new_destination_store_id' => 'nullable|exists:stores,id',
+            'new_source'               => 'nullable|string|max:255',
+        ]);
+
+        $itemsInput = $request->input('items', []);
+        $notes = trim($request->input('separate_notes', ''));
+
+        // Filter items selected with valid positive quantity
+        $itemsToSeparate = [];
+        foreach ($itemsInput as $itemId => $itemData) {
+            $selected = !empty($itemData['selected']);
+            $splitQty = isset($itemData['quantity']) ? (float)$itemData['quantity'] : 0;
+            if ($selected && $splitQty > 0) {
+                $itemsToSeparate[$itemId] = $splitQty;
+            }
+        }
+
+        if (empty($itemsToSeparate)) {
+            return back()->with('error', 'Please select at least one item with a valid quantity greater than 0 to separate.');
+        }
+
+        $originalItems = $materialRequest->items()->whereIn('id', array_keys($itemsToSeparate))->get()->keyBy('id');
+        foreach ($itemsToSeparate as $itemId => $splitQty) {
+            if (!isset($originalItems[$itemId])) {
+                return back()->with('error', "Item #{$itemId} could not be found on this material request.");
+            }
+            $currQty = (float)$originalItems[$itemId]->quantity_requested;
+            if ($splitQty > $currQty) {
+                return back()->with('error', "Split quantity ({$splitQty}) cannot exceed current item quantity ({$currQty}) for " . ($originalItems[$itemId]->product->name ?? "Item #{$itemId}") . ".");
+            }
+        }
+
+        $newMr = null;
+
+        DB::transaction(function () use ($materialRequest, $itemsToSeparate, $originalItems, $request, $notes, &$newMr) {
+            $adminName = Auth::user()->name ?? 'General Admin';
+
+            // 1. Create new MR
+            $newMr = MaterialRequest::create([
+                'reference_number'     => MaterialRequest::generateReferenceNumber(),
+                'project_id'           => $request->input('new_project_id') ?: $materialRequest->project_id,
+                'destination_store_id' => $request->input('new_destination_store_id') ?: $materialRequest->destination_store_id,
+                'source'               => $request->input('new_source') ?: ($materialRequest->source ?? 'Emergency'),
+                'required_date'        => $materialRequest->required_date,
+                'status'               => $materialRequest->status,
+                'created_by'           => $materialRequest->created_by ?: Auth::id(),
+                'notes'                => "Separated from MR #{$materialRequest->reference_number} by General Admin {$adminName}" . ($notes ? ". Reason: {$notes}" : ''),
+                'merge_notes'          => "Separated from MR #{$materialRequest->reference_number}",
+            ]);
+
+            $separatedCount = 0;
+            foreach ($itemsToSeparate as $itemId => $splitQty) {
+                $origItem = $originalItems[$itemId];
+                $currQty = (float)$origItem->quantity_requested;
+
+                if ($splitQty >= $currQty) {
+                    // Transfer entire item to new MR
+                    $origItem->update([
+                        'material_request_id' => $newMr->id,
+                    ]);
+                } else {
+                    // Deduct splitQty from original item
+                    $origItem->update([
+                        'quantity_requested' => $currQty - $splitQty,
+                    ]);
+
+                    // Create new item in new MR
+                    MaterialRequestItem::create([
+                        'material_request_id' => $newMr->id,
+                        'product_id'          => $origItem->product_id,
+                        'quantity_requested'  => $splitQty,
+                        'notes'               => $origItem->notes,
+                    ]);
+                }
+                $separatedCount++;
+            }
+
+            // Update original MR notes
+            $materialRequest->update([
+                'notes' => trim(($materialRequest->notes ? $materialRequest->notes . "\n" : '') . "[SEPARATE AUDIT] {$separatedCount} item(s) separated into new MR #{$newMr->reference_number} by General Admin {$adminName}." . ($notes ? " Reason: {$notes}" : '')),
+            ]);
+
+            // If original MR has 0 items remaining, mark it cancelled
+            if ($materialRequest->items()->count() === 0) {
+                $materialRequest->update([
+                    'status'            => 'cancelled',
+                    'merged_into_mr_id' => $newMr->id,
+                    'merge_notes'       => "All items separated into MR #{$newMr->reference_number}",
+                ]);
+            }
+        });
+
+        return redirect()->route('material-requests.show', $newMr)
+            ->with('success', "New Material Request #{$newMr->reference_number} successfully separated from MR #{$materialRequest->reference_number}!");
     }
 }
 

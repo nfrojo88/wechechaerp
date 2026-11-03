@@ -1963,6 +1963,9 @@ Route::middleware(['auth'])->group(function () {
     Route::put('purchase-requests/{purchaseRequest}/items/{item}', [App\Http\Controllers\PurchaseRequestController::class, 'updateItem'])->name('purchase-requests.update-item');
     Route::delete('purchase-requests/{purchaseRequest}/items/{item}', [App\Http\Controllers\PurchaseRequestController::class, 'removeItem'])->name('purchase-requests.remove-item');
     Route::post('purchase-requests/{purchaseRequest}/send-stage-sms', [App\Http\Controllers\PurchaseRequestController::class, 'sendStageSms'])->name('purchase-requests.send-stage-sms');
+    Route::post('purchase-requests/admin-bulk-merge', [App\Http\Controllers\PurchaseRequestController::class, 'adminBulkMergePr'])->name('purchase-requests.admin-bulk-merge');
+    Route::post('purchase-requests/{purchaseRequest}/admin-merge', [App\Http\Controllers\PurchaseRequestController::class, 'adminMergePr'])->name('purchase-requests.admin-merge');
+    Route::post('purchase-requests/{purchaseRequest}/admin-separate', [App\Http\Controllers\PurchaseRequestController::class, 'adminSeparatePr'])->name('purchase-requests.admin-separate');
 
     // ── Office Material Requests (Secretary -> HR Money Approval -> Finance Assign -> Finance Pay) ──
     Route::get('office-requests', [App\Http\Controllers\OfficeSupplyRequestController::class, 'index'])->name('office-requests.index');
@@ -2032,6 +2035,9 @@ Route::middleware(['auth'])->group(function () {
     Route::post('material-requests/{materialRequest}/status',
         [App\Http\Controllers\MaterialRequestController::class, 'updateStatus'])
         ->name('material-requests.updateStatus');
+    Route::post('material-requests/admin-bulk-merge', [App\Http\Controllers\MaterialRequestController::class, 'adminBulkMergeMr'])->name('material-requests.admin-bulk-merge');
+    Route::post('material-requests/{materialRequest}/admin-merge', [App\Http\Controllers\MaterialRequestController::class, 'adminMergeMr'])->name('material-requests.admin-merge');
+    Route::post('material-requests/{materialRequest}/admin-separate', [App\Http\Controllers\MaterialRequestController::class, 'adminSeparateMr'])->name('material-requests.admin-separate');
         
     // Material Damage Reports
     Route::resource('material-damage-reports', App\Http\Controllers\MaterialDamageReportController::class)->only(['index', 'create', 'store', 'show']);

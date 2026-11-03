@@ -62,6 +62,11 @@
                 </button>
             </form>
             @endif
+            @if($isGlobalAdmin)
+            <button type="button" class="btn btn-outline-primary shadow-sm fw-bold" data-bs-toggle="modal" data-bs-target="#adminBulkMergePrQueueModal" title="Merge purchase requests (General Admin)">
+                <i class="fas fa-code-merge me-1"></i> Merge Requests
+            </button>
+            @endif
             @if(!$isAuditorUser)
             <a href="{{ route('purchase-requests.create') }}" class="btn btn-primary shadow-sm fw-bold">
                 <i class="fas fa-plus me-1"></i> New Purchase Request
@@ -2464,4 +2469,98 @@ function setAllSplitDecisions(decisionValue) {
     });
 }
 </script>
+@if($isGlobalAdmin)
+<!-- Modal: Bulk Merge Purchase Requests (General Admin Only) -->
+<div class="modal fade" id="adminBulkMergePrQueueModal" tabindex="-1" aria-labelledby="adminBulkMergePrQueueModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <form action="{{ route('purchase-requests.admin-bulk-merge') }}" method="POST">
+                @csrf
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title fs-6 fw-bold" id="adminBulkMergePrQueueModalLabel">
+                        <i class="fas fa-code-merge me-2"></i>Merge Purchase Requests (General Admin)
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4 text-start">
+                    <div class="alert alert-info small mb-3">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Combine multiple purchase requests into a single destination PR. All items will be transferred/consolidated, and the merged source requests will be marked as cancelled/merged with full audit logs.
+                    </div>
+
+                    @php
+                        $queueMergePrs = isset($mergeablePrs) && $mergeablePrs->isNotEmpty() ? $mergeablePrs : (isset($allPrs) ? $allPrs : collect());
+                    @endphp
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-muted text-uppercase">1. Destination / Target Purchase Request <span class="text-danger">*</span></label>
+                        <select name="target_pr_id" id="bulkTargetPrSelect" class="form-select form-select-sm" required onchange="filterBulkSourcePrs()">
+                            <option value="">-- Select Destination PR --</option>
+                            @foreach($queueMergePrs as $qPr)
+                                <option value="{{ $qPr->id }}">#{{ $qPr->pr_no }} ({{ $qPr->status_label ?? $qPr->status }})</option>
+                            @endforeach
+                        </select>
+                        <small class="text-muted">This request will receive all items and remain active.</small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-muted text-uppercase">2. Source Purchase Requests to Merge <span class="text-danger">*</span></label>
+                        <div class="border rounded p-2" style="max-height: 200px; overflow-y: auto;">
+                            @foreach($queueMergePrs as $qPr)
+                                <div class="form-check py-1 border-bottom border-light bulk-source-pr-row" id="bulkSourceRow_{{ $qPr->id }}">
+                                    <input class="form-check-input bulk-source-pr-chk" type="checkbox" name="source_pr_ids[]" value="{{ $qPr->id }}" id="bulkSourcePr_{{ $qPr->id }}">
+                                    <label class="form-check-label d-flex justify-content-between align-items-center w-100 pe-2" for="bulkSourcePr_{{ $qPr->id }}">
+                                        <span>
+                                            <strong>#{{ $qPr->pr_no }}</strong>
+                                            <span class="badge bg-secondary ms-1 small">{{ $qPr->status_label ?? $qPr->status }}</span>
+                                        </span>
+                                        <span class="text-muted small">{{ $qPr->created_at?->format('M d, Y') }}</span>
+                                    </label>
+                                </div>
+                            @endforeach
+                        </div>
+                        <small class="text-muted">These requests will be merged into the destination PR and marked cancelled.</small>
+                    </div>
+
+                    <div class="mb-3">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" name="consolidate_duplicates" id="bulkConsolidateDuplicates" value="1" checked>
+                            <label class="form-check-label fw-semibold" for="bulkConsolidateDuplicates">
+                                Consolidate duplicate products (sum quantities)
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label fw-bold small text-muted text-uppercase">Merge Reason / Remarks</label>
+                        <textarea name="merge_notes" class="form-control form-control-sm" rows="2" placeholder="Explain the reason for merging these purchase requests..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm fw-bold"><i class="fas fa-code-merge me-1"></i> Confirm &amp; Merge</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<script>
+function filterBulkSourcePrs() {
+    var targetId = document.getElementById('bulkTargetPrSelect').value;
+    var rows = document.querySelectorAll('.bulk-source-pr-row');
+    rows.forEach(function(row) {
+        var id = row.id.replace('bulkSourceRow_', '');
+        var chk = document.getElementById('bulkSourcePr_' + id);
+        if (id === targetId) {
+            row.classList.add('d-none');
+            if (chk) { chk.checked = false; chk.disabled = true; }
+        } else {
+            row.classList.remove('d-none');
+            if (chk) { chk.disabled = false; }
+        }
+    });
+}
+</script>
+@endif
+
 @endsection

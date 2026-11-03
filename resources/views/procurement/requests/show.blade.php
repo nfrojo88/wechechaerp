@@ -52,7 +52,15 @@
         <span class="badge bg-info text-white py-2 px-3 fw-semibold">
             <i class="fa-solid fa-lock me-1"></i> Transferred &amp; Locked
         </span>
-        @elseif($isGlobalAdmin)
+        @endif
+
+        @if($isGlobalAdmin && $materialRequest->status !== 'cancelled')
+        <button type="button" class="btn btn-outline-primary shadow-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#adminMergeMrModal" title="Merge other Material Requests into this MR">
+            <i class="fa-solid fa-code-merge me-1"></i> Merge MR (Admin)
+        </button>
+        <button type="button" class="btn btn-outline-warning shadow-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#adminSeparateMrModal" title="Separate / split items from this MR into a new MR">
+            <i class="fa-solid fa-scissors me-1"></i> Separate MR (Admin)
+        </button>
         <button type="button" class="btn btn-outline-danger shadow-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#deleteMrModal">
             <i class="fa-solid fa-trash-can me-1"></i> Delete MR (Admin Only)
         </button>
@@ -172,6 +180,40 @@
         <span class="badge bg-danger text-white px-3 py-2 fs-6 rounded-pill">
             <i class="fa-solid fa-lock me-1"></i> Deleted &amp; Locked
         </span>
+    </div>
+@endif
+
+@if($materialRequest->merged_into_mr_id)
+    <div class="alert alert-info border-info d-flex align-items-center gap-3 shadow-sm mb-4">
+        <i class="fa-solid fa-code-merge fa-2x text-info"></i>
+        <div>
+            <h5 class="mb-1 fw-bold text-dark">This Material Request was Merged</h5>
+            <p class="mb-0 text-secondary">
+                All items from this request have been merged into 
+                <a href="{{ route('material-requests.show', $materialRequest->merged_into_mr_id) }}" class="fw-bold text-primary text-decoration-underline">
+                    MR #{{ $materialRequest->mergedInto?->reference_number ?? $materialRequest->merged_into_mr_id }}
+                </a>.
+                @if($materialRequest->merge_notes)
+                    <span class="d-block small mt-1 text-muted">{{ $materialRequest->merge_notes }}</span>
+                @endif
+            </p>
+        </div>
+    </div>
+@endif
+@if($materialRequest->mergedRequests && $materialRequest->mergedRequests->isNotEmpty())
+    <div class="alert alert-success border-success d-flex align-items-center gap-3 shadow-sm mb-4">
+        <i class="fa-solid fa-boxes-packing fa-2x text-success"></i>
+        <div>
+            <h5 class="mb-1 fw-bold text-dark">Merged Requests Incorporated</h5>
+            <p class="mb-0 text-secondary">
+                This request incorporates items merged from:
+                @foreach($materialRequest->mergedRequests as $mReq)
+                    <a href="{{ route('material-requests.show', $mReq->id) }}" class="badge bg-light text-dark border me-1 text-decoration-none">
+                        #{{ $mReq->reference_number }}
+                    </a>
+                @endforeach
+            </p>
+        </div>
     </div>
 @endif
 
@@ -442,6 +484,147 @@
 @endif
 
 @if($isGlobalAdmin)
+@if($isGlobalAdmin)
+<!-- Modal: Merge Material Requests into this MR (General Admin Only) -->
+<div class="modal fade" id="adminMergeMrModal" tabindex="-1" aria-labelledby="adminMergeMrModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <form action="{{ route('material-requests.admin-merge', $materialRequest) }}" method="POST">
+                @csrf
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title fs-6 fw-bold" id="adminMergeMrModalLabel">
+                        <i class="fa-solid fa-code-merge me-2"></i>Merge Material Requests into #{{ $materialRequest->reference_number }}
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4 text-start">
+                    <div class="alert alert-info small mb-3">
+                        <i class="fa-solid fa-info-circle me-1"></i>
+                        Select one or more material requests to merge into <strong>#{{ $materialRequest->reference_number }}</strong>.
+                        The items from the selected requests will be combined into this MR, and the source requests will be marked as cancelled/merged with full audit logs.
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-muted text-uppercase">Select Material Requests to Merge <span class="text-danger">*</span></label>
+                        @if(isset($mergeableMrs) && $mergeableMrs->isNotEmpty())
+                            <div class="border rounded p-2" style="max-height: 220px; overflow-y: auto;">
+                                @foreach($mergeableMrs as $mMr)
+                                    <div class="form-check py-1 border-bottom border-light">
+                                        <input class="form-check-input" type="checkbox" name="source_mr_ids[]" value="{{ $mMr->id }}" id="mergeMr_{{ $mMr->id }}">
+                                        <label class="form-check-label d-flex justify-content-between align-items-center w-100 pe-2" for="mergeMr_{{ $mMr->id }}">
+                                            <span>
+                                                <strong>#{{ $mMr->reference_number }}</strong>
+                                                <span class="badge bg-secondary ms-1 small">{{ strtoupper($mMr->status) }}</span>
+                                            </span>
+                                            <span class="text-muted small">{{ $mMr->created_at?->format('M d, Y') }}</span>
+                                        </label>
+                                    </div>
+                                @endforeach
+                            </div>
+                        @else
+                            <p class="text-muted small mb-0 fst-italic">No other active material requests found to merge.</p>
+                        @endif
+                    </div>
+
+                    <div class="mb-3">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" name="consolidate_duplicates" id="consolidateDuplicatesMr" value="1" checked>
+                            <label class="form-check-label fw-semibold" for="consolidateDuplicatesMr">
+                                Consolidate duplicate products (sum requested quantities together)
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label fw-bold small text-muted text-uppercase">Merge Justification / Reason</label>
+                        <textarea name="merge_notes" class="form-control form-control-sm" rows="2" placeholder="Explain the reason for merging these material requests..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm fw-bold"><i class="fa-solid fa-code-merge me-1"></i> Confirm &amp; Merge</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Separate / Split MR into a New MR (General Admin Only) -->
+<div class="modal fade" id="adminSeparateMrModal" tabindex="-1" aria-labelledby="adminSeparateMrModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <form action="{{ route('material-requests.admin-separate', $materialRequest) }}" method="POST">
+                @csrf
+                <div class="modal-header bg-warning text-dark">
+                    <h5 class="modal-title fs-6 fw-bold" id="adminSeparateMrModalLabel">
+                        <i class="fa-solid fa-scissors me-2"></i>Separate / Split Items from #{{ $materialRequest->reference_number }}
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4 text-start">
+                    <div class="alert alert-warning small mb-3">
+                        <i class="fa-solid fa-info-circle me-1"></i>
+                        Select items and specify the split quantity to move to a brand new Material Request.
+                        Original items will be reduced or transferred, and a new MR will be created with its own unique reference number.
+                    </div>
+
+                    <div class="table-responsive mb-3 border rounded">
+                        <table class="table table-sm table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width: 40px;" class="text-center">Select</th>
+                                    <th>Material / Item</th>
+                                    <th style="width: 100px;">Current Qty</th>
+                                    <th style="width: 140px;">Split Qty</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach($materialRequest->items as $mItem)
+                                    <tr>
+                                        <td class="text-center">
+                                            <input type="checkbox" name="items[{{ $mItem->id }}][selected]" value="1" class="form-check-input mr-split-chk" id="mr_split_chk_{{ $mItem->id }}" onchange="toggleMrSplitInput({{ $mItem->id }})">
+                                        </td>
+                                        <td>
+                                            <label for="mr_split_chk_{{ $mItem->id }}" class="mb-0 fw-semibold cursor-pointer">
+                                                {{ $mItem->product->name ?? ('Item #' . $mItem->product_id) }}
+                                            </label>
+                                            @if($mItem->notes)
+                                                <small class="text-muted d-block">{{ Str::limit($mItem->notes, 40) }}</small>
+                                            @endif
+                                        </td>
+                                        <td><span class="badge bg-light text-dark border">{{ (float)$mItem->quantity_requested }}</span></td>
+                                        <td>
+                                            <input type="number" step="0.001" min="0.001" max="{{ (float)$mItem->quantity_requested }}" name="items[{{ $mItem->id }}][quantity]" value="{{ (float)$mItem->quantity_requested }}" class="form-control form-control-sm mr-split-input" id="mr_split_qty_{{ $mItem->id }}" disabled>
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label fw-bold small text-muted text-uppercase">Separation Justification / Reason</label>
+                        <textarea name="separate_notes" class="form-control form-control-sm" rows="2" placeholder="Explain the reason for separating these items..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-warning btn-sm fw-bold"><i class="fa-solid fa-scissors me-1"></i> Confirm &amp; Separate</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<script>
+function toggleMrSplitInput(itemId) {
+    var chk = document.getElementById('mr_split_chk_' + itemId);
+    var input = document.getElementById('mr_split_qty_' + itemId);
+    if (chk && input) {
+        input.disabled = !chk.checked;
+    }
+}
+</script>
+
 <!-- Modal: Delete Material Request (Global Admin Only) -->
 <div class="modal fade" id="deleteMrModal" tabindex="-1" aria-labelledby="deleteMrModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">

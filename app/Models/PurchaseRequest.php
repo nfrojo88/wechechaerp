@@ -236,7 +236,7 @@ class PurchaseRequest extends Model
     protected $fillable = [
         'pr_no', 'project_id', 'store_id', 'requested_by', 'material_request_id',
         'priority', 'type', 'is_office_request', 'office_purpose', 'required_date', 'justification', 'status',
-        'merged_into_pr_id', 'approved_by', 'approved_at', 'rejection_reason',
+        'merged_into_pr_id', 'merge_notes', 'approved_by', 'approved_at', 'rejection_reason',
         'hr_coordinator_notes', 'hr_coordinator_approved_by', 'hr_coordinator_approved_at',
         'sourcing_method', 'direct_buy_amount', 'direct_buy_added_by',
         'procurement_team_notes', 'pm_sendback_reason',
@@ -261,6 +261,7 @@ class PurchaseRequest extends Model
     public function hrCoordinatorApprovedBy() { return $this->belongsTo(User::class, 'hr_coordinator_approved_by'); }
     public function materialRequest(){ return $this->belongsTo(MaterialRequest::class); }
     public function mergedInto()     { return $this->belongsTo(PurchaseRequest::class, 'merged_into_pr_id'); }
+    public function mergedRequests() { return $this->hasMany(PurchaseRequest::class, 'merged_into_pr_id'); }
     public function directBuyBy()    { return $this->belongsTo(User::class, 'direct_buy_added_by'); }
 
     public function items()           { return $this->hasMany(PurchaseRequestItem::class); }

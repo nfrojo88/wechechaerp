@@ -16,6 +16,8 @@ class MaterialRequest extends Model
         'reference_number',
         'source',
         'status',
+        'merged_into_mr_id',
+        'merge_notes',
         'purchase_method',
         'required_date',
         'notes',
@@ -92,6 +94,30 @@ class MaterialRequest extends Model
     public function pettyCashPurchase()
     {
         return $this->hasOne(PettyCashMaterialPurchase::class, 'material_request_id')->latestOfMany();
+    }
+
+    public function mergedInto()
+    {
+        return $this->belongsTo(MaterialRequest::class, 'merged_into_mr_id');
+    }
+
+    public function mergedRequests()
+    {
+        return $this->hasMany(MaterialRequest::class, 'merged_into_mr_id');
+    }
+
+    /**
+     * Generate a guaranteed unique reference number (e.g. MR-20261103-0001).
+     */
+    public static function generateReferenceNumber(?string $prefix = 'MR'): string
+    {
+        $datePrefix = ($prefix ?: 'MR') . '-' . date('Ymd') . '-';
+        $nextSeq = static::count() + 1;
+        do {
+            $candidate = $datePrefix . str_pad($nextSeq, 4, '0', STR_PAD_LEFT);
+            $nextSeq++;
+        } while (static::where('reference_number', $candidate)->exists());
+        return $candidate;
     }
 
     /**

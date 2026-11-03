@@ -18,6 +18,7 @@ class User extends Authenticatable
         'email',
         'password',
         'store_id',
+        'is_admin',
         'is_active',
         'access_blocked_at',
         'access_block_reason',
@@ -206,13 +207,14 @@ class User extends Authenticatable
         }
 
         try {
-            if ($this->hasAnyRole(['global_admin', 'Global Admin', 'admin', 'Admin', 'super_admin', 'Super Admin', 'globaladmin'])) {
+            if ($this->hasAnyRole(['global_admin', 'Global Admin', 'general_admin', 'General Admin', 'admin', 'Admin', 'super_admin', 'Super Admin', 'globaladmin', 'generaladmin'])) {
                 return true;
             }
         } catch (\Throwable $e) {}
 
         $roleNames = $this->roles ? $this->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-', '_'], '', trim($r))))->toArray() : [];
         return in_array('globaladmin', $roleNames) 
+            || in_array('generaladmin', $roleNames)
             || in_array('admin', $roleNames) 
             || in_array('superadmin', $roleNames);
     }

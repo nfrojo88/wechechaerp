@@ -607,11 +607,18 @@ class ProcurementLifecycleController extends Controller
             }
         }
 
+        $mergeablePrs = ($user && $user->isGlobalAdmin())
+            ? PurchaseRequest::whereNotIn('status', [PurchaseRequest::STATUS_CANCELLED, PurchaseRequest::STATUS_REJECTED])
+                ->orderByDesc('id')
+                ->limit(100)
+                ->get(['id', 'pr_no', 'status', 'project_id', 'created_at'])
+            : collect();
+
         return view('procurement.lifecycle.my-queue', compact(
             'myPrs', 'emergencyMrs', 'coordinatorEmergencyMrs', 'materialRequestsQueue', 'kpi', 'projects',
             'myCreatedPrs', 'myCreatedMrs', 'completedPrs', 'allPrs', 'deletedPrs', 'deletedMrs', 'activeTab',
             'isHr', 'isCoordinator', 'isStoreManager', 'isStoreKeeper', 'isPurchaseManager', 'isFinanceHead', 'isAuditor', 'isAdmin', 'isGm', 'isPlanning',
-            'assignedStore'
+            'assignedStore', 'mergeablePrs'
         ));
     }
 

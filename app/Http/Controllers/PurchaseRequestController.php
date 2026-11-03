@@ -638,11 +638,20 @@ class PurchaseRequestController extends Controller
 
         $proformaMatrix = $purchaseRequest->getProformaComparisonMatrix();
 
+        $mergeablePrs = collect();
+        if ($authUser && $authUser->isGlobalAdmin()) {
+            $mergeablePrs = PurchaseRequest::where('id', '!=', $purchaseRequest->id)
+                ->whereNotIn('status', [PurchaseRequest::STATUS_CANCELLED, PurchaseRequest::STATUS_REJECTED])
+                ->orderByDesc('id')
+                ->limit(100)
+                ->get(['id', 'pr_no', 'status', 'project_id', 'created_at']);
+        }
+
         return view('procurement.purchase-requests.show', compact(
             'purchaseRequest', 'stockAvailability', 'transferAvailability', 'prTransfers', 'coaAccounts',
             'financeStaff', 'drivers', 'suppliers', 'stores', 'pricingBenchmarks',
             'isFinalIntake', 'receiveSlipSequence', 'nextReceiveSlipNo', 'availableProducts', 'prDeliveryReceipts', 'userStoreId',
-            'proformaMatrix'
+            'proformaMatrix', 'mergeablePrs'
         ));
 
     }
@@ -2923,5 +2932,273 @@ class PurchaseRequestController extends Controller
     public function sendStageSms(Request $request, PurchaseRequest $purchaseRequest)
     {
         return back()->with('info', 'SMS notifications for procurement are disabled.');
+    }
+
+    /**
+     * Admin Merge PR: Merge one or more purchase requests into a target purchase request.
+     * Accessible strictly by General Admin.
+     */
+    public function adminMergePr(Request $request, PurchaseRequest $purchaseRequest)
+    {
+        if (!Auth::user() || !Auth::user()->isGlobalAdmin()) {
+            abort(403, 'Unauthorized. Merge and Separate features are reserved for General Admin only.');
+        }
+
+        $request->validate([
+            'source_pr_ids'          => 'required|array|min:1',
+            'source_pr_ids.*'        => 'required|integer|exists:purchase_requests,id',
+            'consolidate_duplicates' => 'nullable|boolean',
+            'merge_notes'            => 'nullable|string|max:1000',
+        ]);
+
+        $consolidate = $request->boolean('consolidate_duplicates', true);
+        $notes = trim($request->input('merge_notes', ''));
+        $sourceIds = array_values(array_diff($request->input('source_pr_ids', []), [$purchaseRequest->id]));
+
+        if (empty($sourceIds)) {
+            return back()->with('error', 'Please select at least one different purchase request to merge.');
+        }
+
+        $sourcePrs = PurchaseRequest::with('items')->whereIn('id', $sourceIds)->get();
+        if ($sourcePrs->isEmpty()) {
+            return back()->with('error', 'Selected purchase requests could not be found.');
+        }
+
+        $mergedPrNos = [];
+        $movedItemsCount = 0;
+
+        DB::transaction(function () use ($purchaseRequest, $sourcePrs, $consolidate, $notes, &$mergedPrNos, &$movedItemsCount) {
+            $adminName = Auth::user()->name ?? 'General Admin';
+
+            foreach ($sourcePrs as $src) {
+                $mergedPrNos[] = $src->pr_no;
+
+                foreach ($src->items as $srcItem) {
+                    $targetItem = null;
+                    if ($consolidate) {
+                        $targetItem = $purchaseRequest->items()
+                            ->where('product_id', $srcItem->product_id)
+                            ->where('unit', $srcItem->unit)
+                            ->first();
+                    }
+
+                    if ($targetItem) {
+                        $targetItem->increment('quantity', (float)$srcItem->quantity);
+                        if ($srcItem->specifications && !str_contains($targetItem->specifications ?? '', $srcItem->specifications)) {
+                            $targetItem->update([
+                                'specifications' => trim(($targetItem->specifications ? $targetItem->specifications . ' | ' : '') . $srcItem->specifications),
+                            ]);
+                        }
+                        $srcItem->delete();
+                    } else {
+                        $srcItem->update([
+                            'purchase_request_id' => $purchaseRequest->id,
+                        ]);
+                    }
+                    $movedItemsCount++;
+                }
+
+                $auditNote = "Merged into PR #{$purchaseRequest->pr_no} by General Admin {$adminName} on " . now()->format('Y-m-d H:i') . ($notes ? ". Reason: {$notes}" : '');
+
+                $src->update([
+                    'status'            => PurchaseRequest::STATUS_CANCELLED,
+                    'merged_into_pr_id' => $purchaseRequest->id,
+                    'merge_notes'       => $auditNote,
+                    'rejection_reason'  => $auditNote,
+                ]);
+
+                try {
+                    PrWorkflowLog::create([
+                        'purchase_request_id' => $src->id,
+                        'from_stage'          => $src->status,
+                        'to_stage'            => PurchaseRequest::STATUS_CANCELLED,
+                        'action'              => 'admin_pr_merged',
+                        'actor_role'          => 'general_admin',
+                        'actor_id'            => Auth::id(),
+                        'notes'               => $auditNote,
+                        'created_at'          => now(),
+                    ]);
+                } catch (\Throwable $e) {}
+            }
+
+            $mergeSummary = "General Admin {$adminName} merged PR(s) " . implode(', ', $mergedPrNos) . " into this request ({$movedItemsCount} items consolidated/moved)." . ($notes ? " Reason: {$notes}" : '');
+
+            try {
+                PrWorkflowLog::create([
+                    'purchase_request_id' => $purchaseRequest->id,
+                    'from_stage'          => $purchaseRequest->status,
+                    'to_stage'            => $purchaseRequest->status,
+                    'action'              => 'admin_pr_merged_sources',
+                    'actor_role'          => 'general_admin',
+                    'actor_id'            => Auth::id(),
+                    'notes'               => $mergeSummary,
+                    'created_at'          => now(),
+                ]);
+            } catch (\Throwable $e) {}
+        });
+
+        return redirect()->route('purchase-requests.show', $purchaseRequest)
+            ->with('success', "Successfully merged PR(s) " . implode(', ', $mergedPrNos) . " into PR #{$purchaseRequest->pr_no}!");
+    }
+
+    /**
+     * Admin Bulk Merge PR from Queue or Table view.
+     */
+    public function adminBulkMergePr(Request $request)
+    {
+        if (!Auth::user() || !Auth::user()->isGlobalAdmin()) {
+            abort(403, 'Unauthorized. Merge and Separate features are reserved for General Admin only.');
+        }
+
+        $request->validate([
+            'target_pr_id'           => 'required|integer|exists:purchase_requests,id',
+            'source_pr_ids'          => 'required|array|min:1',
+            'source_pr_ids.*'        => 'required|integer|exists:purchase_requests,id',
+            'consolidate_duplicates' => 'nullable|boolean',
+            'merge_notes'            => 'nullable|string|max:1000',
+        ]);
+
+        $targetPr = PurchaseRequest::findOrFail($request->input('target_pr_id'));
+        return $this->adminMergePr($request, $targetPr);
+    }
+
+    /**
+     * Admin Separate PR: Split specific items or partial item quantities into a new PR.
+     * Accessible strictly by General Admin.
+     */
+    public function adminSeparatePr(Request $request, PurchaseRequest $purchaseRequest)
+    {
+        if (!Auth::user() || !Auth::user()->isGlobalAdmin()) {
+            abort(403, 'Unauthorized. Merge and Separate features are reserved for General Admin only.');
+        }
+
+        $request->validate([
+            'items'          => 'required|array|min:1',
+            'separate_notes' => 'nullable|string|max:1000',
+            'new_priority'   => 'nullable|in:normal,high,urgent',
+            'new_type'       => 'nullable|in:normal,emergency,direct',
+            'new_project_id' => 'nullable|exists:projects,id',
+            'new_store_id'   => 'nullable|exists:stores,id',
+        ]);
+
+        $itemsInput = $request->input('items', []);
+        $notes = trim($request->input('separate_notes', ''));
+
+        // Filter items selected with valid positive quantity
+        $itemsToSeparate = [];
+        foreach ($itemsInput as $itemId => $itemData) {
+            $selected = !empty($itemData['selected']);
+            $splitQty = isset($itemData['quantity']) ? (float)$itemData['quantity'] : 0;
+            if ($selected && $splitQty > 0) {
+                $itemsToSeparate[$itemId] = $splitQty;
+            }
+        }
+
+        if (empty($itemsToSeparate)) {
+            return back()->with('error', 'Please select at least one item with a valid quantity greater than 0 to separate.');
+        }
+
+        $originalItems = $purchaseRequest->items()->whereIn('id', array_keys($itemsToSeparate))->get()->keyBy('id');
+        foreach ($itemsToSeparate as $itemId => $splitQty) {
+            if (!isset($originalItems[$itemId])) {
+                return back()->with('error', "Item #{$itemId} could not be found on this purchase request.");
+            }
+            $currQty = (float)$originalItems[$itemId]->quantity;
+            if ($splitQty > $currQty) {
+                return back()->with('error', "Split quantity ({$splitQty}) cannot exceed current item quantity ({$currQty}) for " . ($originalItems[$itemId]->product->name ?? "Item #{$itemId}") . ".");
+            }
+        }
+
+        $newPr = null;
+
+        DB::transaction(function () use ($purchaseRequest, $itemsToSeparate, $originalItems, $request, $notes, &$newPr) {
+            $adminName = Auth::user()->name ?? 'General Admin';
+
+            // 1. Create new PR
+            $newPr = PurchaseRequest::create([
+                'pr_no'               => PurchaseRequest::generatePrNo(),
+                'project_id'          => $request->input('new_project_id') ?: $purchaseRequest->project_id,
+                'store_id'            => $request->input('new_store_id') ?: $purchaseRequest->store_id,
+                'requested_by'        => $purchaseRequest->requested_by ?: Auth::id(),
+                'priority'            => $request->input('new_priority') ?: ($purchaseRequest->priority ?: 'normal'),
+                'type'                => $request->input('new_type') ?: ($purchaseRequest->type ?: 'normal'),
+                'required_date'       => $purchaseRequest->required_date,
+                'justification'       => "Separated from PR #{$purchaseRequest->pr_no} by General Admin {$adminName}" . ($notes ? ". Reason: {$notes}" : ''),
+                'status'              => $purchaseRequest->status,
+                'current_owner_role'  => $purchaseRequest->current_owner_role,
+                'merge_notes'         => "Separated from PR #{$purchaseRequest->pr_no}",
+            ]);
+
+            $separatedCount = 0;
+            foreach ($itemsToSeparate as $itemId => $splitQty) {
+                $origItem = $originalItems[$itemId];
+                $currQty = (float)$origItem->quantity;
+
+                if ($splitQty >= $currQty) {
+                    // Transfer entire item to new PR
+                    $origItem->update([
+                        'purchase_request_id' => $newPr->id,
+                    ]);
+                } else {
+                    // Deduct splitQty from original item
+                    $origItem->update([
+                        'quantity' => $currQty - $splitQty,
+                    ]);
+
+                    // Create new item in new PR
+                    PurchaseRequestItem::create([
+                        'purchase_request_id' => $newPr->id,
+                        'product_id'          => $origItem->product_id,
+                        'quantity'            => $splitQty,
+                        'unit'                => $origItem->unit,
+                        'specifications'      => $origItem->specifications,
+                        'estimated_unit_cost' => $origItem->estimated_unit_cost,
+                        'payment_method'      => $origItem->payment_method,
+                    ]);
+                }
+                $separatedCount++;
+            }
+
+            // 2. Audit Workflow Logs
+            $originalNote = "General Admin {$adminName} separated {$separatedCount} item(s) into new PR #{$newPr->pr_no}." . ($notes ? " Reason: {$notes}" : '');
+            $newPrNote = "Created by separating {$separatedCount} item(s) from PR #{$purchaseRequest->pr_no} by General Admin {$adminName}." . ($notes ? " Reason: {$notes}" : '');
+
+            try {
+                PrWorkflowLog::create([
+                    'purchase_request_id' => $purchaseRequest->id,
+                    'from_stage'          => $purchaseRequest->status,
+                    'to_stage'            => $purchaseRequest->status,
+                    'action'              => 'admin_pr_separated',
+                    'actor_role'          => 'general_admin',
+                    'actor_id'            => Auth::id(),
+                    'notes'               => $originalNote,
+                    'created_at'          => now(),
+                ]);
+
+                PrWorkflowLog::create([
+                    'purchase_request_id' => $newPr->id,
+                    'from_stage'          => 'draft',
+                    'to_stage'            => $newPr->status,
+                    'action'              => 'admin_pr_created_from_separation',
+                    'actor_role'          => 'general_admin',
+                    'actor_id'            => Auth::id(),
+                    'notes'               => $newPrNote,
+                    'created_at'          => now(),
+                ]);
+            } catch (\Throwable $e) {}
+
+            // If original PR has 0 items remaining, mark it cancelled
+            if ($purchaseRequest->items()->count() === 0) {
+                $purchaseRequest->update([
+                    'status'           => PurchaseRequest::STATUS_CANCELLED,
+                    'merged_into_pr_id'=> $newPr->id,
+                    'merge_notes'      => "All items separated into PR #{$newPr->pr_no}",
+                    'rejection_reason' => "All items separated into PR #{$newPr->pr_no} by General Admin",
+                ]);
+            }
+        });
+
+        return redirect()->route('purchase-requests.show', $newPr)
+            ->with('success', "New Purchase Request #{$newPr->pr_no} successfully separated from PR #{$purchaseRequest->pr_no}!");
     }
 }

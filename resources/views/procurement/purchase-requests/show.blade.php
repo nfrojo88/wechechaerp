@@ -42,7 +42,15 @@
             <span class="badge bg-info text-white py-2 px-3 fw-semibold">
                 <i class="fas fa-lock me-1"></i> Transferred &amp; Locked
             </span>
-            @elseif($isGlobalAdmin)
+            @endif
+
+            @if($isGlobalAdmin && !$purchaseRequest->trashed() && $purchaseRequest->status !== \App\Models\PurchaseRequest::STATUS_CANCELLED)
+            <button type="button" class="btn btn-outline-primary shadow-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#adminMergePrModal" title="Merge other Purchase Requests into this PR">
+                <i class="fas fa-code-merge me-1"></i> Merge PR (Admin)
+            </button>
+            <button type="button" class="btn btn-outline-warning shadow-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#adminSeparatePrModal" title="Separate / split items from this PR into a new PR">
+                <i class="fas fa-scissors me-1"></i> Separate PR (Admin)
+            </button>
             <button type="button" class="btn btn-outline-danger shadow-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#deletePrModal">
                 <i class="fas fa-trash-can me-1"></i> Delete PR (Admin Only)
             </button>
@@ -50,6 +58,40 @@
             <a href="{{ route('procurement.my-queue') }}" class="btn btn-outline-primary"><i class="fas fa-tasks me-1"></i>Procurement — My Queue</a>
         </div>
     </div>
+
+    @if($purchaseRequest->merged_into_pr_id)
+        <div class="alert alert-info border-info d-flex align-items-center gap-3 shadow-sm mb-4">
+            <i class="fas fa-code-merge fa-2x text-info"></i>
+            <div>
+                <h5 class="mb-1 fw-bold text-dark">This Purchase Request was Merged</h5>
+                <p class="mb-0 text-secondary">
+                    All items from this request have been merged into 
+                    <a href="{{ route('purchase-requests.show', $purchaseRequest->merged_into_pr_id) }}" class="fw-bold text-primary text-decoration-underline">
+                        PR #{{ $purchaseRequest->mergedInto?->pr_no ?? $purchaseRequest->merged_into_pr_id }}
+                    </a>.
+                    @if($purchaseRequest->merge_notes)
+                        <span class="d-block small mt-1 text-muted">{{ $purchaseRequest->merge_notes }}</span>
+                    @endif
+                </p>
+            </div>
+        </div>
+    @endif
+    @if($purchaseRequest->mergedRequests && $purchaseRequest->mergedRequests->isNotEmpty())
+        <div class="alert alert-success border-success d-flex align-items-center gap-3 shadow-sm mb-4">
+            <i class="fas fa-boxes-packing fa-2x text-success"></i>
+            <div>
+                <h5 class="mb-1 fw-bold text-dark">Merged Requests Incorporated</h5>
+                <p class="mb-0 text-secondary">
+                    This request incorporates items merged from:
+                    @foreach($purchaseRequest->mergedRequests as $mReq)
+                        <a href="{{ route('purchase-requests.show', $mReq->id) }}" class="badge bg-light text-dark border me-1 text-decoration-none">
+                            #{{ $mReq->pr_no }}
+                        </a>
+                    @endforeach
+                </p>
+            </div>
+        </div>
+    @endif
 
     @if(session('success'))
         <div class="alert alert-success alert-dismissible fade show shadow-sm">{{ session('success') }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
@@ -5934,6 +5976,170 @@ document.addEventListener('DOMContentLoaded', function () {
         </div>
     </div>
 </div>
+
+@if($isGlobalAdmin)
+<!-- Modal: Merge Purchase Requests into this PR (General Admin Only) -->
+<div class="modal fade" id="adminMergePrModal" tabindex="-1" aria-labelledby="adminMergePrModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <form action="{{ route('purchase-requests.admin-merge', $purchaseRequest) }}" method="POST">
+                @csrf
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title fs-6 fw-bold" id="adminMergePrModalLabel">
+                        <i class="fas fa-code-merge me-2"></i>Merge Purchase Requests into #{{ $purchaseRequest->pr_no }}
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4 text-start">
+                    <div class="alert alert-info small mb-3">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Select one or more purchase requests to merge into <strong>#{{ $purchaseRequest->pr_no }}</strong>.
+                        The items from the selected PRs will be combined into this PR, and the source PRs will be marked as cancelled/merged for complete audit tracking.
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-muted text-uppercase">Select Purchase Requests to Merge <span class="text-danger">*</span></label>
+                        @if(isset($mergeablePrs) && $mergeablePrs->isNotEmpty())
+                            <div class="border rounded p-2" style="max-height: 220px; overflow-y: auto;">
+                                @foreach($mergeablePrs as $mPr)
+                                    <div class="form-check py-1 border-bottom border-light">
+                                        <input class="form-check-input" type="checkbox" name="source_pr_ids[]" value="{{ $mPr->id }}" id="mergePr_{{ $mPr->id }}">
+                                        <label class="form-check-label d-flex justify-content-between align-items-center w-100 pe-2" for="mergePr_{{ $mPr->id }}">
+                                            <span>
+                                                <strong>#{{ $mPr->pr_no }}</strong>
+                                                <span class="badge bg-secondary ms-1 small">{{ $mPr->status_label ?? $mPr->status }}</span>
+                                            </span>
+                                            <span class="text-muted small">{{ $mPr->created_at?->format('M d, Y') }}</span>
+                                        </label>
+                                    </div>
+                                @endforeach
+                            </div>
+                        @else
+                            <p class="text-muted small mb-0 fst-italic">No other active purchase requests found to merge.</p>
+                        @endif
+                    </div>
+
+                    <div class="mb-3">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" name="consolidate_duplicates" id="consolidateDuplicatesPr" value="1" checked>
+                            <label class="form-check-label fw-semibold" for="consolidateDuplicatesPr">
+                                Consolidate duplicate products (sum quantities together)
+                            </label>
+                        </div>
+                        <small class="text-muted d-block ms-4">If checked, items with the same product ID will have their quantities combined into one line. If unchecked, they will be appended as separate lines.</small>
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label fw-bold small text-muted text-uppercase">Merge Justification / Reason</label>
+                        <textarea name="merge_notes" class="form-control" rows="2" placeholder="Explain the reason for merging these purchase requests..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm fw-bold"><i class="fas fa-code-merge me-1"></i> Confirm &amp; Merge</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Separate / Split PR into a New PR (General Admin Only) -->
+<div class="modal fade" id="adminSeparatePrModal" tabindex="-1" aria-labelledby="adminSeparatePrModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <form action="{{ route('purchase-requests.admin-separate', $purchaseRequest) }}" method="POST">
+                @csrf
+                <div class="modal-header bg-warning text-dark">
+                    <h5 class="modal-title fs-6 fw-bold" id="adminSeparatePrModalLabel">
+                        <i class="fas fa-scissors me-2"></i>Separate / Split Items from #{{ $purchaseRequest->pr_no }}
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4 text-start">
+                    <div class="alert alert-warning small mb-3">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Select items and specify the split quantity to move to a brand new Purchase Request.
+                        Original items will be reduced or transferred, and a new PR will be created with its own unique PR number.
+                    </div>
+
+                    <div class="table-responsive mb-3 border rounded">
+                        <table class="table table-sm table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width: 40px;" class="text-center">Select</th>
+                                    <th>Material / Item</th>
+                                    <th style="width: 100px;">Current Qty</th>
+                                    <th style="width: 140px;">Split Qty</th>
+                                    <th>Unit</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach($purchaseRequest->items as $item)
+                                    <tr>
+                                        <td class="text-center">
+                                            <input type="checkbox" name="items[{{ $item->id }}][selected]" value="1" class="form-check-input item-split-chk" id="split_chk_{{ $item->id }}" onchange="toggleSplitInput({{ $item->id }})">
+                                        </td>
+                                        <td>
+                                            <label for="split_chk_{{ $item->id }}" class="mb-0 fw-semibold cursor-pointer">
+                                                {{ $item->product->name ?? ('Item #' . $item->product_id) }}
+                                            </label>
+                                            @if($item->specifications)
+                                                <small class="text-muted d-block">{{ Str::limit($item->specifications, 40) }}</small>
+                                            @endif
+                                        </td>
+                                        <td><span class="badge bg-light text-dark border">{{ (float)$item->quantity }}</span></td>
+                                        <td>
+                                            <input type="number" step="0.001" min="0.001" max="{{ (float)$item->quantity }}" name="items[{{ $item->id }}][quantity]" value="{{ (float)$item->quantity }}" class="form-control form-control-sm item-split-input" id="split_qty_{{ $item->id }}" disabled>
+                                        </td>
+                                        <td><span class="text-muted small">{{ $item->unit }}</span></td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold text-muted text-uppercase">Priority of New PR</label>
+                            <select name="new_priority" class="form-select form-select-sm">
+                                <option value="normal" {{ $purchaseRequest->priority === 'normal' ? 'selected' : '' }}>Normal</option>
+                                <option value="high" {{ $purchaseRequest->priority === 'high' ? 'selected' : '' }}>High</option>
+                                <option value="urgent" {{ $purchaseRequest->priority === 'urgent' ? 'selected' : '' }}>Urgent</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold text-muted text-uppercase">Type of New PR</label>
+                            <select name="new_type" class="form-select form-select-sm">
+                                <option value="normal" {{ $purchaseRequest->type === 'normal' ? 'selected' : '' }}>Normal</option>
+                                <option value="emergency" {{ $purchaseRequest->type === 'emergency' ? 'selected' : '' }}>Emergency</option>
+                                <option value="direct" {{ $purchaseRequest->type === 'direct' ? 'selected' : '' }}>Direct</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label fw-bold small text-muted text-uppercase">Separation Justification / Reason</label>
+                        <textarea name="separate_notes" class="form-control form-control-sm" rows="2" placeholder="Explain the reason for separating these items..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-warning btn-sm fw-bold"><i class="fas fa-scissors me-1"></i> Confirm &amp; Separate</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<script>
+function toggleSplitInput(itemId) {
+    var chk = document.getElementById('split_chk_' + itemId);
+    var input = document.getElementById('split_qty_' + itemId);
+    if (chk && input) {
+        input.disabled = !chk.checked;
+    }
+}
+</script>
+@endif
 
 <!-- Modal: Delete Purchase Request (Global Admin Only) -->
 <div class="modal fade" id="deletePrModal" tabindex="-1" aria-labelledby="deletePrModalLabel" aria-hidden="true">
