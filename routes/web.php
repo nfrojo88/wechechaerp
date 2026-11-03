@@ -1777,6 +1777,7 @@ Route::middleware(['auth'])->group(function () {
     // Products — Global Admin Complete Purge & Lookup routes (Must precede resource route)
     Route::get('products/lookup-by-sku', [App\Http\Controllers\ProductController::class, 'lookupBySku'])->name('products.lookup-by-sku');
     Route::post('products/complete-delete-by-sku', [App\Http\Controllers\ProductController::class, 'completeDeleteBySku'])->name('products.complete-delete-by-sku');
+    Route::post('products/convert-to-consumable-by-sku', [App\Http\Controllers\ProductController::class, 'convertToConsumableBySku'])->name('products.convert-to-consumable-by-sku');
     Route::delete('products/{product}/force-delete', [App\Http\Controllers\ProductController::class, 'forceDeleteProduct'])->name('products.force-delete');
     Route::resource('products', ProductController::class);
 

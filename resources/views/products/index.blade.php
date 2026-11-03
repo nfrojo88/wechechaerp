@@ -66,9 +66,14 @@
     </div>
     <div class="d-flex gap-2 align-items-center">
         @if(auth()->user()->isGlobalAdmin())
-        <button type="button" class="btn btn-danger shadow-sm" data-bs-toggle="modal" data-bs-target="#adminSkuDeleteModal">
-            <i class="fas fa-trash-can me-1"></i> Complete Delete by SKU
-        </button>
+        <div class="btn-group shadow-sm" role="group">
+            <button type="button" class="btn btn-warning text-dark fw-semibold" data-bs-toggle="modal" data-bs-target="#adminSkuConvertModal" title="Convert Fixed Assets to Consumable in Bulk">
+                <i class="fas fa-arrow-right-arrow-left me-1"></i> Convert to Consumable
+            </button>
+            <button type="button" class="btn btn-danger fw-semibold" data-bs-toggle="modal" data-bs-target="#adminSkuDeleteModal" title="Completely Purge Materials by SKU in Bulk">
+                <i class="fas fa-trash-can me-1"></i> Complete Delete
+            </button>
+        </div>
         @endif
         @can('products.create')
         <a href="{{ route('products.create') }}" class="btn btn-primary">
@@ -256,6 +261,13 @@
                                 </form>
                                 @endcan
                                 @if(auth()->user()->isGlobalAdmin())
+                                @if(strtolower($product->category ?? '') === 'fixed asset')
+                                <button type="button" class="btn btn-sm btn-warning text-dark px-2"
+                                        title="Global Admin: Convert Fixed Asset to Consumable"
+                                        onclick="openSkuConvertModal('{{ $product->sku }}', '{{ addslashes($product->name) }}')">
+                                    <i class="fas fa-arrow-right-arrow-left" style="font-size:.75rem;"></i>
+                                </button>
+                                @endif
                                 <button type="button" class="btn btn-sm btn-danger text-white px-2"
                                         title="Global Admin: Complete Delete by SKU (Permanent)"
                                         onclick="openSkuDeleteModal('{{ $product->sku }}', '{{ addslashes($product->name) }}')">
@@ -304,5 +316,6 @@
 </div>
 
 @include('products.partials.admin_sku_delete_modal')
+@include('products.partials.admin_sku_convert_modal')
 
 @endsection

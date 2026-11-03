@@ -137,9 +137,15 @@ class MaterialToConsumableService
                                     $prod->restore();
                                 }
                                 $prod->category = 'Consumable';
-                                $prod->asset_status = 'Available';
-                                $prod->equipment_condition = 'Good';
-                                $prod->assigned_to = 'Unassigned';
+                                if (Schema::hasColumn('products', 'asset_status')) {
+                                    $prod->asset_status = 'Available';
+                                }
+                                if (Schema::hasColumn('products', 'equipment_condition')) {
+                                    $prod->equipment_condition = 'Good';
+                                }
+                                if (Schema::hasColumn('products', 'assigned_to')) {
+                                    $prod->assigned_to = 'Unassigned';
+                                }
                                 $prod->save();
 
                                 $convertedProducts[] = [
@@ -148,12 +154,20 @@ class MaterialToConsumableService
                                     'name' => $prod->name,
                                 ];
                             } else {
-                                DB::table('products')->where('id', $pId)->update([
-                                    'category'     => 'Consumable',
-                                    'asset_status' => 'Available',
-                                    'assigned_to'  => 'Unassigned',
-                                    'deleted_at'   => null,
-                                ]);
+                                $updateData = ['category' => 'Consumable'];
+                                if (Schema::hasColumn('products', 'asset_status')) {
+                                    $updateData['asset_status'] = 'Available';
+                                }
+                                if (Schema::hasColumn('products', 'assigned_to')) {
+                                    $updateData['assigned_to'] = 'Unassigned';
+                                }
+                                if (Schema::hasColumn('products', 'equipment_condition')) {
+                                    $updateData['equipment_condition'] = 'Good';
+                                }
+                                if (Schema::hasColumn('products', 'deleted_at')) {
+                                    $updateData['deleted_at'] = null;
+                                }
+                                DB::table('products')->where('id', $pId)->update($updateData);
                                 $convertedProducts[] = [
                                     'id'   => $pId,
                                     'sku'  => $primarySku,

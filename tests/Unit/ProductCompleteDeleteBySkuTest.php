@@ -70,6 +70,8 @@ class ProductCompleteDeleteBySkuTest extends TestCase
             $table->decimal('max_stock', 15, 2)->default(100);
             $table->integer('reorder_level')->default(20);
             $table->string('asset_status')->default('Available');
+            $table->string('equipment_condition')->nullable();
+            $table->string('assigned_to')->nullable();
             $table->softDeletes();
             $table->timestamps();
         });
@@ -456,5 +458,129 @@ class ProductCompleteDeleteBySkuTest extends TestCase
         $this->assertEquals(0, DB::table('fixed_assets')->where('id', $fa2)->count());
         $this->assertEquals(0, DB::table('fixed_asset_units')->where('id', $unit2)->count());
         $this->assertEquals(0, DB::table('fixed_asset_assignments')->where('fixed_asset_unit_id', $unit2)->count());
+    }
+
+    public function test_non_global_admin_cannot_access_convert_to_consumable()
+    {
+        $regularUser = $this->createRegularUser();
+        Auth::login($regularUser);
+
+        $this->expectException(\Symfony\Component\HttpKernel\Exception\HttpException::class);
+
+        $request = Request::create(route('products.convert-to-consumable-by-sku'), 'POST', [
+            'sku'            => 'FA-BUST',
+            'confirm_action' => 'CONVERT',
+        ]);
+        $this->controller->convertToConsumableBySku($request);
+    }
+
+    public function test_global_admin_can_convert_fixed_assets_to_consumable_in_bulk_with_multiline_numbered_input()
+    {
+        $admin = $this->createGlobalAdminUser();
+        Auth::login($admin);
+
+        // Create 2 Fixed Asset products
+        $p1 = Product::create([
+            'name'     => 'Bushing Test 1',
+            'sku'      => 'FA-BUST',
+            'category' => 'Fixed Asset',
+        ]);
+        $p2 = Product::create([
+            'name'     => 'Balder Test 2',
+            'sku'      => 'FA-BALD',
+            'category' => 'Fixed Asset',
+        ]);
+
+        // Attach inventory with on-hand quantity and reserved quantity
+        $inv1 = DB::table('inventory')->insertGetId([
+            'store_id'          => 1,
+            'product_id'        => $p1->id,
+            'quantity_on_hand'  => 10.0,
+            'quantity_reserved' => 2.0,
+            'unit_cost'         => 100.0,
+        ]);
+        $inv2 = DB::table('inventory')->insertGetId([
+            'store_id'          => 1,
+            'product_id'        => $p2->id,
+            'quantity_on_hand'  => 5.0,
+            'quantity_reserved' => 1.0,
+            'unit_cost'         => 50.0,
+        ]);
+
+        // Create serialized fixed asset & units
+        $fa1 = DB::table('fixed_assets')->insertGetId([
+            'name'        => 'Bushing Asset',
+            'code_prefix' => 'BUST',
+        ]);
+        $unit1 = DB::table('fixed_asset_units')->insertGetId([
+            'fixed_asset_id' => $fa1,
+            'unit_code'      => 'BUST-01',
+        ]);
+
+        // Simulate numbered multiline paste from user ("multy like this")
+        $multilineInput = "1\tFA-BUST\n2 FA-BALD";
+
+        $request = Request::create(route('products.convert-to-consumable-by-sku'), 'POST', [
+            'sku'            => $multilineInput,
+            'confirm_action' => 'CONVERT',
+        ]);
+
+        $response = $this->controller->convertToConsumableBySku($request);
+        $this->assertEquals(302, $response->getStatusCode());
+        $this->assertNull(session('error'));
+
+        // Refresh products and verify category changed to Consumable
+        $p1->refresh();
+        $p2->refresh();
+        $this->assertEquals('Consumable', $p1->category);
+        $this->assertEquals('Consumable', $p2->category);
+
+        // Verify inventory on hand was preserved and reserved quantity was unlocked
+        $this->assertEquals(10.0, DB::table('inventory')->where('id', $inv1)->value('quantity_on_hand'));
+        $this->assertEquals(0, DB::table('inventory')->where('id', $inv1)->value('quantity_reserved'));
+        $this->assertEquals(5.0, DB::table('inventory')->where('id', $inv2)->value('quantity_on_hand'));
+        $this->assertEquals(0, DB::table('inventory')->where('id', $inv2)->value('quantity_reserved'));
+
+        // Verify serialized fixed assets and units are purged
+        $this->assertEquals(0, DB::table('fixed_assets')->where('id', $fa1)->count());
+        $this->assertEquals(0, DB::table('fixed_asset_units')->where('id', $unit1)->count());
+    }
+
+    public function test_global_admin_can_complete_delete_in_bulk_with_multiline_numbered_input()
+    {
+        $admin = $this->createGlobalAdminUser();
+        Auth::login($admin);
+
+        $p1 = Product::create([
+            'name'     => 'Delete Bulk 1',
+            'sku'      => 'FA-DEL1',
+            'category' => 'Fixed Asset',
+        ]);
+        $p2 = Product::create([
+            'name'     => 'Delete Bulk 2',
+            'sku'      => 'FA-DEL2',
+            'category' => 'Fixed Asset',
+        ]);
+
+        $inv1 = DB::table('inventory')->insertGetId([
+            'store_id'         => 1,
+            'product_id'       => $p1->id,
+            'quantity_on_hand' => 8.0,
+        ]);
+
+        // Numbered list paste
+        $multilineInput = "1. FA-DEL1\n2. FA-DEL2";
+
+        $request = Request::create(route('products.complete-delete-by-sku'), 'POST', [
+            'sku'         => $multilineInput,
+            'confirm_sku' => 'DELETE',
+        ]);
+
+        $response = $this->controller->completeDeleteBySku($request);
+        $this->assertEquals(302, $response->getStatusCode());
+
+        $this->assertNull(Product::withTrashed()->where('sku', 'FA-DEL1')->first());
+        $this->assertNull(Product::withTrashed()->where('sku', 'FA-DEL2')->first());
+        $this->assertEquals(0, DB::table('inventory')->where('id', $inv1)->count());
     }
 }

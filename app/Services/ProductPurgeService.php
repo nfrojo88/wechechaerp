@@ -35,6 +35,13 @@ class ProductPurgeService
         $cleanSkus = [];
         foreach ($skus as $s) {
             $s = trim((string)$s);
+            if (empty($s) || strtoupper($s) === 'DELETE') {
+                continue;
+            }
+            // Strip numeric list prefix e.g. "1\tFA-BUST", "1. FA-BUST", "1 FA-BUST"
+            if (preg_match('/^[0-9]+[\.\t\s]+(.+)$/', $s, $m)) {
+                $s = trim($m[1]);
+            }
             if (!empty($s) && strtoupper($s) !== 'DELETE') {
                 $cleanSkus[] = $s;
             }
@@ -83,6 +90,23 @@ class ProductPurgeService
         $sku = trim($sku);
         if (empty($sku)) return false;
 
+        // Strip numeric list prefix e.g. "1\tFA-BUST", "1. FA-BUST", "1 FA-BUST"
+        if (preg_match('/^[0-9]+[\.\t\s]+(.+)$/', $sku, $m)) {
+            $sku = trim($m[1]);
+        }
+
+        $variants = [$sku, strtoupper($sku), strtolower($sku)];
+        if (str_contains($sku, ' ')) {
+            $variants[] = str_replace(' ', '', $sku);
+            $variants[] = str_replace(' ', '-', $sku);
+            $variants[] = str_replace(' ', '_', $sku);
+        }
+        if (str_starts_with(strtoupper($sku), 'FE-')) {
+            $variants[] = 'FA-' . substr(strtoupper($sku), 3);
+        }
+        $variants = array_values(array_unique(array_filter($variants)));
+        $variantsLower = array_map('strtolower', $variants);
+
         $skuUpper = strtoupper($sku);
         $skuLower = strtolower($sku);
 
@@ -91,9 +115,10 @@ class ProductPurgeService
         if (Schema::hasTable('products')) {
             try {
                 $matchingProducts = Product::withTrashed()
-                    ->where('sku', $sku)
-                    ->orWhere('sku', $skuUpper)
-                    ->orWhere(DB::raw('LOWER(TRIM(sku))'), $skuLower)
+                    ->where(function ($q) use ($variants, $variantsLower) {
+                        $q->whereIn('sku', $variants)
+                          ->orWhereIn(DB::raw('LOWER(TRIM(sku))'), $variantsLower);
+                    })
                     ->get();
                 $productIds = $matchingProducts->pluck('id')->toArray();
             } catch (\Throwable $e) {}
@@ -101,10 +126,13 @@ class ProductPurgeService
             // Also check raw query in case model global scopes, soft delete settings, or mutators hide it
             try {
                 $rawIds = DB::table('products')
-                    ->where('sku', $sku)
-                    ->orWhere('sku', $skuUpper)
-                    ->orWhere(DB::raw('LOWER(TRIM(sku))'), $skuLower)
-                    ->orWhere('sku', 'like', $sku . '_DELETED_%')
+                    ->where(function ($q) use ($variants, $variantsLower) {
+                        $q->whereIn('sku', $variants)
+                          ->orWhereIn(DB::raw('LOWER(TRIM(sku))'), $variantsLower);
+                        foreach ($variants as $v) {
+                            $q->orWhere('sku', 'like', $v . '_DELETED_%');
+                        }
+                    })
                     ->pluck('id')
                     ->toArray();
                 $productIds = array_unique(array_merge($productIds, $rawIds));
@@ -114,38 +142,52 @@ class ProductPurgeService
         // 2. Resolve matching Fixed Assets (code_prefix, sku, description, or linked product_id)
         $faIds = [];
         if (Schema::hasTable('fixed_assets')) {
-            $prefixWithoutFa = str_starts_with($skuUpper, 'FA-') ? substr($skuUpper, 3) : null;
+            $prefixes = [];
+            foreach ($variants as $v) {
+                $prefixes[] = $v;
+                $prefixes[] = strtoupper($v);
+                $prefixes[] = strtolower($v);
+                if (str_starts_with(strtoupper($v), 'FA-')) {
+                    $p = substr(strtoupper($v), 3);
+                    $prefixes[] = $p;
+                    $prefixes[] = strtolower($p);
+                }
+            }
+            $prefixes = array_values(array_unique(array_filter($prefixes)));
+
             $faQuery = DB::table('fixed_assets');
             $hasCondition = false;
 
             if (Schema::hasColumn('fixed_assets', 'code_prefix')) {
-                $faQuery->where(function ($q) use ($sku, $skuUpper, $skuLower, $prefixWithoutFa) {
-                    $q->where('code_prefix', $sku)
-                      ->orWhere('code_prefix', $skuUpper)
-                      ->orWhere('code_prefix', $skuLower);
-                    if ($prefixWithoutFa) {
-                        $q->orWhere('code_prefix', $prefixWithoutFa)
-                          ->orWhere('code_prefix', strtolower($prefixWithoutFa));
-                    }
+                $faQuery->where(function ($q) use ($prefixes) {
+                    $q->whereIn('code_prefix', $prefixes)
+                      ->orWhereIn(DB::raw('LOWER(TRIM(code_prefix))'), array_map('strtolower', $prefixes));
                 });
                 $hasCondition = true;
             }
 
             if (Schema::hasColumn('fixed_assets', 'sku')) {
-                $faQuery->orWhere(function ($q) use ($sku, $skuUpper) {
-                    $q->where('sku', $sku)->orWhere('sku', $skuUpper);
+                $faQuery->orWhere(function ($q) use ($variants) {
+                    $q->whereIn('sku', $variants);
                 });
                 $hasCondition = true;
             }
 
             if (Schema::hasColumn('fixed_assets', 'description')) {
-                $faQuery->orWhere('description', 'like', "%SKU: {$sku}%")
-                        ->orWhere('description', 'like', "%SKU: {$skuUpper}%");
+                $faQuery->orWhere(function ($q) use ($variants) {
+                    foreach ($variants as $v) {
+                        $q->orWhere('description', 'like', "%SKU: {$v}%");
+                    }
+                });
                 $hasCondition = true;
             }
 
             if (Schema::hasColumn('fixed_assets', 'name')) {
-                $faQuery->orWhere('name', 'like', "%{$sku}%");
+                $faQuery->orWhere(function ($q) use ($variants) {
+                    foreach ($variants as $v) {
+                        $q->orWhere('name', 'like', "%{$v}%");
+                    }
+                });
                 $hasCondition = true;
             }
 

@@ -180,9 +180,8 @@ class ProductController extends Controller
         $rawInput = trim((string)$request->input('sku'));
         $confirmInput = trim((string)$request->input('confirm_sku'));
 
-        // Parse one or multiple SKUs separated by comma or newlines
-        $skus = preg_split('/[\r\n,]+/', $rawInput);
-        $skus = array_values(array_filter(array_map('trim', $skus)));
+        // Parse one or multiple SKUs separated by comma or newlines (supports numbered lists e.g. "1 FA-BUST")
+        $skus = $this->parseSkusFromInput($rawInput);
 
         if (empty($skus)) {
             return back()->with('error', 'Please provide a valid material SKU code to delete.');
@@ -198,26 +197,10 @@ class ProductController extends Controller
             return back()->with('error', "Confirmation failed: You must type the SKU code '{$firstSku}' or 'DELETE' to confirm permanent complete deletion.");
         }
 
-        $deletedCount = 0;
-        $deletedSkus = [];
-        $failedSkus = [];
-
-        foreach ($skus as $sku) {
-            try {
-                $purged = $this->purgeMaterialBySku($sku);
-                if ($purged) {
-                    $deletedCount++;
-                    $deletedSkus[] = $sku;
-                } else {
-                    $failedSkus[] = "SKU '{$sku}' not found";
-                }
-            } catch (\Throwable $e) {
-                Log::error("Failed to completely delete material SKU '{$sku}': " . $e->getMessage(), [
-                    'exception' => $e
-                ]);
-                $failedSkus[] = "SKU '{$sku}' failed ({$e->getMessage()})";
-            }
-        }
+        $purgeResult = app(\App\Services\ProductPurgeService::class)->purgeSkus($skus);
+        $deletedCount = $purgeResult['deleted_count'];
+        $deletedSkus = $purgeResult['deleted_skus'];
+        $failedSkus = $purgeResult['failed_skus'];
 
         if ($deletedCount > 0 && empty($failedSkus)) {
             $skuList = implode(', ', $deletedSkus);
@@ -225,11 +208,96 @@ class ProductController extends Controller
         } elseif ($deletedCount > 0 && !empty($failedSkus)) {
             $skuList = implode(', ', $deletedSkus);
             $failList = implode('; ', $failedSkus);
-            return back()->with('warning', "Successfully deleted: [{$skuList}]. Notice: {$failList}.");
+            return back()->with('warning', "Successfully deleted {$deletedCount} SKU(s): [{$skuList}]. Notice: {$failList}.");
         } else {
             $failList = implode('; ', $failedSkus);
             return back()->with('error', "Complete delete failed: {$failList}.");
         }
+    }
+
+    /**
+     * Convert Material(s) from Fixed Asset to Consumable by SKU (Global Admin only).
+     * Retains inventory on-hand balances, removes serialized fixed asset units/records,
+     * and sets category to 'Consumable'.
+     */
+    public function convertToConsumableBySku(Request $request)
+    {
+        $user = Auth::user();
+        if (!$user || !$user->isGlobalAdmin()) {
+            abort(403, 'Unauthorized: Converting material category by SKU is strictly reserved for Global Admin.');
+        }
+
+        $request->validate([
+            'sku' => ['required', 'string'],
+            'confirm_action' => ['required', 'string'],
+        ]);
+
+        $rawInput = trim((string)$request->input('sku'));
+        $confirmInput = trim((string)$request->input('confirm_action'));
+
+        $skus = $this->parseSkusFromInput($rawInput);
+
+        if (empty($skus)) {
+            return back()->with('error', 'Please provide at least one valid material SKU code to convert.');
+        }
+
+        $firstSku = $skus[0];
+        $isConfirmed = (strtoupper($confirmInput) === 'CONVERT')
+            || (strcasecmp($confirmInput, $firstSku) === 0)
+            || (strcasecmp($confirmInput, $rawInput) === 0);
+
+        if (!$isConfirmed) {
+            return back()->with('error', "Confirmation failed: You must type 'CONVERT' to confirm converting the selected materials to Consumable.");
+        }
+
+        $result = app(\App\Services\MaterialToConsumableService::class)->convertSkusToConsumable($skus);
+
+        $convertedCount = $result['converted_count'];
+        $faRemoved = $result['fixed_assets_removed'];
+        $unitsRemoved = $result['units_removed'];
+        $notFound = $result['not_found'];
+        $convertedProducts = $result['converted_products'];
+
+        if ($convertedCount > 0 && empty($notFound)) {
+            $prodNames = array_map(function ($p) {
+                return "{$p['sku']} ({$p['name']})";
+            }, array_slice($convertedProducts, 0, 10));
+            $summary = implode(', ', $prodNames);
+            if (count($convertedProducts) > 10) {
+                $summary .= ' and ' . (count($convertedProducts) - 10) . ' more';
+            }
+            return back()->with('success', "Successfully converted {$convertedCount} material(s) [{$summary}] to Consumable. Serialized assets/units removed ({$faRemoved} assets, {$unitsRemoved} units) while all store inventory stock on-hand was safely preserved.");
+        } elseif ($convertedCount > 0 && !empty($notFound)) {
+            $prodNames = array_map(fn($p) => $p['sku'], array_slice($convertedProducts, 0, 8));
+            $missing = implode(', ', array_slice($notFound, 0, 8));
+            return back()->with('warning', "Converted {$convertedCount} material(s) [SKUs: " . implode(', ', $prodNames) . "] to Consumable ({$faRemoved} assets, {$unitsRemoved} units removed). Not found or already consumable: [{$missing}].");
+        } else {
+            $missing = implode(', ', array_slice($notFound, 0, 10));
+            return back()->with('error', "Conversion failed: No active Fixed Asset materials matched the provided SKU(s): [{$missing}].");
+        }
+    }
+
+    /**
+     * Parse multi-line, comma-separated, or numbered text input into unique clean SKU strings.
+     */
+    protected function parseSkusFromInput(string $input): array
+    {
+        $lines = preg_split('/[\r\n,]+/', $input);
+        $skus = [];
+        foreach ($lines as $line) {
+            $line = trim($line);
+            if ($line === '' || strtoupper($line) === 'DELETE' || strtoupper($line) === 'CONVERT') {
+                continue;
+            }
+            // Strip numeric list prefixes e.g. "1\tFA-BUST", "1. FA-BUST", "1 FA-BUST"
+            if (preg_match('/^[0-9]+[\.\t\s]+(.+)$/', $line, $m)) {
+                $line = trim($m[1]);
+            }
+            if ($line !== '' && strtoupper($line) !== 'DELETE' && strtoupper($line) !== 'CONVERT') {
+                $skus[] = $line;
+            }
+        }
+        return array_values(array_unique($skus));
     }
 
     /**
@@ -243,6 +311,10 @@ class ProductController extends Controller
         }
 
         $sku = trim((string)$request->input('sku'));
+        if (preg_match('/^[0-9]+[\.\t\s]+(.+)$/', $sku, $m)) {
+            $sku = trim($m[1]);
+        }
+
         if (empty($sku)) {
             return response()->json(['found' => false, 'message' => 'SKU code is required.'], 400);
         }

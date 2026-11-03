@@ -40,23 +40,32 @@
 
                     <!-- SKU Input Group -->
                     <div class="mb-3">
-                        <label for="adminDeleteSkuInput" class="form-label small fw-bold text-dark text-uppercase mb-1">
-                            <i class="fa-solid fa-barcode text-primary me-1"></i> Material SKU Code <span class="text-danger">*</span>
-                        </label>
-                        <div class="input-group">
-                            <span class="input-group-text bg-light font-monospace fw-bold text-secondary">
-                                <i class="fa-solid fa-hashtag"></i>
-                            </span>
-                            <input type="text" name="sku" id="adminDeleteSkuInput" 
-                                   class="form-control form-control-lg font-monospace fw-bold text-dark" 
-                                   placeholder="e.g. MAT-1002 or FA-TRUC-001 (or multiple comma-separated)" 
-                                   required autocomplete="off" oninput="handleSkuInputDebounce(this.value)">
-                            <button type="button" class="btn btn-outline-secondary px-3" onclick="triggerManualSkuLookup()" title="Inspect SKU Details">
-                                <i class="fa-solid fa-magnifying-glass me-1"></i> Inspect
-                            </button>
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <label for="adminDeleteSkuInput" class="form-label small fw-bold text-dark text-uppercase mb-0">
+                                <i class="fa-solid fa-barcode text-danger me-1"></i> Material SKU Code(s) <span class="text-danger">*</span>
+                            </label>
+                            <div class="d-flex align-items-center gap-2">
+                                <span id="adminDeleteSkuCountBadge" class="badge bg-secondary-subtle text-secondary border font-monospace" style="font-size:0.75rem;">
+                                    0 SKUs detected
+                                </span>
+                                <button type="button" class="btn btn-link btn-sm text-decoration-none p-0 text-muted" onclick="clearDeleteSkuInput()" title="Clear input">
+                                    <i class="fa-solid fa-eraser me-1"></i>Clear
+                                </button>
+                            </div>
                         </div>
-                        <div class="form-text text-muted small">
-                            Enter the exact material SKU code. Multiple SKUs can be separated by commas or newlines.
+                        <div class="position-relative">
+                            <textarea name="sku" id="adminDeleteSkuInput" rows="4"
+                                      class="form-control font-monospace fw-bold text-dark" 
+                                      placeholder="Paste single or multiple SKUs here, e.g.:&#10;1 FA-BUST&#10;2 FA-BALD&#10;FA-B RUS&#10;or comma-separated: FA-BUST, FA-BALD" 
+                                      required autocomplete="off" oninput="handleSkuInputDebounce(this.value)"></textarea>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center mt-1">
+                            <div class="form-text text-muted small">
+                                Supports numbered lists (e.g. <code>1 FA-BUST</code>), line-by-line paste, or comma-separated SKUs.
+                            </div>
+                            <button type="button" class="btn btn-outline-secondary btn-sm px-2 py-0.5" onclick="triggerManualSkuLookup()" title="Inspect first SKU Details">
+                                <i class="fa-solid fa-magnifying-glass me-1"></i> Inspect First SKU
+                            </button>
                         </div>
                     </div>
 
@@ -108,6 +117,38 @@
 <script>
 let skuLookupDebounceTimer = null;
 
+function parseSkuList(text) {
+    if (!text) return [];
+    return text.split(/[\r\n,]+/)
+        .map(s => s.trim())
+        .map(s => s.replace(/^[0-9]+[\.\t\s]+/, '').trim())
+        .filter(s => s.length > 0 && s.toUpperCase() !== 'DELETE' && s.toUpperCase() !== 'CONVERT');
+}
+
+function updateDeleteSkuCount() {
+    const skuInput = document.getElementById('adminDeleteSkuInput');
+    const badge = document.getElementById('adminDeleteSkuCountBadge');
+    if (!skuInput || !badge) return;
+
+    const skus = parseSkuList(skuInput.value);
+    const count = skus.length;
+    badge.textContent = count === 1 ? '1 SKU detected' : `${count} SKUs detected`;
+    badge.className = count > 0 
+        ? 'badge bg-danger bg-opacity-10 text-danger border border-danger-subtle font-monospace' 
+        : 'badge bg-secondary-subtle text-secondary border font-monospace';
+}
+
+function clearDeleteSkuInput() {
+    const skuInput = document.getElementById('adminDeleteSkuInput');
+    if (skuInput) {
+        skuInput.value = '';
+        updateDeleteSkuCount();
+        validateDeleteConfirmation();
+    }
+    const container = document.getElementById('skuLookupContainer');
+    if (container) container.style.display = 'none';
+}
+
 function openSkuDeleteModal(sku = '', name = '') {
     const modalEl = document.getElementById('adminSkuDeleteModal');
     if (!modalEl) return;
@@ -131,6 +172,8 @@ function openSkuDeleteModal(sku = '', name = '') {
         feedbackText.innerHTML = 'Waiting for confirmation input...';
     }
 
+    updateDeleteSkuCount();
+
     const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
     modal.show();
 
@@ -144,19 +187,17 @@ function openSkuDeleteModal(sku = '', name = '') {
 
 function handleSkuInputDebounce(value) {
     clearTimeout(skuLookupDebounceTimer);
+    updateDeleteSkuCount();
     validateDeleteConfirmation();
 
-    const trimmed = (value || '').trim();
-    if (!trimmed) {
+    const skus = parseSkuList(value);
+    if (skus.length === 0) {
         const container = document.getElementById('skuLookupContainer');
         if (container) container.style.display = 'none';
         return;
     }
 
-    // Only lookup the first SKU if comma-separated
-    const firstSku = trimmed.split(/[\r\n,]+/)[0].trim();
-    if (!firstSku) return;
-
+    const firstSku = skus[0];
     skuLookupDebounceTimer = setTimeout(() => {
         lookupSkuDetails(firstSku);
     }, 400);
@@ -164,13 +205,12 @@ function handleSkuInputDebounce(value) {
 
 function triggerManualSkuLookup() {
     const skuInput = document.getElementById('adminDeleteSkuInput');
-    const val = (skuInput?.value || '').trim();
-    if (!val) {
-        alert('Please enter a SKU code first.');
+    const skus = parseSkuList(skuInput?.value || '');
+    if (skus.length === 0) {
+        alert('Please enter or paste at least one SKU code first.');
         return;
     }
-    const firstSku = val.split(/[\r\n,]+/)[0].trim();
-    lookupSkuDetails(firstSku);
+    lookupSkuDetails(skus[0]);
 }
 
 function lookupSkuDetails(sku) {
@@ -179,6 +219,9 @@ function lookupSkuDetails(sku) {
     const body = document.getElementById('skuLookupCardBody');
 
     if (!container || !badge || !body) return;
+
+    // Clean SKU if numbered prefix present
+    sku = sku.replace(/^[0-9]+[\.\t\s]+/, '').trim();
 
     container.style.display = 'block';
     badge.className = 'badge bg-warning text-dark small';
@@ -252,8 +295,8 @@ function validateDeleteConfirmation() {
 
     if (!skuInput || !confirmInput || !submitBtn || !feedbackText) return;
 
-    const rawSku = (skuInput.value || '').trim();
-    const firstSku = rawSku.split(/[\r\n,]+/)[0].trim();
+    const skus = parseSkuList(skuInput.value);
+    const firstSku = skus[0] || '';
     const typed = (confirmInput.value || '').trim();
 
     if (!typed) {
@@ -273,7 +316,7 @@ function validateDeleteConfirmation() {
     } else {
         submitBtn.disabled = true;
         feedbackText.className = 'small mt-1 text-danger';
-        feedbackText.innerHTML = `<i class="fa-solid fa-circle-xmark me-1"></i> Does not match 'DELETE' or '${firstSku}'.`;
+        feedbackText.innerHTML = `<i class="fa-solid fa-circle-xmark me-1"></i> Type 'DELETE' or '${firstSku}' to unlock.`;
     }
 }
 
