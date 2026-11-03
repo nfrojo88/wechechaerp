@@ -422,4 +422,28 @@ class SlipSequenceController extends Controller
             'is_full'         => $data['is_full'],
         ]);
     }
+
+    /**
+     * Check all currently added slips in Store Manager & Store Keeper,
+     * accept all added slips, automatically fill any missing gap numbers as void entries,
+     * and synchronize active sequence counters.
+     */
+    public function syncAndFillGaps(Request $request)
+    {
+        $slipService = app(\App\Services\SlipSequenceService::class);
+        $storeId = $request->input('store_id') ? (int)$request->input('store_id') : null;
+        $slipType = $request->input('slip_type') ?: null;
+
+        $result = $slipService->checkAndFillMissingSlips($storeId, $slipType);
+
+        $gapsFilled = $result['gaps_filled'];
+        $updatedCount = count($result['sequences_updated']);
+
+        if ($gapsFilled > 0 || $updatedCount > 0) {
+            $msg = "Checked current added slips across Store Manager & Store Keeper. Filled {$gapsFilled} missing slip gap(s) and synchronized {$updatedCount} sequence book(s). All entered slips accepted.";
+            return back()->with('success', $msg);
+        }
+
+        return back()->with('info', "Checked all currently added slips in Store Manager and Store Keeper sections: All sequences are continuous with zero missing gaps.");
+    }
 }

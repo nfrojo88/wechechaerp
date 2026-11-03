@@ -2527,6 +2527,7 @@ Route::middleware(['auth'])->group(function () {
         Route::post('slip-sequences/{slipSequence}/reset', [App\Http\Controllers\SlipSequenceController::class, 'reset'])->name('slip-sequences.reset');
         Route::get('slip-sequences/{slipSequence}/cross-check', [App\Http\Controllers\SlipSequenceController::class, 'crossCheck'])->name('slip-sequences.cross-check');
         Route::post('slip-sequences/void-missing', [App\Http\Controllers\SlipSequenceController::class, 'voidMissing'])->name('slip-sequences.void-missing');
+        Route::post('slip-sequences/sync-gaps', [App\Http\Controllers\SlipSequenceController::class, 'syncAndFillGaps'])->name('slip-sequences.sync-gaps');
         // Store Keeper Assignment Hub
         Route::get('assign-store-keeper', [App\Http\Controllers\StoreManagerController::class, 'assignStoreKeepersIndex'])->name('store-keepers.index');
         Route::post('assign-store-keeper', [App\Http\Controllers\StoreManagerController::class, 'updateStoreKeeperAssignment'])->name('store-keepers.update');

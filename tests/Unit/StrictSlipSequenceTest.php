@@ -189,9 +189,9 @@ class StrictSlipSequenceTest extends TestCase
     }
 
     /**
-     * Test 1: Rejecting 2102 before 2101; after voiding 2101 it is accepted.
+     * Test 1: Higher number entered is accepted, and missing gaps are auto-filled as void.
      */
-    public function test_accepting_higher_number_is_rejected_and_accepted_after_voiding(): void
+    public function test_accepting_higher_number_is_accepted_and_autofills_missing_gaps(): void
     {
         $sequence = SlipSequence::create([
             'store_id'        => $this->store->id,
@@ -205,53 +205,8 @@ class StrictSlipSequenceTest extends TestCase
             'status'          => 'active',
         ]);
 
-        // Attempting to consume 2102 when 2101 is next expected should throw SlipSequenceGapException
-        try {
-            $this->service->consumeNext(
-                storeId: $this->store->id,
-                slipType: 'receive',
-                inputSlipNo: '2102',
-                sourceType: 'procurement'
-            );
-            $this->fail('Expected SlipSequenceGapException was not thrown for skipped slip 2101.');
-        } catch (SlipSequenceGapException $e) {
-            $this->assertEquals(2102, $e->getGivenNumber());
-            $this->assertEquals(2101, $e->getExpectedNumber());
-            $this->assertEquals([2101], $e->getMissingNumbers());
-            $this->assertStringContainsString('not recorded yet', strtolower($e->getMessage()));
-            $this->assertStringContainsString('record or void', strtolower($e->getMessage()));
-        }
-
-        // Sequence must NOT have jumped; current_slip_no remains 2101
-        $sequence->refresh();
-        $this->assertEquals(2101, $sequence->current_slip_no);
-        $this->assertEquals(1, $sequence->used_count);
-
-        // Storekeeper voids missing slip 2101
-        $voidResult = $this->service->voidMissingSlips(
-            storeId: $this->store->id,
-            slipType: 'receive',
-            numbers: [2101],
-            reason: 'Physical leaf torn and spoiled by rain',
-            userId: $this->user->id
-        );
-
-        $this->assertEquals(1, $voidResult['voided_count']);
-        $this->assertDatabaseHas('delivery_receipts', [
-            'store_id'    => $this->store->id,
-            'slip_no'     => 'REC-02101',
-            'source_type' => 'void',
-            'is_void'     => 1,
-            'void_reason' => 'Physical leaf torn and spoiled by rain',
-            'voided_by'   => $this->user->id,
-        ]);
-
-        // Counter has now advanced to 2102
-        $sequence->refresh();
-        $this->assertEquals(2102, $sequence->current_slip_no);
-        $this->assertEquals(2, $sequence->used_count);
-
-        // Now consuming 2102 succeeds strictly!
+        // When user enters 2102 (jumping past 2101):
+        // 2102 is accepted, and missing 2101 is auto-filled as void
         $result = $this->service->consumeNext(
             storeId: $this->store->id,
             slipType: 'receive',
@@ -260,11 +215,19 @@ class StrictSlipSequenceTest extends TestCase
         );
 
         $this->assertEquals('REC-02102', $result['slip_no']);
-        $this->assertEquals(2102, $result['numeric_slip_no']);
+        $this->assertEquals(2102, $result['numeric_no']);
 
+        // Missing slip 2101 is automatically recorded as void gap
+        $this->assertDatabaseHas('delivery_receipts', [
+            'store_id'    => $this->store->id,
+            'slip_no'     => 'REC-02101',
+            'source_type' => 'void',
+            'is_void'     => 1,
+        ]);
+
+        // Sequence current_slip_no has advanced to 2103
         $sequence->refresh();
         $this->assertEquals(2103, $sequence->current_slip_no);
-        $this->assertEquals(3, $sequence->used_count);
     }
 
     /**
@@ -730,5 +693,101 @@ class StrictSlipSequenceTest extends TestCase
             ->where('status', 'inactive')
             ->count();
         $this->assertEquals(2, $inactiveCount);
+    }
+
+    public function test_consume_next_accepts_jumped_slip_and_autofills_missing_gaps(): void
+    {
+        $sequence = SlipSequence::create([
+            'store_id'        => $this->store->id,
+            'slip_type'       => 'receive',
+            'label'           => 'Jump Test Book',
+            'prefix'          => 'REC-',
+            'book_start_no'   => 5001,
+            'book_end_no'     => 5100,
+            'current_slip_no' => 5001,
+            'used_count'      => 0,
+            'status'          => 'active',
+        ]);
+
+        // User in Store Keeper or Store Manager enters slip #REC-05004 (skipping 5001, 5002, 5003)
+        $result = $this->service->consumeNext(
+            storeId: $this->store->id,
+            slipType: 'receive',
+            inputSlipNo: 'REC-05004',
+            sourceType: 'procurement'
+        );
+
+        // Verify the entered slip is ACCEPTED without error
+        $this->assertEquals('REC-05004', $result['slip_no']);
+        $this->assertEquals(5004, $result['numeric_no']);
+
+        // Verify missing slips 5001, 5002, 5003 are auto-filled as void
+        $voidReceipts = DeliveryReceipt::where('store_id', $this->store->id)
+            ->where('slip_type', 'receive')
+            ->where('is_void', true)
+            ->orderBy('id', 'asc')
+            ->get();
+
+        $this->assertCount(3, $voidReceipts);
+        $this->assertEquals(['REC-05001', 'REC-05002', 'REC-05003'], $voidReceipts->pluck('slip_no')->toArray());
+
+        // Verify sequence advanced to 5005
+        $sequence->refresh();
+        $this->assertEquals(5005, $sequence->current_slip_no);
+        $this->assertEquals(4, $sequence->used_count);
+    }
+
+    public function test_check_and_fill_missing_slips_accepts_current_added_and_fills_all_gaps(): void
+    {
+        $sequence = SlipSequence::create([
+            'store_id'        => $this->store->id,
+            'slip_type'       => 'send',
+            'label'           => 'SIN Gap Test',
+            'prefix'          => 'SIN-',
+            'book_start_no'   => 1001,
+            'book_end_no'     => 1050,
+            'current_slip_no' => 1001,
+            'used_count'      => 0,
+            'status'          => 'active',
+        ]);
+
+        // Simulate slips currently added in Store Manager / Store Keeper (e.g. transfers with slips 1002 and 1005)
+        DeliveryReceipt::create([
+            'dr_no'         => 'SIN-01002',
+            'slip_no'       => 'SIN-01002',
+            'slip_type'     => 'send',
+            'source_type'   => 'transfer_out',
+            'store_id'      => $this->store->id,
+            'received_date' => now()->toDateString(),
+            'status'        => 'issued',
+            'is_void'       => false,
+        ]);
+
+        DeliveryReceipt::create([
+            'dr_no'         => 'SIN-01005',
+            'slip_no'       => 'SIN-01005',
+            'slip_type'     => 'send',
+            'source_type'   => 'transfer_out',
+            'store_id'      => $this->store->id,
+            'received_date' => now()->toDateString(),
+            'status'        => 'issued',
+            'is_void'       => false,
+        ]);
+
+        // Run batch check and auto-fill
+        $summary = $this->service->checkAndFillMissingSlips($this->store->id, 'send');
+
+        // Missing slips 1001, 1003, 1004 should be auto-filled
+        $this->assertEquals(3, $summary['gaps_filled']);
+
+        $sequence->refresh();
+        // Current slip should advance past highest added (1005) to 1006
+        $this->assertEquals(1006, $sequence->current_slip_no);
+
+        // Run full reconciliation: must be 100% OK with 0 problems
+        $audit = $this->service->reconcile($sequence);
+        $this->assertFalse($audit['has_issues']);
+        $this->assertEquals('ok', $audit['status']);
+        $this->assertEmpty($audit['gaps']);
     }
 }

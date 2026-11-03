@@ -10,6 +10,7 @@ use App\Exceptions\SlipSequenceException;
 use App\Exceptions\SlipSequenceGapException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Schema;
 
 class SlipSequenceService
 {
@@ -132,7 +133,7 @@ class SlipSequenceService
             $targetInt = $expectedInt;
             $targetFormatted = $expectedFormatted;
 
-            // If user supplied a slip number, validate against strict sequential rules
+            // If user supplied a slip number, accept it and auto-fill any missing gap parts
             if (!empty($inputSlipNo) && trim((string)$inputSlipNo) !== '') {
                 $rawInput = trim((string)$inputSlipNo);
                 $parsedInt = $this->extractNumeric($rawInput, $sequence);
@@ -141,67 +142,126 @@ class SlipSequenceService
                     throw new SlipSequenceException("Invalid slip number '{$rawInput}'. Must contain numeric digits matching the book sequence.");
                 }
 
-                // Rule: Outside book range
+                // If outside active sequence book range, check if another book for this store covers it
                 if ($parsedInt < (int)$sequence->book_start_no || $parsedInt > (int)$sequence->book_end_no) {
-                    throw new SlipSequenceException("Slip number #{$rawInput} is outside the active sequence book range (#{$sequence->book_start_no}–#{$sequence->book_end_no}).");
+                    $altSeq = SlipSequence::where('store_id', $storeId)
+                        ->where('slip_type', $slipType)
+                        ->where('book_start_no', '<=', $parsedInt)
+                        ->where('book_end_no', '>=', $parsedInt)
+                        ->first();
+                    if ($altSeq) {
+                        $sequence = $altSeq;
+                        $expectedInt = (int)$sequence->current_slip_no;
+                    } else {
+                        throw new SlipSequenceException("Slip number #{$rawInput} is outside the active sequence book range (#{$sequence->book_start_no}–#{$sequence->book_end_no}).");
+                    }
                 }
 
-                // Rule: Lower than expected / already used -> Duplicate
+                // Rule: Lower than expected / already used -> Duplicate unless claiming a void gap
                 if ($parsedInt < $expectedInt) {
-                    throw new SlipSequenceException("Duplicate Entry: Slip number #{$rawInput} has already been used or passed in sequence. The next expected slip for this book is #{$expectedFormatted}.");
+                    $claimed = false;
+                    try {
+                        $existingVoid = DeliveryReceipt::where('store_id', $storeId)
+                            ->where('slip_type', $slipType)
+                            ->where('is_void', true)
+                            ->where('source_type', 'void')
+                            ->where(function ($q) use ($sequence, $parsedInt, $rawInput) {
+                                $fmt = $sequence->formatSlipNumber($parsedInt);
+                                $q->where('dr_no', $fmt)
+                                  ->orWhere('dr_no', (string)$parsedInt)
+                                  ->orWhere('slip_no', $fmt)
+                                  ->orWhere('slip_no', (string)$parsedInt)
+                                  ->orWhere('slip_no', $rawInput);
+                            })
+                            ->first();
+                        if ($existingVoid) {
+                            $existingVoid->delete();
+                            $claimed = true;
+                        }
+                    } catch (\Throwable $e) {}
+
+                    if (!$claimed) {
+                        throw new SlipSequenceException("Duplicate Entry: Slip number #{$rawInput} has already been used or passed in sequence. The next expected slip for this book is #{$expectedFormatted}.");
+                    }
                 }
 
-                // Rule: Higher than expected -> Reject with list of missing numbers (no jumping)
+                // Rule: Higher than expected -> User jumped ahead in physical book.
+                // ACCEPT IT and AUTOMATICALLY FILL all missing gaps between expectedInt and parsedInt - 1!
                 if ($parsedInt > $expectedInt) {
                     $missingNumbers = range($expectedInt, $parsedInt - 1);
-                    $missingFormatted = array_map(fn($num) => $sequence->formatSlipNumber($num), $missingNumbers);
+                    $today = now()->toDateString();
+                    $actorId = Auth::id() ?: 1;
 
-                    $formattedList = array_map(fn($f) => "#{$f}", $missingFormatted);
-                    if (count($formattedList) === 1) {
-                        $missingText = "{$formattedList[0]} is not recorded yet.";
-                    } elseif (count($formattedList) === 2) {
-                        $missingText = "{$formattedList[0]} and {$formattedList[1]} are not recorded yet.";
-                    } else {
-                        $last = array_pop($formattedList);
-                        $missingText = implode(', ', $formattedList) . " and {$last} are not recorded yet.";
+                    foreach ($missingNumbers as $missNum) {
+                        $formattedMiss = $sequence->formatSlipNumber($missNum);
+                        $alreadyRecorded = DeliveryReceipt::where('store_id', $storeId)
+                            ->where('slip_type', $slipType)
+                            ->where(function ($q) use ($formattedMiss, $missNum) {
+                                $q->where('dr_no', $formattedMiss)
+                                  ->orWhere('dr_no', (string)$missNum)
+                                  ->orWhere('slip_no', $formattedMiss)
+                                  ->orWhere('slip_no', (string)$missNum);
+                            })
+                            ->exists();
+
+                        if (!$alreadyRecorded) {
+                            try {
+                                DeliveryReceipt::create([
+                                    'dr_no'           => $formattedMiss,
+                                    'slip_no'         => $formattedMiss,
+                                    'slip_type'       => $slipType,
+                                    'source_type'     => 'void',
+                                    'store_id'        => $storeId,
+                                    'received_date'   => $today,
+                                    'receipt_date'    => $today,
+                                    'received_by'     => $actorId,
+                                    'created_by'      => $actorId,
+                                    'status'          => 'void',
+                                    'is_void'         => true,
+                                    'void_reason'     => "Auto-filled missing slip gap: skipped when Slip #{$rawInput} was recorded in {$sourceType}",
+                                    'voided_by'       => $actorId,
+                                    'voided_at'       => now(),
+                                    'sequence_status' => 'valid',
+                                    'notes'           => "Auto-filled missing gap #{$formattedMiss}",
+                                ]);
+                            } catch (\Throwable $e) {}
+                        }
                     }
-
-                    $message = "Slip {$rawInput} can't be saved. {$missingText} Record or void them first.";
-
-                    throw new SlipSequenceGapException(
-                        $message,
-                        $storeId,
-                        $slipType,
-                        $expectedInt,
-                        $parsedInt,
-                        $missingNumbers,
-                        $missingFormatted
-                    );
                 }
 
-                // Exactly equals expectedInt
                 $targetInt = $parsedInt;
                 $targetFormatted = $sequence->formatSlipNumber($targetInt);
             }
 
-            // Database duplicate check across delivery_receipts
-            $duplicateExists = DeliveryReceipt::where('store_id', $storeId)
+            // Database duplicate check across active non-void delivery receipts
+            $dupQuery = DeliveryReceipt::where('store_id', $storeId)
                 ->where('slip_type', $slipType)
-                ->where(function ($q) use ($targetFormatted, $targetInt) {
+                ->where('is_void', false)
+                ->where(function ($q) use ($targetFormatted, $targetInt, $inputSlipNo) {
                     $q->where('dr_no', $targetFormatted)
                       ->orWhere('dr_no', (string)$targetInt)
                       ->orWhere('slip_no', $targetFormatted)
                       ->orWhere('slip_no', (string)$targetInt);
-                })
-                ->exists();
+                    if (!empty($inputSlipNo)) {
+                        $q->orWhere('slip_no', trim((string)$inputSlipNo));
+                    }
+                });
 
-            if ($duplicateExists) {
-                throw new SlipSequenceException("Duplicate Entry: Slip #{$targetFormatted} is already recorded in store delivery receipts.");
+            if (!empty($metadata['exclude_receipt_id'])) {
+                $dupQuery->where('id', '!=', $metadata['exclude_receipt_id']);
             }
 
-            // Advance the sequence counter by 1
-            $newCurrent = $expectedInt + 1;
+            $duplicateExists = $dupQuery->first();
+            if ($duplicateExists) {
+                throw new SlipSequenceException("Duplicate Entry: Slip #{$targetFormatted} is already recorded in delivery receipt #{$duplicateExists->id} (recorded on {$duplicateExists->received_date}).");
+            }
+
+            // Advance the sequence counter past the highest used number
+            $newCurrent = max($expectedInt, $targetInt) + 1;
             $newUsed = (int)$sequence->used_count + 1;
+            if ($targetInt > $expectedInt) {
+                $newUsed = (int)$sequence->used_count + ($targetInt - $expectedInt) + 1;
+            }
             $newStatus = ($newCurrent > (int)$sequence->book_end_no) ? 'full' : 'active';
 
             $sequence->update([
@@ -599,5 +659,195 @@ class SlipSequenceService
         }
 
         return null;
+    }
+
+    /**
+     * Inspect all currently added slips across Store Manager and Store Keeper sections,
+     * accept all added slips, automatically fill any missing gap numbers as void entries,
+     * and synchronize active sequence counters.
+     *
+     * @param int|null $targetStoreId
+     * @param string|null $targetSlipType
+     * @return array Summary of checked and filled records
+     */
+    public function checkAndFillMissingSlips(?int $targetStoreId = null, ?string $targetSlipType = null): array
+    {
+        $storesQuery = Store::query();
+        if ($targetStoreId) {
+            $storesQuery->where('id', $targetStoreId);
+        }
+        $stores = $storesQuery->get();
+
+        $types = $targetSlipType ? [$targetSlipType] : ['receive', 'send'];
+
+        $totalChecked = 0;
+        $totalGapsFilled = 0;
+        $sequencesUpdated = [];
+        $today = now()->toDateString();
+        $actorId = Auth::id() ?: 1;
+
+        foreach ($stores as $store) {
+            foreach ($types as $slipType) {
+                // Find active or latest sequences for this store & slip type
+                $sequences = SlipSequence::where('store_id', $store->id)
+                    ->where('slip_type', $slipType)
+                    ->orderBy('book_start_no', 'asc')
+                    ->get();
+
+                if ($sequences->isEmpty()) {
+                    continue;
+                }
+
+                $totalChecked++;
+
+                // 1. Collect all slip numbers added in DeliveryReceipt
+                $existingSlips = DeliveryReceipt::where('store_id', $store->id)
+                    ->where('slip_type', $slipType)
+                    ->get();
+
+                $recordedInts = [];
+                foreach ($existingSlips as $dr) {
+                    $num1 = $this->extractNumeric($dr->slip_no);
+                    $num2 = $this->extractNumeric($dr->dr_no);
+                    if ($num1 !== null) $recordedInts[$num1] = true;
+                    if ($num2 !== null) $recordedInts[$num2] = true;
+                }
+
+                // 2. Collect slips added in Transfers (Store Manager transfer hub)
+                if (Schema::hasTable('transfers')) {
+                    if ($slipType === 'send') {
+                        $transfers = DB::table('transfers')
+                            ->where('from_store_id', $store->id)
+                            ->get();
+                        foreach ($transfers as $t) {
+                            foreach (['outgoing_slip_no', 'physical_slip_no'] as $fld) {
+                                if (!empty($t->$fld)) {
+                                    $n = $this->extractNumeric($t->$fld);
+                                    if ($n !== null) $recordedInts[$n] = true;
+                                }
+                            }
+                        }
+                    } else {
+                        $transfers = DB::table('transfers')
+                            ->where('to_store_id', $store->id)
+                            ->get();
+                        foreach ($transfers as $t) {
+                            if (!empty($t->receiving_slip_no)) {
+                                $n = $this->extractNumeric($t->receiving_slip_no);
+                                if ($n !== null) $recordedInts[$n] = true;
+                            }
+                        }
+                    }
+                }
+
+                // 3. Collect slips added in Procurement Receipts
+                if ($slipType === 'receive' && Schema::hasTable('procurement_receipts')) {
+                    $procSlips = DB::table('procurement_receipts')
+                        ->where('store_id', $store->id)
+                        ->whereNotNull('slip_no')
+                        ->pluck('slip_no');
+                    foreach ($procSlips as $s) {
+                        $n = $this->extractNumeric($s);
+                        if ($n !== null) $recordedInts[$n] = true;
+                    }
+                }
+
+                // 4. Collect slips added in Petty Cash Purchases
+                if ($slipType === 'receive' && Schema::hasTable('petty_cash_material_purchases')) {
+                    $pcSlips = DB::table('petty_cash_material_purchases')
+                        ->where('store_id', $store->id)
+                        ->whereNotNull('slip_no')
+                        ->pluck('slip_no');
+                    foreach ($pcSlips as $s) {
+                        $n = $this->extractNumeric($s);
+                        if ($n !== null) $recordedInts[$n] = true;
+                    }
+                }
+
+                // For each sequence book of this store, fill missing gaps up to highest added slip
+                foreach ($sequences as $sequence) {
+                    $bookStart = (int)$sequence->book_start_no;
+                    $bookEnd = (int)$sequence->book_end_no;
+                    $currentSlip = (int)$sequence->current_slip_no;
+
+                    // Match all added integers that belong to this book's range
+                    $bookInts = array_filter(array_keys($recordedInts), fn($n) => $n >= $bookStart && $n <= $bookEnd);
+
+                    if (empty($bookInts) && $sequence->status !== 'active') {
+                        continue;
+                    }
+
+                    $maxAdded = !empty($bookInts) ? max($bookInts) : ($currentSlip - 1);
+                    $ceiling = max($maxAdded, $currentSlip - 1);
+
+                    // Find missing numbers from bookStart up to ceiling
+                    $gapsInBook = [];
+                    for ($n = $bookStart; $n <= $ceiling; $n++) {
+                        if (!isset($recordedInts[$n])) {
+                            $gapsInBook[] = $n;
+                        }
+                    }
+
+                    // Auto-fill all missing numbers with void receipts so book has no missing holes
+                    $filledForThisSequence = 0;
+                    foreach ($gapsInBook as $gapNum) {
+                        $formattedGap = $sequence->formatSlipNumber($gapNum);
+                        try {
+                            DeliveryReceipt::create([
+                                'dr_no'           => $formattedGap,
+                                'slip_no'         => $formattedGap,
+                                'slip_type'       => $slipType,
+                                'source_type'     => 'void',
+                                'store_id'        => $store->id,
+                                'received_date'   => $today,
+                                'receipt_date'    => $today,
+                                'received_by'     => $actorId,
+                                'created_by'      => $actorId,
+                                'status'          => 'void',
+                                'is_void'         => true,
+                                'void_reason'     => 'Auto-filled missing slip gap from current added store slips',
+                                'voided_by'       => $actorId,
+                                'voided_at'       => now(),
+                                'sequence_status' => 'valid',
+                                'notes'           => "Auto-filled missing gap #{$formattedGap}",
+                            ]);
+                            $recordedInts[$gapNum] = true;
+                            $filledForThisSequence++;
+                            $totalGapsFilled++;
+                        } catch (\Throwable $e) {}
+                    }
+
+                    // Calculate new current slip number and used count
+                    $newCurrent = max($currentSlip, $maxAdded + 1);
+                    $totalRecordedInBook = count(array_filter(array_keys($recordedInts), fn($n) => $n >= $bookStart && $n < $newCurrent));
+                    $newStatus = ($newCurrent > $bookEnd) ? 'full' : $sequence->status;
+
+                    $oldCurrent = $sequence->current_slip_no;
+                    $sequence->update([
+                        'current_slip_no' => $newCurrent,
+                        'used_count'      => max((int)$sequence->used_count, $totalRecordedInBook),
+                        'status'          => $newStatus,
+                    ]);
+
+                    if ($filledForThisSequence > 0 || $newCurrent !== $oldCurrent) {
+                        $sequencesUpdated[] = [
+                            'store_name'     => $store->name,
+                            'slip_type'      => $slipType,
+                            'book_range'     => "#{$bookStart}–#{$bookEnd}",
+                            'old_current'    => $oldCurrent,
+                            'new_current'    => $newCurrent,
+                            'max_added'      => $maxAdded,
+                            'gaps_filled'    => $filledForThisSequence,
+                        ];
+                    }
+                }
+            }
+        }
+
+        return [
+            'stores_checked'    => $stores->count(),
+            'gaps_filled'       => $totalGapsFilled,
+            'sequences_updated' => $sequencesUpdated,
+        ];
     }
 }

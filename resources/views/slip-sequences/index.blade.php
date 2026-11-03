@@ -10,6 +10,12 @@
             <p class="text-muted">Manage GRN (Receiving) and SIN (Outgoing) slip sequences</p>
         </div>
         <div class="col-md-6 text-end">
+            <form action="{{ route('store-manager.slip-sequences.sync-gaps') }}" method="POST" class="d-inline" onsubmit="return confirm('Check all currently added slips in Store Manager and Store Keeper sections and automatically fill any missing gaps?')">
+                @csrf
+                <button type="submit" class="btn btn-warning text-dark me-2 shadow-sm" title="Accept all added slips and automatically fill missing gaps">
+                    <i class="fas fa-magic me-1"></i>Check & Auto-Fill Missing Slips
+                </button>
+            </form>
             <a href="{{ route('store-manager.slip-history.index') }}" class="btn btn-outline-primary me-2 shadow-sm">
                 <i class="fas fa-history me-1"></i>View Complete Slip History
             </a>

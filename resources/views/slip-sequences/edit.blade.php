@@ -38,6 +38,14 @@
                 </ul>
             </div>
             @endif
+            <form action="{{ route('store-manager.slip-sequences.sync-gaps') }}" method="POST" class="d-inline" onsubmit="return confirm('Check all currently added slips for this store and auto-fill any missing gaps?')">
+                @csrf
+                <input type="hidden" name="store_id" value="{{ $slipSequence->store_id }}">
+                <input type="hidden" name="slip_type" value="{{ $slipSequence->slip_type }}">
+                <button type="submit" class="btn btn-sm btn-outline-warning text-dark shadow-sm" title="Accept added slips and auto-fill missing gap numbers">
+                    <i class="fas fa-magic me-1"></i>Auto-Fill Missing Slips
+                </button>
+            </form>
             <button type="button" class="btn btn-sm btn-outline-info shadow-sm" onclick="runCrossCheck()">
                 <i class="fas fa-stethoscope me-1"></i>Cross-Check
             </button>
