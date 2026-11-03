@@ -168,6 +168,10 @@ class InventoryService
             }
 
             $cat = strtolower(trim($product->category ?? ''));
+            if ($cat === 'consumable' || strtolower(trim($product->sub_category ?? '')) === 'consumable') {
+                return;
+            }
+
             $sku = strtoupper(trim($product->sku ?? ''));
             $isFixedAsset = str_contains($cat, 'fixed') || str_contains($cat, 'asset') || str_starts_with($sku, 'FA-');
 

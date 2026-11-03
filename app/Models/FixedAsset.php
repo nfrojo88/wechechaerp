@@ -51,7 +51,7 @@ class FixedAsset extends Model
                     $q->where('name', $fixedAsset->name)->where('category', 'Fixed Asset');
                 })->first();
 
-                if ($product) {
+                if ($product && strtolower(trim($product->category ?? '')) === 'fixed asset') {
                     Inventory::where('product_id', $product->id)->delete();
                     $product->delete();
                 }
@@ -341,6 +341,10 @@ class FixedAsset extends Model
                 $sku = strtoupper(trim($productCheck->sku ?? ''));
                 $nameLower = strtolower(trim($productCheck->name ?? ''));
 
+                if ($cat === 'consumable' || $subCat === 'consumable') {
+                    return 0; // Explicitly marked as Consumable, do not create or sync fixed assets
+                }
+
                 $assetCategories = [
                     'fixed asset', 'fixed assets', 'fixed_asset',
                     'computer & it', 'it equipment', 'it',
@@ -420,7 +424,10 @@ class FixedAsset extends Model
                     'camera', 'projector', 'radio', 'walkie talkie', 'television', 'tv', 'refrigerator', 'ac', 'air conditioner',
                 ];
 
-                $query->where(function($q) use ($assetCategories, $assetKeywords) {
+                $query->where(function($q) {
+                    $q->whereNull('category')
+                      ->orWhere(DB::raw('LOWER(category)'), '!=', 'consumable');
+                })->where(function($q) use ($assetCategories, $assetKeywords) {
                     $q->whereIn('category', $assetCategories)
                       ->orWhereIn('sub_category', $assetCategories)
                       ->orWhere('sku', 'like', 'FA-%')

@@ -42,9 +42,9 @@ class Inventory extends Model
             }
 
             try {
-                // Only sync if product is explicitly a Fixed Asset
+                // Only sync if product is explicitly a Fixed Asset (never Consumables)
                 $product = $inventory->relationLoaded('product') ? $inventory->product : Product::find($inventory->product_id);
-                if ($product) {
+                if ($product && strtolower(trim($product->category ?? '')) !== 'consumable') {
                     static::$isSyncing = true;
                     FixedAsset::syncFromInventory($inventory->product_id);
                 }
