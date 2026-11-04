@@ -95,11 +95,17 @@ class DashboardController extends Controller
     /**
      * Get VAT & Withholding Tax compliance summary and monthly report.
      */
-    public function getTaxComplianceReportData(): array
+    /**
+     * Get VAT & Withholding Tax compliance summary and monthly report.
+     * Supports grouping by Ethiopian Calendar (ERCA eTax filing standard) and Gregorian Calendar.
+     */
+    public function getTaxComplianceReportData(?string $calendar = null): array
     {
-        return $this->safe(function () {
+        return $this->safe(function () use ($calendar) {
+            $activeCalendar = $calendar ?: request('tax_calendar', 'ethiopian');
             if (!\Illuminate\Support\Facades\Schema::hasTable('expense_requests')) {
                 return [
+                    'calendar'                 => $activeCalendar,
                     'total_records'            => 0,
                     'total_gross_base'         => 0.0,
                     'total_vat_amount'         => 0.0,
@@ -107,6 +113,8 @@ class DashboardController extends Controller
                     'total_net_disbursed'      => 0.0,
                     'slips_attached_count'     => 0,
                     'monthly_report'           => [],
+                    'monthly_report_ec'        => [],
+                    'monthly_report_gc'        => [],
                 ];
             }
 
@@ -131,7 +139,111 @@ class DashboardController extends Controller
             $totalNetDisbursed = 0.0;
             $slipsAttachedCount = 0;
 
-            $monthlyMap = [];
+            $monthlyMapEc = [];
+            $monthlyMapGc = [];
+
+            $aggregateItem = function ($gross, $vat, $wht, $net, $hasReceipt, $date) use (
+                &$monthlyMapEc, &$monthlyMapGc
+            ) {
+                // 1. Ethiopian Calendar Grouping (ERCA Standard)
+                if (class_exists(\App\Services\EthiopianDate::class)) {
+                    $eth = \App\Services\EthiopianDate::toEthiopian($date);
+                    $ethYear = (int)$eth['year'];
+                    $ethMonth = (int)$eth['month'];
+                    $monthRange = \App\Services\EthiopianDate::monthRange($ethYear, $ethMonth);
+                    $monthAm = \App\Services\EthiopianDate::MONTHS_AM[$ethMonth] ?? ($eth['month_am'] ?? 'ወር');
+                    $monthEn = \App\Services\EthiopianDate::MONTHS_EN[$ethMonth] ?? ($eth['month_en'] ?? 'Month');
+                    $daysInMonth = $monthRange['days'] ?? 30;
+
+                    $ecKey = sprintf('%04d-%02d', $ethYear, $ethMonth);
+                    $ecLabel = "{$monthAm} {$ethYear} ዓ.ም. ({$monthEn})";
+                    $ecShortLabel = "{$monthAm} {$ethYear}";
+                    $ecChartLabel = "{$monthAm} {$ethYear}";
+                    $ecPeriodLabel = sprintf('01/%02d/%04d – %02d/%02d/%04d ዓ.ም.', $ethMonth, $ethYear, $daysInMonth, $ethMonth, $ethYear);
+                    $ecFromDate = $monthRange['start_date'];
+                    $ecToDate = $monthRange['end_date'];
+                } else {
+                    $ecKey = $date->format('Y-m');
+                    $ecLabel = $date->format('F Y');
+                    $ecShortLabel = $date->format('M Y');
+                    $ecChartLabel = $date->format('M Y');
+                    $ecPeriodLabel = $date->format('Y-m-d');
+                    $ecFromDate = $date->copy()->startOfMonth()->format('Y-m-d');
+                    $ecToDate = $date->copy()->endOfMonth()->format('Y-m-d');
+                    $ethYear = null;
+                    $ethMonth = null;
+                    $monthAm = '';
+                    $monthEn = '';
+                }
+
+                if (!isset($monthlyMapEc[$ecKey])) {
+                    $monthlyMapEc[$ecKey] = [
+                        'month_key'        => $ecKey,
+                        'month_label'      => $ecLabel,
+                        'short_label'      => $ecShortLabel,
+                        'chart_label'      => $ecChartLabel,
+                        'eth_year'         => $ethYear,
+                        'eth_month'        => $ethMonth,
+                        'month_am'         => $monthAm,
+                        'month_en'         => $monthEn,
+                        'eth_period_label' => $ecPeriodLabel,
+                        'from_date'        => $ecFromDate,
+                        'to_date'          => $ecToDate,
+                        'period_label'     => $ecPeriodLabel,
+                        'count'            => 0,
+                        'gross_base'       => 0.0,
+                        'vat_amount'       => 0.0,
+                        'wht_amount'       => 0.0,
+                        'net_disbursed'    => 0.0,
+                        'slips_count'      => 0,
+                        'calendar'         => 'ethiopian',
+                    ];
+                }
+                $monthlyMapEc[$ecKey]['count']++;
+                $monthlyMapEc[$ecKey]['gross_base'] += $gross;
+                $monthlyMapEc[$ecKey]['vat_amount'] += $vat;
+                $monthlyMapEc[$ecKey]['wht_amount'] += $wht;
+                $monthlyMapEc[$ecKey]['net_disbursed'] += $net;
+                if ($hasReceipt) {
+                    $monthlyMapEc[$ecKey]['slips_count']++;
+                }
+
+                // 2. Gregorian Calendar Grouping
+                $gcKey = $date->format('Y-m');
+                $gcLabel = $date->format('F Y');
+                $gcShortLabel = $date->format('M Y');
+                $gcChartLabel = $date->format('M Y');
+                $gcFromDate = $date->copy()->startOfMonth()->format('Y-m-d');
+                $gcToDate = $date->copy()->endOfMonth()->format('Y-m-d');
+                $gcPeriodLabel = "{$gcFromDate} to {$gcToDate}";
+
+                if (!isset($monthlyMapGc[$gcKey])) {
+                    $monthlyMapGc[$gcKey] = [
+                        'month_key'        => $gcKey,
+                        'month_label'      => $gcLabel,
+                        'short_label'      => $gcShortLabel,
+                        'chart_label'      => $gcChartLabel,
+                        'from_date'        => $gcFromDate,
+                        'to_date'          => $gcToDate,
+                        'period_label'     => $gcPeriodLabel,
+                        'count'            => 0,
+                        'gross_base'       => 0.0,
+                        'vat_amount'       => 0.0,
+                        'wht_amount'       => 0.0,
+                        'net_disbursed'    => 0.0,
+                        'slips_count'      => 0,
+                        'calendar'         => 'gregorian',
+                    ];
+                }
+                $monthlyMapGc[$gcKey]['count']++;
+                $monthlyMapGc[$gcKey]['gross_base'] += $gross;
+                $monthlyMapGc[$gcKey]['vat_amount'] += $vat;
+                $monthlyMapGc[$gcKey]['wht_amount'] += $wht;
+                $monthlyMapGc[$gcKey]['net_disbursed'] += $net;
+                if ($hasReceipt) {
+                    $monthlyMapGc[$gcKey]['slips_count']++;
+                }
+            };
 
             foreach ($items as $item) {
                 $gross = (float)($item->gross_amount > 0 ? $item->gross_amount : $item->amount);
@@ -161,34 +273,7 @@ class DashboardController extends Controller
                 }
 
                 $date = $item->paid_at ? \Illuminate\Support\Carbon::parse($item->paid_at) : ($item->created_at ? \Illuminate\Support\Carbon::parse($item->created_at) : now());
-                $monthKey = $date->format('Y-m');
-                $monthLabel = $date->format('F Y');
-                $monthStart = $date->copy()->startOfMonth()->format('Y-m-d');
-                $monthEnd   = $date->copy()->endOfMonth()->format('Y-m-d');
-
-                if (!isset($monthlyMap[$monthKey])) {
-                    $monthlyMap[$monthKey] = [
-                        'month_key'     => $monthKey,
-                        'month_label'   => $monthLabel,
-                        'from_date'     => $monthStart,
-                        'to_date'       => $monthEnd,
-                        'count'         => 0,
-                        'gross_base'    => 0.0,
-                        'vat_amount'    => 0.0,
-                        'wht_amount'    => 0.0,
-                        'net_disbursed' => 0.0,
-                        'slips_count'   => 0,
-                    ];
-                }
-
-                $monthlyMap[$monthKey]['count']++;
-                $monthlyMap[$monthKey]['gross_base'] += $gross;
-                $monthlyMap[$monthKey]['vat_amount'] += $vat;
-                $monthlyMap[$monthKey]['wht_amount'] += $wht;
-                $monthlyMap[$monthKey]['net_disbursed'] += $net;
-                if ($hasReceipt) {
-                    $monthlyMap[$monthKey]['slips_count']++;
-                }
+                $aggregateItem($gross, $vat, $wht, $net, $hasReceipt, $date);
             }
 
             // Also incorporate paid Procurement Payments with VAT or Withholding
@@ -234,42 +319,22 @@ class DashboardController extends Controller
                     }
 
                     $date = $pItem->paid_at ? \Illuminate\Support\Carbon::parse($pItem->paid_at) : ($pItem->created_at ? \Illuminate\Support\Carbon::parse($pItem->created_at) : now());
-                    $monthKey = $date->format('Y-m');
-                    $monthLabel = $date->format('F Y');
-                    $monthStart = $date->copy()->startOfMonth()->format('Y-m-d');
-                    $monthEnd   = $date->copy()->endOfMonth()->format('Y-m-d');
-
-                    if (!isset($monthlyMap[$monthKey])) {
-                        $monthlyMap[$monthKey] = [
-                            'month_key'     => $monthKey,
-                            'month_label'   => $monthLabel,
-                            'from_date'     => $monthStart,
-                            'to_date'       => $monthEnd,
-                            'count'         => 0,
-                            'gross_base'    => 0.0,
-                            'vat_amount'    => 0.0,
-                            'wht_amount'    => 0.0,
-                            'net_disbursed' => 0.0,
-                            'slips_count'   => 0,
-                        ];
-                    }
-
-                    $monthlyMap[$monthKey]['count']++;
-                    $monthlyMap[$monthKey]['gross_base'] += $gross;
-                    $monthlyMap[$monthKey]['vat_amount'] += $vat;
-                    $monthlyMap[$monthKey]['wht_amount'] += $wht;
-                    $monthlyMap[$monthKey]['net_disbursed'] += $net;
-                    if ($hasReceipt) {
-                        $monthlyMap[$monthKey]['slips_count']++;
-                    }
+                    $aggregateItem($gross, $vat, $wht, $net, $hasReceipt, $date);
                 }
             }
 
             // Sort months descending (newest month first)
-            krsort($monthlyMap);
-            $monthlyReport = array_values($monthlyMap);
+            krsort($monthlyMapEc);
+            krsort($monthlyMapGc);
+
+            $monthlyReportEc = array_values($monthlyMapEc);
+            $monthlyReportGc = array_values($monthlyMapGc);
+
+            // Active calendar monthly report defaults to Ethiopian
+            $monthlyReport = ($activeCalendar === 'gregorian') ? $monthlyReportGc : $monthlyReportEc;
 
             return [
+                'calendar'                 => $activeCalendar,
                 'total_records'            => $totalRecords,
                 'total_gross_base'         => $totalGrossBase,
                 'total_vat_amount'         => $totalVatAmount,
@@ -277,8 +342,11 @@ class DashboardController extends Controller
                 'total_net_disbursed'      => $totalNetDisbursed,
                 'slips_attached_count'     => $slipsAttachedCount,
                 'monthly_report'           => $monthlyReport,
+                'monthly_report_ec'        => $monthlyReportEc,
+                'monthly_report_gc'        => $monthlyReportGc,
             ];
         }, [
+            'calendar'                 => 'ethiopian',
             'total_records'            => 0,
             'total_gross_base'         => 0.0,
             'total_vat_amount'         => 0.0,
@@ -286,6 +354,8 @@ class DashboardController extends Controller
             'total_net_disbursed'      => 0.0,
             'slips_attached_count'     => 0,
             'monthly_report'           => [],
+            'monthly_report_ec'        => [],
+            'monthly_report_gc'        => [],
         ]);
     }
 

@@ -71,6 +71,7 @@ class GlobalAdminDashboardTest extends TestCase
             $table->string('last_name')->nullable();
             $table->string('name')->nullable();
             $table->string('status')->default('active');
+            $table->boolean('is_dead_file')->default(false);
             $table->timestamps();
             $table->softDeletes();
         });
@@ -516,5 +517,89 @@ class GlobalAdminDashboardTest extends TestCase
         $this->assertGreaterThanOrEqual(26086.96, $taxData['total_vat_amount']);
         $this->assertGreaterThanOrEqual(4000.00, $taxData['total_withholding_amount']);
         $this->assertGreaterThanOrEqual(1, $taxData['slips_attached_count']);
+    }
+
+    public function test_tax_compliance_report_groups_by_ethiopian_calendar_correctly()
+    {
+        $project = Project::firstOrCreate(
+            ['name' => 'HQ Tax Ethiopian Project'],
+            ['created_by' => $this->adminUser->id]
+        );
+
+        // Date in Meskerem 2019 (e.g. 2026-09-25)
+        $meskeremDate = Carbon::parse('2026-09-25 10:00:00');
+        // Date in Tikimt 2019 (e.g. 2026-10-25)
+        $tikimtDate = Carbon::parse('2026-10-25 14:00:00');
+
+        $exp1 = ExpenseRequest::create([
+            'request_number'      => 'EXP-ETH-001',
+            'user_id'             => $this->adminUser->id,
+            'project_id'          => $project->id,
+            'category'            => 'office_supplies',
+            'amount'              => 50000.00,
+            'gross_amount'        => 50000.00,
+            'vat_type'            => 'exclusive',
+            'vat_rate'            => 15.00,
+            'vat_amount'          => 7500.00,
+            'has_withholding'     => true,
+            'withholding_amount'  => 1000.00,
+            'withholding_receipt' => 'uploads/tax/slip_001.pdf',
+            'status'              => ExpenseRequest::STATUS_PAID,
+            'paid_at'             => $meskeremDate,
+            'created_at'          => $meskeremDate,
+        ]);
+
+        ExpenseRequest::create([
+            'request_number'      => 'EXP-ETH-002',
+            'user_id'             => $this->adminUser->id,
+            'project_id'          => $project->id,
+            'category'            => 'equipment',
+            'amount'              => 80000.00,
+            'gross_amount'        => 80000.00,
+            'vat_type'            => 'exclusive',
+            'vat_rate'            => 15.00,
+            'vat_amount'          => 12000.00,
+            'has_withholding'     => true,
+            'withholding_amount'  => 1600.00,
+            'withholding_receipt' => null,
+            'status'              => ExpenseRequest::STATUS_PAID,
+            'paid_at'             => $tikimtDate,
+            'created_at'          => $tikimtDate,
+        ]);
+
+        $controller = new DashboardController();
+        $taxData = $controller->getTaxComplianceReportData();
+
+        // 1. By default, calendar is Ethiopian
+        $this->assertEquals('ethiopian', $taxData['calendar']);
+        $this->assertNotEmpty($taxData['monthly_report']);
+        $this->assertNotEmpty($taxData['monthly_report_ec']);
+        $this->assertNotEmpty($taxData['monthly_report_gc']);
+
+        // 2. Check Ethiopian month grouping
+        $ecMonths = collect($taxData['monthly_report_ec']);
+        $meskeremReport = $ecMonths->first(fn($m) => ($m['eth_month'] ?? null) === 1);
+        $tikimtReport = $ecMonths->first(fn($m) => ($m['eth_month'] ?? null) === 2);
+
+        $this->assertNotNull($meskeremReport, 'Meskerem report must exist');
+        $this->assertEquals('መስከረም', $meskeremReport['month_am']);
+        $this->assertEquals('Meskerem', $meskeremReport['month_en']);
+        $this->assertStringContainsString('መስከረም', $meskeremReport['month_label']);
+        $this->assertStringContainsString('ዓ.ም.', $meskeremReport['eth_period_label']);
+        $this->assertEquals(1, $meskeremReport['slips_count']);
+        $this->assertEquals(7500.00, $meskeremReport['vat_amount']);
+        $this->assertEquals(1000.00, $meskeremReport['wht_amount']);
+
+        $this->assertNotNull($tikimtReport, 'Tikimt report must exist');
+        $this->assertEquals('ጥቅምት', $tikimtReport['month_am']);
+        $this->assertEquals('Tikimt', $tikimtReport['month_en']);
+        $this->assertStringContainsString('ጥቅምት', $tikimtReport['month_label']);
+        $this->assertEquals(12000.00, $tikimtReport['vat_amount']);
+        $this->assertEquals(1600.00, $tikimtReport['wht_amount']);
+
+        // 3. Test Gregorian calendar toggle parameter
+        $gcTaxData = $controller->getTaxComplianceReportData('gregorian');
+        $this->assertEquals('gregorian', $gcTaxData['calendar']);
+        $this->assertEquals($taxData['monthly_report_gc'], $gcTaxData['monthly_report']);
     }
 }
