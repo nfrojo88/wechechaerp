@@ -88,6 +88,11 @@ class PurchaseRequest extends Model
         return self::statusLabels()[$this->status] ?? ucfirst(str_replace('_', ' ', $this->status));
     }
 
+    public function getRequestNumberAttribute(): string
+    {
+        return $this->attributes['request_number'] ?? $this->attributes['pr_no'] ?? ('PR-' . str_pad($this->id, 5, '0', STR_PAD_LEFT));
+    }
+
     public function getEstimatedTotalCostAttribute(): float
     {
         if (isset($this->attributes['estimated_total_cost'])) {

@@ -507,8 +507,15 @@ class StoreAuditController extends Controller
         if ($search) {
             $query->where(function ($q) use ($search) {
                 $q->whereHas('purchaseRequest', function ($sq) use ($search) {
-                    $sq->where('request_number', 'like', "%{$search}%")
-                      ->orWhere('title', 'like', "%{$search}%");
+                    $sq->where(function ($subPr) use ($search) {
+                        $subPr->where('pr_no', 'like', "%{$search}%");
+                        if (Schema::hasColumn('purchase_requests', 'request_number')) {
+                            $subPr->orWhere('request_number', 'like', "%{$search}%");
+                        }
+                        if (Schema::hasColumn('purchase_requests', 'title')) {
+                            $subPr->orWhere('title', 'like', "%{$search}%");
+                        }
+                    });
                 })->orWhereHas('product', function ($pq) use ($search) {
                     $pq->where('name', 'like', "%{$search}%")
                       ->orWhere('sku', 'like', "%{$search}%");
@@ -676,6 +683,11 @@ class StoreAuditController extends Controller
 
     /**
      * Detail drawer data for Purchase Request fulfillment trail.
+     * Returns:
+     * - PR and project/store details
+     * - Physical delivery slips added by storekeeper (Model 19 / GRN) with scan photo URLs & store-only flags
+     * - Inventory stock movements (intake ledger, before/after balances, performer)
+     * - Finance payments disbursed
      */
     public function fulfillmentDetails(int $id)
     {
@@ -689,20 +701,31 @@ class StoreAuditController extends Controller
             'payments.assignedStaff',
             'payments.paidByUser',
             'payment',
+            'deliveryReceipts.store',
             'deliveryReceipts.items.product',
             'deliveryReceipts.receivedBy',
+            'deliveryReceipts.voidedBy',
         ])->findOrFail($id);
 
         // Analyze intake slips for quality/compliance flags
         $intakeSlips = $pr->deliveryReceipts->map(function ($dr) use ($pr) {
             $flags = [];
 
+            // Flag 0: Voided slip
+            if ($dr->is_void) {
+                $flags[] = [
+                    'type'    => 'danger',
+                    'title'   => 'VOID SLIP',
+                    'message' => 'This intake slip has been VOIDED' . ($dr->void_reason ? ': ' . $dr->void_reason : '.') . ($dr->voidedBy ? ' (Voided by ' . $dr->voidedBy->name . ')' : ''),
+                ];
+            }
+
             // Flag 1: Missing slip photo
             if (empty($dr->slip_receipt_path)) {
                 $flags[] = [
                     'type'    => 'danger',
                     'title'   => 'Missing Physical Slip Photo',
-                    'message' => 'No scan or photo of the physical delivery slip is attached.',
+                    'message' => 'No scan or photo of the physical delivery slip (Model 19 / GRN) is attached by store keeper.',
                 ];
             }
 
@@ -715,7 +738,16 @@ class StoreAuditController extends Controller
                 ];
             }
 
-            // Flag 3: Intake date before PR date
+            // Flag 3: Store-Only physical slip
+            if ($dr->is_physical_store_only) {
+                $flags[] = [
+                    'type'    => 'info',
+                    'title'   => 'Store-Only Physical Slip',
+                    'message' => 'Physical slip recorded for store internal stock intake only (excluded from VAT declarations).',
+                ];
+            }
+
+            // Flag 4: Intake date before PR date
             if ($dr->received_date && $pr->created_at && $dr->received_date->lt($pr->created_at->startOfDay())) {
                 $flags[] = [
                     'type'    => 'danger',
@@ -724,51 +756,155 @@ class StoreAuditController extends Controller
                 ];
             }
 
+            $isImage = !empty($dr->slip_receipt_path) && (bool) preg_match('/\.(jpe?g|png|webp|gif|bmp)$/i', $dr->slip_receipt_path);
+
             return [
-                'id'                => $dr->id,
-                'dr_no'             => $dr->dr_no,
-                'slip_no'           => $dr->slip_no,
-                'received_date'     => $dr->received_date ? $dr->received_date->format('d M Y') : 'N/A',
-                'received_by'       => $dr->receivedBy?->name ?? 'N/A',
-                'slip_receipt_url'  => $dr->slip_receipt_url,
-                'is_store_only'     => (bool) $dr->is_physical_store_only,
-                'flags'             => $flags,
-                'items'             => $dr->items->map(fn($it) => [
+                'id'                  => $dr->id,
+                'dr_no'               => $dr->dr_no,
+                'slip_no'             => $dr->slip_no,
+                'store_name'          => $dr->store?->name ?? $pr->store?->name ?? 'Store',
+                'received_date'       => $dr->received_date ? $dr->received_date->format('d M Y') : ($dr->created_at ? $dr->created_at->format('d M Y') : 'N/A'),
+                'received_by'         => $dr->receivedBy?->name ?? 'Storekeeper',
+                'slip_receipt_url'    => $dr->slip_receipt_url,
+                'slip_receipt_path'   => $dr->slip_receipt_path,
+                'is_image'            => $isImage,
+                'is_store_only'       => (bool) $dr->is_physical_store_only,
+                'physical_slip_notes' => $dr->physical_slip_notes,
+                'notes'               => $dr->notes,
+                'is_void'             => (bool) $dr->is_void,
+                'void_reason'         => $dr->void_reason,
+                'voided_by'           => $dr->voidedBy?->name,
+                'voided_at'           => $dr->voided_at ? $dr->voided_at->format('d M Y H:i') : null,
+                'status'              => $dr->status ?? 'verified',
+                'flags'               => $flags,
+                'items'               => $dr->items->map(fn($it) => [
                     'product_name'      => $it->product?->name ?? 'N/A',
+                    'product_sku'       => $it->product?->sku ?? $it->product?->item_code ?? '—',
                     'quantity_received' => (float)$it->quantity_received,
                     'accepted_quantity' => (float)$it->accepted_quantity,
+                    'rejected_quantity' => (float)($it->rejected_quantity ?? 0),
                     'unit'              => $it->unit ?? $it->product?->unit ?? 'pcs',
+                    'rejection_reason'  => $it->rejection_reason,
                 ]),
             ];
         });
 
+        // Query Inventory Movements associated with this PR and its delivery intake slips
+        $deliveryReceipts = $pr->deliveryReceipts;
+        $drIds = $deliveryReceipts->pluck('id')->filter()->all();
+        $slipNos = $deliveryReceipts->pluck('slip_no')->filter()->all();
+        $drNos = $deliveryReceipts->pluck('dr_no')->filter()->all();
+        $prNo = $pr->pr_no ?? $pr->request_number;
+
+        $movements = InventoryMovement::with([
+            'inventory.product',
+            'inventory.store',
+            'performer',
+        ])->where(function ($query) use ($pr, $drIds, $slipNos, $drNos, $prNo) {
+            // Direct PR reference
+            $query->where(function ($sub) use ($pr) {
+                $sub->whereIn('reference_type', [
+                    PurchaseRequest::class,
+                    'App\Models\PurchaseRequest',
+                    'PurchaseRequest',
+                    'purchase_request',
+                ])->where('reference_id', $pr->id);
+            });
+
+            // Delivery Receipt reference
+            if (!empty($drIds)) {
+                $query->orWhere(function ($sub) use ($drIds) {
+                    $sub->whereIn('reference_type', [
+                        DeliveryReceipt::class,
+                        'App\Models\DeliveryReceipt',
+                        'DeliveryReceipt',
+                        'delivery_receipt',
+                    ])->whereIn('reference_id', $drIds);
+                });
+            }
+
+            // Remarks matching PR number
+            if (!empty($prNo)) {
+                $query->orWhere('remarks', 'like', "%PR #{$prNo}%")
+                      ->orWhere('remarks', 'like', "%PR-{$prNo}%")
+                      ->orWhere('remarks', 'like', "%{$prNo}%");
+            }
+
+            // Remarks matching Delivery Receipt slip numbers
+            foreach ($slipNos as $sNo) {
+                if (!empty($sNo)) {
+                    $query->orWhere('remarks', 'like', "%Slip #{$sNo}%")
+                          ->orWhere('remarks', 'like', "%{$sNo}%");
+                }
+            }
+            foreach ($drNos as $dNo) {
+                if (!empty($dNo)) {
+                    $query->orWhere('remarks', 'like', "%DR #{$dNo}%")
+                          ->orWhere('remarks', 'like', "%{$dNo}%");
+                }
+            }
+        })
+        ->orderBy('id', 'desc')
+        ->get();
+
+        $formattedMovements = $movements->map(function ($mov) {
+            return [
+                'id'             => $mov->id,
+                'date'           => $mov->created_at ? $mov->created_at->format('d M Y, H:i') : 'N/A',
+                'type'           => $mov->type,
+                'type_label'     => ucfirst(str_replace('_', ' ', $mov->type ?? 'in')),
+                'quantity'       => (float) $mov->quantity,
+                'balance_before' => $mov->balance_before !== null ? (float) $mov->balance_before : null,
+                'balance_after'  => $mov->balance_after !== null ? (float) $mov->balance_after : null,
+                'product_name'   => $mov->inventory?->product?->name ?? 'Unknown Product',
+                'product_sku'    => $mov->inventory?->product?->sku ?? $mov->inventory?->product?->item_code ?? '—',
+                'product_unit'   => $mov->inventory?->product?->unit ?? 'pcs',
+                'store_name'     => $mov->inventory?->store?->name ?? 'Store',
+                'performed_by'   => $mov->performer?->name ?? 'Storekeeper / System',
+                'remarks'        => $mov->remarks ?: ($mov->notes ?: 'Stock movement recorded'),
+                'reference_type' => class_basename($mov->reference_type ?? ''),
+                'reference_id'   => $mov->reference_id,
+            ];
+        });
+
         // Payments
-        $payments = $pr->payments->map(fn($p) => [
+        $paymentsList = collect();
+        if ($pr->payments && $pr->payments->isNotEmpty()) {
+            $paymentsList = $pr->payments;
+        } elseif ($pr->payment) {
+            $paymentsList = collect([$pr->payment]);
+        }
+
+        $payments = $paymentsList->map(fn($p) => [
             'amount'      => (float)$p->amount,
             'method'      => $p->method ?? 'Bank',
-            'status'      => $p->status,
+            'status'      => $p->status ?? 'paid',
             'paid_at'     => $p->paid_at ? $p->paid_at->format('d M Y') : 'Pending',
-            'paid_by'     => $p->paidByUser?->name ?? 'N/A',
+            'paid_by'     => $p->paidByUser?->name ?? $p->assignedStaff?->name ?? 'Finance Staff',
             'gross'       => (float)($p->gross_amount ?? $p->amount),
             'vat'         => (float)($p->vat_amount ?? 0),
             'withholding' => (float)($p->withholding_amount ?? 0),
         ]);
 
         return response()->json([
-            'success'     => true,
-            'pr'          => [
+            'success'         => true,
+            'pr'              => [
                 'id'             => $pr->id,
-                'request_number' => $pr->request_number,
-                'title'          => $pr->title,
-                'status'         => $pr->status_label,
-                'project_name'   => $pr->project?->name ?? 'N/A',
-                'store_name'     => $pr->store?->name ?? 'N/A',
+                'request_number' => $pr->pr_no ?? $pr->request_number ?? ('PR-' . $pr->id),
+                'pr_no'          => $pr->pr_no ?? $pr->request_number ?? ('PR-' . $pr->id),
+                'title'          => $pr->title ?? $pr->justification ?? ('PR #' . ($pr->pr_no ?? $pr->id)),
+                'status'         => $pr->status_label ?? $pr->status,
+                'project_name'   => $pr->project?->name ?? 'Head Office',
+                'store_name'     => $pr->store?->name ?? 'Main Store',
                 'supplier_name'  => $pr->supplier?->name ?? 'N/A',
                 'created_at'     => $pr->created_at ? $pr->created_at->format('d M Y') : 'N/A',
                 'requested_by'   => $pr->requestedBy?->name ?? 'N/A',
             ],
-            'payments'    => $payments,
-            'intake_slips'=> $intakeSlips,
+            'payments'        => $payments,
+            'intake_slips'    => $intakeSlips,
+            'movements'       => $formattedMovements,
+            'total_slips'     => $intakeSlips->count(),
+            'total_movements' => $formattedMovements->count(),
         ]);
     }
 

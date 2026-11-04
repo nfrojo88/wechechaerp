@@ -227,7 +227,13 @@ class StoreAuditModuleTest extends TestCase
             $table->foreignId('received_by')->nullable();
             $table->string('slip_receipt_path')->nullable();
             $table->boolean('is_physical_store_only')->default(false);
+            $table->text('physical_slip_notes')->nullable();
+            $table->text('notes')->nullable();
             $table->boolean('is_void')->default(false);
+            $table->string('void_reason')->nullable();
+            $table->foreignId('voided_by')->nullable();
+            $table->timestamp('voided_at')->nullable();
+            $table->string('status')->default('verified');
             $table->timestamps();
         });
 
@@ -538,5 +544,148 @@ class StoreAuditModuleTest extends TestCase
         $this->assertInstanceOf(\Symfony\Component\HttpFoundation\StreamedResponse::class, $response);
         $this->assertEquals(200, $response->getStatusCode());
         $this->assertStringContainsString('attachment; filename="inventory_audit_overview_', $response->headers->get('Content-Disposition'));
+    }
+
+    /**
+     * Test 7: fulfillmentDetails returns storekeeper physical slips, uploaded photo scan, and stock movements ledger.
+     */
+    public function test_fulfillment_details_returns_storekeeper_slips_photos_and_stock_movements(): void
+    {
+        Auth::login($this->auditorUser);
+
+        // 1. Create Purchase Request
+        $pr = PurchaseRequest::create([
+            'pr_no'          => 'PR-2026-9999',
+            'title'          => 'Cement Purchase for Tower B',
+            'status'         => PurchaseRequest::STATUS_INTAKE_COMPLETE,
+            'project_id'     => $this->project->id,
+            'store_id'       => $this->store->id,
+            'requested_by'   => $this->storekeeperUser->id,
+        ]);
+
+        $prItem = PurchaseRequestItem::create([
+            'purchase_request_id' => $pr->id,
+            'product_id'          => $this->product->id,
+            'quantity'            => 100,
+            'purchased_quantity'  => 100,
+            'received_quantity'   => 100,
+            'unit'                => 'bags',
+        ]);
+
+        // 2. Create Delivery Receipt with storekeeper slip details & uploaded photo
+        $dr = DeliveryReceipt::create([
+            'dr_no'                  => 'DR-8888',
+            'slip_no'                => 'SLIP-8888',
+            'purchase_request_id'    => $pr->id,
+            'store_id'               => $this->store->id,
+            'received_date'          => now()->subDay(),
+            'received_by'            => $this->storekeeperUser->id,
+            'slip_receipt_path'      => 'delivery_receipts/model_19_signed_scan.jpg',
+            'is_physical_store_only' => true,
+            'physical_slip_notes'    => 'Model 19 hardcopy filed in cabinet A; store-only intake',
+            'notes'                  => '100 bags received in good condition',
+            'status'                 => 'verified',
+        ]);
+
+        DeliveryReceiptItem::create([
+            'delivery_receipt_id' => $dr->id,
+            'product_id'          => $this->product->id,
+            'quantity_received'   => 100,
+            'accepted_quantity'   => 100,
+            'unit'                => 'bags',
+        ]);
+
+        // 3. Create inventory record and inventory movement
+        $inv = Inventory::create([
+            'store_id'         => $this->store->id,
+            'product_id'       => $this->product->id,
+            'quantity_on_hand' => 100,
+            'unit_cost'        => 500,
+            'last_movement_at' => now(),
+        ]);
+
+        $mov = InventoryMovement::create([
+            'inventory_id'   => $inv->id,
+            'type'           => 'in',
+            'quantity'       => 100,
+            'balance_before' => 0,
+            'balance_after'  => 100,
+            'reference_type' => PurchaseRequest::class,
+            'reference_id'   => $pr->id,
+            'performed_by'   => $this->storekeeperUser->id,
+            'remarks'        => "Stock In from PR #{$pr->pr_no} (Receipt Slip #{$dr->slip_no})",
+        ]);
+
+        // 4. Create finance payment
+        ProcurementPayment::create([
+            'purchase_request_id' => $pr->id,
+            'method'              => 'Bank Transfer',
+            'amount'              => 50000,
+            'status'              => 'paid',
+            'paid_at'             => now()->subDays(2),
+            'paid_by'             => $this->auditorUser->id,
+        ]);
+
+        $controller = app(StoreAuditController::class);
+        $response = $controller->fulfillmentDetails($pr->id);
+
+        $this->assertEquals(200, $response->getStatusCode());
+        $data = $response->getData(true);
+
+        $this->assertTrue($data['success']);
+        $this->assertEquals('PR-2026-9999', $data['pr']['pr_no']);
+        $this->assertEquals(1, $data['total_slips']);
+        $this->assertEquals(1, $data['total_movements']);
+
+        // Check Store Keeper Slip details
+        $slip = $data['intake_slips'][0];
+        $this->assertEquals('SLIP-8888', $slip['slip_no']);
+        $this->assertEquals('DR-8888', $slip['dr_no']);
+        $this->assertTrue($slip['is_store_only']);
+        $this->assertTrue($slip['is_image']);
+        $this->assertEquals($this->storekeeperUser->name, $slip['received_by']);
+        $this->assertEquals('Model 19 hardcopy filed in cabinet A; store-only intake', $slip['physical_slip_notes']);
+        $this->assertEquals(1, count($slip['items']));
+        $this->assertEquals(100.0, $slip['items'][0]['accepted_quantity']);
+
+        // Check Stock Movement ledger details
+        $movement = $data['movements'][0];
+        $this->assertEquals('in', $movement['type']);
+        $this->assertEquals(100.0, $movement['quantity']);
+        $this->assertEquals(0.0, $movement['balance_before']);
+        $this->assertEquals(100.0, $movement['balance_after']);
+        $this->assertEquals($this->storekeeperUser->name, $movement['performed_by']);
+        $this->assertStringContainsString('PR-2026-9999', $movement['remarks']);
+        $this->assertStringContainsString('SLIP-8888', $movement['remarks']);
+
+        // Check Payment
+        $this->assertEquals(1, count($data['payments']));
+        $this->assertEquals(50000.0, $data['payments'][0]['amount']);
+    }
+
+    /**
+     * Test 8: fulfillmentDetails denies unauthorized users.
+     */
+    public function test_fulfillment_details_denies_unauthorized_user(): void
+    {
+        $unauthorizedUser = User::create([
+            'name'     => 'Regular Staff',
+            'email'    => 'regular@test.com',
+            'is_admin' => false,
+        ]);
+
+        Auth::login($unauthorizedUser);
+
+        $pr = PurchaseRequest::create([
+            'pr_no'        => 'PR-RESTRICTED',
+            'status'       => 'draft',
+            'requested_by' => $unauthorizedUser->id,
+        ]);
+
+        $this->expectException(HttpException::class);
+        $this->expectExceptionMessage('Unauthorized access. Only Auditors and Administrators can access the Store Audit Module.');
+
+        $controller = app(StoreAuditController::class);
+        $controller->fulfillmentDetails($pr->id);
     }
 }
