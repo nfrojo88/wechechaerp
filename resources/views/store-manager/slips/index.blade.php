@@ -14,6 +14,11 @@
             <p class="text-muted">Manage all Receive and Send slips with sequence validation</p>
         </div>
         <div class="col-md-6 text-end">
+            <button type="button" class="btn btn-outline-danger me-2" 
+                    data-bs-toggle="modal" data-bs-target="#voidSlipModal"
+                    title="Void spoiled / damaged paper slip leaf">
+                <i class="fas fa-ban me-1 text-danger"></i>Void Slip #
+            </button>
             <a href="{{ route('store-manager.slips.create') }}" class="btn btn-primary">
                 <i class="fas fa-plus me-1"></i>Create New Slip
             </a>
@@ -297,5 +302,8 @@
     </div>
 </div>
 @endforeach
+
+@include('partials._void_slip_modal')
+
 @endsection
 

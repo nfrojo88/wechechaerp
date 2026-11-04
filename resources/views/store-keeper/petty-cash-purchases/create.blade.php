@@ -286,13 +286,36 @@
                         <div class="mb-3">
                             <label class="form-label fw-semibold text-dark small d-flex justify-content-between align-items-center">
                                 <span>Store GRN Slip #</span>
-                                @if(!empty($nextReceivingSlip) && $nextReceivingSlip['has_sequence'])
-                                    <span id="pettyNextSlipBadge" class="badge text-white font-monospace" style="background-color: #0d9488;">
-                                        Next: #{{ $nextReceivingSlip['formatted_slip'] }}
-                                    </span>
-                                @endif
+                                <div class="d-flex align-items-center gap-1">
+                                    @if(!empty($nextReceivingSlip) && $nextReceivingSlip['has_sequence'])
+                                        <span id="pettyNextSlipBadge" class="badge text-white font-monospace" style="background-color: #0d9488;">
+                                            Next: #{{ $nextReceivingSlip['formatted_slip'] }}
+                                        </span>
+                                    @endif
+                                    <button type="button" class="btn btn-xs btn-outline-danger py-0 px-2 fw-semibold" 
+                                            data-bs-toggle="modal" data-bs-target="#voidSlipModal"
+                                            data-target-input="#pettySlipNo"
+                                            data-store-select="#storeSelect"
+                                            data-store-id="{{ $assignedStore->id ?? ($stores->first()->id ?? '') }}"
+                                            data-slip-type="receive"
+                                            title="Void spoiled or damaged paper slip in physical book">
+                                        <i class="fas fa-ban me-1 text-danger"></i>Void Slip #
+                                    </button>
+                                </div>
                             </label>
-                            <input type="text" name="slip_no" id="pettySlipNo" class="form-control form-control-sm font-monospace fw-bold @error('slip_no') is-invalid @enderror" placeholder="{{ !empty($nextReceivingSlip) && $nextReceivingSlip['has_sequence'] ? 'Auto: #' . $nextReceivingSlip['formatted_slip'] : 'Auto from sequence' }}" value="{{ old('slip_no') }}">
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text bg-light"><i class="fas fa-hashtag text-muted"></i></span>
+                                <input type="text" name="slip_no" id="pettySlipNo" class="form-control form-control-sm font-monospace fw-bold @error('slip_no') is-invalid @enderror" placeholder="{{ !empty($nextReceivingSlip) && $nextReceivingSlip['has_sequence'] ? 'Auto: #' . $nextReceivingSlip['formatted_slip'] : 'Auto from sequence' }}" value="{{ old('slip_no') }}">
+                                <button type="button" class="btn btn-outline-danger btn-sm" 
+                                        data-bs-toggle="modal" data-bs-target="#voidSlipModal"
+                                        data-target-input="#pettySlipNo"
+                                        data-store-select="#storeSelect"
+                                        data-store-id="{{ $assignedStore->id ?? ($stores->first()->id ?? '') }}"
+                                        data-slip-type="receive"
+                                        title="Void spoiled slip and use next">
+                                    <i class="fas fa-ban me-1"></i>Void
+                                </button>
+                            </div>
                             <small class="text-muted d-block mt-1" style="font-size:0.73rem;">
                                 Leave blank to auto-consume next receiving slip (#{{ $nextReceivingSlip['formatted_slip'] ?? '...' }}). Strict sequential order enforced.
                             </small>
@@ -1359,6 +1382,8 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
 </div>
 @endif
+
+@include('partials._void_slip_modal')
 
 @endsection
 

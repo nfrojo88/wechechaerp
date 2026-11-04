@@ -220,7 +220,67 @@ class SlipSequenceService
     }
 
     /**
-     * Void one or more contiguous missing slips to allow sequence to advance.
+     * Parse raw slip number input into a sorted array of positive integers.
+     * Supports single numbers, comma/semicolon/space separated numbers, ranges (e.g. 2402-2405), and prefixes.
+     *
+     * @param mixed $input
+     * @param SlipSequence|null $sequence
+     * @return array<int>
+     */
+    public function parseSlipNumbersInput(mixed $input, ?SlipSequence $sequence = null): array
+    {
+        if (empty($input)) {
+            return [];
+        }
+
+        $numbers = [];
+
+        if (is_array($input)) {
+            foreach ($input as $item) {
+                if (is_numeric($item)) {
+                    $numbers[] = (int) $item;
+                } elseif (is_string($item)) {
+                    $numbers = array_merge($numbers, $this->parseSlipNumbersInput($item, $sequence));
+                }
+            }
+        } elseif (is_string($input) || is_numeric($input)) {
+            $raw = trim((string) $input);
+            $parts = preg_split('/[,;\n\r]+/', $raw);
+            foreach ($parts as $part) {
+                $part = trim($part);
+                if (empty($part)) {
+                    continue;
+                }
+                // Range pattern like "2402-2405" or "REC-2402 - REC-2405" or "2402..2405"
+                if (preg_match('/^([A-Za-z0-9_\-#]+)\s*[\-\.]{1,2}\s*([A-Za-z0-9_\-#]+)$/', $part, $rangeMatches)) {
+                    $startDigits = preg_replace('/\D/', '', $rangeMatches[1]);
+                    $endDigits = preg_replace('/\D/', '', $rangeMatches[2]);
+                    if ($startDigits !== '' && $endDigits !== '') {
+                        $startNum = (int) $startDigits;
+                        $endNum = (int) $endDigits;
+                        if ($startNum <= $endNum && ($endNum - $startNum) <= 500) {
+                            for ($n = $startNum; $n <= $endNum; $n++) {
+                                $numbers[] = $n;
+                            }
+                            continue;
+                        }
+                    }
+                }
+                // Single token: extract numeric digits
+                $digits = preg_replace('/\D/', '', $part);
+                if ($digits !== '') {
+                    $numbers[] = (int) $digits;
+                }
+            }
+        }
+
+        $numbers = array_values(array_unique(array_filter($numbers, fn($n) => $n > 0)));
+        sort($numbers);
+        return $numbers;
+    }
+
+    /**
+     * Void one or more missing, spoiled, or damaged slip numbers to allow sequence to advance.
      * Records DeliveryReceipt with source_type = 'void', is_void = true, without stock movement.
      *
      * @param int $storeId
@@ -228,6 +288,7 @@ class SlipSequenceService
      * @param array $numbers Array of integer slip numbers to void
      * @param string $reason Required text reason
      * @param int|null $userId
+     * @param string|null $receiptPath
      * @return array
      */
     public function voidMissingSlips(
@@ -235,7 +296,8 @@ class SlipSequenceService
         string $slipType,
         array $numbers,
         string $reason,
-        ?int $userId = null
+        ?int $userId = null,
+        ?string $receiptPath = null
     ): array {
         $reason = trim((string)$reason);
         if (empty($reason)) {
@@ -244,7 +306,7 @@ class SlipSequenceService
 
         $userId = $userId ?: (Auth::id() ?: 1);
 
-        return DB::transaction(function () use ($storeId, $slipType, $numbers, $reason, $userId) {
+        return DB::transaction(function () use ($storeId, $slipType, $numbers, $reason, $userId, $receiptPath) {
             $sequence = SlipSequence::where('store_id', $storeId)
                 ->where('slip_type', $slipType)
                 ->where('status', 'active')
@@ -259,31 +321,57 @@ class SlipSequenceService
             $nextFree = $sequence->nextFreeNumber(null, $assignedSlips);
             $expected = $nextFree ?? (int)$sequence->current_slip_no;
 
+            // Clean and sort numbers
+            $numbers = array_values(array_unique(array_filter($numbers, fn($n) => is_numeric($n) && (int)$n > 0)));
+            $numbers = array_map(fn($n) => (int)$n, $numbers);
             sort($numbers);
 
-            // Ensure the numbers to void start at expected sequence
-            if (empty($numbers) || $numbers[0] !== $expected) {
-                throw new SlipSequenceException("Voiding must begin with the next expected slip (#{$sequence->formatSlipNumber($expected)}).");
+            // If empty, default to next expected slip number
+            if (empty($numbers)) {
+                if ($expected !== null && $expected <= (int)$sequence->book_end_no) {
+                    $numbers = [$expected];
+                } else {
+                    throw new SlipSequenceException("No available slips left in the active sequence book to void.");
+                }
             }
 
-            // Verify numbers are strictly consecutive
-            for ($i = 0; $i < count($numbers); $i++) {
-                if ($numbers[$i] !== $expected + $i) {
-                    throw new SlipSequenceException("Void slip numbers must be contiguous without gaps.");
+            // Validate that every number is within book range and not already occupied by an active transaction
+            $alreadyVoid = [];
+            $validNumbersToVoid = [];
+
+            foreach ($numbers as $num) {
+                if ($num < (int)$sequence->book_start_no || $num > (int)$sequence->book_end_no) {
+                    throw new SlipSequenceException("Slip number #{$sequence->formatSlipNumber($num)} is outside the active sequence book range ({$sequence->book_start_no} - {$sequence->book_end_no}).");
                 }
-                if ($numbers[$i] > (int)$sequence->book_end_no || $numbers[$i] < (int)$sequence->book_start_no) {
-                    throw new SlipSequenceException("Slip number {$numbers[$i]} is beyond the sequence book range.");
+
+                $existing = $assignedSlips->firstWhere('numeric_no', $num);
+                if ($existing) {
+                    if (!empty($existing['is_void'])) {
+                        $alreadyVoid[] = $num;
+                        continue;
+                    }
+                    $source = ucfirst($existing['source_type'] ?? 'existing');
+                    throw new SlipSequenceException("Slip #{$sequence->formatSlipNumber($num)} is already used by an active {$source} transaction (#{$existing['slip_no']}) and cannot be voided as an unused leaf.");
                 }
+
+                $validNumbersToVoid[] = $num;
+            }
+
+            if (empty($validNumbersToVoid)) {
+                if (!empty($alreadyVoid)) {
+                    throw new SlipSequenceException("Slip number(s) " . implode(', ', array_map(fn($n) => '#' . $sequence->formatSlipNumber($n), $alreadyVoid)) . " are already marked as VOID.");
+                }
+                throw new SlipSequenceException("No valid slip numbers to void.");
             }
 
             $voidedReceipts = [];
             $today = now()->toDateString();
 
-            foreach ($numbers as $num) {
+            foreach ($validNumbersToVoid as $num) {
                 $formatted = $sequence->formatSlipNumber($num);
 
                 // Create void delivery receipt leaf
-                $receipt = DeliveryReceipt::create([
+                $receiptData = [
                     'dr_no'           => $formatted,
                     'slip_no'         => $formatted,
                     'slip_type'       => $slipType,
@@ -300,14 +388,25 @@ class SlipSequenceService
                     'voided_at'       => now(),
                     'sequence_status' => 'valid',
                     'notes'           => "Voided slip #{$formatted}: {$reason}",
-                ]);
+                ];
+
+                if (\Illuminate\Support\Facades\Schema::hasColumn('delivery_receipts', 'slip_receipt_path')) {
+                    $receiptData['slip_receipt_path'] = $receiptPath;
+                }
+                if (\Illuminate\Support\Facades\Schema::hasColumn('delivery_receipts', 'is_physical_store_only')) {
+                    $receiptData['is_physical_store_only'] = true;
+                }
+                if (\Illuminate\Support\Facades\Schema::hasColumn('delivery_receipts', 'physical_slip_notes')) {
+                    $receiptData['physical_slip_notes'] = "Void leaf: {$reason}";
+                }
+
+                $receipt = DeliveryReceipt::create($receiptData);
 
                 $voidedReceipts[] = $receipt;
             }
 
-            $lastNum = max($numbers);
             $updatedAssigned = $sequence->getAssignedSlipsDetail();
-            $followingFree = $sequence->nextFreeNumber($lastNum + 1, $updatedAssigned);
+            $followingFree = $sequence->nextFreeNumber(null, $updatedAssigned);
             $newCurrent = $followingFree ?? ((int)$sequence->book_end_no + 1);
             $newStatus = ($followingFree === null) ? 'full' : 'active';
             $newUsed = $updatedAssigned->unique('numeric_no')->count();
@@ -319,11 +418,12 @@ class SlipSequenceService
             ]);
 
             return [
-                'voided_count'    => count($voidedReceipts),
-                'voided_numbers'  => $numbers,
-                'voided_receipts' => $voidedReceipts,
-                'next_expected'   => $newCurrent <= (int)$sequence->book_end_no ? $sequence->formatSlipNumber($newCurrent) : null,
-                'sequence'        => $sequence,
+                'voided_count'      => count($voidedReceipts),
+                'voided_numbers'    => $validNumbersToVoid,
+                'formatted_numbers' => array_map(fn($n) => $sequence->formatSlipNumber($n), $validNumbersToVoid),
+                'voided_receipts'   => $voidedReceipts,
+                'next_expected'     => $newCurrent <= (int)$sequence->book_end_no ? $sequence->formatSlipNumber($newCurrent) : null,
+                'sequence'          => $sequence,
             ];
         });
     }

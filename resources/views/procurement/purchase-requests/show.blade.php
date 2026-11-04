@@ -1953,7 +1953,17 @@
                             </div>
 
                             <div class="mb-2">
-                                <label class="form-label small fw-bold text-uppercase text-muted">Receiving Slip Number (Model 19 / GRN) <span class="text-danger">*</span></label>
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <label class="form-label small fw-bold text-uppercase text-muted mb-0">Receiving Slip Number (Model 19 / GRN) <span class="text-danger">*</span></label>
+                                    <button type="button" class="btn btn-xs btn-outline-danger py-0 px-2 fw-semibold" 
+                                            data-bs-toggle="modal" data-bs-target="#voidSlipModal"
+                                            data-target-input="#intakeSlipNoInput"
+                                            data-store-select="#intakeStoreSelect"
+                                            data-slip-type="receive"
+                                            title="Void spoiled or damaged paper slip leaf in current book">
+                                        <i class="fas fa-ban me-1 text-danger"></i>Void Slip #
+                                    </button>
+                                </div>
                                 <div class="input-group input-group-sm">
                                     <span class="input-group-text bg-light"><i class="fas fa-hashtag text-muted"></i></span>
                                     <input type="text" name="slip_no" id="intakeSlipNoInput" 
@@ -1963,6 +1973,14 @@
                                            data-prefix="{{ $receiveSlipSequence->prefix ?? '' }}"
                                            oninput="validateIntakeSlipRange()"
                                            value="{{ old('slip_no', $nextReceiveSlipNo ?? ('REC-' . date('Ymd') . '-' . str_pad($purchaseRequest->id, 4, '0', STR_PAD_LEFT))) }}" required>
+                                    <button type="button" class="btn btn-outline-danger btn-sm" 
+                                            data-bs-toggle="modal" data-bs-target="#voidSlipModal"
+                                            data-target-input="#intakeSlipNoInput"
+                                            data-store-select="#intakeStoreSelect"
+                                            data-slip-type="receive"
+                                            title="Void spoiled slip leaf and use next">
+                                        <i class="fas fa-ban me-1"></i>Void
+                                    </button>
                                 </div>
                                 @error('slip_no')
                                     <div class="text-danger small fw-bold mt-1">
@@ -6331,5 +6349,7 @@ function confirmDeletePrItem(itemId, productName) {
     </div>
 </div>
 @endif
+
+@include('partials._void_slip_modal')
 
 @endsection

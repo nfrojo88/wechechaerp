@@ -140,6 +140,9 @@ class StrictSlipSequenceTest extends TestCase
             $table->timestamp('voided_at')->nullable();
             $table->string('sequence_status', 50)->default('valid');
             $table->text('notes')->nullable();
+            $table->string('slip_receipt_path')->nullable();
+            $table->boolean('is_physical_store_only')->default(false);
+            $table->text('physical_slip_notes')->nullable();
             $table->timestamps();
 
             $table->unique(['store_id', 'slip_type', 'slip_no'], 'idx_store_slip_unique');

@@ -58,9 +58,31 @@
                     <div class="col-md-4">
                         <label class="form-label d-flex justify-content-between align-items-center">
                             <span>Slip No *</span>
-                            <span id="nextSlipBadge" class="badge bg-primary font-monospace">Next: Checking...</span>
+                            <div class="d-flex align-items-center gap-1">
+                                <span id="nextSlipBadge" class="badge bg-primary font-monospace">Next: Checking...</span>
+                                <button type="button" class="btn btn-xs btn-outline-danger py-0 px-2 fw-semibold" 
+                                        data-bs-toggle="modal" data-bs-target="#voidSlipModal"
+                                        data-target-input="#slip_no"
+                                        data-store-select="#store_id"
+                                        data-slip-type="receive"
+                                        id="voidSlipTriggerBtn"
+                                        title="Void spoiled or damaged paper slip in physical book">
+                                    <i class="fas fa-ban me-1 text-danger"></i>Void Slip #
+                                </button>
+                            </div>
                         </label>
-                        <input type="text" name="slip_no" class="form-control font-monospace fw-bold @error('slip_no') is-invalid @enderror" id="slip_no" placeholder="Will auto-fetch next slip" value="{{ old('slip_no') }}" oninput="validateSlipSequenceInput()">
+                        <div class="input-group">
+                            <span class="input-group-text bg-light"><i class="fas fa-hashtag text-muted"></i></span>
+                            <input type="text" name="slip_no" class="form-control font-monospace fw-bold @error('slip_no') is-invalid @enderror" id="slip_no" placeholder="Will auto-fetch next slip" value="{{ old('slip_no') }}" oninput="validateSlipSequenceInput()">
+                            <button type="button" class="btn btn-outline-danger" 
+                                    data-bs-toggle="modal" data-bs-target="#voidSlipModal"
+                                    data-target-input="#slip_no"
+                                    data-store-select="#store_id"
+                                    data-slip-type="receive"
+                                    title="Void spoiled slip and use next">
+                                <i class="fas fa-ban me-1"></i>Void
+                            </button>
+                        </div>
                         <div id="slipSeqAlert" class="small mt-1"></div>
                         @error('slip_no')
                             <div class="text-danger small mt-1"><i class="fas fa-exclamation-circle me-1"></i>{{ $message }}</div>
@@ -79,8 +101,8 @@
                             <div class="invalid-feedback">{{ $message }}</div>
                         @enderror
                     </div>
-                    <div class="col-md-6 d-flex align-items-center">
-                        <div class="card bg-light border p-2 w-100 mt-2">
+                    <div class="col-md-6">
+                        <div class="card bg-light border p-2 mb-2">
                             <div class="form-check form-switch mb-1">
                                 <input class="form-check-input" type="checkbox" name="is_physical_store_only" id="is_physical_store_only" value="1" {{ old('is_physical_store_only') ? 'checked' : '' }}>
                                 <label class="form-check-label fw-bold text-dark" for="is_physical_store_only">
@@ -91,6 +113,28 @@
                                 Internal physical store document. Recorded in inventory and slip sequence, but excluded from VAT / TAS tax reports.
                             </small>
                         </div>
+                        <div class="card bg-danger bg-opacity-10 border border-danger border-opacity-25 p-2">
+                            <div class="form-check form-switch mb-1">
+                                <input class="form-check-input" type="checkbox" name="is_void_slip" id="is_void_slip" value="1" {{ old('is_void_slip') ? 'checked' : '' }} onchange="toggleDirectVoidSlip(this.checked)">
+                                <label class="form-check-label fw-bold text-danger" for="is_void_slip">
+                                    <i class="fas fa-ban me-1"></i>Mark this Slip directly as VOID (Ruined leaf, skip stock movement)
+                                </label>
+                            </div>
+                            <small class="text-muted ps-4 d-block" style="font-size: 11px;">
+                                Saves this slip leaf as voided in sequence counter without moving any stock or requiring line items.
+                            </small>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row mb-3 d-none" id="directVoidReasonRow">
+                    <div class="col-12">
+                        <div class="alert alert-danger py-2 px-3 small border-0 mb-2">
+                            <i class="fas fa-exclamation-triangle me-1"></i>
+                            <strong>Direct Void Mode Active:</strong> This slip will be recorded as VOID in the sequence counter. No products or stock movements will be performed.
+                        </div>
+                        <label class="form-label fw-bold text-danger">Void Reason *</label>
+                        <textarea name="void_reason" id="direct_void_reason" class="form-control form-control-sm" rows="2" placeholder="State reason for voiding this paper slip (e.g. Ruined paper leaf, writing mistake, canceled on site)...">{{ old('void_reason') }}</textarea>
                     </div>
                 </div>
 
@@ -204,6 +248,10 @@ function toggleSlipType() {
     const sendFields = document.getElementById('send-fields');
     const costColumns = document.querySelectorAll('.cost-column');
     const toStoreSelect = document.querySelector('select[name="to_store_id"]');
+    const voidBtn = document.getElementById('voidSlipTriggerBtn');
+    if (voidBtn) {
+        voidBtn.setAttribute('data-slip-type', slipType);
+    }
     
     if (slipType === 'receive') {
         receiveFields.style.display = 'block';
@@ -217,6 +265,34 @@ function toggleSlipType() {
         if (toStoreSelect) toStoreSelect.setAttribute('required', 'required');
     }
     updateSlipNo();
+}
+
+function toggleDirectVoidSlip(isVoid) {
+    const reasonRow = document.getElementById('directVoidReasonRow');
+    const reasonInput = document.getElementById('direct_void_reason');
+    const itemsCard = document.getElementById('items-table')?.closest('.card');
+    const itemsTable = document.getElementById('items-table');
+    const receiveFields = document.getElementById('receive-fields');
+    const sendFields = document.getElementById('send-fields');
+
+    if (isVoid) {
+        if (reasonRow) reasonRow.classList.remove('d-none');
+        if (reasonInput) reasonInput.setAttribute('required', 'required');
+        if (itemsCard) itemsCard.style.display = 'none';
+        if (itemsTable) {
+            itemsTable.querySelectorAll('input, select').forEach(el => el.removeAttribute('required'));
+        }
+        if (receiveFields) receiveFields.style.display = 'none';
+        if (sendFields) sendFields.style.display = 'none';
+    } else {
+        if (reasonRow) reasonRow.classList.add('d-none');
+        if (reasonInput) reasonInput.removeAttribute('required');
+        if (itemsCard) itemsCard.style.display = 'block';
+        if (itemsTable) {
+            itemsTable.querySelectorAll('.product-select, .quantity-input').forEach(el => el.setAttribute('required', 'required'));
+        }
+        toggleSlipType();
+    }
 }
 
 function updateSlipNo() {
@@ -400,5 +476,8 @@ $(document).on('change', '.product-select', function() {
 </div>
 @endif
 @endpush
+
+@include('partials._void_slip_modal')
+
 @endsection
 

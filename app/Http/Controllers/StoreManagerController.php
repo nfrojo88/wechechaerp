@@ -2705,6 +2705,37 @@ class StoreManagerController extends Controller
      */
     public function storeSlip(Request $request)
     {
+        // Direct void slip registration (spoiled/damaged physical leaf without inventory movement)
+        if ($request->boolean('is_void_slip')) {
+            $request->validate([
+                'slip_type'              => 'required|in:receive,send',
+                'store_id'               => 'required|exists:stores,id',
+                'slip_no'                => 'nullable|string|max:50',
+                'slip_date'              => 'required|date',
+                'void_reason'            => 'required|string|max:500',
+                'slip_receipt'           => 'nullable|file|mimes:pdf,jpg,jpeg,png,webp|max:10240',
+            ]);
+
+            $slipReceiptPath = null;
+            if ($request->hasFile('slip_receipt')) {
+                $slipReceiptPath = \App\Services\FileUploadService::upload($request->file('slip_receipt'), 'slips/void');
+            }
+
+            $slipService = app(\App\Services\SlipSequenceService::class);
+            $parsedNumbers = $slipService->parseSlipNumbersInput($request->slip_no);
+
+            $result = $slipService->voidMissingSlips(
+                storeId: (int) $request->store_id,
+                slipType: $request->slip_type,
+                numbers: $parsedNumbers,
+                reason: $request->void_reason,
+                userId: Auth::id(),
+                receiptPath: $slipReceiptPath
+            );
+
+            return redirect()->route('store-manager.slips.index')->with('success', "Slip registered as VOID successfully. Next available slip is #{$result['next_expected']}.");
+        }
+
         $request->validate([
             'slip_type'              => 'required|in:receive,send',
             'store_id'               => 'required|exists:stores,id',

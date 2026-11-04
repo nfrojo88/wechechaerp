@@ -46,6 +46,15 @@
                     <i class="fas fa-magic me-1"></i>Auto-Fill Missing Slips
                 </button>
             </form>
+            <button type="button" class="btn btn-sm btn-outline-danger shadow-sm" 
+                    data-bs-toggle="modal" data-bs-target="#voidSlipModal"
+                    data-store-id="{{ $slipSequence->store_id }}"
+                    data-store-name="{{ $slipSequence->store->name ?? 'Store' }}"
+                    data-slip-type="{{ $slipSequence->slip_type }}"
+                    data-current-slip="{{ $slipSequence->getNextSlipNumber() }}"
+                    title="Void spoiled, damaged or skipped paper slip leaf in this book">
+                <i class="fas fa-ban me-1 text-danger"></i>Void Slip #
+            </button>
             <button type="button" class="btn btn-sm btn-outline-info shadow-sm" onclick="runCrossCheck()">
                 <i class="fas fa-stethoscope me-1"></i>Cross-Check
             </button>
@@ -1443,4 +1452,7 @@
     </div>
 </div>
 @endpush
+
+@include('partials._void_slip_modal')
+
 @endsection

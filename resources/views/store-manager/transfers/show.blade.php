@@ -771,11 +771,34 @@
                         <div class="col-md-6">
                             <label class="form-label fw-bold small text-uppercase d-flex justify-content-between align-items-center" style="color: #334155;">
                                 <span>Outgoing Physical Slip / Waybill # <span class="text-danger">*</span></span>
-                                @if(!empty($nextOutgoingSlip['formatted_slip']))
-                                    <span class="badge bg-primary font-monospace">Next: #{{ $nextOutgoingSlip['formatted_slip'] }}</span>
-                                @endif
+                                <div class="d-flex align-items-center gap-1">
+                                    @if(!empty($nextOutgoingSlip['formatted_slip']))
+                                        <span class="badge bg-primary font-monospace">Next: #{{ $nextOutgoingSlip['formatted_slip'] }}</span>
+                                    @endif
+                                    <button type="button" class="btn btn-xs btn-outline-danger py-0 px-2 fw-semibold" 
+                                            data-bs-toggle="modal" data-bs-target="#voidSlipModal"
+                                            data-target-input="#outgoingSlipNoInput"
+                                            data-store-id="{{ $transfer->from_store_id }}"
+                                            data-store-name="{{ $transfer->fromStore->name ?? 'Origin Store' }}"
+                                            data-slip-type="send"
+                                            title="Void spoiled outgoing paper slip in book">
+                                        <i class="fas fa-ban me-1 text-danger"></i>Void Slip #
+                                    </button>
+                                </div>
                             </label>
-                            <input type="text" name="outgoing_slip_no" class="form-control font-monospace rounded-3 @error('outgoing_slip_no') is-invalid @enderror" style="border: 1.5px solid #cbd5e1;" placeholder="e.g. {{ $nextOutgoingSlip['formatted_slip'] ?? 'SLIP-09823' }}" value="{{ old('outgoing_slip_no', $transfer->outgoing_slip_no ?: ($transfer->physical_slip_no ?: ($nextOutgoingSlip['formatted_slip'] ?? ''))) }}" required>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light"><i class="fas fa-hashtag text-muted"></i></span>
+                                <input type="text" name="outgoing_slip_no" id="outgoingSlipNoInput" class="form-control font-monospace rounded-0 rounded-start @error('outgoing_slip_no') is-invalid @enderror" style="border: 1.5px solid #cbd5e1;" placeholder="e.g. {{ $nextOutgoingSlip['formatted_slip'] ?? 'SLIP-09823' }}" value="{{ old('outgoing_slip_no', $transfer->outgoing_slip_no ?: ($transfer->physical_slip_no ?: ($nextOutgoingSlip['formatted_slip'] ?? ''))) }}" required>
+                                <button type="button" class="btn btn-outline-danger" 
+                                        data-bs-toggle="modal" data-bs-target="#voidSlipModal"
+                                        data-target-input="#outgoingSlipNoInput"
+                                        data-store-id="{{ $transfer->from_store_id }}"
+                                        data-store-name="{{ $transfer->fromStore->name ?? 'Origin Store' }}"
+                                        data-slip-type="send"
+                                        title="Void spoiled slip">
+                                    <i class="fas fa-ban me-1"></i>Void
+                                </button>
+                            </div>
                             @error('outgoing_slip_no')
                                 <div class="text-danger small mt-1"><i class="fas fa-exclamation-circle me-1"></i>{{ $message }}</div>
                             @enderror
@@ -878,11 +901,34 @@
                         <div class="col-md-6">
                             <label class="form-label fw-bold small text-uppercase d-flex justify-content-between align-items-center" style="color: #334155;">
                                 <span>Signed Receiving Slip / GRN # (Optional)</span>
-                                @if(!empty($nextReceivingSlip['formatted_slip']))
-                                    <span class="badge bg-success font-monospace">Next: #{{ $nextReceivingSlip['formatted_slip'] }}</span>
-                                @endif
+                                <div class="d-flex align-items-center gap-1">
+                                    @if(!empty($nextReceivingSlip['formatted_slip']))
+                                        <span class="badge bg-success font-monospace">Next: #{{ $nextReceivingSlip['formatted_slip'] }}</span>
+                                    @endif
+                                    <button type="button" class="btn btn-xs btn-outline-danger py-0 px-2 fw-semibold" 
+                                            data-bs-toggle="modal" data-bs-target="#voidSlipModal"
+                                            data-target-input="#receivingSlipNoInput"
+                                            data-store-id="{{ $transfer->to_store_id }}"
+                                            data-store-name="{{ $transfer->toStore->name ?? 'Destination Store' }}"
+                                            data-slip-type="receive"
+                                            title="Void spoiled receiving paper slip in book">
+                                        <i class="fas fa-ban me-1 text-danger"></i>Void Slip #
+                                    </button>
+                                </div>
                             </label>
-                            <input type="text" name="receiving_slip_no" class="form-control font-monospace rounded-3 @error('receiving_slip_no') is-invalid @enderror" style="border: 1.5px solid #cbd5e1;" placeholder="e.g. {{ $nextReceivingSlip['formatted_slip'] ?? 'GRN-2026-99' }}" value="{{ old('receiving_slip_no', $transfer->receiving_slip_no ?: ($nextReceivingSlip['formatted_slip'] ?? '')) }}">
+                            <div class="input-group">
+                                <span class="input-group-text bg-light"><i class="fas fa-hashtag text-muted"></i></span>
+                                <input type="text" name="receiving_slip_no" id="receivingSlipNoInput" class="form-control font-monospace rounded-0 rounded-start @error('receiving_slip_no') is-invalid @enderror" style="border: 1.5px solid #cbd5e1;" placeholder="e.g. {{ $nextReceivingSlip['formatted_slip'] ?? 'GRN-2026-99' }}" value="{{ old('receiving_slip_no', $transfer->receiving_slip_no ?: ($nextReceivingSlip['formatted_slip'] ?? '')) }}">
+                                <button type="button" class="btn btn-outline-danger" 
+                                        data-bs-toggle="modal" data-bs-target="#voidSlipModal"
+                                        data-target-input="#receivingSlipNoInput"
+                                        data-store-id="{{ $transfer->to_store_id }}"
+                                        data-store-name="{{ $transfer->toStore->name ?? 'Destination Store' }}"
+                                        data-slip-type="receive"
+                                        title="Void spoiled receiving slip">
+                                    <i class="fas fa-ban me-1"></i>Void
+                                </button>
+                            </div>
                             @error('receiving_slip_no')
                                 <div class="text-danger small mt-1"><i class="fas fa-exclamation-circle me-1"></i>{{ $message }}</div>
                             @enderror
@@ -959,8 +1005,31 @@
                 </div>
                 <div class="modal-body p-4 bg-white">
                     <div class="mb-3">
-                        <label class="form-label fw-bold small text-uppercase" style="color: #334155;">Physical Slip Number <span class="text-danger">*</span></label>
-                        <input type="text" name="physical_slip_no" class="form-control font-monospace rounded-3" style="border: 1.5px solid #cbd5e1;" placeholder="e.g. SLIP-09823 or WB-2026-44" value="{{ old('physical_slip_no', $transfer->physical_slip_no ?: $transfer->outgoing_slip_no) }}" required>
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <label class="form-label fw-bold small text-uppercase mb-0" style="color: #334155;">Physical Slip Number <span class="text-danger">*</span></label>
+                            <button type="button" class="btn btn-xs btn-outline-danger py-0 px-2 fw-semibold" 
+                                    data-bs-toggle="modal" data-bs-target="#voidSlipModal"
+                                    data-target-input="#physicalSlipNoInput"
+                                    data-store-id="{{ $transfer->from_store_id }}"
+                                    data-store-name="{{ $transfer->fromStore->name ?? 'Store' }}"
+                                    data-slip-type="send"
+                                    title="Void spoiled physical paper slip">
+                                <i class="fas fa-ban me-1 text-danger"></i>Void Slip #
+                            </button>
+                        </div>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light"><i class="fas fa-hashtag text-muted"></i></span>
+                            <input type="text" name="physical_slip_no" id="physicalSlipNoInput" class="form-control font-monospace" style="border: 1.5px solid #cbd5e1;" placeholder="e.g. SLIP-09823 or WB-2026-44" value="{{ old('physical_slip_no', $transfer->physical_slip_no ?: $transfer->outgoing_slip_no) }}" required>
+                            <button type="button" class="btn btn-outline-danger" 
+                                    data-bs-toggle="modal" data-bs-target="#voidSlipModal"
+                                    data-target-input="#physicalSlipNoInput"
+                                    data-store-id="{{ $transfer->from_store_id }}"
+                                    data-store-name="{{ $transfer->fromStore->name ?? 'Store' }}"
+                                    data-slip-type="send"
+                                    title="Void spoiled slip">
+                                <i class="fas fa-ban me-1"></i>Void
+                            </button>
+                        </div>
                         <small class="text-muted mt-1 d-block">Enter the physical paper slip or delivery receipt number that accompanies this transfer.</small>
                     </div>
                 </div>
@@ -1599,5 +1668,8 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 </script>
 @endif
+
+@include('partials._void_slip_modal')
+
 @endsection
 

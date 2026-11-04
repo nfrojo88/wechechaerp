@@ -352,33 +352,63 @@ class SlipSequenceController extends Controller
     }
 
     /**
-     * Void missing slips to allow sequence to advance
+     * Void missing, spoiled, or damaged slips to allow sequence to advance.
+     * Supports array of numbers, comma-separated string, ranges, or auto-voiding next expected slip.
      */
     public function voidMissing(Request $request)
     {
+        $slipService = app(\App\Services\SlipSequenceService::class);
+
+        // Normalize raw numbers input from multiple possible keys
+        $rawNumbers = $request->input('numbers', $request->input('slip_number_input', $request->input('slip_number', $request->input('slip_no', $request->input('target_slip_no')))));
+        
+        $parsedNumbers = $slipService->parseSlipNumbersInput($rawNumbers);
+
+        // If numbers were not provided or empty, attempt to default to the sequence's next expected slip
+        if (empty($parsedNumbers) && $request->filled('store_id') && $request->filled('slip_type')) {
+            $expected = $slipService->getNextExpected((int)$request->store_id, $request->slip_type);
+            if (!empty($expected['has_sequence']) && !empty($expected['current_slip_no'])) {
+                $parsedNumbers = [(int)$expected['current_slip_no']];
+            }
+        }
+
+        $request->merge(['numbers' => $parsedNumbers]);
+
         $request->validate([
-            'store_id'  => 'required|exists:stores,id',
-            'slip_type' => 'required|in:receive,send',
-            'numbers'   => 'required|array|min:1',
-            'numbers.*' => 'required|integer',
-            'reason'    => 'required|string|max:500',
+            'store_id'     => 'required|exists:stores,id',
+            'slip_type'    => 'required|in:receive,send',
+            'numbers'      => 'required|array|min:1',
+            'numbers.*'    => 'required|integer',
+            'reason'       => 'required|string|max:500',
+            'slip_receipt' => 'nullable|file|mimes:jpeg,jpg,png,pdf,webp|max:10240',
+            'attachment'   => 'nullable|file|mimes:jpeg,jpg,png,pdf,webp|max:10240',
         ]);
 
         try {
-            $slipService = app(\App\Services\SlipSequenceService::class);
+            $receiptPath = null;
+            $file = $request->file('slip_receipt') ?: $request->file('attachment');
+            if ($file) {
+                $receiptPath = \App\Services\FileUploadService::upload($file, 'slips/void');
+            }
+
             $result = $slipService->voidMissingSlips(
                 (int)$request->store_id,
                 $request->slip_type,
                 $request->numbers,
                 $request->reason,
-                \Illuminate\Support\Facades\Auth::id()
+                \Illuminate\Support\Facades\Auth::id(),
+                $receiptPath
             );
 
             if ($request->wantsJson() || $request->ajax()) {
                 return response()->json([
-                    'success' => true,
-                    'message' => "Successfully voided {$result['voided_count']} slip(s).",
-                    'data'    => $result,
+                    'success'           => true,
+                    'message'           => "Successfully voided {$result['voided_count']} slip(s). Next expected slip is now #{$result['next_expected']}.",
+                    'voided_count'      => $result['voided_count'],
+                    'voided_numbers'    => $result['voided_numbers'],
+                    'formatted_numbers' => $result['formatted_numbers'] ?? array_map(fn($n) => (string)$n, $result['voided_numbers']),
+                    'next_expected'     => $result['next_expected'],
+                    'data'              => $result,
                 ]);
             }
 
