@@ -2706,16 +2706,19 @@ class StoreManagerController extends Controller
     public function storeSlip(Request $request)
     {
         $request->validate([
-            'slip_type'           => 'required|in:receive,send',
-            'store_id'            => 'required|exists:stores,id',
-            'slip_no'             => 'nullable|string|max:50',
-            'slip_date'           => 'required|date',
-            'supplier_name'       => 'nullable|string|max:255',
-            'reference_no'        => 'nullable|string|max:100',
-            'items'               => 'required|array|min:1',
-            'items.*.product_id'  => 'required|exists:products,id',
-            'items.*.quantity'    => 'required|numeric|min:0.001',
-            'items.*.unit_cost'   => 'nullable|numeric|min:0',
+            'slip_type'              => 'required|in:receive,send',
+            'store_id'               => 'required|exists:stores,id',
+            'slip_no'                => 'nullable|string|max:50',
+            'slip_date'              => 'required|date',
+            'supplier_name'          => 'nullable|string|max:255',
+            'reference_no'           => 'nullable|string|max:100',
+            'notes'                  => 'nullable|string|max:500',
+            'slip_receipt'           => 'nullable|file|mimes:pdf,jpg,jpeg,png,webp|max:10240',
+            'is_physical_store_only' => 'nullable|boolean',
+            'items'                  => 'required|array|min:1',
+            'items.*.product_id'     => 'required|exists:products,id',
+            'items.*.quantity'       => 'required|numeric|min:0.001',
+            'items.*.unit_cost'      => 'nullable|numeric|min:0',
         ]);
 
         if ($request->slip_type === 'send') {
@@ -2724,8 +2727,14 @@ class StoreManagerController extends Controller
             ]);
         }
 
+        $slipReceiptPath = null;
+        if ($request->hasFile('slip_receipt')) {
+            $slipReceiptPath = \App\Services\FileUploadService::upload($request->file('slip_receipt'), 'slips');
+        }
+        $isPhysicalStoreOnly = $request->boolean('is_physical_store_only');
+
         try {
-            DB::transaction(function () use ($request) {
+            DB::transaction(function () use ($request, $slipReceiptPath, $isPhysicalStoreOnly) {
                 $slipType = $request->slip_type;
                 $storeId = (int) $request->store_id;
                 
@@ -2752,22 +2761,26 @@ class StoreManagerController extends Controller
                 );
 
                 $receipt = DeliveryReceipt::create([
-                    'dr_no'             => $slipNo,
-                    'slip_no'           => $slipNo,
-                    'slip_type'         => $slipType,
-                    'source_type'       => 'manual',
-                    'store_id'          => $storeId,
-                    'to_store_id'       => $request->to_store_id ?? null,
-                    'received_date'     => $request->slip_date,
-                    'receipt_date'      => $request->slip_date,
-                    'supplier_name'     => $request->supplier_name,
-                    'reference_no'      => $request->reference_no,
-                    'purchase_order_id' => $dummyPo->id,
-                    'received_by'       => Auth::id(),
-                    'created_by'        => Auth::id(),
-                    'status'            => 'draft',
-                    'is_void'           => false,
-                    'sequence_status'   => 'valid',
+                    'dr_no'                  => $slipNo,
+                    'slip_no'                => $slipNo,
+                    'slip_type'              => $slipType,
+                    'source_type'            => 'manual',
+                    'store_id'               => $storeId,
+                    'to_store_id'            => $request->to_store_id ?? null,
+                    'received_date'          => $request->slip_date,
+                    'receipt_date'           => $request->slip_date,
+                    'supplier_name'          => $request->supplier_name,
+                    'reference_no'           => $request->reference_no,
+                    'purchase_order_id'      => $dummyPo->id,
+                    'received_by'            => Auth::id(),
+                    'created_by'             => Auth::id(),
+                    'status'                 => 'draft',
+                    'is_void'                => false,
+                    'sequence_status'        => 'valid',
+                    'notes'                  => $request->notes,
+                    'slip_receipt_path'      => $slipReceiptPath,
+                    'is_physical_store_only' => $isPhysicalStoreOnly,
+                    'physical_slip_notes'    => $isPhysicalStoreOnly ? ($request->notes ?: 'Physical store slip (store-only)') : null,
                 ]);
 
                 foreach ($request->items as $item) {

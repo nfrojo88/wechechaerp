@@ -315,6 +315,11 @@
                             @else
                                 <span class="badge bg-light text-secondary">Direct Added</span>
                             @endif
+                            @if($p->is_physical_store_only || ($p->deliveryReceipt && $p->deliveryReceipt->is_physical_store_only))
+                                <br><span class="badge bg-warning text-dark border border-warning" style="font-size: 0.65rem;">
+                                    <i class="fa-solid fa-warehouse me-1"></i>Store Only (Non-VAT)
+                                </span>
+                            @endif
                         </td>
                         <td class="text-end pe-3">
                             <a href="{{ route('store-keeper.petty-cash-purchases.show', $p) }}" class="btn btn-sm btn-outline-primary shadow-xs">

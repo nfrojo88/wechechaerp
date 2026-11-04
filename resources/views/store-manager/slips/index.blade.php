@@ -126,6 +126,12 @@
                         <tr class="{{ $slip->is_void ? 'table-danger' : '' }}">
                             <td>
                                 <strong>{{ $slip->dr_no }}</strong>
+                                @if($slip->is_physical_store_only)
+                                    <br><span class="badge bg-warning bg-opacity-25 text-dark border border-warning" style="font-size: 9px;"><i class="fas fa-warehouse me-1"></i>Store Only (Non-VAT)</span>
+                                @endif
+                                @if($slip->slip_receipt_url)
+                                    <br><a href="{{ $slip->slip_receipt_url }}" target="_blank" class="badge bg-primary text-white text-decoration-none mt-1" style="font-size: 9px;"><i class="fas fa-file-arrow-down me-1"></i>Receipt File</a>
+                                @endif
                                 @if($slip->is_void)
                                 <br><span class="badge bg-danger"><i class="fas fa-exclamation-triangle me-1"></i>VOID</span>
                                 @endif
@@ -219,6 +225,35 @@
                         @endif
                     </div>
                 </div>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <strong>VAT Classification:</strong>
+                        @if($slip->is_physical_store_only)
+                            <span class="badge bg-warning bg-opacity-25 text-dark border border-warning">
+                                <i class="fas fa-warehouse me-1"></i>Physical Store Slip (Store Only — Not Shown in VAT)
+                            </span>
+                        @else
+                            <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25">
+                                <i class="fas fa-receipt me-1"></i>Standard / VAT Eligible
+                            </span>
+                        @endif
+                    </div>
+                    <div class="col-md-6">
+                        @if($slip->slip_receipt_url)
+                            <strong>Slip Document:</strong>
+                            <a href="{{ $slip->slip_receipt_url }}" target="_blank" class="btn btn-xs btn-outline-primary ms-1">
+                                <i class="fas fa-arrow-up-right-from-square me-1"></i>View Uploaded Slip Receipt
+                            </a>
+                        @endif
+                    </div>
+                </div>
+                @if($slip->notes)
+                <div class="row mb-3">
+                    <div class="col-12">
+                        <strong>Notes:</strong> <span class="text-muted">{{ $slip->notes }}</span>
+                    </div>
+                </div>
+                @endif
                 @if($slip->supplier_name)
                 <div class="row mb-3">
                     <div class="col-md-12">

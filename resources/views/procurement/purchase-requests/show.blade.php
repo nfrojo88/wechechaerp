@@ -1938,7 +1938,7 @@
                             </p>
                         </div>
 
-                        <form action="{{ route('purchase-requests.store-intake', $purchaseRequest) }}" method="POST" onsubmit="const btn = this.querySelector('button[type=submit]'); if (btn) { btn.disabled = true; btn.innerHTML = '<i class=\'fas fa-spinner fa-spin me-1\'></i> Processing Intake...'; }">
+                        <form action="{{ route('purchase-requests.store-intake', $purchaseRequest) }}" method="POST" enctype="multipart/form-data" onsubmit="const btn = this.querySelector('button[type=submit]'); if (btn) { btn.disabled = true; btn.innerHTML = '<i class=\'fas fa-spinner fa-spin me-1\'></i> Processing Intake...'; }">
                             @csrf
 
                             <div class="mb-2">
@@ -2025,12 +2025,26 @@
                                         @foreach($prDeliveryReceipts as $dr)
                                             <div class="list-group-item p-2 d-flex justify-content-between align-items-center">
                                                 <div>
-                                                    <div class="fw-bold font-monospace text-primary small">
+                                                    <div class="fw-bold font-monospace text-primary small d-flex align-items-center gap-1 flex-wrap">
                                                         <i class="fas fa-hashtag me-1 text-muted"></i>{{ $dr->dr_no }}
                                                         <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 ms-1 py-0 px-1" style="font-size: 9px;">Stocked</span>
+                                                        @if($dr->is_physical_store_only)
+                                                            <span class="badge bg-warning bg-opacity-25 text-dark border border-warning py-0 px-1" style="font-size: 9px;" title="Store Only Document (Excluded from VAT)">
+                                                                <i class="fas fa-warehouse me-1"></i>Store Only (Non-VAT)
+                                                            </span>
+                                                        @else
+                                                            <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 py-0 px-1" style="font-size: 9px;">
+                                                                VAT Eligible
+                                                            </span>
+                                                        @endif
+                                                        @if($dr->slip_receipt_url)
+                                                            <a href="{{ $dr->slip_receipt_url }}" target="_blank" class="btn btn-xs btn-outline-primary py-0 px-1 ms-1 text-decoration-none" title="View Uploaded Slip Receipt">
+                                                                <i class="fas fa-file-arrow-down me-1"></i>Slip File
+                                                            </a>
+                                                        @endif
                                                     </div>
                                                     <div class="text-muted" style="font-size: 10px;">
-                                                        {{ $dr->received_date->format('M d, Y') ?? date('M d, Y') }}
+                                                        {{ $dr->received_date ? $dr->received_date->format('M d, Y') : date('M d, Y') }}
                                                         @if($dr->store) &bull; {{ $dr->store->name }} @endif
                                                         @if($dr->receivedBy) &bull; By: {{ $dr->receivedBy->name }} @endif
                                                     </div>
@@ -2114,6 +2128,29 @@
                                         </div>
                                     @endforeach
                                 </div>
+                            </div>
+
+                            <div class="mb-2">
+                                <label class="form-label small fw-bold text-uppercase text-muted">
+                                    <i class="fas fa-paperclip me-1 text-primary"></i>Upload Slip Receipt / Scan / Photo
+                                </label>
+                                <input type="file" name="slip_receipt" class="form-control form-control-sm @error('slip_receipt') is-invalid @enderror" accept=".pdf,.jpg,.jpeg,.png,.webp">
+                                <small class="text-muted" style="font-size: 10px;">Supported formats: PDF, JPG, PNG, WEBP (Max 10MB)</small>
+                                @error('slip_receipt')
+                                    <div class="invalid-feedback">{{ $message }}</div>
+                                @enderror
+                            </div>
+
+                            <div class="mb-3 p-2 bg-light border rounded">
+                                <div class="form-check form-switch mb-0">
+                                    <input class="form-check-input" type="checkbox" name="is_physical_store_only" id="isPhysicalStoreOnlyIntake" value="1" {{ old('is_physical_store_only') ? 'checked' : '' }}>
+                                    <label class="form-check-label small fw-bold text-dark" for="isPhysicalStoreOnlyIntake">
+                                        <i class="fas fa-warehouse text-warning me-1"></i>Physical Slip (Store Only — Do Not Show in VAT)
+                                    </label>
+                                </div>
+                                <small class="text-muted d-block mt-1 ps-4" style="font-size: 10px;">
+                                    Enable if this is an internal physical store receiving document. It will be recorded in store inventory and slip sequence, but strictly excluded from ERCA VAT returns &amp; tax declarations.
+                                </small>
                             </div>
 
                             <div class="mb-3">

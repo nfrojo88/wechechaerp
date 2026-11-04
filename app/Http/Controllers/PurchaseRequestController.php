@@ -2300,11 +2300,13 @@ class PurchaseRequestController extends Controller
         }
         
         $request->validate([
-            'store_id'      => 'nullable|exists:stores,id',
-            'slip_no'       => 'nullable|string|max:100',
-            'received_date' => 'nullable|date',
-            'items'         => 'nullable|array',
-            'notes'         => 'nullable|string',
+            'store_id'               => 'nullable|exists:stores,id',
+            'slip_no'                => 'nullable|string|max:100',
+            'received_date'          => 'nullable|date',
+            'items'                  => 'nullable|array',
+            'notes'                  => 'nullable|string',
+            'slip_receipt'           => 'nullable|file|mimes:pdf,jpg,jpeg,png,webp|max:10240',
+            'is_physical_store_only' => 'nullable|boolean',
         ]);
 
         $slipNo = trim((string)$request->input('slip_no'));
@@ -2319,6 +2321,12 @@ class PurchaseRequestController extends Controller
             }
         }
 
+        $slipReceiptPath = null;
+        if ($request->hasFile('slip_receipt')) {
+            $slipReceiptPath = \App\Services\FileUploadService::upload($request->file('slip_receipt'), 'slips');
+        }
+        $isPhysicalStoreOnly = $request->boolean('is_physical_store_only');
+
         try {
             $result = $this->lifecycle->storeIntake(
                 $purchaseRequest,
@@ -2326,7 +2334,9 @@ class PurchaseRequestController extends Controller
                 $slipNo ?: null,
                 $request->input('received_date'),
                 $request->input('items', []),
-                $request->input('notes')
+                $request->input('notes'),
+                $slipReceiptPath,
+                $isPhysicalStoreOnly
             );
         } catch (\App\Exceptions\SlipSequenceGapException $e) {
             return back()->withInput()->withErrors([

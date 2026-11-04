@@ -17,7 +17,7 @@
 
     <div class="card shadow-sm">
         <div class="card-body">
-            <form action="{{ route('store-manager.slips.store') }}" method="POST">
+            <form action="{{ route('store-manager.slips.store') }}" method="POST" enctype="multipart/form-data">
                 @csrf
                 
                 <!-- Slip Type Selection -->
@@ -65,6 +65,39 @@
                         @error('slip_no')
                             <div class="text-danger small mt-1"><i class="fas fa-exclamation-circle me-1"></i>{{ $message }}</div>
                         @enderror
+                    </div>
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">
+                            <i class="fas fa-paperclip me-1 text-primary"></i>Upload Slip Receipt / Scan / Photo
+                        </label>
+                        <input type="file" name="slip_receipt" class="form-control @error('slip_receipt') is-invalid @enderror" accept=".pdf,.jpg,.jpeg,.png,.webp">
+                        <small class="text-muted">Supported formats: PDF, JPG, PNG, WEBP (Max 10MB)</small>
+                        @error('slip_receipt')
+                            <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
+                    </div>
+                    <div class="col-md-6 d-flex align-items-center">
+                        <div class="card bg-light border p-2 w-100 mt-2">
+                            <div class="form-check form-switch mb-1">
+                                <input class="form-check-input" type="checkbox" name="is_physical_store_only" id="is_physical_store_only" value="1" {{ old('is_physical_store_only') ? 'checked' : '' }}>
+                                <label class="form-check-label fw-bold text-dark" for="is_physical_store_only">
+                                    <i class="fas fa-warehouse text-warning me-1"></i>Physical Slip (Store Only — Do Not Show in VAT)
+                                </label>
+                            </div>
+                            <small class="text-muted ps-4" style="font-size: 11px;">
+                                Internal physical store document. Recorded in inventory and slip sequence, but excluded from VAT / TAS tax reports.
+                            </small>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-12">
+                        <label class="form-label">Notes / Remarks</label>
+                        <textarea name="notes" class="form-control" rows="2" placeholder="Optional notes for this slip..."></textarea>
                     </div>
                 </div>
 

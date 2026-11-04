@@ -28,12 +28,14 @@ class PettyCashMaterialPurchase extends Model
         'delivery_receipt_id',
         'journal_entry_id',
         'material_request_id',
+        'is_physical_store_only',
         'status',
     ];
 
     protected $casts = [
-        'purchase_date' => 'date',
-        'total_amount'  => 'decimal:2',
+        'purchase_date'          => 'date',
+        'total_amount'           => 'decimal:2',
+        'is_physical_store_only' => 'boolean',
     ];
 
     public function store()

@@ -310,6 +310,19 @@
                             <small class="text-muted d-block mt-1" style="font-size:0.73rem;">Photo of paper receipt or physical voucher.</small>
                         </div>
 
+                        {{-- Physical Slip (Store Only — Do Not Show in VAT) Option --}}
+                        <div class="mb-3 p-2 bg-light border rounded">
+                            <div class="form-check form-switch mb-0">
+                                <input class="form-check-input" type="checkbox" name="is_physical_store_only" id="isPhysicalStoreOnlyPetty" value="1" {{ old('is_physical_store_only') ? 'checked' : '' }}>
+                                <label class="form-check-label small fw-bold text-dark" for="isPhysicalStoreOnlyPetty">
+                                    <i class="fa-solid fa-warehouse text-warning me-1"></i>Physical Slip (Store Only — Do Not Show in VAT)
+                                </label>
+                            </div>
+                            <small class="text-muted d-block mt-1 ps-4" style="font-size:0.73rem;">
+                                Internal physical slip for site store inventory only. Will not be sent to central VAT / TAS tax declarations.
+                            </small>
+                        </div>
+
                         {{-- Dynamic OCR Feedback & Duplicate Alert Area --}}
                         <div id="pettyOcrFeedbackArea"></div>
 

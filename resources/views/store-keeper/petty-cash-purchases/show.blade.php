@@ -229,6 +229,18 @@
                             <span class="text-muted">Petty Cash Fund:</span>
                             <span class="badge bg-warning text-dark font-monospace">{{ $purchase->chartOfAccount->name ?? 'Petty Cash' }}</span>
                         </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
+                            <span class="text-muted">VAT Classification:</span>
+                            @if($purchase->is_physical_store_only || ($purchase->deliveryReceipt && $purchase->deliveryReceipt->is_physical_store_only))
+                                <span class="badge bg-warning text-dark border border-warning">
+                                    <i class="fa-solid fa-warehouse me-1"></i>Physical Slip (Store Only — Non-VAT)
+                                </span>
+                            @else
+                                <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">
+                                    <i class="fa-solid fa-receipt me-1"></i>Standard / VAT Eligible
+                                </span>
+                            @endif
+                        </li>
                         @if($purchase->materialRequest)
                         <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
                             <span class="text-muted">Fulfilled Emergency Request:</span>

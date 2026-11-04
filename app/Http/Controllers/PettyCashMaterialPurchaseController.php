@@ -497,10 +497,11 @@ class PettyCashMaterialPurchaseController extends Controller
             'supplier_name'       => 'required|string|max:255',
             'supplier_tin'        => 'nullable|string|max:20',
             'fs_no'               => 'nullable|string|max:20',
-            'receipt_no'          => 'required|string|max:100',
-            'notes'               => 'nullable|string|max:1000',
-            'attachment'          => 'nullable|file|mimes:pdf,jpg,jpeg,png,webp|max:10240',
-            'items'               => 'required|array|min:1',
+            'receipt_no'             => 'required|string|max:100',
+            'notes'                  => 'nullable|string|max:1000',
+            'attachment'             => 'nullable|file|mimes:pdf,jpg,jpeg,png,webp|max:10240',
+            'is_physical_store_only' => 'nullable|boolean',
+            'items'                  => 'required|array|min:1',
             'items.*.product_id'  => 'required|exists:products,id',
             'items.*.quantity'    => 'required|numeric|min:0.001',
             'items.*.unit_price'  => 'required|numeric|min:0',
@@ -520,8 +521,10 @@ class PettyCashMaterialPurchaseController extends Controller
             $attachmentPath = FileUploadService::upload($request->file('attachment'), 'petty_cash_purchases');
         }
 
+        $isPhysicalStoreOnly = $request->boolean('is_physical_store_only');
+
         try {
-            $purchase = DB::transaction(function () use ($validated, $store, $pettyCashAccount, $attachmentPath, $user, $request) {
+            $purchase = DB::transaction(function () use ($validated, $store, $pettyCashAccount, $attachmentPath, $user, $request, $isPhysicalStoreOnly) {
             $today = date('Ymd');
             $countToday = PettyCashMaterialPurchase::whereDate('created_at', now())->count() + 1;
             $purchaseNo = 'PCMP-' . $today . '-' . str_pad($countToday, 4, '0', STR_PAD_LEFT);
@@ -534,20 +537,21 @@ class PettyCashMaterialPurchaseController extends Controller
 
             // 1. Create Purchase Record
             $purchase = PettyCashMaterialPurchase::create([
-                'purchase_no'         => $purchaseNo,
-                'store_id'            => $store->id,
-                'chart_of_account_id' => $pettyCashAccount?->id,
-                'purchased_by'        => $user->id,
-                'purchase_date'       => $validated['purchase_date'],
-                'supplier_name'       => $validated['supplier_name'],
-                'supplier_tin'        => $validated['supplier_tin'] ?? null,
-                'fs_no'               => $validated['fs_no'] ?? null,
-                'receipt_no'          => $validated['receipt_no'],
-                'total_amount'        => $totalAmount,
-                'notes'               => $validated['notes'] ?? null,
-                'attachment_path'     => $attachmentPath,
-                'material_request_id' => $validated['material_request_id'] ?? null,
-                'status'              => 'completed',
+                'purchase_no'            => $purchaseNo,
+                'store_id'               => $store->id,
+                'chart_of_account_id'    => $pettyCashAccount?->id,
+                'purchased_by'           => $user->id,
+                'purchase_date'          => $validated['purchase_date'],
+                'supplier_name'          => $validated['supplier_name'],
+                'supplier_tin'           => $validated['supplier_tin'] ?? null,
+                'fs_no'                  => $validated['fs_no'] ?? null,
+                'receipt_no'             => $validated['receipt_no'],
+                'total_amount'           => $totalAmount,
+                'notes'                  => $validated['notes'] ?? null,
+                'attachment_path'        => $attachmentPath,
+                'material_request_id'    => $validated['material_request_id'] ?? null,
+                'is_physical_store_only' => $isPhysicalStoreOnly,
+                'status'                 => 'completed',
             ]);
 
             // If this purchase fulfills an Emergency Material Request, mark MR as completed
@@ -605,22 +609,25 @@ class PettyCashMaterialPurchaseController extends Controller
 
             // 4. Create Receive Slip (DeliveryReceipt)
             $deliveryReceipt = DeliveryReceipt::create([
-                'dr_no'             => $drNo,
-                'slip_no'           => $drNo,
-                'slip_type'         => 'receive',
-                'source_type'       => 'petty_cash',
-                'store_id'          => $store->id,
-                'received_date'     => $validated['purchase_date'],
-                'receipt_date'      => $validated['purchase_date'],
-                'supplier_name'     => $validated['supplier_name'],
-                'reference_no'      => $validated['receipt_no'],
-                'purchase_order_id' => $dummyPo->id,
-                'received_by'       => $user->id,
-                'created_by'        => $user->id,
-                'status'            => 'received',
-                'is_void'           => false,
-                'sequence_status'   => 'valid',
-                'notes'             => "Petty Cash Purchase {$purchaseNo} - {$validated['supplier_name']}",
+                'dr_no'                  => $drNo,
+                'slip_no'                => $drNo,
+                'slip_type'              => 'receive',
+                'source_type'            => 'petty_cash',
+                'store_id'               => $store->id,
+                'received_date'          => $validated['purchase_date'],
+                'receipt_date'           => $validated['purchase_date'],
+                'supplier_name'          => $validated['supplier_name'],
+                'reference_no'           => $validated['receipt_no'],
+                'purchase_order_id'      => $dummyPo->id,
+                'received_by'            => $user->id,
+                'created_by'             => $user->id,
+                'status'                 => 'received',
+                'is_void'                => false,
+                'sequence_status'        => 'valid',
+                'notes'                  => "Petty Cash Purchase {$purchaseNo} - {$validated['supplier_name']}",
+                'slip_receipt_path'      => $attachmentPath,
+                'is_physical_store_only' => $isPhysicalStoreOnly,
+                'physical_slip_notes'    => $isPhysicalStoreOnly ? "Internal physical store slip (Excluded from VAT)" : null,
             ]);
 
             // 5. Process Items, Increment Inventory, and Create Movement
@@ -734,8 +741,8 @@ class PettyCashMaterialPurchaseController extends Controller
 
             $purchase->save();
 
-            // Auto-link to central Receipt table for fiscal and tax declarations
-            if ($attachmentPath || !empty($validated['fs_no'])) {
+            // Auto-link to central Receipt table for fiscal and tax declarations (skip if physical store only)
+            if (!$isPhysicalStoreOnly && ($attachmentPath || !empty($validated['fs_no']))) {
                 try {
                     $ocrService = app(\App\Services\ReceiptOcrService::class);
                     $ocrItems = [];
@@ -788,6 +795,25 @@ class PettyCashMaterialPurchaseController extends Controller
                     );
                 } catch (\Throwable $ocrEx) {
                     \Illuminate\Support\Facades\Log::warning("Could not auto-create linked Receipt for Petty Cash Purchase #{$purchaseNo}: " . $ocrEx->getMessage());
+                }
+            } elseif ($isPhysicalStoreOnly && class_exists(\App\Models\ExpenseHubVatDecision::class)) {
+                // If flagged as store-only physical slip, mark ExpenseHubVatDecision as NO_VAT
+                try {
+                    \App\Models\ExpenseHubVatDecision::updateOrCreate(
+                        [
+                            'source_type' => 'petty_cash_purchase',
+                            'source_id'   => $purchase->id,
+                        ],
+                        [
+                            'vat_status'         => \App\Models\ExpenseHubVatDecision::STATUS_NO_VAT,
+                            'no_vat_reason_code' => 'physical_store_slip',
+                            'no_vat_reason_note' => 'Physical Store Slip (Site Internal Inventory Only - Excluded from VAT)',
+                            'decided_by'         => $user->id,
+                            'decided_at'         => now(),
+                        ]
+                    );
+                } catch (\Throwable $vatEx) {
+                    \Illuminate\Support\Facades\Log::warning("Could not sync ExpenseHubVatDecision for physical store slip #{$purchaseNo}: " . $vatEx->getMessage());
                 }
             }
 

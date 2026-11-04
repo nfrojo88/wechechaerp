@@ -1227,7 +1227,9 @@ class ProcurementLifecycleService
         ?string $slipNo = null,
         ?string $receivedDate = null,
         array $receivedItems = [],
-        ?string $notes = null
+        ?string $notes = null,
+        ?string $slipReceiptPath = null,
+        bool $isPhysicalStoreOnly = false
     ): array {
         $from = $pr->status;
         $storeId = $storeId ?: ($pr->store_id ?: Store::where('is_active', true)->first()?->id ?: 1);
@@ -1235,7 +1237,7 @@ class ProcurementLifecycleService
 
         $intakeResult = ['is_full' => true, 'remaining' => [], 'slip_no' => $slipNo];
 
-        DB::transaction(function () use ($pr, $storeId, &$slipNo, $receivedDate, $receivedItems, $notes, $from, &$intakeResult) {
+        DB::transaction(function () use ($pr, $storeId, &$slipNo, $receivedDate, $receivedItems, $notes, $from, &$intakeResult, $slipReceiptPath, $isPhysicalStoreOnly) {
             // 1. Strictly consume next slip via SlipSequenceService
             $slipService = app(\App\Services\SlipSequenceService::class);
             $slipResult = $slipService->consumeNext(
@@ -1313,19 +1315,46 @@ class ProcurementLifecycleService
 
             // 3. Create DeliveryReceipt record
             $receipt = DeliveryReceipt::create([
-                'dr_no'               => $slipNo,
-                'slip_no'             => $slipNo,
-                'slip_type'           => 'receive',
-                'source_type'         => 'procurement',
-                'sequence_status'     => 'valid',
-                'purchase_order_id'   => $poId,
-                'purchase_request_id' => $pr->id,
-                'store_id'            => $storeId,
-                'received_date'       => $receivedDate,
-                'received_by'         => Auth::id() ?? 1,
-                'status'              => 'verified',
-                'notes'               => $notes ?: "Intake for PR #{$pr->pr_no} (Slip #{$slipNo})",
+                'dr_no'                  => $slipNo,
+                'slip_no'                => $slipNo,
+                'slip_type'              => 'receive',
+                'source_type'            => 'procurement',
+                'sequence_status'        => 'valid',
+                'purchase_order_id'      => $poId,
+                'purchase_request_id'    => $pr->id,
+                'store_id'               => $storeId,
+                'received_date'          => $receivedDate,
+                'received_by'            => Auth::id() ?? 1,
+                'status'                 => 'verified',
+                'notes'                  => $notes ?: "Intake for PR #{$pr->pr_no} (Slip #{$slipNo})",
+                'slip_receipt_path'      => $slipReceiptPath,
+                'is_physical_store_only' => $isPhysicalStoreOnly,
+                'physical_slip_notes'    => $isPhysicalStoreOnly ? ($notes ?: 'Physical store slip (store-only)') : null,
             ]);
+
+            // If flagged as store-only physical slip, ensure excluded from VAT declarations
+            if ($isPhysicalStoreOnly && class_exists(\App\Models\ExpenseHubVatDecision::class)) {
+                try {
+                    $payment = $pr->payment ?: \App\Models\ProcurementPayment::where('purchase_request_id', $pr->id)->first();
+                    if ($payment) {
+                        \App\Models\ExpenseHubVatDecision::updateOrCreate(
+                            [
+                                'source_type' => 'procurement_payment',
+                                'source_id'   => $payment->id,
+                            ],
+                            [
+                                'vat_status'         => \App\Models\ExpenseHubVatDecision::STATUS_NO_VAT,
+                                'no_vat_reason_code' => 'physical_store_slip',
+                                'no_vat_reason_note' => 'Physical Store Slip (Store Internal Intake Only - Excluded from VAT)',
+                                'decided_by'         => Auth::id() ?? 1,
+                                'decided_at'         => now(),
+                            ]
+                        );
+                    }
+                } catch (\Throwable $vatEx) {
+                    \Illuminate\Support\Facades\Log::warning("Could not sync ExpenseHubVatDecision for physical store slip on PR #{$pr->pr_no}: " . $vatEx->getMessage());
+                }
+            }
 
             // 4. Process items and increment Inventory
             $prItems = $pr->items()->with('product')->get();

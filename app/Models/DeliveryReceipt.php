@@ -12,14 +12,37 @@ class DeliveryReceipt extends Model
         'slip_type', 'source_type', 'is_void', 'void_reason', 'voided_by', 'voided_at',
         'sequence_status', 'to_store_id', 'created_by', 'supplier_name', 'reference_no',
         'receipt_date', 'intake_completed_at',
+        'slip_receipt_path', 'is_physical_store_only', 'physical_slip_notes',
     ];
 
     protected $casts = [
-        'received_date' => 'date',
-        'receipt_date'  => 'date',
-        'is_void'       => 'boolean',
-        'voided_at'     => 'datetime',
+        'received_date'          => 'date',
+        'receipt_date'           => 'date',
+        'is_void'                => 'boolean',
+        'is_physical_store_only' => 'boolean',
+        'voided_at'              => 'datetime',
     ];
+
+    public function getSlipReceiptUrlAttribute(): ?string
+    {
+        if (empty($this->slip_receipt_path)) {
+            return null;
+        }
+        return \App\Services\FileUploadService::url($this->slip_receipt_path);
+    }
+
+    public function scopeVatEligible($query)
+    {
+        return $query->where(function ($q) {
+            $q->where('is_physical_store_only', false)
+              ->orWhereNull('is_physical_store_only');
+        });
+    }
+
+    public function scopeStoreOnly($query)
+    {
+        return $query->where('is_physical_store_only', true);
+    }
 
     public function purchaseOrder()   { return $this->belongsTo(PurchaseOrder::class); }
     public function store()           { return $this->belongsTo(Store::class); }

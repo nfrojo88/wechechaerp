@@ -241,7 +241,12 @@ class ExpenseHubQueryService
             $key = 'procurement_payment:' . $payment->id;
             $decision = $decisions->get($key);
 
-            $defaultStatus = $vatAmt > 0 ? ExpenseHubVatDecision::STATUS_VAT_APPLIES : ExpenseHubVatDecision::STATUS_PENDING_DECISION;
+            $hasStoreOnlySlip = $pr && $pr->deliveryReceipts()->where('is_physical_store_only', true)->exists();
+            $defaultStatus = ($hasStoreOnlySlip && !$decision)
+                ? ExpenseHubVatDecision::STATUS_NO_VAT
+                : ($vatAmt > 0 ? ExpenseHubVatDecision::STATUS_VAT_APPLIES : ExpenseHubVatDecision::STATUS_PENDING_DECISION);
+            $defaultReasonCode = $hasStoreOnlySlip ? 'physical_store_slip' : null;
+            $defaultReasonNote = $hasStoreOnlySlip ? 'Physical Store Slip (Store Internal Intake Only - Excluded from VAT)' : null;
 
             $lineItems = [];
             if ($pr && $pr->items) {
@@ -305,6 +310,8 @@ class ExpenseHubQueryService
                 'line_items'           => $lineItems,
                 'decision'             => $decision,
                 'default_status'       => $defaultStatus,
+                'default_reason_code'  => $defaultReasonCode ?? null,
+                'default_reason_note'  => $defaultReasonNote ?? null,
             ]));
         }
     }
@@ -396,6 +403,8 @@ class ExpenseHubQueryService
                 'line_items'           => $lineItems,
                 'decision'             => $decision,
                 'default_status'       => $defaultStatus,
+                'default_reason_code'  => $defaultReasonCode ?? null,
+                'default_reason_note'  => $defaultReasonNote ?? null,
             ]));
         }
     }
@@ -505,6 +514,8 @@ class ExpenseHubQueryService
                 'line_items'           => $lineItems,
                 'decision'             => $decision,
                 'default_status'       => $defaultStatus,
+                'default_reason_code'  => $defaultReasonCode ?? null,
+                'default_reason_note'  => $defaultReasonNote ?? null,
             ]));
         }
     }
@@ -581,7 +592,9 @@ class ExpenseHubQueryService
                 'is_capex'             => false,
                 'line_items'           => $lineItems,
                 'decision'             => $decision,
-                'default_status'       => ExpenseHubVatDecision::STATUS_PENDING_DECISION,
+                'default_status'       => $p->is_physical_store_only ? ExpenseHubVatDecision::STATUS_NO_VAT : ExpenseHubVatDecision::STATUS_PENDING_DECISION,
+                'default_reason_code'  => $p->is_physical_store_only ? 'physical_store_slip' : null,
+                'default_reason_note'  => $p->is_physical_store_only ? 'Physical Store Slip (Site Internal Inventory Only - Excluded from VAT)' : null,
             ]));
         }
     }

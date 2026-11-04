@@ -77,6 +77,7 @@ class ExpenseHubVatDecision extends Model
     public const STATUS_PENDING_DECISION  = 'pending_decision';
 
     public const NO_VAT_REASONS = [
+        'physical_store_slip' => 'Physical Store Slip (Store Only — Excluded from VAT)',
         'fuel_zero_vat'      => 'Fuel / Petroleum Receipt (0% VAT / TAS Purchase)',
         'tas_purchase'       => 'TAS Purchase with Fiscal Receipt (0% VAT / Exempt)',
         'no_tin'             => 'Vendor has no valid TIN',
