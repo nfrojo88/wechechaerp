@@ -191,6 +191,80 @@ class DashboardController extends Controller
                 }
             }
 
+            // Also incorporate paid Procurement Payments with VAT or Withholding
+            if (\Illuminate\Support\Facades\Schema::hasTable('procurement_payments')) {
+                $procQuery = \App\Models\ProcurementPayment::with(['purchaseRequest.supplier', 'purchaseRequest.project', 'coaAccount'])
+                    ->where('status', 'paid')
+                    ->where(function ($q) {
+                        $q->where('has_withholding', true)
+                          ->orWhere('withholding_amount', '>', 0)
+                          ->orWhere('vat_amount', '>', 0)
+                          ->orWhereIn('vat_type', ['exclusive', 'inclusive', 'vat_b'])
+                          ->orWhere(function ($sq) {
+                              $sq->whereNotNull('withholding_receipt')->where('withholding_receipt', '!=', '');
+                          });
+                    });
+
+                foreach ($procQuery->latest()->get() as $pItem) {
+                    $gross = (float)($pItem->gross_amount > 0 ? $pItem->gross_amount : $pItem->amount);
+                    $vatType = $pItem->vat_type ?? 'none';
+                    $vatRate = (float)($pItem->vat_rate > 0 ? $pItem->vat_rate : 15.00);
+
+                    $vat = 0.0;
+                    if ((float)$pItem->vat_amount > 0) {
+                        $vat = (float)$pItem->vat_amount;
+                    } elseif (in_array($vatType, ['inclusive', 'vat_b'])) {
+                        $base = round($gross / (1 + ($vatRate / 100)), 2);
+                        $vat = round($gross - $base, 2);
+                    } elseif ($vatType === 'exclusive') {
+                        $vat = round($gross * ($vatRate / 100), 2);
+                    }
+
+                    $wht = (float)($pItem->withholding_amount ?? 0);
+                    $net = (float)($pItem->net_amount > 0 ? $pItem->net_amount : ($gross - $wht));
+                    $hasReceipt = !empty($pItem->withholding_receipt);
+
+                    $totalRecords++;
+                    $totalGrossBase += $gross;
+                    $totalVatAmount += $vat;
+                    $totalWithholdingAmount += $wht;
+                    $totalNetDisbursed += $net;
+                    if ($hasReceipt) {
+                        $slipsAttachedCount++;
+                    }
+
+                    $date = $pItem->paid_at ? \Illuminate\Support\Carbon::parse($pItem->paid_at) : ($pItem->created_at ? \Illuminate\Support\Carbon::parse($pItem->created_at) : now());
+                    $monthKey = $date->format('Y-m');
+                    $monthLabel = $date->format('F Y');
+                    $monthStart = $date->copy()->startOfMonth()->format('Y-m-d');
+                    $monthEnd   = $date->copy()->endOfMonth()->format('Y-m-d');
+
+                    if (!isset($monthlyMap[$monthKey])) {
+                        $monthlyMap[$monthKey] = [
+                            'month_key'     => $monthKey,
+                            'month_label'   => $monthLabel,
+                            'from_date'     => $monthStart,
+                            'to_date'       => $monthEnd,
+                            'count'         => 0,
+                            'gross_base'    => 0.0,
+                            'vat_amount'    => 0.0,
+                            'wht_amount'    => 0.0,
+                            'net_disbursed' => 0.0,
+                            'slips_count'   => 0,
+                        ];
+                    }
+
+                    $monthlyMap[$monthKey]['count']++;
+                    $monthlyMap[$monthKey]['gross_base'] += $gross;
+                    $monthlyMap[$monthKey]['vat_amount'] += $vat;
+                    $monthlyMap[$monthKey]['wht_amount'] += $wht;
+                    $monthlyMap[$monthKey]['net_disbursed'] += $net;
+                    if ($hasReceipt) {
+                        $monthlyMap[$monthKey]['slips_count']++;
+                    }
+                }
+            }
+
             // Sort months descending (newest month first)
             krsort($monthlyMap);
             $monthlyReport = array_values($monthlyMap);
@@ -320,9 +394,9 @@ class DashboardController extends Controller
             ->latest()
             ->get(), collect());
 
-        // 2. Cash & Bank Accounts (from Chart of Accounts)
+        // 2. Cash & Bank Accounts (from Chart of Accounts & Bank Accounts Registry)
         $cashAndBankCoas = $this->safe(function() {
-            return \App\Models\ChartOfAccount::where('is_active', true)
+            $coas = \App\Models\ChartOfAccount::where('is_active', true)
                 ->where(function($q) {
                     $q->where('subtype', 'Cash and Bank')
                       ->orWhere('subtype', 'like', '%Cash%')
@@ -331,17 +405,45 @@ class DashboardController extends Controller
                       ->orWhere('name', 'like', '%Cash%')
                       ->orWhere('code', 'like', '10%');
                 })
+                ->with('manager')
                 ->orderBy('code')
                 ->get();
+
+            if (\Illuminate\Support\Facades\Schema::hasTable('bank_accounts')) {
+                $linkedCoaIds = $coas->pluck('id')->filter()->toArray();
+                $standaloneBanks = \App\Models\BankAccount::where('is_active', true)
+                    ->where(function($q) use ($linkedCoaIds) {
+                        $q->whereNull('coa_id')->orWhereNotIn('coa_id', $linkedCoaIds);
+                    })
+                    ->with('assignedStaff')
+                    ->get();
+
+                foreach ($standaloneBanks as $bank) {
+                    $coas->push((object)[
+                        'id'              => 'ba_' . $bank->id,
+                        'code'            => $bank->account_number ?: ('BA-' . $bank->id),
+                        'name'            => ($bank->bank_name ?: 'Bank') . ' - ' . ($bank->account_name ?: 'Operating Account'),
+                        'description'     => $bank->branch ? ("Branch: {$bank->branch}") : $bank->notes,
+                        'type'            => 'asset',
+                        'subtype'         => 'Bank Account',
+                        'manager'         => $bank->assignedStaff,
+                        'current_balance' => (float)($bank->current_balance ?? 0),
+                    ]);
+                }
+            }
+
+            return $coas;
         }, collect());
 
         $totalCashBankBalance = (float) $cashAndBankCoas->sum('current_balance');
 
-        // 3. Incomes & Expenses (Respecting Selected Period & YTD)
-        $monthlyIncome = $this->safe(function() use ($startDate, $endDate, $now) {
+        // 3. Incomes & Expenses (Respecting Selected Period, YTD & All-Time History)
+        $monthlyIncome = $this->safe(function() use ($startDate, $endDate, $now, $period) {
             $paymentQuery = \App\Models\Payment::query();
             if ($startDate && $endDate) {
                 $paymentQuery->whereBetween('payment_date', [$startDate->toDateString(), $endDate->toDateString()]);
+            } elseif ($period === 'all') {
+                // All time history - no date restriction
             } else {
                 $paymentQuery->whereMonth('payment_date', $now->month)->whereYear('payment_date', $now->year);
             }
@@ -352,6 +454,8 @@ class DashboardController extends Controller
                 $incQuery = \App\Models\IncomeRecord::where('status', '!=', 'cancelled');
                 if ($startDate && $endDate) {
                     $incQuery->whereBetween('income_date', [$startDate->toDateString(), $endDate->toDateString()]);
+                } elseif ($period === 'all') {
+                    // All time history - no date restriction
                 } else {
                     $incQuery->whereMonth('income_date', $now->month)->whereYear('income_date', $now->year);
                 }
@@ -371,10 +475,21 @@ class DashboardController extends Controller
             return $direct + $incRecords;
         }, 0);
 
-        $monthlyExpenses = $this->safe(function() use ($startDate, $endDate, $now) {
+        $allTimeIncome = $this->safe(function() {
+            $direct = (float) (\App\Models\Payment::sum('amount') ?? 0);
+            $incRecords = 0;
+            if (\Illuminate\Support\Facades\Schema::hasTable('income_records')) {
+                $incRecords = (float) (\App\Models\IncomeRecord::where('status', '!=', 'cancelled')->sum('amount') ?? 0);
+            }
+            return $direct + $incRecords;
+        }, 0);
+
+        $monthlyExpenses = $this->safe(function() use ($startDate, $endDate, $now, $period) {
             $expQuery = \App\Models\Expense::query();
             if ($startDate && $endDate) {
                 $expQuery->whereBetween('expense_date', [$startDate->toDateString(), $endDate->toDateString()]);
+            } elseif ($period === 'all') {
+                // All time history - no date restriction
             } else {
                 $expQuery->whereMonth('expense_date', $now->month)->whereYear('expense_date', $now->year);
             }
@@ -393,6 +508,8 @@ class DashboardController extends Controller
                               $sq->whereNull('paid_at')->whereBetween('created_at', [$startDate, $endDate]);
                           });
                     });
+                } elseif ($period === 'all') {
+                    // All time history - no date restriction
                 } else {
                     $reqQuery->where(function($q) use ($now) {
                         $q->where(function($sq) use ($now) {
@@ -407,7 +524,45 @@ class DashboardController extends Controller
                 $paidRequests = (float) ($reqQuery->sum('amount') ?? 0);
             }
 
-            return $direct + $paidRequests;
+            $paidProcurement = 0;
+            if (\Illuminate\Support\Facades\Schema::hasTable('procurement_payments')) {
+                $procQuery = \App\Models\ProcurementPayment::where('status', 'paid');
+                if (\Illuminate\Support\Facades\Schema::hasTable('expense_requests')) {
+                    $bridgedPrIds = \App\Models\ExpenseRequest::where('status', \App\Models\ExpenseRequest::STATUS_PAID)
+                        ->whereNotNull('purchase_request_id')
+                        ->pluck('purchase_request_id')
+                        ->filter()->toArray();
+                    if (!empty($bridgedPrIds)) {
+                        $procQuery->whereNotIn('purchase_request_id', $bridgedPrIds);
+                    }
+                }
+                if ($startDate && $endDate) {
+                    $procQuery->where(function($q) use ($startDate, $endDate) {
+                        $q->whereBetween('paid_at', [$startDate, $endDate])
+                          ->orWhere(function($sq) use ($startDate, $endDate) {
+                              $sq->whereNull('paid_at')->whereBetween('updated_at', [$startDate, $endDate]);
+                          })
+                          ->orWhere(function($sq) use ($startDate, $endDate) {
+                              $sq->whereNull('paid_at')->whereBetween('created_at', [$startDate, $endDate]);
+                          });
+                    });
+                } elseif ($period === 'all') {
+                    // All time history - no date restriction
+                } else {
+                    $procQuery->where(function($q) use ($now) {
+                        $q->where(function($sq) use ($now) {
+                            $sq->whereNotNull('paid_at')->whereMonth('paid_at', $now->month)->whereYear('paid_at', $now->year);
+                        })->orWhere(function($sq) use ($now) {
+                            $sq->whereNull('paid_at')->whereMonth('updated_at', $now->month)->whereYear('updated_at', $now->year);
+                        })->orWhere(function($sq) use ($now) {
+                            $sq->whereNull('paid_at')->whereMonth('created_at', $now->month)->whereYear('created_at', $now->year);
+                        });
+                    });
+                }
+                $paidProcurement = (float) ($procQuery->sum('amount') ?? 0);
+            }
+
+            return $direct + $paidRequests + $paidProcurement;
         }, 0);
 
         $ytdExpenses = $this->safe(function() use ($now) {
@@ -423,7 +578,54 @@ class DashboardController extends Controller
                     });
                 })
                 ->sum('amount') ?? 0);
-            return $direct + $paidRequests;
+
+            $paidProcurement = 0;
+            if (\Illuminate\Support\Facades\Schema::hasTable('procurement_payments')) {
+                $procQuery = \App\Models\ProcurementPayment::where('status', 'paid');
+                if (\Illuminate\Support\Facades\Schema::hasTable('expense_requests')) {
+                    $bridgedPrIds = \App\Models\ExpenseRequest::where('status', \App\Models\ExpenseRequest::STATUS_PAID)
+                        ->whereNotNull('purchase_request_id')
+                        ->pluck('purchase_request_id')
+                        ->filter()->toArray();
+                    if (!empty($bridgedPrIds)) {
+                        $procQuery->whereNotIn('purchase_request_id', $bridgedPrIds);
+                    }
+                }
+                $paidProcurement = (float) ($procQuery->where(function($q) use ($now) {
+                    $q->where(function($sq) use ($now) {
+                        $sq->whereNotNull('paid_at')->whereYear('paid_at', $now->year);
+                    })->orWhere(function($sq) use ($now) {
+                        $sq->whereNull('paid_at')->whereYear('updated_at', $now->year);
+                    })->orWhere(function($sq) use ($now) {
+                        $sq->whereNull('paid_at')->whereYear('created_at', $now->year);
+                    });
+                })->sum('amount') ?? 0);
+            }
+
+            return $direct + $paidRequests + $paidProcurement;
+        }, 0);
+
+        $allTimeExpenses = $this->safe(function() {
+            $direct = (float) (\App\Models\Expense::sum('amount') ?? 0);
+            $paidRequests = 0;
+            if (\Illuminate\Support\Facades\Schema::hasTable('expense_requests')) {
+                $paidRequests = (float) (\App\Models\ExpenseRequest::where('status', \App\Models\ExpenseRequest::STATUS_PAID)->sum('amount') ?? 0);
+            }
+            $paidProcurement = 0;
+            if (\Illuminate\Support\Facades\Schema::hasTable('procurement_payments')) {
+                $procQuery = \App\Models\ProcurementPayment::where('status', 'paid');
+                if (\Illuminate\Support\Facades\Schema::hasTable('expense_requests')) {
+                    $bridgedPrIds = \App\Models\ExpenseRequest::where('status', \App\Models\ExpenseRequest::STATUS_PAID)
+                        ->whereNotNull('purchase_request_id')
+                        ->pluck('purchase_request_id')
+                        ->filter()->toArray();
+                    if (!empty($bridgedPrIds)) {
+                        $procQuery->whereNotIn('purchase_request_id', $bridgedPrIds);
+                    }
+                }
+                $paidProcurement = (float) ($procQuery->sum('amount') ?? 0);
+            }
+            return $direct + $paidRequests + $paidProcurement;
         }, 0);
 
         // Today's Live Pulse
@@ -445,6 +647,15 @@ class DashboardController extends Controller
                           });
                     })->sum('amount') ?? 0);
             }
+            if (\Illuminate\Support\Facades\Schema::hasTable('procurement_payments')) {
+                $todayExpense += (float) (\App\Models\ProcurementPayment::where('status', 'paid')
+                    ->where(function($q) use ($todayDate) {
+                        $q->whereDate('paid_at', $todayDate)
+                          ->orWhere(function($sq) use ($todayDate) {
+                              $sq->whereNull('paid_at')->whereDate('updated_at', $todayDate);
+                          });
+                    })->sum('amount') ?? 0);
+            }
 
             $attendancePresent = 0;
             $attendanceSite = 0;
@@ -454,10 +665,10 @@ class DashboardController extends Controller
             if (\Illuminate\Support\Facades\Schema::hasTable('attendance')) {
                 $todayAttendances = \App\Models\Attendance::whereDate('attendance_date', $todayDate)->get();
                 $totalLoggedToday = $todayAttendances->count();
-                $attendancePresent = $todayAttendances->whereIn('status', ['present', 'S'])->count();
-                $attendanceSite = $todayAttendances->where('status', 'S')->count();
-                $attendanceLeave = $todayAttendances->where('status', 'leave')->count();
-                $attendanceAbsent = $todayAttendances->where('status', 'absent')->count();
+                $attendancePresent = $todayAttendances->filter(fn($a) => in_array(strtolower(trim($a->status ?? '')), ['present', 's', 'p']))->count();
+                $attendanceSite = $todayAttendances->filter(fn($a) => strtolower(trim($a->status ?? '')) === 's')->count();
+                $attendanceLeave = $todayAttendances->filter(fn($a) => strtolower(trim($a->status ?? '')) === 'leave')->count();
+                $attendanceAbsent = $todayAttendances->filter(fn($a) => strtolower(trim($a->status ?? '')) === 'absent')->count();
             }
 
             $todayTransfers = 0;
@@ -486,7 +697,7 @@ class DashboardController extends Controller
         ]);
 
         // Transfers (TR) Center Data
-        $transfersData = $this->safe(function() use ($startDate, $endDate) {
+        $transfersData = $this->safe(function() use ($startDate, $endDate, $period) {
             if (!\Illuminate\Support\Facades\Schema::hasTable('transfers')) {
                 return [
                     'kpi' => ['in_transit' => 0, 'pending_dispatch' => 0, 'completed' => 0, 'total_period' => 0],
@@ -545,10 +756,10 @@ class DashboardController extends Controller
             $totalActive = \App\Models\Employee::where('status', 'active')->count();
 
             $attendances = \App\Models\Attendance::whereDate('attendance_date', $todayDate)->get();
-            $present = $attendances->whereIn('status', ['present', 'S'])->count();
-            $site = $attendances->where('status', 'S')->count();
-            $leave = $attendances->where('status', 'leave')->count();
-            $absent = $attendances->where('status', 'absent')->count();
+            $present = $attendances->filter(fn($a) => in_array(strtolower(trim($a->status ?? '')), ['present', 's', 'p']))->count();
+            $site = $attendances->filter(fn($a) => strtolower(trim($a->status ?? '')) === 's')->count();
+            $leave = $attendances->filter(fn($a) => strtolower(trim($a->status ?? '')) === 'leave')->count();
+            $absent = $attendances->filter(fn($a) => strtolower(trim($a->status ?? '')) === 'absent')->count();
             $late = $attendances->filter(fn($a) => ($a->late_minutes ?? 0) > 0)->count();
 
             $rate = $totalActive > 0 ? min(100, round(($present / $totalActive) * 100, 1)) : 0;
@@ -571,32 +782,41 @@ class DashboardController extends Controller
                 ->join('products', 'inventory.product_id', '=', 'products.id')
                 ->whereNull('products.deleted_at')
                 ->sum(\Illuminate\Support\Facades\DB::raw('inventory.quantity_on_hand * COALESCE(
-                    inventory.unit_cost,
-                    (SELECT price FROM material_prices WHERE product_id = products.id ORDER BY effective_date DESC, id DESC LIMIT 1),
-                    (SELECT unit_price FROM purchase_order_items WHERE product_id = products.id ORDER BY id DESC LIMIT 1),
-                    products.unit_price,
+                    NULLIF(inventory.unit_cost, 0),
+                    (SELECT price FROM material_prices WHERE product_id = products.id AND price > 0 ORDER BY effective_date DESC, id DESC LIMIT 1),
+                    (SELECT unit_price FROM purchase_order_items WHERE product_id = products.id AND unit_price > 0 ORDER BY id DESC LIMIT 1),
+                    NULLIF(products.unit_price, 0),
                     0
                 )'));
         }, 0);
 
         $fixedAssetsValue = $this->safe(function() {
             if (\Illuminate\Support\Facades\Schema::hasTable('fixed_assets')) {
-                return (float) \App\Models\FixedAsset::sum('purchase_price');
+                return (float) \App\Models\FixedAsset::whereNull('deleted_at')
+                    ->sum(\Illuminate\Support\Facades\DB::raw('COALESCE(total_quantity, 1) * COALESCE(unit_cost, 0)'));
             }
             return 0;
         }, 0);
 
         $fixedAssetsCount = $this->safe(function() {
-            return \Illuminate\Support\Facades\Schema::hasTable('fixed_assets') ? \App\Models\FixedAsset::count() : 0;
+            return \Illuminate\Support\Facades\Schema::hasTable('fixed_assets')
+                ? \App\Models\FixedAsset::whereNull('deleted_at')->count()
+                : 0;
+        }, 0);
+
+        $fixedAssetsUnits = $this->safe(function() {
+            return \Illuminate\Support\Facades\Schema::hasTable('fixed_assets')
+                ? (int) \App\Models\FixedAsset::whereNull('deleted_at')->sum(\Illuminate\Support\Facades\DB::raw('COALESCE(total_quantity, 1)'))
+                : 0;
         }, 0);
 
         // 4. Executive KPI Array
         $kpi = [
             'total_projects'          => $this->safe(fn() => \App\Models\Project::count(), 0),
-            'active_projects'         => $this->safe(fn() => \App\Models\Project::where('status', 'active')->count(), 0),
-            'completed_projects'      => $this->safe(fn() => \App\Models\Project::where('status', 'completed')->count(), 0),
-            'total_contract_value'    => $this->safe(fn() => (float) \App\Models\Project::where('status', 'active')->sum('contract_value'), 0),
-            'total_budget_allocated'  => $this->safe(fn() => (float) \App\Models\Project::where('status', 'active')->sum('budget_allocated'), 0),
+            'active_projects'         => $this->safe(fn() => \App\Models\Project::whereNotIn('status', ['completed', 'finished', 'closed', 'cancelled', 'handover', 'archived'])->count(), 0),
+            'completed_projects'      => $this->safe(fn() => \App\Models\Project::whereIn('status', ['completed', 'finished', 'closed', 'handover'])->count(), 0),
+            'total_contract_value'    => $this->safe(fn() => (float) \App\Models\Project::whereNotIn('status', ['cancelled', 'archived'])->sum('contract_value'), 0),
+            'total_budget_allocated'  => $this->safe(fn() => (float) \App\Models\Project::whereNotIn('status', ['cancelled', 'archived'])->sum('budget_allocated'), 0),
 
             'total_employees'         => $this->safe(fn() => \App\Models\Employee::where('status', 'active')->count(), 0),
             'new_employees_month'     => $this->safe(fn() => \App\Models\Employee::where('status', 'active')->whereMonth('created_at', $now->month)->whereYear('created_at', $now->year)->count(), 0),
@@ -604,14 +824,18 @@ class DashboardController extends Controller
 
             'monthly_income'          => $monthlyIncome,
             'ytd_income'              => $ytdIncome,
+            'all_time_income'         => $allTimeIncome,
             'monthly_expenses'        => $monthlyExpenses,
             'ytd_expenses'            => $ytdExpenses,
+            'all_time_expenses'       => $allTimeExpenses,
             'net_cash_flow'           => ($monthlyIncome - $monthlyExpenses),
+            'all_time_net'            => ($allTimeIncome - $allTimeExpenses),
             'cash_bank_balance'       => $totalCashBankBalance,
 
             'inventory_value'         => $inventoryValue,
             'fixed_assets_value'      => $fixedAssetsValue,
             'fixed_assets_count'      => $fixedAssetsCount,
+            'fixed_assets_units'      => $fixedAssetsUnits,
 
             'total_users'             => $this->safe(fn() => User::count(), 0),
             'unassigned_roles_count'  => $unassignedUsers->count(),
@@ -629,7 +853,9 @@ class DashboardController extends Controller
             'pending_maintenance'     => $this->safe(fn() => \Illuminate\Support\Facades\Schema::hasTable('maintenance_requests') ? \App\Models\MaintenanceRequest::whereIn('status', ['pending', 'in_progress', 'reported', 'gm_review'])->count() : 0, 0),
             'open_issues'             => $this->safe(fn() => \Illuminate\Support\Facades\Schema::hasTable('issues') ? \App\Models\Issue::where('status', 'open')->count() : 0, 0),
 
-            'draft_letters'           => $this->safe(fn() => \Illuminate\Support\Facades\Schema::hasTable('letters') ? \App\Models\Letter::where('status', 'draft')->orWhereNull('ref_no')->count() : 0, 0),
+            'draft_letters'           => $this->safe(fn() => \Illuminate\Support\Facades\Schema::hasTable('letters') ? \App\Models\Letter::where(function($q) {
+                $q->where('status', 'draft')->orWhereNull('letter_number')->orWhere('letter_number', '');
+            })->count() : 0, 0),
             'incoming_letters'        => $this->safe(fn() => \Illuminate\Support\Facades\Schema::hasTable('letters') ? \App\Models\Letter::where('type', 'incoming')->count() : 0, 0),
             'outgoing_letters'        => $this->safe(fn() => \Illuminate\Support\Facades\Schema::hasTable('letters') ? \App\Models\Letter::where('type', 'outgoing')->count() : 0, 0),
             'total_vehicles'          => $this->safe(fn() => \Illuminate\Support\Facades\Schema::hasTable('vehicle_reminders') ? \App\Models\VehicleReminder::count() : 0, 0),
@@ -653,14 +879,14 @@ class DashboardController extends Controller
 
         // 6. Project Budgets (Active Projects Only - no closed/dead projects)
         $projectBudgets = $this->safe(fn() =>
-            Project::where('status', 'active')
+            Project::whereNotIn('status', ['completed', 'finished', 'closed', 'cancelled', 'handover', 'archived'])
                    ->withSum('budgets as budgeted_total', 'budgeted_amount')
                    ->withSum('budgets as actual_total', 'actual_amount')
                    ->take(6)->get(),
             collect()
         );
 
-        // 7. Full Project Expenses & Utilization (Active Projects Only: Cash + Daily Material Consumption)
+        // 7. Full Project Expenses & Utilization (Active Projects Only: Cash + Procurement + Daily Material Consumption)
         $latestPriceMap = $this->getLatestMaterialPriceMap();
         $projectExpenses = $this->safe(function () use ($latestPriceMap) {
             $usagesByProject = collect();
@@ -678,7 +904,7 @@ class DashboardController extends Controller
                     ->groupBy('project_id');
             }
 
-            return \App\Models\Project::where('projects.status', 'active')
+            return \App\Models\Project::whereNotIn('projects.status', ['completed', 'finished', 'closed', 'cancelled', 'handover', 'archived'])
                 ->select('projects.id', 'projects.name', 'projects.code',
                     'projects.contract_value', 'projects.budget_allocated', 'projects.status')
                 ->get()
@@ -686,6 +912,16 @@ class DashboardController extends Controller
                     $cashExpenses = (float) \App\Models\ExpenseRequest::where('project_id', $project->id)
                         ->whereIn('status', [\App\Models\ExpenseRequest::STATUS_PAID, 'approved', 'assigned', 'reviewed'])
                         ->sum('amount');
+
+                    if (\Illuminate\Support\Facades\Schema::hasTable('expenses')) {
+                        $cashExpenses += (float) \App\Models\Expense::where('project_id', $project->id)->sum('amount');
+                    }
+
+                    if (\Illuminate\Support\Facades\Schema::hasTable('procurement_payments')) {
+                        $cashExpenses += (float) \App\Models\ProcurementPayment::where('status', 'paid')
+                            ->whereHas('purchaseRequest', fn($pq) => $pq->where('project_id', $project->id))
+                            ->sum('amount');
+                    }
 
                     $projectItems = $usagesByProject->get($project->id, collect());
                     $materialCost = (float) $projectItems->sum(function ($item) use ($latestPriceMap) {
@@ -744,18 +980,35 @@ class DashboardController extends Controller
                 $exp = (float) \Illuminate\Support\Facades\DB::table('expenses')
                     ->whereMonth('expense_date', $monthDate->month)
                     ->whereYear('expense_date', $monthDate->year)
-                    ->sum('amount')
-                    + (float) \App\Models\ExpenseRequest::where('status', \App\Models\ExpenseRequest::STATUS_PAID)
-                    ->where(function($q) use ($monthDate) {
-                        $q->where(function($sq) use ($monthDate) {
-                            $sq->whereNotNull('paid_at')->whereMonth('paid_at', $monthDate->month)->whereYear('paid_at', $monthDate->year);
-                        })->orWhere(function($sq) use ($monthDate) {
-                            $sq->whereNull('paid_at')->whereMonth('updated_at', $monthDate->month)->whereYear('updated_at', $monthDate->year);
-                        })->orWhere(function($sq) use ($monthDate) {
-                            $sq->whereNull('paid_at')->whereMonth('created_at', $monthDate->month)->whereYear('created_at', $monthDate->year);
-                        });
-                    })
                     ->sum('amount');
+
+                if (\Illuminate\Support\Facades\Schema::hasTable('expense_requests')) {
+                    $exp += (float) \App\Models\ExpenseRequest::where('status', \App\Models\ExpenseRequest::STATUS_PAID)
+                        ->where(function($q) use ($monthDate) {
+                            $q->where(function($sq) use ($monthDate) {
+                                $sq->whereNotNull('paid_at')->whereMonth('paid_at', $monthDate->month)->whereYear('paid_at', $monthDate->year);
+                            })->orWhere(function($sq) use ($monthDate) {
+                                $sq->whereNull('paid_at')->whereMonth('updated_at', $monthDate->month)->whereYear('updated_at', $monthDate->year);
+                            })->orWhere(function($sq) use ($monthDate) {
+                                $sq->whereNull('paid_at')->whereMonth('created_at', $monthDate->month)->whereYear('created_at', $monthDate->year);
+                            });
+                        })
+                        ->sum('amount');
+                }
+
+                if (\Illuminate\Support\Facades\Schema::hasTable('procurement_payments')) {
+                    $exp += (float) \App\Models\ProcurementPayment::where('status', 'paid')
+                        ->where(function($q) use ($monthDate) {
+                            $q->where(function($sq) use ($monthDate) {
+                                $sq->whereNotNull('paid_at')->whereMonth('paid_at', $monthDate->month)->whereYear('paid_at', $monthDate->year);
+                            })->orWhere(function($sq) use ($monthDate) {
+                                $sq->whereNull('paid_at')->whereMonth('updated_at', $monthDate->month)->whereYear('updated_at', $monthDate->year);
+                            })->orWhere(function($sq) use ($monthDate) {
+                                $sq->whereNull('paid_at')->whereMonth('created_at', $monthDate->month)->whereYear('created_at', $monthDate->year);
+                            });
+                        })
+                        ->sum('amount');
+                }
 
                 $incomes[] = round($inc, 2);
                 $expenses[] = round($exp, 2);
@@ -765,12 +1018,49 @@ class DashboardController extends Controller
 
         // 9. Real Expense Category Breakdown
         $expenseCategories = $this->safe(function() {
-            return \Illuminate\Support\Facades\DB::table('expenses')
-                ->select('category', \Illuminate\Support\Facades\DB::raw('SUM(amount) as total'))
-                ->groupBy('category')
-                ->orderByDesc('total')
-                ->take(6)
-                ->get();
+            $catMap = [];
+
+            if (\Illuminate\Support\Facades\Schema::hasTable('expenses')) {
+                $dirExp = \Illuminate\Support\Facades\DB::table('expenses')
+                    ->select('category', \Illuminate\Support\Facades\DB::raw('SUM(amount) as total'))
+                    ->groupBy('category')
+                    ->get();
+                foreach ($dirExp as $row) {
+                    $c = trim($row->category ?: 'General');
+                    $catMap[$c] = ($catMap[$c] ?? 0.0) + (float)$row->total;
+                }
+            }
+
+            if (\Illuminate\Support\Facades\Schema::hasTable('expense_requests')) {
+                $reqExp = \Illuminate\Support\Facades\DB::table('expense_requests')
+                    ->where('status', \App\Models\ExpenseRequest::STATUS_PAID)
+                    ->select('category', \Illuminate\Support\Facades\DB::raw('SUM(amount) as total'))
+                    ->groupBy('category')
+                    ->get();
+                foreach ($reqExp as $row) {
+                    $c = trim($row->category ?: 'Operational');
+                    $catMap[$c] = ($catMap[$c] ?? 0.0) + (float)$row->total;
+                }
+            }
+
+            if (\Illuminate\Support\Facades\Schema::hasTable('procurement_payments')) {
+                $procTotal = (float) \App\Models\ProcurementPayment::where('status', 'paid')->sum('amount');
+                if ($procTotal > 0) {
+                    $catMap['Procurement & Materials'] = ($catMap['Procurement & Materials'] ?? 0.0) + $procTotal;
+                }
+            }
+
+            arsort($catMap);
+            $topCategories = collect();
+            foreach (array_slice($catMap, 0, 6, true) as $catName => $totalAmt) {
+                if ($totalAmt > 0) {
+                    $topCategories->push((object)[
+                        'category' => $catName,
+                        'total'    => round($totalAmt, 2),
+                    ]);
+                }
+            }
+            return $topCategories;
         }, collect());
 
         // 10. Low Stock Store Items
@@ -780,8 +1070,18 @@ class DashboardController extends Controller
                     ->join('products', 'inventory.product_id', '=', 'products.id')
                     ->join('stores', 'inventory.store_id', '=', 'stores.id')
                     ->whereNull('products.deleted_at')
-                    ->where('inventory.quantity_on_hand', '<=', 5)
-                    ->select('inventory.id', 'products.name as product_name', 'products.item_code', 'stores.name as store_name', 'inventory.quantity_on_hand', 'products.unit_of_measure')
+                    ->where(function($q) {
+                        $q->where('inventory.quantity_on_hand', '<=', 5)
+                          ->orWhereRaw('inventory.quantity_on_hand <= COALESCE(NULLIF(products.reorder_level, 0), 5)');
+                    })
+                    ->select(
+                        'inventory.id',
+                        'products.name as product_name',
+                        \Illuminate\Support\Facades\DB::raw("COALESCE(products.sku, 'MAT') as item_code"),
+                        'stores.name as store_name',
+                        'inventory.quantity_on_hand',
+                        \Illuminate\Support\Facades\DB::raw("COALESCE(products.unit, 'pcs') as unit_of_measure")
+                    )
                     ->orderBy('inventory.quantity_on_hand')
                     ->take(6)
                     ->get();
@@ -821,7 +1121,7 @@ class DashboardController extends Controller
                     ->where('status', 'open')
                     ->where(function($q) {
                         $q->whereDoesntHave('project')
-                          ->orWhereHas('project', fn($pq) => $pq->where('status', 'active'));
+                          ->orWhereHas('project', fn($pq) => $pq->whereNotIn('status', ['completed', 'finished', 'closed', 'cancelled', 'handover', 'archived']));
                     })
                     ->latest()
                     ->take(5)
@@ -835,7 +1135,7 @@ class DashboardController extends Controller
             if (\Illuminate\Support\Facades\Schema::hasTable('letters')) {
                 return \App\Models\Letter::with(['creator', 'latestRecipient.toUser'])
                     ->latest('id')
-                    ->take(5)
+                    ->take(6)
                     ->get();
             }
             return collect();
@@ -905,7 +1205,9 @@ class DashboardController extends Controller
             'recentIssues',
             'recentLetters',
             'systemDiagnostics',
-            'totalUrgentActions'
+            'totalUrgentActions',
+            'allTimeIncome',
+            'allTimeExpenses'
         ));
     }
 

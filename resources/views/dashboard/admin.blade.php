@@ -301,7 +301,11 @@
                             </div>
                             <div class="h4 mb-0 fw-bold text-dark">{{ number_format($kpi['monthly_income'] ?? 0, 2) }} ETB</div>
                             <small class="text-muted">
-                                YTD Total: <strong class="text-primary">{{ number_format($kpi['ytd_income'] ?? 0, 2) }} ETB</strong>
+                                @if(($period ?? '') === 'all')
+                                    All-Time Inflow: <strong class="text-primary">{{ number_format($kpi['all_time_income'] ?? ($kpi['monthly_income'] ?? 0), 2) }} ETB</strong>
+                                @else
+                                    YTD: <strong class="text-primary">{{ number_format($kpi['ytd_income'] ?? 0, 2) }} ETB</strong> • All-Time: <strong>{{ number_format($kpi['all_time_income'] ?? 0, 2) }} ETB</strong>
+                                @endif
                             </small>
                         </div>
                         <div class="rounded-circle p-3 d-flex align-items-center justify-content-center" style="background: rgba(59,130,246,0.12); width:50px; height:50px;">
@@ -327,7 +331,11 @@
                             </div>
                             <div class="h4 mb-0 fw-bold text-dark">{{ number_format($kpi['monthly_expenses'] ?? 0, 2) }} ETB</div>
                             <small class="text-muted">
-                                YTD Total: <strong class="text-danger">{{ number_format($kpi['ytd_expenses'] ?? 0, 2) }} ETB</strong>
+                                @if(($period ?? '') === 'all')
+                                    All-Time Outflow: <strong class="text-danger">{{ number_format($kpi['all_time_expenses'] ?? ($kpi['monthly_expenses'] ?? 0), 2) }} ETB</strong>
+                                @else
+                                    YTD: <strong class="text-danger">{{ number_format($kpi['ytd_expenses'] ?? 0, 2) }} ETB</strong> • All-Time: <strong>{{ number_format($kpi['all_time_expenses'] ?? 0, 2) }} ETB</strong>
+                                @endif
                             </small>
                         </div>
                         <div class="rounded-circle p-3 d-flex align-items-center justify-content-center" style="background: rgba(239,68,68,0.12); width:50px; height:50px;">
@@ -356,7 +364,11 @@
                                 {{ $netCash >= 0 ? '+' : '' }}{{ number_format($netCash, 2) }} ETB
                             </div>
                             <small class="text-muted">
-                                {{ $netCash >= 0 ? 'Operating Surplus' : 'Operating Deficit' }} ({{ $periodLabel ?? 'Current Scope' }})
+                                @if(($period ?? '') === 'all')
+                                    {{ $netCash >= 0 ? 'Operating Surplus' : 'Operating Deficit' }} (All-Time Net Position)
+                                @else
+                                    YTD Net: <strong>{{ number_format(($kpi['ytd_income'] ?? 0) - ($kpi['ytd_expenses'] ?? 0), 2) }} ETB</strong>
+                                @endif
                             </small>
                         </div>
                         <div class="rounded-circle p-3 d-flex align-items-center justify-content-center" style="background: {{ $netCash >= 0 ? 'rgba(5,150,105,0.12)' : 'rgba(220,38,38,0.12)' }}; width:50px; height:50px;">
@@ -379,7 +391,7 @@
          ══════════════════════════════════════════════════════════════════════════ --}}
     <div class="row g-3 mb-4">
         {{-- Active Construction Projects --}}
-        <div class="col-xl-3 col-md-6">
+        <div class="col-xl col-md-6">
             <div class="card border-0 shadow-sm h-100 position-relative overflow-hidden" style="border-left: 4px solid #3b82f6 !important; border-radius: 12px;">
                 <div class="card-body p-3">
                     <div class="d-flex align-items-center justify-content-between">
@@ -401,7 +413,7 @@
         </div>
 
         {{-- Store Inventory Valuation & TR Status --}}
-        <div class="col-xl-3 col-md-6">
+        <div class="col-xl col-md-6">
             <div class="card border-0 shadow-sm h-100 position-relative overflow-hidden" style="border-left: 4px solid #06b6d4 !important; border-radius: 12px;">
                 <div class="card-body p-3">
                     <div class="d-flex align-items-center justify-content-between">
@@ -424,8 +436,32 @@
             </div>
         </div>
 
+        {{-- Fixed Assets & Equipment Valuation --}}
+        <div class="col-xl col-md-6">
+            <div class="card border-0 shadow-sm h-100 position-relative overflow-hidden" style="border-left: 4px solid #8b5cf6 !important; border-radius: 12px;">
+                <div class="card-body p-3">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div>
+                            <div class="text-xs fw-bold text-muted text-uppercase mb-1" style="font-size:0.72rem;">Fixed Assets &amp; Equipment</div>
+                            <div class="h4 mb-0 fw-bold text-dark">{{ number_format($kpi['fixed_assets_value'] ?? 0, 2) }} ETB</div>
+                            <small class="text-muted">
+                                <strong>{{ $kpi['fixed_assets_count'] ?? 0 }} Assets</strong> ({{ $kpi['fixed_assets_units'] ?? 0 }} Units)
+                            </small>
+                        </div>
+                        <div class="rounded-circle p-3 d-flex align-items-center justify-content-center" style="background: rgba(139,92,246,0.12); width:46px; height:46px;">
+                            <i class="fa-solid fa-truck-pickup fa-lg" style="color: #8b5cf6;"></i>
+                        </div>
+                    </div>
+                    <div class="mt-2 pt-2 border-top d-flex justify-content-between align-items-center">
+                        <a href="{{ route('fixed-assets.index') }}" class="small text-decoration-none fw-semibold" style="color:#7c3aed;">Asset Ledger <i class="fa-solid fa-arrow-right ms-1"></i></a>
+                        <span class="badge rounded-pill px-2 py-0" style="background: rgba(139,92,246,0.1); color:#7c3aed; font-size:0.68rem;">Capital Assets</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         {{-- Total Active Workforce & Live Attendance --}}
-        <div class="col-xl-3 col-md-6">
+        <div class="col-xl col-md-6">
             <div class="card border-0 shadow-sm h-100 position-relative overflow-hidden" style="border-left: 4px solid #10b981 !important; border-radius: 12px;">
                 <div class="card-body p-3">
                     <div class="d-flex align-items-center justify-content-between">
@@ -449,7 +485,7 @@
         </div>
 
         {{-- System Users & Security --}}
-        <div class="col-xl-3 col-md-6">
+        <div class="col-xl col-md-6">
             <div class="card border-0 shadow-sm h-100 position-relative overflow-hidden" style="border-left: 4px solid #64748b !important; border-radius: 12px;">
                 <div class="card-body p-3">
                     <div class="d-flex align-items-center justify-content-between">
@@ -1092,7 +1128,7 @@
                                             $prAmount = (float)($pr->direct_buy_amount ?: $pr->items->sum('estimated_total'));
                                         @endphp
                                         <tr>
-                                            <td class="fw-bold font-monospace text-primary">{{ $pr->request_number ?? ('PR-#' . $pr->id) }}</td>
+                                            <td class="fw-bold font-monospace text-primary">{{ $pr->pr_no ?? ($pr->request_number ?? ('PR-#' . $pr->id)) }}</td>
                                             <td>{{ $pr->project->name ?? 'General / Head Office' }}</td>
                                             <td>{{ $pr->requestedBy->name ?? 'Staff' }}</td>
                                             <td>
@@ -1137,7 +1173,7 @@
                                 <tbody>
                                     @foreach($pendingGmExpenses as $exp)
                                         <tr>
-                                            <td class="fw-bold font-monospace text-warning">{{ $exp->request_code ?? ('EXP-#' . $exp->id) }}</td>
+                                            <td class="fw-bold font-monospace text-warning">{{ $exp->request_number ?? ($exp->request_code ?? ('EXP-#' . $exp->id)) }}</td>
                                             <td>{{ $exp->project->name ?? 'Company General' }}</td>
                                             <td>{{ $exp->requester->name ?? ($exp->user->name ?? 'Staff') }}</td>
                                             <td>
@@ -1480,7 +1516,7 @@
                                             {{ $letter->subject ?? 'Official Letter' }}
                                         </div>
                                         <small class="text-muted">
-                                            Ref: <strong class="font-monospace">{{ $letter->ref_no ?? 'Unregistered Draft' }}</strong> • {{ $letter->created_at->diffForHumans() }}
+                                            Ref: <strong class="font-monospace">{{ $letter->letter_number ?? ($letter->ref_no ?? 'Unregistered Draft') }}</strong> • {{ $letter->created_at->diffForHumans() }}
                                         </small>
                                     </div>
                                     <a href="{{ route('letters.show', $letter->id) }}" class="btn btn-sm btn-outline-secondary py-0 px-2 text-xs">
