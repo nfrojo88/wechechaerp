@@ -484,7 +484,6 @@
 @endif
 
 @if($isGlobalAdmin)
-@if($isGlobalAdmin)
 <!-- Modal: Merge Material Requests into this MR (General Admin Only) -->
 <div class="modal fade" id="adminMergeMrModal" tabindex="-1" aria-labelledby="adminMergeMrModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered">

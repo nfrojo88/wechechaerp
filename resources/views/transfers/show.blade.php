@@ -38,6 +38,7 @@
             </div>
             <span class="badge bg-white text-info border border-info px-3 py-2 fw-semibold"><i class="fa-solid fa-lock me-1"></i>Read-Only</span>
         </div>
+    @endif
     @php
         $isDeducted = $transfer->isDeductedFromOrigin();
         $isAdded = $transfer->isAddedToDestination();
