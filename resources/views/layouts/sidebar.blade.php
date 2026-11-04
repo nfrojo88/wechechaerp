@@ -943,73 +943,73 @@
                 @endif
             </a>
         </li>
+
+        {{-- NEW Store & Inventory Audit Module (Strictly Read-Only) --}}
+        <hr class="sidebar-section-divider">
+        <li style="padding: 0.35rem 0.9rem 0.1rem;">
+            <small style="color:#64748b; font-size:0.68rem; text-transform:uppercase; letter-spacing:0.06em; font-weight:700;">
+                Store Audit (Read-Only)
+            </small>
+        </li>
         <li class="sidebar-nav-item">
-            <a href="{{ \Illuminate\Support\Facades\Route::has('audit.expense-receipts.index') ? route('audit.expense-receipts.index') : url('/audit/expense-receipts') }}" class="sidebar-nav-link {{ request()->routeIs('audit.expense-receipts.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-receipt text-warning"></i>
-                <span>Expense Receipt Audit</span>
+            <a href="{{ route('audit.inventory') }}" class="sidebar-nav-link {{ request()->routeIs('audit.inventory*') ? 'active' : '' }}">
+                <i class="fa-solid fa-warehouse text-info"></i>
+                <span>Inventory Overview</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('audit.stock-movements') }}" class="sidebar-nav-link {{ request()->routeIs('audit.stock-movements*') ? 'active' : '' }}">
+                <i class="fa-solid fa-arrows-split-up-and-left text-success"></i>
+                <span>Stock Movement Ledger</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('audit.daily-usage') }}" class="sidebar-nav-link {{ request()->routeIs('audit.daily-usage*') ? 'active' : '' }}">
+                <i class="fa-solid fa-clipboard-list text-primary"></i>
+                <span>Daily Usage Audit</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('audit.transfers') }}" class="sidebar-nav-link {{ request()->routeIs('audit.transfers*') ? 'active' : '' }}">
+                <i class="fa-solid fa-truck-moving text-warning"></i>
+                <span>Material Transfers Audit</span>
                 @php
-                    $audMissingReceiptCount = 0;
+                    $audOverdueTransfers = 0;
                     try {
-                        if (\Illuminate\Support\Facades\Schema::hasTable('expense_requests')) {
-                            $audMissingReceiptCount = \App\Models\ExpenseRequest::whereNull('attachment')
-                                ->where('status', \App\Models\ExpenseRequest::STATUS_PAID)
-                                ->where(function ($q) {
-                                    $q->whereNull('audit_receipt_status')
-                                      ->orWhereNotIn('audit_receipt_status', ['verified_no_receipt', 'verified']);
-                                })
-                                ->count();
-                        }
+                        $audOverdueTransfers = \App\Models\Transfer::where('status', \App\Models\Transfer::STATUS_IN_TRANSIT)
+                            ->whereNotNull('dispatched_at')
+                            ->where('dispatched_at', '<=', now()->subHours(48))
+                            ->count();
                     } catch (\Throwable $e) {}
                 @endphp
-                @if($audMissingReceiptCount > 0)
-                    <span class="badge bg-danger rounded-pill ms-auto">{{ $audMissingReceiptCount }}</span>
+                @if($audOverdueTransfers > 0)
+                    <span class="badge bg-danger rounded-pill ms-auto" title="In-transit > 48 hours">{{ $audOverdueTransfers }}</span>
                 @endif
             </a>
         </li>
         <li class="sidebar-nav-item">
-            <a href="{{ route('expenses.index') }}" class="sidebar-nav-link {{ request()->routeIs('expenses.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-file-invoice-dollar text-success"></i>
-                <span>Expense Audit &amp; Tracking</span>
+            <a href="{{ route('audit.fulfillment') }}" class="sidebar-nav-link {{ request()->routeIs('audit.fulfillment*') ? 'active' : '' }}">
+                <i class="fa-solid fa-boxes-packing text-danger"></i>
+                <span>Intake Fulfillment Check</span>
             </a>
         </li>
         <li class="sidebar-nav-item">
-            <a href="{{ route('procurement.my-queue') }}" class="sidebar-nav-link {{ request()->routeIs('procurement.*') || request()->routeIs('purchase-requests.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-boxes-packing text-primary"></i>
-                <span>Procurement Status (Read-Only)</span>
+            <a href="{{ route('audit.findings.index') }}" class="sidebar-nav-link {{ request()->routeIs('audit.findings*') ? 'active' : '' }}">
+                <i class="fa-solid fa-clipboard-question text-secondary"></i>
+                <span>Audit Findings &amp; Queries</span>
+                @php
+                    $audOpenFindingsCount = 0;
+                    try {
+                        $audOpenFindingsCount = \App\Models\AuditFinding::open()->count();
+                    } catch (\Throwable $e) {}
+                @endphp
+                @if($audOpenFindingsCount > 0)
+                    <span class="badge bg-warning text-dark rounded-pill ms-auto">{{ $audOpenFindingsCount }}</span>
+                @endif
             </a>
         </li>
-        <li class="sidebar-nav-item">
-            <a href="{{ route('store-manager.transfers.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.transfers.*') || request()->routeIs('transfers.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-truck-moving text-warning"></i>
-                <span>Store Transfers (Read-Only)</span>
-            </a>
-        </li>
-        <li class="sidebar-nav-item">
-            <a href="{{ route('finance.tax-deductions.index') }}" class="sidebar-nav-link {{ request()->routeIs('finance.tax-deductions.index') ? 'active' : '' }}">
-                <i class="fa-solid fa-receipt text-danger"></i>
-                <span>VAT &amp; Withholding Tax</span>
-            </a>
-        </li>
-        <li class="sidebar-nav-item">
-            <a href="{{ route('finance.expense-hub.index') }}" class="sidebar-nav-link {{ request()->routeIs('finance.expense-hub.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-calculator text-primary"></i>
-                <span>Expense Hub &amp; VAT</span>
-            </a>
-        </li>
-        <li class="sidebar-nav-item">
-            <a href="{{ route('finance.tax-deductions.movements') }}" class="sidebar-nav-link {{ request()->routeIs('finance.tax-deductions.movements') || request()->routeIs('finance.tax-movements') ? 'active' : '' }}">
-                <i class="fa-solid fa-scale-balanced text-primary"></i>
-                <span>Financial Movements &amp; Audit</span>
-            </a>
-        </li>
-        @if(auth()->check() && auth()->user()->hasAnyPermission(['manage-receipts','view-receipts']))
-        <li class="sidebar-nav-item">
-            <a href="{{ route('receipts.index') }}" class="sidebar-nav-link {{ request()->routeIs('receipts.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-magnifying-glass text-warning"></i>
-                <span>Receipt Analyzer</span>
-            </a>
-        </li>
-        @endif
+
+        <hr class="sidebar-section-divider">
         <li class="sidebar-nav-item">
             <a href="{{ route('leave-requests.create') }}" class="sidebar-nav-link {{ request()->routeIs('leave-requests.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-calendar-plus text-info"></i>

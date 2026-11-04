@@ -14,6 +14,18 @@ class ReceiptController extends Controller
     public function __construct()
     {
         $this->middleware('auth');
+        $this->middleware(function ($request, $next) {
+            $user = Auth::user();
+            if ($user && method_exists($user, 'hasAnyRole')) {
+                $isAuditor = $user->hasAnyRole(['auditor', 'Auditor', 'audit', 'audit_team', 'internal_auditor']);
+                $isAdmin = $user->hasAnyRole(['admin', 'global_admin', 'super_admin', 'Admin', 'Global Admin'])
+                    || (method_exists($user, 'isGlobalAdmin') && $user->isGlobalAdmin());
+                if ($isAuditor && !$isAdmin) {
+                    abort(403, 'Access denied. Receipt Analyzer is restricted for audit roles.');
+                }
+            }
+            return $next($request);
+        });
     }
 
     // ── Index ─────────────────────────────────────────────────────────────

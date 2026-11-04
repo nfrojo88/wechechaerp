@@ -2284,6 +2284,22 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/audit/expense-receipts/verify-no-receipt', [App\Http\Controllers\Audit\ExpenseReceiptAuditController::class, 'verifyWithoutReceipt'])->name('audit.expense-receipts.verify-no-receipt');
     Route::post('/audit/expense-receipts/link-project', [App\Http\Controllers\Audit\ExpenseReceiptAuditController::class, 'linkProject'])->name('audit.expense-receipts.link-project');
 
+    // ─── Store & Inventory Audit Module (Strictly Read-Only) ────────────────────
+    Route::prefix('audit')->name('audit.')->group(function () {
+        Route::get('inventory',                           [App\Http\Controllers\Audit\StoreAuditController::class, 'inventoryOverview'])->name('inventory');
+        Route::get('stock-movements',                     [App\Http\Controllers\Audit\StoreAuditController::class, 'stockMovements'])->name('stock-movements');
+        Route::get('daily-usage',                         [App\Http\Controllers\Audit\StoreAuditController::class, 'dailyUsage'])->name('daily-usage');
+        Route::get('transfers',                           [App\Http\Controllers\Audit\StoreAuditController::class, 'transferAudit'])->name('transfers');
+        Route::get('fulfillment',                         [App\Http\Controllers\Audit\StoreAuditController::class, 'fulfillmentCheck'])->name('fulfillment');
+        Route::get('fulfillment/{id}/details',            [App\Http\Controllers\Audit\StoreAuditController::class, 'fulfillmentDetails'])->name('fulfillment.details');
+        Route::get('findings',                            [App\Http\Controllers\Audit\StoreAuditController::class, 'findingsIndex'])->name('findings.index');
+        Route::post('findings',                           [App\Http\Controllers\Audit\StoreAuditController::class, 'storeFinding'])->name('findings.store');
+        Route::get('findings/{id}',                       [App\Http\Controllers\Audit\StoreAuditController::class, 'showFinding'])->name('findings.show');
+        Route::post('findings/{id}/respond',              [App\Http\Controllers\Audit\StoreAuditController::class, 'respondFinding'])->name('findings.respond');
+        Route::post('findings/{id}/resolve',              [App\Http\Controllers\Audit\StoreAuditController::class, 'resolveFinding'])->name('findings.resolve');
+        Route::post('findings/check-escalations',         [App\Http\Controllers\Audit\StoreAuditController::class, 'checkEscalations'])->name('findings.check-escalations');
+    });
+
 
 
     Route::delete('manpower-assignment/{manpowerAssignment}', [App\Http\Controllers\ManpowerForecastController::class, 'removeAssignment'])->name('manpower-assignment.remove');

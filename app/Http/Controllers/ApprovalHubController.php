@@ -21,8 +21,20 @@ class ApprovalHubController extends Controller
 {
     public function index(Request $request)
     {
-        $items = new Collection();
         $user = Auth::user();
+
+        if ($user && method_exists($user, 'hasAnyRole')) {
+            $isAuditor = $user->hasAnyRole(['auditor', 'Auditor', 'audit', 'audit_team', 'internal_auditor']);
+            $isAdminOrApprover = $user->hasAnyRole([
+                'admin', 'global_admin', 'super_admin', 'Admin', 'Global Admin',
+                'finance_head', 'finance', 'gm', 'general_manager', 'hr_manager', 'hr'
+            ]) || (method_exists($user, 'isGlobalAdmin') && $user->isGlobalAdmin());
+            if ($isAuditor && !$isAdminOrApprover) {
+                abort(403, 'Access denied. Approval Hub is restricted for audit roles.');
+            }
+        }
+
+        $items = new Collection();
 
         // 1. Fetch Expense Requests (Employee "Ask Money" Requests)
         // Exclude expense requests linked to Purchase Requests, which are tracked natively in Section 5

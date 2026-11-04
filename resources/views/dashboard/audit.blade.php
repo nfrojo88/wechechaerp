@@ -51,98 +51,115 @@
     >
         <x-slot name="actions">
             <div class="d-flex gap-2 flex-wrap align-items-center">
-                <a href="{{ route('expense-requests.index') }}" class="btn btn-outline-success btn-sm rounded-pill px-3 shadow-xs fw-semibold" style="min-height: 38px; display: inline-flex; align-items: center;">
-                    <i class="fa-solid fa-hand-holding-dollar me-1"></i> Ask Money
+                <a href="{{ route('finance.replenishments.index', ['tab' => 'under_audit']) }}" class="btn btn-warning text-dark btn-sm rounded-pill px-3 shadow-xs fw-bold" style="min-height: 38px; display: inline-flex; align-items: center;">
+                    <i class="fa-solid fa-hand-holding-dollar me-1"></i> Petty Cash Clearance ({{ $kpi['under_audit_count'] }})
                 </a>
-                <a href="{{ route('leave-requests.create') }}" class="btn btn-outline-info btn-sm rounded-pill px-3 shadow-xs fw-semibold" style="min-height: 38px; display: inline-flex; align-items: center;">
-                    <i class="fa-solid fa-calendar-plus me-1"></i> Ask Leave
+                <a href="{{ route('audit.fulfillment', ['tab' => 'paid_not_received']) }}" class="btn btn-danger btn-sm rounded-pill px-3 shadow-xs fw-bold" style="min-height: 38px; display: inline-flex; align-items: center;">
+                    <i class="fa-solid fa-triangle-exclamation me-1"></i> Paid Not Received ({{ $storeAuditKpi['paid_not_received_count'] }})
                 </a>
-                <a href="{{ route('finance.replenishments.index') }}" class="btn btn-warning text-dark btn-sm rounded-pill px-3 shadow-xs fw-bold" style="min-height: 38px; display: inline-flex; align-items: center;">
-                    <i class="fa-solid fa-hand-holding-dollar me-1"></i> Petty Cash Approvals
-                </a>
-                <a href="{{ route('admin.activity-logs') }}" class="btn btn-outline-primary btn-sm rounded-pill px-3 shadow-xs" style="min-height: 38px; display: inline-flex; align-items: center;">
-                    <i class="fa-solid fa-list-ol me-1"></i> Full Activity Trail
+                <a href="{{ route('audit.findings.index') }}" class="btn btn-primary btn-sm rounded-pill px-3 shadow-xs fw-semibold" style="min-height: 38px; display: inline-flex; align-items: center;">
+                    <i class="fa-solid fa-clipboard-question me-1"></i> Audit Findings ({{ $storeAuditKpi['open_findings_count'] }})
                 </a>
             </div>
         </x-slot>
     </x-page-header>
 
-    <!-- Quick Employee Self-Service & Navigation Bar -->
+    <!-- Store & Financial Audit Quick Navigation Bar -->
     <div class="card border-0 shadow-sm rounded-3 mb-4 bg-white">
         <div class="card-body p-3">
             <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
                 <div class="d-flex align-items-center gap-2">
                     <span class="badge bg-primary-subtle text-primary fw-bold px-2.5 py-1.5 rounded-3">
-                        <i class="fa-solid fa-user-check me-1"></i> Employee &amp; Audit Quick Actions
+                        <i class="fa-solid fa-shield-halved me-1"></i> Audit Modules
                     </span>
-                    <small class="text-muted d-none d-md-inline">Direct access to staff requests and financial audits</small>
+                    <small class="text-muted d-none d-md-inline">Internal audit workspaces and stock controls</small>
                 </div>
                 <div class="d-flex flex-wrap gap-2">
-                    <a href="{{ route('expense-requests.index') }}" class="btn btn-light border btn-sm rounded-pill px-3 text-dark fw-semibold" style="min-height: 34px; display: inline-flex; align-items: center;">
-                        <i class="fa-solid fa-wallet text-success me-1"></i> Ask Money (Expenses)
+                    <a href="{{ route('finance.replenishments.index', ['tab' => 'under_audit']) }}" class="btn btn-light border btn-sm rounded-pill px-3 text-dark fw-semibold" style="min-height: 34px; display: inline-flex; align-items: center;">
+                        <i class="fa-solid fa-hand-holding-dollar text-warning me-1"></i> Petty Cash Audit
                     </a>
-                    <a href="{{ route('leave-requests.create') }}" class="btn btn-light border btn-sm rounded-pill px-3 text-dark fw-semibold" style="min-height: 34px; display: inline-flex; align-items: center;">
-                        <i class="fa-solid fa-calendar-check text-info me-1"></i> Request Leave
+                    <a href="{{ route('audit.inventory') }}" class="btn btn-light border btn-sm rounded-pill px-3 text-dark fw-semibold" style="min-height: 34px; display: inline-flex; align-items: center;">
+                        <i class="fa-solid fa-warehouse text-info me-1"></i> Inventory Overview
                     </a>
-                    <a href="{{ route('letters.index') }}" class="btn btn-light border btn-sm rounded-pill px-3 text-dark fw-semibold" style="min-height: 34px; display: inline-flex; align-items: center;">
-                        <i class="fa-solid fa-envelope text-primary me-1"></i> Letters
+                    <a href="{{ route('audit.stock-movements') }}" class="btn btn-light border btn-sm rounded-pill px-3 text-dark fw-semibold" style="min-height: 34px; display: inline-flex; align-items: center;">
+                        <i class="fa-solid fa-arrows-split-up-and-left text-success me-1"></i> Movement Ledger
                     </a>
-                    <a href="{{ route('expenses.index') }}" class="btn btn-light border btn-sm rounded-pill px-3 text-dark fw-semibold" style="min-height: 34px; display: inline-flex; align-items: center;">
-                        <i class="fa-solid fa-file-invoice text-danger me-1"></i> Expense Audit Hub
+                    <a href="{{ route('audit.daily-usage') }}" class="btn btn-light border btn-sm rounded-pill px-3 text-dark fw-semibold" style="min-height: 34px; display: inline-flex; align-items: center;">
+                        <i class="fa-solid fa-clipboard-list text-primary me-1"></i> Daily Usage
                     </a>
-                    <a href="{{ route('procurement.my-queue') }}" class="btn btn-light border btn-sm rounded-pill px-3 text-dark fw-semibold" style="min-height: 34px; display: inline-flex; align-items: center;">
-                        <i class="fa-solid fa-boxes-packing text-primary me-1"></i> Procurement Status
+                    <a href="{{ route('audit.transfers') }}" class="btn btn-light border btn-sm rounded-pill px-3 text-dark fw-semibold" style="min-height: 34px; display: inline-flex; align-items: center;">
+                        <i class="fa-solid fa-truck-moving text-warning me-1"></i> Transfers
                     </a>
-                    <a href="{{ route('store-manager.transfers.index') }}" class="btn btn-light border btn-sm rounded-pill px-3 text-dark fw-semibold" style="min-height: 34px; display: inline-flex; align-items: center;">
-                        <i class="fa-solid fa-truck-moving text-warning me-1"></i> Store Transfers
+                    <a href="{{ route('audit.fulfillment') }}" class="btn btn-light border btn-sm rounded-pill px-3 text-dark fw-bold" style="min-height: 34px; display: inline-flex; align-items: center;">
+                        <i class="fa-solid fa-boxes-packing text-danger me-1"></i> Intake Fulfillment
                     </a>
-                    <a href="{{ route('coa.index') }}" class="btn btn-light border btn-sm rounded-pill px-3 text-dark fw-semibold" style="min-height: 34px; display: inline-flex; align-items: center;">
-                        <i class="fa-solid fa-sitemap text-secondary me-1"></i> COA Ledger
+                    <a href="{{ route('audit.findings.index') }}" class="btn btn-light border btn-sm rounded-pill px-3 text-dark fw-semibold" style="min-height: 34px; display: inline-flex; align-items: center;">
+                        <i class="fa-solid fa-clipboard-question text-secondary me-1"></i> Queries &amp; Findings
                     </a>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- KPI Summary Row -->
+    <!-- Store & Petty Cash Audit KPI Row -->
     <div class="row g-3 mb-4">
-        <div class="col-12 col-sm-6 col-xl-3">
+        <div class="col-12 col-sm-6 col-xl-2">
             <x-kpi-card
-                title="Under Audit Review"
+                title="Replenishments Under Audit"
                 :value="$kpi['under_audit_count'] . ' Cycles'"
                 :subtitle="'ETB ' . number_format($kpi['under_audit_amount'], 2)"
-                icon="fa-solid fa-shield-halved"
+                icon="fa-solid fa-hand-holding-dollar"
+                tone="warning"
+            />
+        </div>
+
+        <div class="col-12 col-sm-6 col-xl-2">
+            <x-kpi-card
+                title="Unfulfilled Materials"
+                :value="$storeAuditKpi['unfulfilled_count'] . ' Lines'"
+                :subtitle="'ETB ' . number_format($storeAuditKpi['unfulfilled_value'], 2)"
+                icon="fa-solid fa-boxes-stacked"
+                tone="info"
+            />
+        </div>
+
+        <div class="col-12 col-sm-6 col-xl-2">
+            <x-kpi-card
+                title="🚨 Paid But Not Received"
+                :value="$storeAuditKpi['paid_not_received_count'] . ' Items'"
+                :subtitle="'Risk: ETB ' . number_format($storeAuditKpi['paid_not_received_value'], 2)"
+                icon="fa-solid fa-triangle-exclamation"
                 tone="danger"
             />
         </div>
 
-        <div class="col-12 col-sm-6 col-xl-3">
+        <div class="col-12 col-sm-6 col-xl-2">
             <x-kpi-card
-                title="Fulfilled Top-Ups (Month)"
-                :value="'ETB ' . number_format($kpi['fulfilled_replenishments_month'], 2)"
-                subtitle="Disbursed &amp; Reconciled"
-                icon="fa-solid fa-money-bill-transfer"
-                tone="success"
+                title="Transfers In-Transit >48h"
+                :value="$storeAuditKpi['transfers_over_48h'] . ' Dispatches'"
+                :subtitle="'Total In-Transit: ' . $storeAuditKpi['transfers_pending']"
+                icon="fa-solid fa-truck-clock"
+                tone="danger"
             />
         </div>
 
-        <div class="col-12 col-sm-6 col-xl-3">
+        <div class="col-12 col-sm-6 col-xl-2">
             <x-kpi-card
-                title="Reconciled Expense Vouchers"
-                :value="number_format($kpi['total_reconciled_vouchers']) . ' Vouchers'"
-                :subtitle="'Total: ETB ' . number_format($kpi['total_reconciled_amount'], 2)"
-                icon="fa-solid fa-receipt"
-                tone="primary"
-            />
-        </div>
-
-        <div class="col-12 col-sm-6 col-xl-3">
-            <x-kpi-card
-                title="Pending Finance Initial Review"
-                :value="$kpi['pending_replenishments_count'] . ' Requests'"
-                :subtitle="'Total Activity Logs: ' . number_format($kpi['total_activity_logs'])"
-                icon="fa-solid fa-clock"
+                title="Stock Discrepancies"
+                :value="$storeAuditKpi['negative_stock_count'] . ' Negative'"
+                :subtitle="'Dormant (>30d): ' . $storeAuditKpi['dormant_stock_count']"
+                icon="fa-solid fa-scale-unbalanced"
                 tone="warning"
+            />
+        </div>
+
+        <div class="col-12 col-sm-6 col-xl-2">
+            <x-kpi-card
+                title="Open Audit Findings"
+                :value="$storeAuditKpi['open_findings_count'] . ' Open'"
+                :subtitle="'Overdue (to GM): ' . $storeAuditKpi['overdue_findings_count']"
+                icon="fa-solid fa-clipboard-question"
+                tone="primary"
             />
         </div>
     </div>
@@ -324,14 +341,14 @@
         </div>
 
 
-        <!-- Cash & Bank Account Balances Oversight -->
+        <!-- Petty Cash & Site Imprest Balances Oversight -->
         <div class="col-xl-4">
             <div class="card border-0 shadow-sm rounded-3 h-100 overflow-hidden bg-white">
                 <div class="card-header bg-white border-bottom py-3 px-3 px-md-4">
                     <h6 class="fw-bold mb-0 text-dark">
-                        <i class="fa-solid fa-building-columns text-primary me-2"></i>Cash &amp; Bank Liquidity Audit
+                        <i class="fa-solid fa-coins text-warning me-2"></i>Petty Cash &amp; Imprest Balances
                     </h6>
-                    <small class="text-muted">Active asset accounts monitored for imprest funding</small>
+                    <small class="text-muted">Active site petty cash funds monitored for replenishment</small>
                 </div>
                 <div class="card-body p-0">
                     <div class="table-responsive wc-table-mobile-cards" style="max-height: 380px; overflow-y: auto;">
@@ -344,14 +361,14 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                @forelse($cashAndBankAccounts as $acc)
+                                @forelse($imprestCashAccounts as $acc)
                                     <tr>
                                         <td data-label="Account" class="ps-4 py-2.5">
                                             <strong class="text-dark d-block">[{{ $acc->code }}] {{ $acc->name }}</strong>
-                                            <small class="text-muted">{{ $acc->subtype ?? ucfirst($acc->type) }}</small>
+                                            <small class="text-muted">{{ $acc->subtype ?? 'Cash Account' }}</small>
                                         </td>
                                         <td data-label="Custodian" class="py-2.5">
-                                            <small class="text-dark fw-semibold">{{ $acc->manager->name ?? 'Company General' }}</small>
+                                            <small class="text-dark fw-semibold">{{ $acc->manager->name ?? 'Custodian' }}</small>
                                         </td>
                                         <td data-label="Balance" class="pe-4 py-2.5 text-end font-monospace font-tabular fw-bold {{ $acc->current_balance < 0 ? 'text-danger' : 'text-success' }}">
                                             ETB {{ number_format($acc->current_balance, 2) }}
@@ -359,7 +376,7 @@
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="3" class="text-center py-3 text-muted">No accounts found.</td>
+                                        <td colspan="3" class="text-center py-3 text-muted">No petty cash accounts found.</td>
                                     </tr>
                                 @endforelse
                             </tbody>
@@ -371,21 +388,21 @@
 
     </div>
 
-    <!-- Procurement & Purchasing Lifecycle Oversight (Read-Only) -->
-    <div class="card border-0 shadow-sm rounded-3 mb-4 bg-white border-top border-4 border-primary">
+    <!-- CRITICAL AUDIT RISK: Paid But Not Received -->
+    <div class="card border-0 shadow-sm rounded-3 mb-4 bg-white border-top border-4 border-danger">
         <div class="card-header bg-white border-bottom py-3 px-3 px-md-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
             <div>
-                <h6 class="fw-bold mb-0 text-dark">
-                    <i class="fa-solid fa-boxes-packing text-primary me-2"></i>Procurement &amp; Material Sourcing Status (Read-Only)
+                <h6 class="fw-bold mb-0 text-danger">
+                    <i class="fa-solid fa-triangle-exclamation text-danger me-2"></i>Critical Audit Alert: Paid But Not Received
                 </h6>
-                <small class="text-muted">Real-time audit oversight of purchase requisitions, quotations, GM approvals, and vendor payment clearances</small>
+                <small class="text-muted">Procurement lines where supplier payments have disbursed but goods are unfulfilled at destination store</small>
             </div>
             <div class="d-flex align-items-center gap-2">
-                <span class="badge bg-primary text-white font-monospace px-3 py-1.5 rounded-pill fs-6">
-                    {{ $activeProcurementCount ?? 0 }} Active In-Flight
+                <span class="badge bg-danger text-white font-monospace px-3 py-1.5 rounded-pill fs-6">
+                    {{ $storeAuditKpi['paid_not_received_count'] }} Critical Line Items
                 </span>
-                <a href="{{ route('procurement.my-queue') }}" class="btn btn-sm btn-outline-primary rounded-pill px-3" style="min-height: 34px; display: inline-flex; align-items: center;">
-                    View Full Lifecycle <i class="fa-solid fa-arrow-right ms-1"></i>
+                <a href="{{ route('audit.fulfillment', ['tab' => 'paid_not_received']) }}" class="btn btn-sm btn-outline-danger rounded-pill px-3 fw-semibold" style="min-height: 34px; display: inline-flex; align-items: center;">
+                    View All Paid-Not-Received <i class="fa-solid fa-arrow-right ms-1"></i>
                 </a>
             </div>
         </div>
@@ -394,65 +411,56 @@
                 <table class="table table-hover align-middle mb-0 small">
                     <thead class="bg-light text-muted text-uppercase" style="font-size: 0.75rem;">
                         <tr>
-                            <th class="ps-4 py-2.5">PR Number</th>
-                            <th class="py-2.5">Project / Channel</th>
-                            <th class="py-2.5">Priority</th>
-                            <th class="py-2.5">Lifecycle Stage / Status</th>
-                            <th class="py-2.5">Current Owner</th>
-                            <th class="py-2.5 text-center">Quotes &amp; Payments</th>
-                            <th class="pe-4 py-2.5 text-end">Audit Inspection</th>
+                            <th class="ps-4 py-2.5">PR # &amp; Date</th>
+                            <th class="py-2.5">Item &amp; SKU</th>
+                            <th class="py-2.5">Project / Store</th>
+                            <th class="py-2.5 text-center">Purchased / Received</th>
+                            <th class="py-2.5 text-end">Remaining Qty</th>
+                            <th class="py-2.5 text-center">Payment Status</th>
+                            <th class="pe-4 py-2.5 text-end">Audit Action</th>
                         </tr>
                     </thead>
                     <tbody>
-                        @forelse($recentProcurements ?? [] as $pr)
-                            <tr>
+                        @forelse($paidNotReceivedAlerts as $item)
+                            <tr class="table-danger bg-opacity-10">
                                 <td data-label="PR #" class="ps-4 py-3">
-                                    <span class="fw-bold font-monospace text-primary">{{ $pr->pr_no }}</span>
-                                    <small class="text-muted d-block">{{ $pr->created_at->format('M d, Y') }}</small>
+                                    <span class="fw-bold font-monospace text-dark d-block">{{ $item->purchaseRequest?->request_number }}</span>
+                                    <small class="text-muted">{{ $item->purchaseRequest?->created_at?->format('M d, Y') }}</small>
                                 </td>
-                                <td data-label="Project" class="py-3">
-                                    <strong class="text-dark">{{ $pr->project->name ?? 'Head Office / Store' }}</strong>
-                                    <small class="text-muted d-block">{{ $pr->materialRequest->source ?? 'Purchase Request' }}</small>
+                                <td data-label="Item" class="py-3">
+                                    <strong class="text-dark d-block">{{ $item->product?->name ?? 'Item' }}</strong>
+                                    <small class="text-muted font-monospace">{{ $item->product?->sku ?? 'N/A' }}</small>
                                 </td>
-                                <td data-label="Priority" class="py-3">
-                                    <span class="badge bg-{{ $pr->priority === 'urgent' ? 'danger' : ($pr->priority === 'high' ? 'warning' : 'secondary') }}">
-                                        {{ ucfirst($pr->priority ?? 'normal') }}
+                                <td data-label="Project / Store" class="py-3">
+                                    <span class="d-block text-dark fw-semibold">{{ $item->purchaseRequest?->project?->name ?? 'Head Office' }}</span>
+                                    <small class="text-muted">{{ $item->purchaseRequest?->store?->name ?? 'Main Store' }}</small>
+                                </td>
+                                <td data-label="Purchased / Received" class="py-3 text-center">
+                                    <span class="badge bg-light text-dark border font-monospace">
+                                        {{ number_format((float)($item->purchased_quantity ?: $item->quantity), 2) }} / {{ number_format((float)$item->received_quantity, 2) }} {{ $item->unit ?? 'pcs' }}
                                     </span>
                                 </td>
-                                <td data-label="Stage" class="py-3">
-                                    <span class="badge bg-{{ \App\Models\PurchaseRequest::statusBadgeClass($pr->status) }}">
-                                        {{ $pr->status_label }}
+                                <td data-label="Remaining" class="py-3 text-end font-monospace font-tabular">
+                                    <span class="badge bg-danger text-white fs-6">
+                                        {{ number_format(max(0, (float)($item->purchased_quantity ?: $item->quantity) - (float)$item->received_quantity), 2) }} {{ $item->unit ?? 'pcs' }}
                                     </span>
                                 </td>
-                                <td data-label="Owner" class="py-3">
-                                    <span class="badge bg-secondary bg-opacity-10 text-dark">
-                                        <i class="fa-solid fa-user-tag me-1"></i>{{ ucfirst(str_replace('_', ' ', $pr->current_owner_role ?? 'None')) }}
+                                <td data-label="Payment" class="py-3 text-center">
+                                    <span class="badge bg-success bg-opacity-25 text-success border border-success-subtle font-monospace px-2.5 py-1">
+                                        <i class="fa-solid fa-check-circle me-1"></i>DISBURSED / PAID
                                     </span>
                                 </td>
-                                <td data-label="Quotes & Payments" class="py-3 text-center">
-                                    @if($pr->proformaInvoices->count() > 0)
-                                        <span class="badge bg-info bg-opacity-10 text-info border border-info-subtle font-monospace px-2 py-1 me-1">
-                                            {{ $pr->proformaInvoices->count() }} Quotes
-                                        </span>
-                                    @endif
-                                    @if($pr->payment)
-                                        <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle font-monospace px-2 py-1">
-                                            <i class="fa-solid fa-money-bill me-1"></i>{{ ucfirst($pr->payment?->status ?? 'Payment') }}
-                                        </span>
-                                    @else
-                                        <span class="text-muted small">Pending Finance</span>
-                                    @endif
-                                </td>
-                                <td data-label="Action" class="pe-4 py-3 text-end">
-                                    <a href="{{ route('purchase-requests.show', $pr->id) }}" class="btn btn-sm btn-outline-primary shadow-xs rounded-pill px-3" style="min-height: 32px; display: inline-flex; align-items: center;">
-                                        <i class="fa-solid fa-eye me-1"></i> Inspect PR
+                                <td data-label="Audit Action" class="pe-4 py-3 text-end">
+                                    <a href="{{ route('audit.fulfillment', ['search' => $item->purchaseRequest?->request_number]) }}" class="btn btn-sm btn-outline-danger rounded-pill px-3 shadow-xs fw-semibold" style="min-height: 32px; display: inline-flex; align-items: center;">
+                                        <i class="fa-solid fa-magnifying-glass me-1"></i> Inspect Line
                                     </a>
                                 </td>
                             </tr>
                         @empty
                             <tr>
                                 <td colspan="7" class="text-center py-4 text-muted">
-                                    No purchase request lifecycle records found.
+                                    <i class="fa-solid fa-shield-check text-success fa-2x mb-2 d-block"></i>
+                                    All clear! No critical "Paid But Not Received" items detected in procurement fulfillment.
                                 </td>
                             </tr>
                         @endforelse
@@ -462,21 +470,21 @@
         </div>
     </div>
 
-    <!-- Inter-Store Material Transfers & Logistics Oversight (Read-Only) -->
+    <!-- MATERIAL TRANSFERS IN TRANSIT > 48 HOURS -->
     <div class="card border-0 shadow-sm rounded-3 mb-4 bg-white border-top border-4 border-warning">
         <div class="card-header bg-white border-bottom py-3 px-3 px-md-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
             <div>
                 <h6 class="fw-bold mb-0 text-dark">
-                    <i class="fa-solid fa-truck-moving text-warning me-2"></i>Inter-Store Material Transfers &amp; Logistics (Read-Only)
+                    <i class="fa-solid fa-truck-clock text-warning me-2"></i>Material Transfers In Transit &gt; 48 Hours
                 </h6>
-                <small class="text-muted">Live audit tracking of warehouse-to-site dispatches, waybills, driver custody, and verified destination receiving slips</small>
+                <small class="text-muted">Inter-store shipments dispatched over 48 hours ago without destination confirmation receipt</small>
             </div>
             <div class="d-flex align-items-center gap-2">
                 <span class="badge bg-warning text-dark font-monospace px-3 py-1.5 rounded-pill fs-6">
-                    {{ $activeTransfersCount ?? 0 }} Active In-Flight
+                    {{ $storeAuditKpi['transfers_over_48h'] }} Dispatches Overdue
                 </span>
-                <a href="{{ route('store-manager.transfers.index') }}" class="btn btn-sm btn-outline-warning rounded-pill px-3 text-dark fw-semibold" style="min-height: 34px; display: inline-flex; align-items: center;">
-                    View Full Transfers Hub <i class="fa-solid fa-arrow-right ms-1"></i>
+                <a href="{{ route('audit.transfers', ['flag' => 'in_transit_over_48h']) }}" class="btn btn-sm btn-outline-warning text-dark rounded-pill px-3 fw-semibold" style="min-height: 34px; display: inline-flex; align-items: center;">
+                    View All Transfers Audit <i class="fa-solid fa-arrow-right ms-1"></i>
                 </a>
             </div>
         </div>
@@ -486,51 +494,42 @@
                     <thead class="bg-light text-muted text-uppercase" style="font-size: 0.75rem;">
                         <tr>
                             <th class="ps-4 py-2.5">Transfer #</th>
-                            <th class="py-2.5">From Store (Origin)</th>
-                            <th class="py-2.5">To Store (Destination)</th>
-                            <th class="py-2.5">Assigned Driver &amp; Vehicle</th>
-                            <th class="py-2.5">Outgoing Waybill</th>
-                            <th class="py-2.5">Status</th>
+                            <th class="py-2.5">Origin Store</th>
+                            <th class="py-2.5">Destination Store</th>
+                            <th class="py-2.5">Dispatched Time</th>
+                            <th class="py-2.5">Driver &amp; Vehicle</th>
+                            <th class="py-2.5 text-center">Status</th>
                             <th class="pe-4 py-2.5 text-end">Audit Inspection</th>
                         </tr>
                     </thead>
                     <tbody>
-                        @forelse($recentTransfers ?? [] as $tr)
-                            <tr>
+                        @forelse($transfersOver48hList as $tr)
+                            <tr class="table-warning bg-opacity-10">
                                 <td data-label="Transfer #" class="ps-4 py-3">
-                                    <span class="fw-bold font-monospace text-primary">{{ $tr->transfer_no }}</span>
-                                    <small class="text-muted d-block">{{ $tr->created_at->format('M d, Y') }}</small>
+                                    <span class="fw-bold font-monospace text-primary d-block">{{ $tr->transfer_no }}</span>
+                                    <small class="text-muted">{{ $tr->physical_slip_no ?? 'No slip #' }}</small>
                                 </td>
                                 <td data-label="Origin" class="py-3">
-                                    <strong class="text-dark">{{ $tr->fromStore->name ?? 'Main Store' }}</strong>
+                                    <strong class="text-dark">{{ $tr->fromStore?->name ?? 'Origin Store' }}</strong>
                                 </td>
                                 <td data-label="Destination" class="py-3">
-                                    <strong class="text-dark">{{ $tr->toStore->name ?? 'Site / Store' }}</strong>
+                                    <strong class="text-dark">{{ $tr->toStore?->name ?? 'Destination Store' }}</strong>
                                 </td>
-                                <td data-label="Driver & Vehicle" class="py-3">
-                                    @if($tr->driver)
-                                        <span class="d-block fw-semibold text-dark"><i class="fas fa-id-badge text-primary me-1"></i>{{ $tr->driver->full_name }}</span>
-                                        <small class="text-muted">{{ $tr->vehicle_plate_no ?: 'No plate' }}</small>
-                                    @else
-                                        <span class="badge bg-warning bg-opacity-10 text-dark border border-warning">
-                                            <i class="fas fa-clock me-1"></i>Awaiting Driver
-                                        </span>
-                                    @endif
+                                <td data-label="Dispatched" class="py-3">
+                                    <span class="text-danger fw-bold d-block">{{ $tr->dispatched_at?->format('M d, Y H:i') }}</span>
+                                    <small class="text-muted">({{ $tr->dispatched_at?->diffForHumans() }})</small>
                                 </td>
-                                <td data-label="Waybill" class="py-3">
-                                    @if($tr->outgoing_slip_no || $tr->physical_slip_no)
-                                        <span class="badge bg-light text-dark font-monospace border">
-                                            <i class="fas fa-receipt text-primary me-1"></i>{{ $tr->outgoing_slip_no ?: $tr->physical_slip_no }}
-                                        </span>
-                                    @else
-                                        <span class="text-muted small">—</span>
-                                    @endif
+                                <td data-label="Driver" class="py-3">
+                                    <span class="d-block text-dark fw-semibold">{{ $tr->vehicle_plate_no ?? 'Vehicle' }}</span>
+                                    <small class="text-muted">{{ $tr->driver_employee_id ?? 'N/A' }}</small>
                                 </td>
-                                <td data-label="Status" class="py-3">
-                                    <x-status-badge :status="$tr->status" />
+                                <td data-label="Status" class="py-3 text-center">
+                                    <span class="badge bg-danger rounded-pill px-2.5 py-1">
+                                        <i class="fa-solid fa-clock me-1"></i>&gt;48H IN TRANSIT
+                                    </span>
                                 </td>
                                 <td data-label="Action" class="pe-4 py-3 text-end">
-                                    <a href="{{ route('store-manager.transfers.show', $tr->id) }}" class="btn btn-sm btn-outline-primary shadow-xs rounded-pill px-3" style="min-height: 32px; display: inline-flex; align-items: center;">
+                                    <a href="{{ route('audit.transfers', ['search' => $tr->transfer_no]) }}" class="btn btn-sm btn-outline-primary rounded-pill px-3 shadow-xs" style="min-height: 32px; display: inline-flex; align-items: center;">
                                         <i class="fa-solid fa-eye me-1"></i> Inspect Transfer
                                     </a>
                                 </td>
@@ -538,7 +537,8 @@
                         @empty
                             <tr>
                                 <td colspan="7" class="text-center py-4 text-muted">
-                                    No material transfer records found.
+                                    <i class="fa-solid fa-circle-check text-success fa-2x mb-2 d-block"></i>
+                                    No transfers are currently delayed in transit longer than 48 hours.
                                 </td>
                             </tr>
                         @endforelse
@@ -548,77 +548,87 @@
         </div>
     </div>
 
-    <!-- Live System Audit & Activity Trail -->
-    <div class="card border-0 shadow-sm rounded-3 overflow-hidden mb-4 bg-white">
+    <!-- RECENT AUDIT FINDINGS & QUERIES -->
+    <div class="card border-0 shadow-sm rounded-3 mb-4 bg-white border-top border-4 border-info">
         <div class="card-header bg-white border-bottom py-3 px-3 px-md-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
             <div>
                 <h6 class="fw-bold mb-0 text-dark">
-                    <i class="fa-solid fa-list-check text-info me-2"></i>Live System Audit Trail &amp; Money Movement Logs
+                    <i class="fa-solid fa-clipboard-question text-info me-2"></i>Active Audit Queries &amp; Observations
                 </h6>
-                <small class="text-muted">Automated chronological audit stream of financial transactions, approvals, disbursements, and user changes</small>
+                <small class="text-muted">Open findings issued by Internal Audit requiring storekeeper or procurement response</small>
             </div>
-            <a href="{{ route('admin.activity-logs') }}" class="btn btn-outline-primary btn-sm rounded-pill px-3 shadow-xs" style="min-height: 34px; display: inline-flex; align-items: center;">
-                <i class="fa-solid fa-filter me-1"></i> Filter Full Trail
-            </a>
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-info text-white font-monospace px-3 py-1.5 rounded-pill fs-6">
+                    {{ $storeAuditKpi['open_findings_count'] }} Active Findings
+                </span>
+                <a href="{{ route('audit.findings.index') }}" class="btn btn-sm btn-outline-primary rounded-pill px-3 fw-semibold" style="min-height: 34px; display: inline-flex; align-items: center;">
+                    View Findings Hub <i class="fa-solid fa-arrow-right ms-1"></i>
+                </a>
+            </div>
         </div>
         <div class="card-body p-0">
             <div class="table-responsive wc-table-mobile-cards">
                 <table class="table table-hover align-middle mb-0 small">
                     <thead class="bg-light text-muted text-uppercase" style="font-size: 0.75rem;">
                         <tr>
-                            <th class="ps-4 py-2.5">Timestamp</th>
-                            <th class="py-2.5">User</th>
-                            <th class="py-2.5">Action</th>
-                            <th class="py-2.5">Module</th>
-                            <th class="py-2.5">Audit Description &amp; Details</th>
-                            <th class="pe-4 py-2.5 text-end">IP Address</th>
+                            <th class="ps-4 py-2.5">Finding #</th>
+                            <th class="py-2.5">Subject / Title</th>
+                            <th class="py-2.5">Severity</th>
+                            <th class="py-2.5">Source Module</th>
+                            <th class="py-2.5">Assigned To</th>
+                            <th class="py-2.5">Due Date</th>
+                            <th class="pe-4 py-2.5 text-end">Action</th>
                         </tr>
                     </thead>
                     <tbody>
-                        @forelse($recentActivityLogs as $log)
+                        @forelse($recentFindings as $f)
                             <tr>
-                                <td data-label="Timestamp" class="ps-4 py-3 text-muted" style="white-space:nowrap;">
-                                    <strong class="text-dark d-block">{{ $log->created_at->format('M d, Y') }}</strong>
-                                    <small>{{ $log->created_at->format('H:i:s') }} ({{ $log->created_at->diffForHumans() }})</small>
+                                <td data-label="Finding #" class="ps-4 py-3">
+                                    <span class="fw-bold font-monospace text-primary d-block">{{ $f->finding_number }}</span>
+                                    <small class="text-muted">{{ $f->created_at?->format('M d, Y') }}</small>
                                 </td>
-                                <td data-label="User" class="py-3">
-                                    <div class="d-flex align-items-center gap-2">
-                                        <div class="bg-primary bg-opacity-10 text-primary rounded-circle d-flex align-items-center justify-content-center fw-bold" style="width:30px; height:30px; font-size:0.8rem;">
-                                            {{ substr($log->user->name ?? 'S', 0, 1) }}
-                                        </div>
-                                        <div>
-                                            <strong class="text-dark d-block">{{ $log->user->name ?? 'System' }}</strong>
-                                        </div>
-                                    </div>
+                                <td data-label="Title" class="py-3">
+                                    <strong class="text-dark d-block">{{ $f->title }}</strong>
+                                    <small class="text-muted">{{ Str::limit($f->observation, 60) }}</small>
                                 </td>
-                                <td data-label="Action" class="py-3">
-                                    <span class="badge bg-{{ $log->action_color }} rounded-pill px-2.5 py-1 font-monospace text-uppercase" style="font-size:0.7rem;">
-                                        {{ $log->action }}
+                                <td data-label="Severity" class="py-3">
+                                    @php
+                                        $sevBadge = match($f->severity) {
+                                            'critical' => 'danger',
+                                            'high'     => 'warning',
+                                            'medium'   => 'info',
+                                            default    => 'secondary',
+                                        };
+                                    @endphp
+                                    <span class="badge bg-{{ $sevBadge }} text-uppercase font-monospace px-2.5 py-1">
+                                        {{ $f->severity }}
                                     </span>
                                 </td>
-                                <td data-label="Module" class="py-3">
-                                    <span class="badge bg-secondary-subtle text-dark border">
-                                        {{ $log->module ?? 'General' }}
+                                <td data-label="Source" class="py-3">
+                                    <span class="badge bg-light text-dark border">
+                                        {{ ucfirst(str_replace('_', ' ', $f->source_type)) }}
                                     </span>
                                 </td>
-                                <td data-label="Description" class="py-3">
-                                    <div class="text-dark">{{ $log->description }}</div>
-                                    @if($log->changes && is_array($log->changes))
-                                        <div class="mt-1 small text-muted font-monospace bg-light p-1.5 rounded border">
-                                            @foreach($log->changes as $key => $val)
-                                                <span class="me-2"><strong>{{ $key }}:</strong> {{ is_array($val) ? json_encode($val) : $val }}</span>
-                                            @endforeach
-                                        </div>
+                                <td data-label="Assigned To" class="py-3">
+                                    <span class="text-dark fw-semibold d-block">{{ $f->assignedTo?->name ?? 'Unassigned' }}</span>
+                                </td>
+                                <td data-label="Due Date" class="py-3">
+                                    @if($f->is_overdue)
+                                        <span class="badge bg-danger rounded-pill px-2 py-1">OVERDUE</span>
+                                    @else
+                                        <span class="text-muted">{{ $f->due_date ? $f->due_date->format('M d, Y') : 'N/A' }}</span>
                                     @endif
                                 </td>
-                                <td data-label="IP" class="pe-4 py-3 text-end text-muted font-monospace" style="font-size:0.75rem;">
-                                    {{ $log->ip_address ?? 'N/A' }}
+                                <td data-label="Action" class="pe-4 py-3 text-end">
+                                    <a href="{{ route('audit.findings.show', $f->id) }}" class="btn btn-sm btn-outline-primary rounded-pill px-3 shadow-xs" style="min-height: 32px; display: inline-flex; align-items: center;">
+                                        <i class="fa-solid fa-eye me-1"></i> Review
+                                    </a>
                                 </td>
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="6" class="text-center py-4 text-muted">
-                                    No audit logs recorded yet.
+                                <td colspan="7" class="text-center py-4 text-muted">
+                                    No audit findings recorded yet.
                                 </td>
                             </tr>
                         @endforelse

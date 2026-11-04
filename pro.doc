@@ -1,45 +1,90 @@
-TASK: Fix slip sequence "next number" logic so it is calculated from the real used numbers, skipping any number that is already registered. Keep existing data untouched.
+TASK: Rework the Audit Role (auditor, audit, internal_auditor, audit_team) in our ERP.
+Keep ONLY the petty cash replenishment audit from the current role. Remove everything else, then add a new read-only Store & Inventory Audit module.
 
-CURRENT PROBLEM
-Store: Chafe Primary School G+4 Building, book 2401-2450 (capacity 50).
-Already registered (from the leaf map): 
-- Transfers: 2401, 2409, 2410, 2417, 2420
-- Petty cash: 2422, 2430
-The header still shows "Next: #2401" and "50 Remaining", and the counter does not match the used leaves. These numbers were registered out of order before the strict rule existed.
+═══════════════════════════════════════
+PART 1 – KEEP (Petty Cash Replenishment only)
+═══════════════════════════════════════
+Keep these exactly as they work today:
+- /finance/replenishments?tab=under_audit
+- Audit Clearance / Approve (adjust approved amount, add audit observations, route to GM as pending_gm)
+- Audit Reject (the whole cycle goes back to the custodian, explanation notes mandatory)
+- Voucher-level actions: Reject Voucher (auto-recalculate valid sum), Request Clarification (clarification_needed + note), Restore/Approve
+- Receipt scan/PDF viewing inside the voucher bundle
+- Replenishment history (reconciled cycles, approved sums, rejections)
+- The audit dashboard keeps only: "Replenishments Awaiting Audit Clearance", "Recent Replenishment History", and petty cash/imprest fund balances.
 
-EXPECTED BEHAVIOR
-1. Next slip = the lowest number in book_start_no..book_end_no that is NOT used and NOT void. It must not rely only on current_slip_no.
-   With the data above:
-   - Next is 2402, then 2403, 2404, ... 2408.
-   - After 2408 is used, the system JUMPS over 2409 and 2410 (already used) and gives 2411.
-   - Then 2412 ... 2416, jump over 2417, give 2418, 2419, jump over 2420, give 2421, jump over 2422, give 2423 ... 2429, jump over 2430, give 2431 ... 2450.
-2. Already registered numbers stay filled (green / indigo / teal) and keep their source type, document link, and date. Do not modify or delete them.
-3. Unused numbers below the highest used number (2402-2408, 2411-2416, 2418-2419, 2421, 2423-2429) are NOT gaps and must NOT be shown as yellow. They are "Available" (gray) and are filled in order starting from the lowest one. Only mark a number as a gap in future when a higher number is accepted while a lower free number exists (which the strict rule now blocks).
-4. Strict rule still applies to all new entries: only the computed next free number is accepted.
-   - Typing 2405 when next is 2402: reject with "Next slip is 2402. Use it or void it first."
-   - Typing an already used number (e.g. 2409): reject as duplicate.
-   - Auto-skip only applies to numbers that are already used or void, never to free numbers.
-5. Remaining count = capacity - used - void. Here: 50 - 7 - 0 = 43.
-   Header badges must match: 0 GRN, 5 Transfers, 2 Petty Cash, Next #2402, 43 Remaining.
-6. current_slip_no and used_count must be recalculated from the real rows (not stored guesses). Add a method SlipSequence::nextFreeNumber() and SlipSequence::recalculate() and use them everywhere: header badges, leaf map "Next Slip" highlight, the API /api/slip-sequences/{store_id}/receive, PR Stage 9 intake, petty cash receive, transfer receive, and the Slips create form.
+═══════════════════════════════════════
+PART 2 – REMOVE for the audit role
+═══════════════════════════════════════
+Hide from the sidebar, block the routes, and enforce this on the backend/API (not just the UI) for:
+- /audit/expense-receipts (receipt audit center and SMS escalation)
+- /finance/expense-hub and /finance/tax-deductions (VAT/tax decisions)
+- /expenses approval hub
+- /receipts OCR analyzer
+- Procurement pipeline cards on the dashboard
+- Bank account balances and the system activity stream on the dashboard
+- Payroll, attendance, and activity logs (stay locked)
+Auditors must never disburse money, create PRs, or adjust stock (segregation of duties stays).
 
-IMPLEMENTATION NOTES
-- Build the set of used numbers from all slip sources for that store and book: purchase receipts (GRN), petty cash receipts, transfer out (SIN), transfer in (receiving slip), manual slips, plus void slips.
-- nextFreeNumber(): loop from book_start_no to book_end_no, return the first number not in the used set. If none, return null and mark the book as full (show "Next Book").
-- Run inside a DB transaction with lockForUpdate() on the sequence row so two users cannot take the same number.
-- Keep the unique index on (store_id, slip_type, slip_no) as the database guard.
-- Add a one-time artisan command or migration "slips:recalculate" that recomputes current_slip_no and used_count for every sequence from existing data, with a dry-run option that only prints what would change. Existing numbers must not be edited.
-- Keep the optional Void Slip action: voiding the next free number marks it void (reason required) and the next number moves on.
-- Leaf map colors: green = GRN purchase, indigo = transfer, teal = petty cash, blue = next, red = void, gray = available.
+═══════════════════════════════════════
+PART 3 – ADD: Store & Inventory Audit (STRICTLY READ-ONLY)
+═══════════════════════════════════════
+Add a new sidebar section "Store Audit" visible only to audit roles, with these pages:
 
-TESTS
-- With the data above, nextFreeNumber() returns 2402.
-- After using 2402-2408, next returns 2411 (skips 2409 and 2410).
-- After using up to 2416, next returns 2418 (skips 2417); after 2419, next returns 2421 (skips 2420); after 2421, next returns 2423 (skips 2422).
-- Entering 2405 while next is 2402 is rejected. Entering 2409 is rejected as duplicate.
-- Header shows 43 remaining and Next #2402 for this book.
-- Voiding 2402 moves next to 2403 and creates no stock movement.
-- Petty cash, transfer, and PR intake all call the same service and skip used numbers.
+3.1 Inventory Overview (/audit/inventory)
+- All stores and all items: current on-hand quantity, unit, last movement date, store, project.
+- Filters: store, project, item/category, date range, status.
+- Flags: negative stock, dormant stock (no movement for X days), and large unexplained adjustments.
 
-DELIVERABLES
-Model methods, service update, recalculation command (with dry run), updated header and leaf map view, tests, and a summary of changed files. Do not delete or rewrite any existing slip record.
+3.2 Stock Movement Ledger (/audit/stock-movements)
+- Complete ledger of EVERY movement: intake, issue/usage, transfer out, transfer in, adjustment, return.
+- Columns: date/time, store, item, qty in/out, balance after, reference doc (PR/slip/transfer/usage no.), performed by, approved by.
+- Running balance check: highlight any row where balance doesn't reconcile.
+- Export to Excel/PDF.
+
+3.3 Daily Usage Audit (/audit/daily-usage)
+- All daily material usage/issue records by site, project, date, and storekeeper.
+- Compare usage vs. planned/BOQ/requested quantity and flag over-usage.
+- Flag days with no usage record where there was stock movement, and duplicate or unusually large entries.
+
+3.4 Material Transfer Audit (/audit/transfers)
+- Every inter-store transfer: origin, destination, vehicle/driver, dispatched qty, received qty, dates, status.
+- Flag: dispatched but not received, received qty ≠ dispatched qty (shortage/excess), in transit longer than 48h, and transfers where the stock deduction and addition don't match.
+
+3.5 Purchase → Intake Fulfillment Check (/audit/fulfillment)  ← MOST IMPORTANT
+For every Purchase Request / Material Request, compare line by line:
+  Requested qty → Approved qty → Purchased qty → Received at store (intake slip) qty → Remaining qty
+Status per line: Fully Fulfilled / Partially Fulfilled / Not Received / Over-received.
+- Dedicated "Unfulfilled Materials" tab listing every item with remaining qty > 0: PR no., supplier, project, store, days since purchase, amount paid, and amount outstanding.
+- Highlight "Paid but not received" in red.
+- Each line opens a detail drawer with: the PR, the payment record, the intake slips (with photos and sequence numbers), and the transfer history.
+- Flag intake slips with missing photos, missing sequence numbers, duplicate slips, or an intake date before the purchase date.
+
+3.6 Audit Findings & Actions
+- Auditor can add an Audit Observation / Query note on any flagged row (stock line, transfer, usage record, fulfillment line).
+- The note creates a Finding with: status (Open / Responded / Resolved), severity, assigned person (storekeeper/procurement), due date, and an attachment.
+- The assignee gets an in-app notification (SMS optional), can respond with notes and attachments, and the auditor can close the finding.
+- Findings that stay open beyond the due date escalate to the GM.
+- Findings dashboard: open, overdue, and resolved counts by store/project.
+
+3.7 Audit Dashboard additions (/dashboard/audit)
+Add cards: Unfulfilled Materials count and value, Paid-but-not-received count, Transfers Pending Receipt, Stock Discrepancies, Open Audit Findings.
+
+═══════════════════════════════════════
+PERMISSIONS (enforce in the DB/RLS and API)
+═══════════════════════════════════════
+- Auditor: SELECT on inventory, stock_movements, daily_usage, transfers, purchase/material requests, intake slips, and payments (view only, for fulfillment matching).
+- Auditor: INSERT/UPDATE only on audit_findings, replenishment audit decisions, and voucher audit actions.
+- NO insert/update/delete on inventory, stock movements, transfers, usage, PRs, intake, or payments.
+- Hide all edit, delete, pay, and adjust buttons on these pages for audit roles.
+- Log every auditor action (who, what, when) in the audit trail.
+
+ACCEPTANCE TESTS
+1. Auditor logs in and sees only petty cash replenishment plus the Store Audit section.
+2. Calling any removed route or write API as an auditor returns 403.
+3. A PR with 100 units purchased and 60 received appears under "Unfulfilled Materials" with 40 remaining.
+4. A transfer dispatched but not received for >48h is flagged.
+5. A finding raised by an auditor notifies the storekeeper, and an overdue one escalates to the GM.
+6. All Store Audit pages filter correctly and export to Excel.
+
+Implement all of it, then list the files and routes changed.

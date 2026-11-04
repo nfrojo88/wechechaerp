@@ -113,14 +113,22 @@ class ExpenseReceiptAuditController extends Controller
             abort(403, 'Unauthorized. Please login.');
         }
 
-        $rolesStr = strtolower(implode(' ', $user->getRoleNames()->toArray()));
-        $isAuditorOrAdmin = $user->hasAnyRole([
-            'auditor', 'Auditor', 'audit', 'audit_team', 'internal_auditor',
-            'admin', 'global_admin', 'super_admin'
-        ]) || str_contains($rolesStr, 'audit') || str_contains($rolesStr, 'admin') || $user->can('audit.view');
+        // Auditors are blocked from Expense Receipt Audit Center per segregation of duties
+        $isPureAuditor = (method_exists($user, 'hasAnyRole') && $user->hasAnyRole(['auditor', 'Auditor', 'audit', 'audit_team', 'internal_auditor']))
+            && (!method_exists($user, 'hasAnyRole') || !$user->hasAnyRole(['admin', 'global_admin', 'super_admin', 'Admin', 'Global Admin']))
+            && !(method_exists($user, 'isGlobalAdmin') && $user->isGlobalAdmin());
 
-        if (!$isAuditorOrAdmin) {
-            abort(403, 'Unauthorized access. Only Auditors and Administrators can view the Expense Receipt Audit Center.');
+        if ($isPureAuditor) {
+            abort(403, 'Access denied. Expense Receipt Audit Center is restricted to Administrators.');
+        }
+
+        $rolesStr = strtolower(implode(' ', $user->getRoleNames()->toArray()));
+        $isAdmin = $user->hasAnyRole([
+            'admin', 'global_admin', 'super_admin'
+        ]) || str_contains($rolesStr, 'admin') || (method_exists($user, 'isGlobalAdmin') && $user->isGlobalAdmin());
+
+        if (!$isAdmin) {
+            abort(403, 'Unauthorized access. Only Administrators can view the Expense Receipt Audit Center.');
         }
     }
 

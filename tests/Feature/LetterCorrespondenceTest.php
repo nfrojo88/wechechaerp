@@ -37,7 +37,7 @@ class LetterCorrespondenceTest extends TestCase
                 return !empty(array_intersect(array_map('strtolower', $flattened), array_map('strtolower', $this->testRoles)));
             }
 
-            public function getRoleNames()
+            public function getRoleNames(): \Illuminate\Support\Collection
             {
                 return collect($this->testRoles);
             }

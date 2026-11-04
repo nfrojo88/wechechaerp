@@ -49,6 +49,18 @@ class ExpenseHubController extends Controller
     public function __construct(ExpenseHubQueryService $queryService)
     {
         $this->middleware('auth');
+        $this->middleware(function ($request, $next) {
+            $user = Auth::user();
+            if ($user && method_exists($user, 'hasAnyRole')) {
+                $isAuditor = $user->hasAnyRole(['auditor', 'Auditor', 'audit', 'audit_team', 'internal_auditor']);
+                $isAdminOrFinance = $user->hasAnyRole(['admin', 'global_admin', 'super_admin', 'Admin', 'Global Admin', 'finance_head', 'finance', 'accountant'])
+                    || (method_exists($user, 'isGlobalAdmin') && $user->isGlobalAdmin());
+                if ($isAuditor && !$isAdminOrFinance) {
+                    abort(403, 'Access denied. Expense Hub is restricted for audit roles.');
+                }
+            }
+            return $next($request);
+        });
         $this->queryService = $queryService;
     }
 
@@ -169,7 +181,7 @@ class ExpenseHubController extends Controller
         $reasons = ExpenseHubVatDecision::NO_VAT_REASONS;
         $purchaseTypes = ExpenseHubVatDecision::PURCHASE_TYPES;
 
-        $canDecideVat = $user->hasAnyRole(['global_admin', 'admin', 'finance_head', 'finance', 'auditor']) || $user->can('finance.approve');
+        $canDecideVat = $user->hasAnyRole(['global_admin', 'admin', 'finance_head', 'finance']) || $user->can('finance.approve');
         $isFinanceHead = $user->hasAnyRole(['global_admin', 'admin', 'finance_head']);
 
         return view('finance.expense-hub.index', compact(

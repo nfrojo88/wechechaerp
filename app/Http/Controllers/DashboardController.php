@@ -2143,71 +2143,186 @@ class DashboardController extends Controller
     // ─── Audit / Compliance Dashboard ──────────────────────────────────────────
     public function audit()
     {
+        \App\Models\AuditFinding::ensureSchema();
+
+        // 1. Petty Cash Replenishment KPIs (KEPT)
         $kpi = [
-            'under_audit_count'            => $this->safe(fn() => \App\Models\PettyCashReplenishment::where('status', \App\Models\PettyCashReplenishment::STATUS_UNDER_AUDIT)->count()),
-            'under_audit_amount'           => $this->safe(fn() => (float) \App\Models\PettyCashReplenishment::where('status', \App\Models\PettyCashReplenishment::STATUS_UNDER_AUDIT)->sum('requested_amount')),
-            'pending_replenishments_count' => $this->safe(fn() => \App\Models\PettyCashReplenishment::where('status', 'pending')->count()),
-            'pending_replenishments_amount'=> $this->safe(fn() => (float) \App\Models\PettyCashReplenishment::where('status', 'pending')->sum('requested_amount')),
+            'under_audit_count'            => $this->safe(fn() => \App\Models\PettyCashReplenishment::where('status', \App\Models\PettyCashReplenishment::STATUS_UNDER_AUDIT)->count(), 0),
+            'under_audit_amount'           => $this->safe(fn() => (float) \App\Models\PettyCashReplenishment::where('status', \App\Models\PettyCashReplenishment::STATUS_UNDER_AUDIT)->sum('requested_amount'), 0.0),
+            'pending_replenishments_count' => $this->safe(fn() => \App\Models\PettyCashReplenishment::where('status', 'pending')->count(), 0),
+            'pending_replenishments_amount'=> $this->safe(fn() => (float) \App\Models\PettyCashReplenishment::where('status', 'pending')->sum('requested_amount'), 0.0),
             'fulfilled_replenishments_month'=> $this->safe(fn() => (float) \App\Models\PettyCashReplenishment::where('status', 'fulfilled')
                 ->whereMonth('fulfilled_at', now()->month)
                 ->whereYear('fulfilled_at', now()->year)
-                ->sum('fulfilled_amount')),
-            'total_reconciled_vouchers'    => $this->safe(fn() => \App\Models\PettyCashReplenishmentItem::count()),
-            'total_reconciled_amount'      => $this->safe(fn() => (float) \App\Models\PettyCashReplenishmentItem::sum('amount')),
-            'total_activity_logs'          => $this->safe(fn() => \App\Models\ActivityLog::count()),
-            'total_paid_expenses_month'    => $this->safe(fn() => (float) \App\Models\ExpenseRequest::where('status', \App\Models\ExpenseRequest::STATUS_PAID)
-                ->whereMonth('paid_at', now()->month)
-                ->whereYear('paid_at', now()->year)
-                ->sum('amount')),
-            'total_journal_entries'        => $this->safe(fn() => \App\Models\JournalEntry::count()),
+                ->sum('fulfilled_amount'), 0.0),
+            'total_reconciled_vouchers'    => $this->safe(fn() => \App\Models\PettyCashReplenishmentItem::count(), 0),
+            'total_reconciled_amount'      => $this->safe(fn() => (float) \App\Models\PettyCashReplenishmentItem::sum('amount'), 0.0),
         ];
 
-        // Replenishments awaiting Audit clearance (under_audit)
+        // 2. Replenishments awaiting Audit clearance (under_audit) (KEPT)
         $underAuditReplenishments = $this->safe(fn() => \App\Models\PettyCashReplenishment::with(['chartOfAccount.manager', 'requester', 'reviewer', 'auditor', 'sourceCoa', 'items'])
             ->where('status', \App\Models\PettyCashReplenishment::STATUS_UNDER_AUDIT)
             ->latest()
             ->get(), collect());
 
-        // Recent Petty Cash Replenishments & Fund Movements
+        // 3. Recent Petty Cash Replenishments & Fund Movements (KEPT)
         $recentReplenishments = $this->safe(fn() => \App\Models\PettyCashReplenishment::with(['chartOfAccount.manager', 'requester', 'financeHead', 'reviewer', 'auditor', 'sourceCoa', 'items'])
             ->latest()
             ->take(10)
             ->get(), collect());
 
-        // Recent Audit Activity Logs
-        $recentActivityLogs = $this->safe(fn() => \App\Models\ActivityLog::with('user')
-            ->latest()
-            ->take(15)
-            ->get(), collect());
-
-        // Cash & Bank Account Balances for Liquidity / Imprest Audit
-        $cashAndBankAccounts = $this->safe(fn() => \App\Models\ChartOfAccount::where('is_active', true)
+        // 4. Imprest Petty Cash Accounts (KEPT - Petty cash accounts only, general bank accounts removed)
+        $imprestCashAccounts = $this->safe(fn() => \App\Models\ChartOfAccount::where('is_active', true)
             ->where(function($q) {
-                $q->where('type', 'asset')
+                $q->where('name', 'like', '%Petty%')
                   ->orWhere('name', 'like', '%Cash%')
-                  ->orWhere('name', 'like', '%Bank%')
                   ->orWhere('subtype', 'like', '%Cash%')
-                  ->orWhere('subtype', 'like', '%Bank%');
+                  ->orWhere('subtype', 'like', '%Petty%');
             })
+            ->where('name', 'not like', '%Bank%')
+            ->where('subtype', 'not like', '%Bank%')
             ->orderBy('code')
             ->take(12)
             ->get(), collect());
 
-        // Procurement & Purchasing Lifecycle Oversight (Read-Only for Auditor)
-        $activeProcurementCount = $this->safe(fn() => \App\Models\PurchaseRequest::where('status', '!=', \App\Models\PurchaseRequest::STATUS_INTAKE_COMPLETE)->count(), 0);
-        $recentProcurements = $this->safe(fn() => \App\Models\PurchaseRequest::with(['project', 'requestedBy', 'proformaInvoices', 'payment'])
-            ->latest()
-            ->take(8)
+        // 5. Store & Inventory Audit KPIs (ADDITIONS)
+        $storeAuditKpi = [
+            'unfulfilled_count'       => 0,
+            'unfulfilled_value'       => 0.0,
+            'paid_not_received_count' => 0,
+            'paid_not_received_value' => 0.0,
+            'transfers_over_48h'      => 0,
+            'transfers_pending'       => 0,
+            'negative_stock_count'    => 0,
+            'dormant_stock_count'     => 0,
+            'stock_discrepancies'     => 0,
+            'open_findings_count'     => 0,
+            'overdue_findings_count'  => 0,
+        ];
+
+        $this->safe(function () use (&$storeAuditKpi) {
+            $prItems = \App\Models\PurchaseRequestItem::with(['purchaseRequest.payment', 'purchaseRequest.payments', 'purchaseRequest.deliveryReceipts.items'])
+                ->whereHas('purchaseRequest', function ($q) {
+                    $q->whereNotIn('status', [\App\Models\PurchaseRequest::STATUS_CANCELLED, \App\Models\PurchaseRequest::STATUS_REJECTED]);
+                })->get();
+
+            foreach ($prItems as $it) {
+                $pr = $it->purchaseRequest;
+                $purchased = (float) $it->purchased_quantity;
+                if ($purchased <= 0 && $pr && in_array($pr->status, [
+                    \App\Models\PurchaseRequest::STATUS_PENDING_PAYMENT,
+                    \App\Models\PurchaseRequest::STATUS_PENDING_RECEIPT_UPLOAD,
+                    \App\Models\PurchaseRequest::STATUS_INTAKE_COMPLETE,
+                    \App\Models\PurchaseRequest::STATUS_COMPLETED
+                ])) {
+                    $purchased = (float) $it->quantity;
+                }
+                $target = $purchased > 0 ? $purchased : (float) $it->quantity;
+
+                $receivedFromReceipts = 0.0;
+                if ($pr && $pr->deliveryReceipts) {
+                    foreach ($pr->deliveryReceipts as $dr) {
+                        if ($dr->is_void) continue;
+                        foreach ($dr->items as $dri) {
+                            if ($dri->product_id == $it->product_id) {
+                                $receivedFromReceipts += (float) ($dri->accepted_quantity ?? $dri->quantity_received ?? 0);
+                            }
+                        }
+                    }
+                }
+                $received = max((float)$it->received_quantity, $receivedFromReceipts);
+                $remaining = max(0.0, $target - $received);
+
+                if ($remaining > 0) {
+                    $storeAuditKpi['unfulfilled_count']++;
+                    $val = $remaining * (float)($it->estimated_unit_cost ?? 0);
+                    $storeAuditKpi['unfulfilled_value'] += $val;
+
+                    // Paid check
+                    $isPaid = false;
+                    if ($pr) {
+                        if ($pr->payments && $pr->payments->where('status', 'paid')->isNotEmpty()) {
+                            $isPaid = true;
+                        } elseif ($pr->payment && ($pr->payment->status === 'paid' || $pr->payment->paid_at !== null)) {
+                            $isPaid = true;
+                        }
+                    }
+                    if ($isPaid) {
+                        $storeAuditKpi['paid_not_received_count']++;
+                        $storeAuditKpi['paid_not_received_value'] += $val;
+                    }
+                }
+            }
+        });
+
+        // Material Transfers
+        $storeAuditKpi['transfers_pending'] = $this->safe(fn() => \App\Models\Transfer::where('status', \App\Models\Transfer::STATUS_IN_TRANSIT)->count(), 0);
+        $storeAuditKpi['transfers_over_48h'] = $this->safe(fn() => \App\Models\Transfer::where('status', \App\Models\Transfer::STATUS_IN_TRANSIT)
+            ->whereNotNull('dispatched_at')
+            ->where('dispatched_at', '<=', now()->subHours(48))
+            ->count(), 0);
+
+        // Stock & Inventory Discrepancies
+        $storeAuditKpi['negative_stock_count'] = $this->safe(fn() => \App\Models\Inventory::where('quantity_on_hand', '<', 0)->count(), 0);
+        $storeAuditKpi['dormant_stock_count']  = $this->safe(fn() => \App\Models\Inventory::where(function ($q) {
+            $q->where('last_movement_at', '<', now()->subDays(30))->orWhereNull('last_movement_at');
+        })->count(), 0);
+        $storeAuditKpi['stock_discrepancies'] = $storeAuditKpi['negative_stock_count'];
+
+        // Audit Findings
+        $storeAuditKpi['open_findings_count']    = $this->safe(fn() => \App\Models\AuditFinding::open()->count(), 0);
+        $storeAuditKpi['overdue_findings_count'] = $this->safe(fn() => \App\Models\AuditFinding::overdue()->count(), 0);
+
+        // High-Risk Alert Items: Paid But Not Received (top 6 for table)
+        $paidNotReceivedAlerts = $this->safe(function () {
+            $items = \App\Models\PurchaseRequestItem::with(['purchaseRequest.payment', 'purchaseRequest.payments', 'purchaseRequest.project', 'purchaseRequest.store', 'product'])
+                ->whereHas('purchaseRequest', function ($q) {
+                    $q->whereNotIn('status', [\App\Models\PurchaseRequest::STATUS_CANCELLED, \App\Models\PurchaseRequest::STATUS_REJECTED]);
+                })->latest('id')->get();
+
+            return $items->filter(function ($it) {
+                $pr = $it->purchaseRequest;
+                $purchased = (float) $it->purchased_quantity ?: (float) $it->quantity;
+                $received = (float) $it->received_quantity;
+                $remaining = max(0.0, $purchased - $received);
+
+                $isPaid = false;
+                if ($pr) {
+                    if ($pr->payments && $pr->payments->where('status', 'paid')->isNotEmpty()) {
+                        $isPaid = true;
+                    } elseif ($pr->payment && ($pr->payment->status === 'paid' || $pr->payment->paid_at !== null)) {
+                        $isPaid = true;
+                    }
+                }
+                return $isPaid && ($remaining > 0);
+            })->take(6);
+        }, collect());
+
+        // Urgent Transfers In Transit > 48 Hours
+        $transfersOver48hList = $this->safe(fn() => \App\Models\Transfer::with(['fromStore', 'toStore', 'requestedBy'])
+            ->where('status', \App\Models\Transfer::STATUS_IN_TRANSIT)
+            ->whereNotNull('dispatched_at')
+            ->where('dispatched_at', '<=', now()->subHours(48))
+            ->latest('dispatched_at')
+            ->take(6)
             ->get(), collect());
 
-        // Inter-Store Material Transfers Oversight (Read-Only for Auditor)
-        $activeTransfersCount = $this->safe(fn() => \App\Models\Transfer::whereIn('status', ['draft', 'pending_approval', 'approved', 'in_transit'])->count(), 0);
-        $recentTransfers = $this->safe(fn() => \App\Models\Transfer::with(['fromStore', 'toStore', 'requestedBy', 'driver', 'items.product'])
-            ->latest()
-            ->take(8)
+        // Recent Audit Findings
+        $recentFindings = $this->safe(fn() => \App\Models\AuditFinding::with(['store', 'project', 'assignedTo'])
+            ->latest('id')
+            ->take(6)
             ->get(), collect());
 
-        return view('dashboard.audit', compact('kpi', 'underAuditReplenishments', 'recentReplenishments', 'recentActivityLogs', 'cashAndBankAccounts', 'activeProcurementCount', 'recentProcurements', 'activeTransfersCount', 'recentTransfers'));
+        return view('dashboard.audit', compact(
+            'kpi',
+            'underAuditReplenishments',
+            'recentReplenishments',
+            'imprestCashAccounts',
+            'storeAuditKpi',
+            'paidNotReceivedAlerts',
+            'transfersOver48hList',
+            'recentFindings'
+        ));
     }
 }
 
