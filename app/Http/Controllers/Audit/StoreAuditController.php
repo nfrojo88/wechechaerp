@@ -326,10 +326,23 @@ class StoreAuditController extends Controller
         $toStoreId   = $request->input('to_store_id');
         $status      = $request->input('status');
         $flag        = $request->input('flag'); // in_transit_over_48h, shortage, unreceived, all
+        $slipFilter  = $request->input('slip_filter'); // has_outgoing, missing_outgoing, has_receiving, missing_receiving, has_file, missing_file
+        $search      = trim((string) $request->input('search'));
         $dateFrom    = $request->input('date_from');
         $dateTo      = $request->input('date_to');
 
         $query = Transfer::with(['fromStore', 'toStore', 'requestedBy', 'dispatchedBy', 'receivedBy', 'items.product']);
+
+        if ($search !== '') {
+            $query->where(function ($q) use ($search) {
+                $q->where('transfer_no', 'like', "%{$search}%")
+                  ->orWhere('outgoing_slip_no', 'like', "%{$search}%")
+                  ->orWhere('receiving_slip_no', 'like', "%{$search}%")
+                  ->orWhere('physical_slip_no', 'like', "%{$search}%")
+                  ->orWhere('vehicle_plate_no', 'like', "%{$search}%")
+                  ->orWhere('driver_employee_id', 'like', "%{$search}%");
+            });
+        }
 
         if ($fromStoreId) {
             $query->where('from_store_id', $fromStoreId);
@@ -361,6 +374,38 @@ class StoreAuditController extends Controller
                   ->whereNotIn('status', [Transfer::STATUS_CANCELLED, Transfer::STATUS_REJECTED]);
         }
 
+        // Slip status filters
+        if ($slipFilter === 'has_outgoing') {
+            $query->where(function ($q) {
+                $q->whereNotNull('outgoing_slip_no')->where('outgoing_slip_no', '!=', '')
+                  ->orWhere(function ($sq) {
+                      $sq->whereNotNull('physical_slip_no')->where('physical_slip_no', '!=', '');
+                  });
+            });
+        } elseif ($slipFilter === 'missing_outgoing') {
+            $query->where(function ($q) {
+                $q->whereNull('outgoing_slip_no')->orWhere('outgoing_slip_no', '');
+            })->where(function ($q) {
+                $q->whereNull('physical_slip_no')->orWhere('physical_slip_no', '');
+            });
+        } elseif ($slipFilter === 'has_receiving') {
+            $query->whereNotNull('receiving_slip_no')->where('receiving_slip_no', '!=', '');
+        } elseif ($slipFilter === 'missing_receiving') {
+            $query->where('status', Transfer::STATUS_COMPLETED)
+                  ->where(function ($q) {
+                      $q->whereNull('receiving_slip_no')->orWhere('receiving_slip_no', '');
+                  });
+        } elseif ($slipFilter === 'has_file') {
+            $query->where(function ($q) {
+                $q->whereNotNull('outgoing_slip_file')->where('outgoing_slip_file', '!=', '')
+                  ->orWhereNotNull('receiving_slip_file')->where('receiving_slip_file', '!=', '');
+            });
+        } elseif ($slipFilter === 'missing_file') {
+            $query->where(function ($q) {
+                $q->whereNull('outgoing_slip_file')->orWhere('outgoing_slip_file', '');
+            });
+        }
+
         // Export
         if ($request->input('export') === 'csv' || $request->input('export') === 'excel') {
             $transfers = $query->latest('id')->get();
@@ -368,13 +413,25 @@ class StoreAuditController extends Controller
         }
 
         // KPIs
-        $totalTransfers  = (clone $query)->count();
-        $inTransitCount  = (clone $query)->where('status', Transfer::STATUS_IN_TRANSIT)->count();
+        $totalTransfers   = (clone $query)->count();
+        $inTransitCount   = (clone $query)->where('status', Transfer::STATUS_IN_TRANSIT)->count();
         $over48HoursCount = (clone $query)->where('status', Transfer::STATUS_IN_TRANSIT)
             ->whereNotNull('dispatched_at')
             ->where('dispatched_at', '<=', now()->subHours(48))
             ->count();
-        $completedCount  = (clone $query)->where('status', Transfer::STATUS_COMPLETED)->count();
+        $completedCount   = (clone $query)->where('status', Transfer::STATUS_COMPLETED)->count();
+
+        // Slip KPI Stats across current filtered set
+        $withSlipsCount = (clone $query)->where(function ($q) {
+            $q->whereNotNull('outgoing_slip_no')->where('outgoing_slip_no', '!=', '')
+              ->orWhereNotNull('receiving_slip_no')->where('receiving_slip_no', '!=', '')
+              ->orWhereNotNull('physical_slip_no')->where('physical_slip_no', '!=', '');
+        })->count();
+
+        $withAttachedFilesCount = (clone $query)->where(function ($q) {
+            $q->whereNotNull('outgoing_slip_file')->where('outgoing_slip_file', '!=', '')
+              ->orWhereNotNull('receiving_slip_file')->where('receiving_slip_file', '!=', '');
+        })->count();
 
         $transfers = $query->latest('id')->paginate(25)->withQueryString();
 
@@ -388,7 +445,9 @@ class StoreAuditController extends Controller
             'totalTransfers',
             'inTransitCount',
             'over48HoursCount',
-            'completedCount'
+            'completedCount',
+            'withSlipsCount',
+            'withAttachedFilesCount'
         ));
     }
 
@@ -1224,12 +1283,16 @@ class StoreAuditController extends Controller
 
             fputcsv($handle, [
                 'Transfer #',
-                'Physical Slip #',
-                'Origin Store',
-                'Destination Store',
+                'Outgoing Physical Slip #',
+                'Outgoing Document Attached',
+                'Receiving Physical Slip #',
+                'Receiving Document Attached',
+                'Physical Slip # (Legacy)',
+                'Origin Store (From)',
+                'Destination Store (To)',
                 'Dispatched Date',
                 'Received Date',
-                'Vehicle / Driver',
+                'Vehicle Plate / Driver',
                 'Dispatched Qty',
                 'Received Qty',
                 'Discrepancy (Shortage/Excess)',
@@ -1248,12 +1311,18 @@ class StoreAuditController extends Controller
                 } elseif ($tr->status === Transfer::STATUS_COMPLETED && $diff < 0) {
                     $auditFlag = 'SHORTAGE: ' . abs($diff);
                 } elseif ($tr->status === Transfer::STATUS_COMPLETED && $diff > 0) {
-                    $auditFlag = 'EXCESS: ' . $diff;
+                    $auditFlag = 'EXCESS: +' . $diff;
                 }
+
+                $outgoingSlip = $tr->outgoing_slip_no ?: $tr->physical_slip_no;
 
                 fputcsv($handle, [
                     $tr->transfer_no ?? ('TR-' . $tr->id),
-                    $tr->physical_slip_no ?? 'N/A',
+                    $outgoingSlip ?: 'None',
+                    $tr->outgoing_slip_url ? 'Yes (' . $tr->outgoing_slip_url . ')' : 'No',
+                    $tr->receiving_slip_no ?: 'None',
+                    $tr->receiving_slip_url ? 'Yes (' . $tr->receiving_slip_url . ')' : 'No',
+                    $tr->physical_slip_no ?: 'None',
                     $tr->fromStore?->name ?? 'N/A',
                     $tr->toStore?->name ?? 'N/A',
                     $tr->dispatched_at ? $tr->dispatched_at->format('Y-m-d H:i') : 'Pending',

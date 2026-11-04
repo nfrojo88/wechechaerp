@@ -151,6 +151,11 @@ class StoreAuditModuleTest extends TestCase
             $table->id();
             $table->string('transfer_no');
             $table->string('physical_slip_no')->nullable();
+            $table->string('outgoing_slip_no')->nullable();
+            $table->string('outgoing_slip_file')->nullable();
+            $table->string('receiving_slip_no')->nullable();
+            $table->string('receiving_slip_file')->nullable();
+            $table->text('receiving_notes')->nullable();
             $table->foreignId('from_store_id');
             $table->foreignId('to_store_id');
             $table->foreignId('requested_by')->nullable();
@@ -418,6 +423,46 @@ class StoreAuditModuleTest extends TestCase
         $this->assertCount(1, $transfers);
         $this->assertEquals('TR-2026-0012', $transfers->first()->transfer_no);
         $this->assertEquals(1, $view->getData()['over48HoursCount']);
+    }
+
+    /**
+     * Test 4b: Material transfers audit displays outgoing and receiving physical slips and supports search/filter.
+     */
+    public function test_transfer_audit_displays_and_filters_physical_slips(): void
+    {
+        Auth::login($this->auditorUser);
+
+        $storeB = Store::create(['name' => 'Secondary Site Store', 'project_id' => $this->project->id]);
+
+        $trWithSlips = Transfer::create([
+            'transfer_no'        => 'TR-2026-0099',
+            'from_store_id'      => $this->store->id,
+            'to_store_id'        => $storeB->id,
+            'status'             => Transfer::STATUS_COMPLETED,
+            'outgoing_slip_no'   => 'SLIP-OUT-991',
+            'outgoing_slip_file' => 'transfer_slips/out991.pdf',
+            'receiving_slip_no'  => 'GRN-REC-882',
+            'receiving_slip_file'=> 'transfer_slips/rec882.jpg',
+            'dispatched_at'      => now()->subDays(2),
+            'received_at'        => now()->subDay(),
+        ]);
+
+        $controller = app(StoreAuditController::class);
+        $view = $controller->transferAudit(new Request(['search' => 'SLIP-OUT-991']));
+
+        $transfers = $view->getData()['transfers'];
+        $this->assertCount(1, $transfers);
+        $this->assertEquals('TR-2026-0099', $transfers->first()->transfer_no);
+        $this->assertEquals('SLIP-OUT-991', $transfers->first()->outgoing_slip_no);
+        $this->assertEquals('GRN-REC-882', $transfers->first()->receiving_slip_no);
+
+        // Search by receiving slip
+        $viewRec = $controller->transferAudit(new Request(['search' => 'GRN-REC-882']));
+        $this->assertCount(1, $viewRec->getData()['transfers']);
+
+        // Filter by has_file
+        $viewFile = $controller->transferAudit(new Request(['slip_filter' => 'has_file']));
+        $this->assertCount(1, $viewFile->getData()['transfers']);
     }
 
     /**
