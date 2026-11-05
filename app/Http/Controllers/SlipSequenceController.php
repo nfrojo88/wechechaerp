@@ -40,13 +40,14 @@ class SlipSequenceController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'store_id'     => 'required|exists:stores,id',
-            'slip_type'    => 'required|in:receive,send',
-            'label'        => 'required|string|max:100',
-            'prefix'       => 'nullable|string|max:50',
-            'book_start_no'=> 'required|integer|min:1',
-            'book_end_no'  => 'required|integer|gt:book_start_no',
-            'notes'        => 'nullable|string',
+            'store_id'        => 'required|exists:stores,id',
+            'slip_type'       => 'required|in:receive,send',
+            'label'           => 'required|string|max:100',
+            'prefix'          => 'nullable|string|max:50',
+            'book_start_no'   => 'required|integer|min:1',
+            'book_end_no'     => 'required|integer|gt:book_start_no',
+            'current_slip_no' => 'nullable|integer|gte:book_start_no|lte:book_end_no',
+            'notes'           => 'nullable|string',
         ]);
 
         // Check if active sequence already exists for this store + type
@@ -74,14 +75,17 @@ class SlipSequenceController extends Controller
             }
         }
 
+        $startNo = (int) $request->book_start_no;
+        $currentSlipNo = $request->filled('current_slip_no') ? (int) $request->current_slip_no : $startNo;
+
         $seq = SlipSequence::create([
             'store_id'        => $request->store_id,
             'slip_type'       => $request->slip_type,
             'label'           => $request->label,
             'prefix'          => $request->prefix,
-            'book_start_no'   => $request->book_start_no,
-            'book_end_no'     => $request->book_end_no,
-            'current_slip_no' => $request->book_start_no,
+            'book_start_no'   => $startNo,
+            'book_end_no'     => (int) $request->book_end_no,
+            'current_slip_no' => $currentSlipNo,
             'used_count'      => 0,
             'status'          => 'active',
             'notes'           => $request->notes,
@@ -96,11 +100,12 @@ class SlipSequenceController extends Controller
     public function storeNextBook(Request $request, SlipSequence $slipSequence)
     {
         $request->validate([
-            'label'         => 'required|string|max:100',
-            'prefix'        => 'nullable|string|max:50',
-            'book_start_no' => 'required|integer|min:1',
-            'book_end_no'   => 'required|integer|gt:book_start_no',
-            'notes'         => 'nullable|string',
+            'label'           => 'required|string|max:100',
+            'prefix'          => 'nullable|string|max:50',
+            'book_start_no'   => 'required|integer|min:1',
+            'book_end_no'     => 'required|integer|gt:book_start_no',
+            'current_slip_no' => 'nullable|integer|gte:book_start_no|lte:book_end_no',
+            'notes'           => 'nullable|string',
         ]);
 
         // Archive / mark previous sequence book as full
@@ -131,15 +136,18 @@ class SlipSequenceController extends Controller
             }
         }
 
+        $bookStartNo = (int) $request->book_start_no;
+        $currentSlipNo = $request->filled('current_slip_no') ? (int) $request->current_slip_no : $bookStartNo;
+
         // Create the new active sequence
         $newSequence = SlipSequence::create([
             'store_id'        => $slipSequence->store_id,
             'slip_type'       => $slipSequence->slip_type,
             'label'           => $request->label,
             'prefix'          => $request->prefix !== null ? $request->prefix : $slipSequence->prefix,
-            'book_start_no'   => (int) $request->book_start_no,
+            'book_start_no'   => $bookStartNo,
             'book_end_no'     => (int) $request->book_end_no,
-            'current_slip_no' => (int) $request->book_start_no,
+            'current_slip_no' => $currentSlipNo,
             'used_count'      => 0,
             'status'          => 'active',
             'notes'           => $request->notes ?: "Continuation after Book #{$slipSequence->book_start_no}–#{$slipSequence->book_end_no}",
@@ -244,12 +252,18 @@ class SlipSequenceController extends Controller
     public function update(Request $request, SlipSequence $slipSequence)
     {
         $request->validate([
-            'label'   => 'required|string|max:100',
-            'prefix'  => 'nullable|string|max:50',
-            'notes'   => 'nullable|string',
+            'label'           => 'required|string|max:100',
+            'prefix'          => 'nullable|string|max:50',
+            'current_slip_no' => 'nullable|integer|min:' . $slipSequence->book_start_no . '|max:' . $slipSequence->book_end_no,
+            'notes'           => 'nullable|string',
         ]);
 
-        $slipSequence->update($request->only(['label', 'prefix', 'notes']));
+        $data = $request->only(['label', 'prefix', 'notes']);
+        if ($request->filled('current_slip_no')) {
+            $data['current_slip_no'] = (int) $request->current_slip_no;
+        }
+
+        $slipSequence->update($data);
 
         return redirect()->route('store-manager.slip-sequences.index')->with('success', 'Slip sequence updated.');
     }

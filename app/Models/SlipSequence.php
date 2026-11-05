@@ -92,6 +92,8 @@ class SlipSequence extends Model
         $start = (int)$this->book_start_no;
         if ($fromNumber !== null) {
             $start = max($start, $fromNumber);
+        } elseif (!empty($this->current_slip_no) && (int)$this->current_slip_no >= $start) {
+            $start = (int)$this->current_slip_no;
         }
         $end = (int)$this->book_end_no;
 
@@ -251,16 +253,21 @@ class SlipSequence extends Model
      */
     public function getRemainingSlips(?\Illuminate\Support\Collection $assignedSlips = null): int
     {
-        $capacity = $this->getCapacity();
-        if ($assignedSlips !== null) {
-            $used = $assignedSlips->filter(function ($item) {
-                $num = $item['numeric_no'] ?? null;
-                return $num !== null && $num >= (int)$this->book_start_no && $num <= (int)$this->book_end_no;
-            })->unique('numeric_no')->count();
-            return max(0, $capacity - $used);
+        $nextFree = $this->nextFreeNumber(null, $assignedSlips);
+        if ($nextFree === null) {
+            return 0;
         }
 
-        return max(0, $capacity - (int)$this->used_count);
+        if ($assignedSlips === null) {
+            $assignedSlips = $this->getAssignedSlipsDetail();
+        }
+
+        $used = $assignedSlips->filter(function ($item) use ($nextFree) {
+            $num = $item['numeric_no'] ?? null;
+            return $num !== null && $num >= $nextFree && $num <= (int)$this->book_end_no;
+        })->unique('numeric_no')->count();
+
+        return max(0, ((int)$this->book_end_no - $nextFree + 1) - $used);
     }
 
     /**

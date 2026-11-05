@@ -53,26 +53,35 @@
                         </div>
 
                         <hr>
-                        <h5>Book Range</h5>
-                        <p class="text-muted small">Define the start and end slip numbers for this book</p>
+                        <h5 class="fw-bold text-dark"><i class="fas fa-book-open me-2 text-primary"></i>Book Range &amp; Next Available Slip</h5>
+                        <p class="text-muted small">Define the start and end slip numbers for this physical pad, and choose which number to start issuing from.</p>
 
                         <div class="row mb-3">
-                            <div class="col-md-6">
-                                <label class="form-label">Book Start No *</label>
-                                <input type="number" name="book_start_no" class="form-control" 
-                                       placeholder="E.g., 2100" required min="1">
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold">Book Start No *</label>
+                                <input type="number" name="book_start_no" id="book_start_no" class="form-control font-monospace fw-bold" 
+                                       placeholder="E.g., 2100" required min="1" value="{{ old('book_start_no') }}" oninput="syncNextAvailableSlipNo()">
+                                <small class="text-muted">First leaf number in physical pad</small>
                             </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Book End No *</label>
-                                <input type="number" name="book_end_no" class="form-control" 
-                                       placeholder="E.g., 2150" required min="2">
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold">Book End No *</label>
+                                <input type="number" name="book_end_no" id="book_end_no" class="form-control font-monospace fw-bold" 
+                                       placeholder="E.g., 2150" required min="2" value="{{ old('book_end_no') }}" oninput="updateBookCapacity()">
+                                <small class="text-muted" id="bookCapacityText">Last leaf number in physical pad</small>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold text-primary">
+                                    <i class="fas fa-play-circle me-1"></i>Next Available Slip (Start With No)
+                                </label>
+                                <input type="number" name="current_slip_no" id="current_slip_no" class="form-control font-monospace fw-bold border-primary shadow-xs" 
+                                       placeholder="Defaults to Start No" min="1" value="{{ old('current_slip_no') }}">
+                                <small class="text-muted">Start issuing slips from this number</small>
                             </div>
                         </div>
 
-                        <div class="alert alert-info">
-                            <i class="fas fa-lightbulb me-2"></i>
-                            <strong>Example:</strong> If you have a physical slip book numbered 2100 to 2150, 
-                            enter those exact numbers. The system will then automatically assign 2100, 2101, 2102, etc.
+                        <div class="alert alert-info py-2 px-3 small border-start border-4 border-info">
+                            <i class="fas fa-lightbulb me-1 text-warning"></i>
+                            <strong>Next Available Slip Option:</strong> If you are entering a physical pad where some slips were already used offline/on paper (e.g. pad is numbered 2100 to 2150, but slips up to 2124 were already issued), specify <strong>2125</strong> in <strong>Next Available Slip (Start With No)</strong>. The system will start assigning numbers directly from <strong>2125</strong>.
                         </div>
 
                         <div class="row mb-3">
@@ -138,6 +147,45 @@
 
 @push('scripts')
 <script>
+let userEditedNextSlip = false;
+
+document.addEventListener('DOMContentLoaded', function() {
+    const currentInput = document.getElementById('current_slip_no');
+    if (currentInput) {
+        currentInput.addEventListener('input', function() {
+            userEditedNextSlip = (this.value.trim() !== '');
+        });
+    }
+});
+
+function syncNextAvailableSlipNo() {
+    const startVal = document.getElementById('book_start_no')?.value;
+    const currentInput = document.getElementById('current_slip_no');
+    if (currentInput && !userEditedNextSlip) {
+        currentInput.value = startVal;
+    }
+    updateBookCapacity();
+}
+
+function updateBookCapacity() {
+    const startVal = parseInt(document.getElementById('book_start_no')?.value) || 0;
+    const endVal = parseInt(document.getElementById('book_end_no')?.value) || 0;
+    const currentInput = document.getElementById('current_slip_no');
+    const capacityText = document.getElementById('bookCapacityText');
+
+    if (startVal > 0 && currentInput) {
+        currentInput.min = startVal;
+    }
+    if (endVal > 0 && currentInput) {
+        currentInput.max = endVal;
+    }
+
+    if (startVal > 0 && endVal >= startVal && capacityText) {
+        const capacity = endVal - startVal + 1;
+        capacityText.innerHTML = `Total capacity: <strong>${capacity}</strong> slips`;
+    }
+}
+
 function updateLabel() {
     const slipType = document.querySelector('select[name="slip_type"]').value;
     const labelInput = document.getElementById('label');

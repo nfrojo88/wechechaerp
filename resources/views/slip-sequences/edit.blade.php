@@ -127,10 +127,16 @@
                                 <small class="text-muted">Total: {{ $slipSequence->book_end_no - $slipSequence->book_start_no + 1 }} slips</small>
                             </div>
                             <div class="col-md-6">
-                                <label class="form-label fw-bold small text-muted text-uppercase">Next Available Slip</label>
-                                <div>
-                                    <span class="badge bg-primary fs-6 px-3 py-1 font-monospace">#{{ $slipSequence->getNextSlipNumber() }}</span>
+                                <label class="form-label fw-bold small text-muted text-uppercase text-primary">
+                                    <i class="fas fa-play-circle me-1"></i>Next Available Slip Number (Start With)
+                                </label>
+                                <div class="input-group">
+                                    <input type="number" name="current_slip_no" class="form-control font-monospace fw-bold border-primary shadow-xs" 
+                                           value="{{ old('current_slip_no', $slipSequence->getNextSlipNumber()) }}" 
+                                           min="{{ $slipSequence->book_start_no }}" max="{{ $slipSequence->book_end_no }}">
+                                    <span class="input-group-text bg-light font-monospace text-muted">Pref: {{ $slipSequence->prefix ?: 'none' }}</span>
                                 </div>
+                                <small class="text-muted">The sequence will start issuing slips from this number</small>
                             </div>
                         </div>
 
@@ -1140,17 +1146,25 @@
                             $nextEnd = $nextStart + $capacity - 1;
                         @endphp
 
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <label class="form-label fw-bold small text-muted text-uppercase">Book Start Number *</label>
                             <input type="number" name="book_start_no" id="modal_book_start_no" class="form-control font-monospace fw-bold" 
                                    value="{{ $nextStart }}" min="1" required oninput="calculateModalCapacity()">
-                            <small class="text-muted">Continuously follows Book #{{ $slipSequence->book_end_no }}</small>
+                            <small class="text-muted">Follows Book #{{ $slipSequence->book_end_no }}</small>
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <label class="form-label fw-bold small text-muted text-uppercase">Book End Number *</label>
                             <input type="number" name="book_end_no" id="modal_book_end_no" class="form-control font-monospace fw-bold" 
                                    value="{{ $nextEnd }}" min="2" required oninput="calculateModalCapacity()">
                             <small class="text-muted" id="modalCapacityText">Total capacity: {{ $capacity }} slips</small>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold small text-muted text-uppercase text-primary">
+                                <i class="fas fa-play-circle me-1"></i>Next Available Slip (Start With)
+                            </label>
+                            <input type="number" name="current_slip_no" id="modal_current_slip_no" class="form-control font-monospace fw-bold border-primary shadow-xs" 
+                                   value="{{ $nextStart }}" min="1">
+                            <small class="text-muted">Start issuing slips from this number</small>
                         </div>
 
                         <div class="col-12">
@@ -1289,10 +1303,20 @@
     function calculateModalCapacity() {
         var startInput = document.getElementById('modal_book_start_no');
         var endInput = document.getElementById('modal_book_end_no');
+        var currentInput = document.getElementById('modal_current_slip_no');
         var capText = document.getElementById('modalCapacityText');
         if (startInput && endInput && capText) {
             var s = parseInt(startInput.value) || 0;
             var e = parseInt(endInput.value) || 0;
+            if (currentInput && s > 0) {
+                currentInput.min = s;
+                if (!currentInput.value || parseInt(currentInput.value) < s) {
+                    currentInput.value = s;
+                }
+            }
+            if (currentInput && e > 0) {
+                currentInput.max = e;
+            }
             if (e >= s && s > 0) {
                 var total = e - s + 1;
                 capText.textContent = 'Total capacity: ' + total + ' slips';
