@@ -106,6 +106,7 @@
                         <option value="Service" {{ request('category') === 'Service' ? 'selected' : '' }}>Service (አገልግሎት)</option>
                         <option value="Transport" {{ request('category') === 'Transport' ? 'selected' : '' }}>Transport (ትራንስፖርት)</option>
                         <option value="Loading & Unloading" {{ (request('category') === 'Loading & Unloading' || request('category') === 'Loading / Unloading' || request('category') === 'Loading Unloading') ? 'selected' : '' }}>Loading &amp; Unloading (መጫን/ማውረድ)</option>
+                        <option value="Utility Expense" {{ (request('category') === 'Utility Expense' || request('category') === 'Utility') ? 'selected' : '' }}>⚡ Utility Expense (የፍጆታ ወጪ)</option>
                         <option value="Contract Work" {{ request('category') === 'Contract Work' ? 'selected' : '' }}>Contract Work (የኮንትራት ስራ)</option>
                         <option value="Office Material" {{ request('category') === 'Office Material' ? 'selected' : '' }}>Office Material (የቢሮ እቃ)</option>
                         <option value="Maintenance" {{ request('category') === 'Maintenance' ? 'selected' : '' }}>Maintenance (ጥገና)</option>
@@ -166,6 +167,7 @@
                                         'Transport' => 'fa-car',
                                         'Office Material' => 'fa-boxes-packing',
                                         'Loading & Unloading', 'Loading / Unloading', 'Loading Unloading' => 'fa-truck-ramp-box',
+                                        'Utility Expense', 'Utility' => 'fa-bolt',
                                         'Contract Work' => 'fa-file-signature',
                                         'Maintenance' => 'fa-screwdriver-wrench',
                                         default => 'fa-list',
@@ -175,7 +177,7 @@
                                     <i class="fa-solid {{ $catIcon }} me-1 text-primary"></i>
                                     {{ $req->category }}
                                 </span>
-                                @if(in_array($req->category, ['Transport', 'Loading & Unloading', 'Loading / Unloading', 'Loading Unloading']))
+                                @if(in_array($req->category, ['Transport', 'Loading & Unloading', 'Loading / Unloading', 'Loading Unloading', 'Utility Expense', 'Utility']))
                                     <div class="mt-1 p-2 rounded-2 bg-light border border-info-subtle small shadow-xs" style="font-size: 0.74rem; line-height: 1.45; min-width: 200px;">
                                         @if($req->employee)
                                             <div class="text-truncate mb-1" title="Beneficiary / Driver / Handler: {{ $req->employee->full_name }}">
@@ -250,8 +252,14 @@
                                     </div>
                                 @endif
                             </td>
-                            <td class="fw-bold fs-6 text-success">
-                                {{ number_format($req->amount, 2) }} <small class="text-muted fw-normal">ETB</small>
+                            <td class="fw-bold fs-6 {{ (float)$req->amount > 0 ? 'text-success' : 'text-warning' }}">
+                                @if((float)$req->amount > 0)
+                                    {{ number_format($req->amount, 2) }} <small class="text-muted fw-normal">ETB</small>
+                                @else
+                                    <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle py-1 px-2" title="Pay amount will be added by Finance Head">
+                                        <i class="fa-solid fa-clock-rotate-left me-1"></i>To be added by Finance Head
+                                    </span>
+                                @endif
                             </td>
                             <td>
                                 <span class="text-truncate d-inline-block" style="max-width: 220px;" title="{{ $req->description }}">
@@ -335,9 +343,15 @@
 
                                 {{-- Finance Head Assign Button --}}
                                 @if(in_array($req->status, ['Approved - Assigned to Finance', 'Assigned to Finance']) && $isFinanceHeadUser)
-                                    <button type="button" class="btn btn-sm btn-primary fw-bold py-1 px-2" data-bs-toggle="modal" data-bs-target="#financeAssignModal{{ $req->id }}">
-                                        <i class="fa-solid fa-user-gear me-1"></i>Assign Finance
-                                    </button>
+                                    @if((float)$req->amount <= 0)
+                                        <button type="button" class="btn btn-sm btn-warning text-dark fw-bold py-1 px-2 shadow-sm" data-bs-toggle="modal" data-bs-target="#financeAssignModal{{ $req->id }}" title="Set Pay Amount & Assign Finance Staff">
+                                            <i class="fa-solid fa-coins me-1"></i>Set Pay Amount &amp; Assign
+                                        </button>
+                                    @else
+                                        <button type="button" class="btn btn-sm btn-primary fw-bold py-1 px-2" data-bs-toggle="modal" data-bs-target="#financeAssignModal{{ $req->id }}">
+                                            <i class="fa-solid fa-user-gear me-1"></i>Assign Finance
+                                        </button>
+                                    @endif
                                 @endif
 
                                 {{-- Finance Staff / Admin Adjust & Payment Button --}}
@@ -752,16 +766,18 @@
                         <div class="bg-light p-3 rounded-3 mb-3 border">
                             <div class="row g-2">
                                 <div class="col-6">
-                                    <span class="text-muted small">Payee Employee:</span>
-                                    <div class="fw-bold text-dark">{{ $req->user->name ?? 'N/A' }}</div>
+                                    <span class="text-muted small">Payee / Assignee:</span>
+                                    <div class="fw-bold text-dark">{{ $req->employee->full_name ?? ($req->user->name ?? 'N/A') }}</div>
                                 </div>
                                 <div class="col-6">
                                     <span class="text-muted small">Category:</span>
                                     <div class="fw-semibold text-dark">{{ $req->category }}</div>
                                 </div>
                                 <div class="col-12">
-                                    <span class="text-muted small">Amount to Disburse:</span>
-                                    <div class="fs-4 fw-bold text-success">ETB {{ number_format($req->amount, 2) }}</div>
+                                    <span class="text-muted small">Current Amount:</span>
+                                    <div class="fs-5 fw-bold {{ (float)$req->amount > 0 ? 'text-success' : 'text-warning' }}">
+                                        {{ (float)$req->amount > 0 ? 'ETB ' . number_format($req->amount, 2) : 'To be added by Finance Head' }}
+                                    </div>
                                 </div>
                             </div>
                             @if($req->attachment)
@@ -772,6 +788,34 @@
                                     </a>
                                 </div>
                             @endif
+                        </div>
+
+                        {{-- Pay Amount (Added or Adjusted by Finance Head) --}}
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">
+                                <i class="fa-solid fa-money-bill-wave text-success me-1"></i>Approved Pay Amount (ETB)
+                                @if($req->category === 'Utility Expense' || (float)$req->amount <= 0)
+                                    <span class="text-danger">*</span>
+                                    <span class="badge bg-warning text-dark ms-1">Added / Approved by Finance Head</span>
+                                @else
+                                    <span class="text-muted fw-normal small">(Optional to adjust)</span>
+                                @endif
+                            </label>
+                            <div class="input-group">
+                                <span class="input-group-text fw-bold bg-light">ETB</span>
+                                <input type="number" step="0.01" min="0.01" name="pay_amount" id="payAmount{{ $req->id }}"
+                                       class="form-control fw-bold fs-5 text-dark"
+                                       value="{{ (float)$req->amount > 0 ? number_format($req->amount, 2, '.', '') : '' }}"
+                                       placeholder="Enter approved pay amount (e.g. 1500.00)"
+                                       {{ (float)$req->amount <= 0 ? 'required' : '' }}>
+                            </div>
+                            <div class="small text-muted mt-1">
+                                @if((float)$req->amount <= 0)
+                                    <i class="fa-solid fa-triangle-exclamation text-warning me-1"></i><strong>Finance Head Action Required:</strong> Please enter the approved pay amount to disburse for this {{ strtolower($req->category) }}.
+                                @else
+                                    <i class="fa-solid fa-pen text-primary me-1"></i>Current requested amount: ETB {{ number_format($req->amount, 2) }}. Finance Head can modify or confirm before assignment.
+                                @endif
+                            </div>
                         </div>
 
                         <div class="mb-3">
@@ -1898,6 +1942,7 @@
                                 <option value="Service">🤝 Service (አገልግሎት)</option>
                                 <option value="Transport">🚚 Transport (ትራንስፖርት)</option>
                                 <option value="Loading & Unloading">📦 Loading &amp; Unloading (መጫን እና ማውረድ)</option>
+                                <option value="Utility Expense">⚡ Utility Expense (የፍጆታ ወጪ)</option>
                                 <option value="Contract Work">📝 Contract Work (የኮንትራት ስራ)</option>
                                 <option value="Office Material">📁 Office Material (የቢሮ እቃ)</option>
                                 <option value="Maintenance">🔧 Maintenance &amp; Repairs (ጥገና)</option>
@@ -1906,11 +1951,14 @@
                         </div>
 
                         <div class="col-md-6">
-                            <label class="form-label fw-bold">Invoice / Base Amount (ETB) <span class="text-danger">*</span></label>
+                            <label class="form-label fw-bold">Invoice / Base Amount (ETB) <span class="text-danger" id="createAmountRequiredAsterisk">*</span></label>
                             <div class="input-group">
                                 <span class="input-group-text fw-bold bg-light">ETB</span>
                                 <input type="number" step="0.01" min="0.01" name="gross_amount" id="createGrossAmount" class="form-control fw-bold fs-5 text-dark" placeholder="0.00" oninput="recalculateCreateTaxes()" required>
                             </div>
+                            <small id="utilityAmountHelp" class="text-muted d-block mt-1" style="display:none; font-size: 0.78rem;">
+                                <i class="fa-solid fa-bolt text-warning me-1"></i>Pay amount can be entered now or left as 0 to be specified by the Finance Head.
+                            </small>
                         </div>
 
                         {{-- Project Selection (Mandatory for Loading & Unloading, Optional for other expenses) --}}
@@ -2254,7 +2302,28 @@ function toggleCategoryOptions() {
         }
     }
 
-    if (category === 'Transport' || category === 'Loading & Unloading') {
+    const isUtility = category === 'Utility Expense' || category === 'Utility';
+    const amountInput = document.getElementById('createGrossAmount');
+    const amountAsterisk = document.getElementById('createAmountRequiredAsterisk');
+    const utilityHint = document.getElementById('utilityAmountHelp');
+
+    if (isUtility) {
+        if (amountInput) {
+            amountInput.required = false;
+            amountInput.min = '0';
+        }
+        if (amountAsterisk) amountAsterisk.style.display = 'none';
+        if (utilityHint) utilityHint.style.display = 'block';
+    } else {
+        if (amountInput) {
+            amountInput.required = true;
+            amountInput.min = '0.01';
+        }
+        if (amountAsterisk) amountAsterisk.style.display = 'inline';
+        if (utilityHint) utilityHint.style.display = 'none';
+    }
+
+    if (category === 'Transport' || category === 'Loading & Unloading' || isUtility) {
         if (employeeGroup) employeeGroup.style.display = 'block';
         if (employeeSelect) {
             employeeSelect.required = true;
@@ -2264,6 +2333,9 @@ function toggleCategoryOptions() {
             if (category === 'Loading & Unloading') {
                 badge.className = 'badge bg-warning text-dark px-2 py-1';
                 badge.innerHTML = '<i class="fa-solid fa-dolly me-1"></i>Loading &amp; Unloading Allocation';
+            } else if (isUtility) {
+                badge.className = 'badge bg-warning text-dark px-2 py-1';
+                badge.innerHTML = '<i class="fa-solid fa-bolt me-1"></i>Utility Expense Allocation';
             } else {
                 badge.className = 'badge bg-info text-white px-2 py-1';
                 badge.innerHTML = '<i class="fa-solid fa-truck-ramp-box me-1"></i>Transport Money Allocation';
@@ -2278,7 +2350,7 @@ function toggleCategoryOptions() {
     }
 
     if (taxSection) {
-        if (category === 'Service' || category === 'Contract Work') {
+        if (category === 'Service' || category === 'Contract Work' || isUtility) {
             taxSection.style.display = 'block';
         } else {
             taxSection.style.display = 'none';
@@ -2620,13 +2692,24 @@ document.addEventListener('DOMContentLoaded', function() {
             const projectSelect = document.getElementById('projectSelect');
             const bankToggle = document.getElementById('createBankPaymentToggle');
 
-            if (category === 'Transport' || category === 'Loading & Unloading') {
+            if (category === 'Transport' || category === 'Loading & Unloading' || category === 'Utility Expense' || category === 'Utility') {
                 if (!employeeSelect || !employeeSelect.value) {
                     e.preventDefault();
-                    const label = category === 'Transport' ? 'Transport (ለትራንስፖርት)' : 'Loading & Unloading (ለመጫን እና ማውረድ)';
-                    alert('Strict Requirement: You must select and assign another employee or driver/handler for ' + label + ' requests. Self-assignment is prohibited. (ራስዎን መምረጥ አይፈቀድም፤ እባክዎ ሌላ ሰራተኛ ወይም አሽከርካሪ ይምረጡ)።');
+                    const label = (category === 'Transport') 
+                        ? 'Transport (ለትራንስፖርት)' 
+                        : ((category === 'Utility Expense' || category === 'Utility') ? 'Utility Expense (ለፍጆታ ወጪ)' : 'Loading & Unloading (ለመጫን እና ማውረድ)');
+                    alert('Strict Requirement: You must select and assign another employee or handler for ' + label + ' requests. Self-assignment is prohibited. (ራስዎን መምረጥ አይፈቀድም፤ እባክዎ ሌላ ሰራተኛ ይምረጡ)።');
                     employeeSelect?.focus();
                     return false;
+                }
+            }
+
+            // For Utility Expense, if gross amount was left empty or <= 0, default to 0.00
+            if (category === 'Utility Expense' || category === 'Utility') {
+                const grossInput = document.getElementById('createGrossAmount');
+                if (grossInput && (!grossInput.value || parseFloat(grossInput.value) < 0)) {
+                    grossInput.value = '0.00';
+                    recalculateCreateTaxes();
                 }
             }
 

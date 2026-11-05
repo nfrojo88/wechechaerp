@@ -131,6 +131,7 @@ class ExpenseRequest extends Model
     public const CATEGORY_SERVICE = 'Service';
     public const CATEGORY_TRANSPORT = 'Transport';
     public const CATEGORY_LOADING_UNLOADING = 'Loading & Unloading';
+    public const CATEGORY_UTILITY = 'Utility Expense';
     public const CATEGORY_CONTRACT_WORK = 'Contract Work';
     public const CATEGORY_OFFICE_MATERIAL = 'Office Material';
     public const CATEGORY_MAINTENANCE = 'Maintenance';
@@ -166,6 +167,13 @@ class ExpenseRequest extends Model
                 'color' => 'warning',
                 'has_tax_options' => false,
                 'description' => 'Material handling, portage, site loading/unloading labor costs'
+            ],
+            self::CATEGORY_UTILITY => [
+                'label' => 'Utility Expense (የፍጆታ ወጪ)',
+                'icon' => 'fa-solid fa-bolt',
+                'color' => 'warning',
+                'has_tax_options' => true,
+                'description' => 'Electricity, water, telephone, internet, and site/office utility bills'
             ],
             self::CATEGORY_CONTRACT_WORK => [
                 'label' => 'Contract Work (የኮንትራት ስራ)',

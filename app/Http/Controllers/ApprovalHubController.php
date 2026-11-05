@@ -668,7 +668,7 @@ class ApprovalHubController extends Controller
         // Collect distinct categories & projects for filter dropdowns
         $categories = [
             'Service', 'Transport', 'Loading & Unloading',
-            'Contract Work', 'Office Material', 'Maintenance', 'Purchase', 'Other'
+            'Utility Expense', 'Contract Work', 'Office Material', 'Maintenance', 'Purchase', 'Other'
         ];
 
         $projects = Project::orderBy('name')->get();

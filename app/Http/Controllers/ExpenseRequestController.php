@@ -471,11 +471,11 @@ class ExpenseRequestController extends Controller
         $validated = $request->validate([
             'employee_id' => 'nullable|exists:employees,id',
             'project_id' => 'nullable|exists:projects,id',
-            'category' => 'required|string|in:Service,Transport,Office Material,Loading & Unloading,Loading / Unloading,Loading Unloading,Contract Work,Maintenance,Other',
+            'category' => 'required|string|in:Service,Transport,Office Material,Loading & Unloading,Loading / Unloading,Loading Unloading,Contract Work,Maintenance,Utility Expense,Utility,Other',
             'other_reason' => 'required_if:category,Other|nullable|string|max:255',
             'service_type' => 'nullable|string|max:100',
             'maintenance_request_id' => 'nullable|exists:maintenance_requests,id',
-            'amount' => 'required|numeric|min:0.01',
+            'amount' => in_array($request->input('category'), ['Utility Expense', 'Utility']) ? 'nullable|numeric|min:0' : 'required|numeric|min:0.01',
             'gross_amount' => 'nullable|numeric|min:0',
             'vat_type' => 'nullable|string|in:none,inclusive,exclusive,vat_b',
             'vat_rate' => 'nullable|numeric|min:0',
@@ -503,15 +503,23 @@ class ExpenseRequestController extends Controller
         if (in_array($category, ['Loading / Unloading', 'Loading Unloading'])) {
             $category = 'Loading & Unloading';
         }
+        if (in_array($category, ['Utility', 'Utility Expense'])) {
+            $category = 'Utility Expense';
+        }
 
         $targetEmployeeId = $request->filled('employee_id') ? (int)$request->input('employee_id') : null;
         $targetProjectId = $request->filled('project_id') ? (int)$request->input('project_id') : null;
 
-        // STRICT ENFORCEMENT: Transport & Loading/Unloading requests must assign another employee or driver
-        if (in_array($category, ['Transport', 'Loading & Unloading'])) {
+        // STRICT ENFORCEMENT: Transport, Loading/Unloading, and Utility Expense requests must assign another employee / handler
+        if (in_array($category, ['Transport', 'Loading & Unloading', 'Utility Expense'])) {
             if (!$targetEmployeeId) {
-                $categoryLabel = $category === 'Transport' ? 'transport (ለትራንስፖርት)' : 'loading & unloading (ለመጫን እና ማውረድ)';
-                return back()->with('error', "Strict Policy: You must assign another employee or driver for {$categoryLabel} requests. (እባክዎ ተጠቃሚ ሰራተኛ ወይም አሽከርካሪ ይምረጡ።)")->withInput();
+                $categoryLabel = match($category) {
+                    'Transport' => 'transport (ለትራንስፖርት)',
+                    'Loading & Unloading' => 'loading & unloading (ለመጫን እና ማውረድ)',
+                    'Utility Expense' => 'utility expense (ለፍጆታ ወጪ)',
+                    default => strtolower($category),
+                };
+                return back()->with('error', "Strict Policy: You must assign another employee or handler for {$categoryLabel} requests. (እባክዎ ተጠቃሚ ሰራተኛ ይምረጡ።)")->withInput();
             }
         }
 
@@ -541,8 +549,8 @@ class ExpenseRequestController extends Controller
             }
         }
 
-        // For non-transport / non-loading categories without an explicit assigned employee, default to requester's employee profile
-        if (!$targetEmployeeId && !in_array($category, ['Transport', 'Loading & Unloading'])) {
+        // For non-transport / non-loading / non-utility categories without an explicit assigned employee, default to requester's employee profile
+        if (!$targetEmployeeId && !in_array($category, ['Transport', 'Loading & Unloading', 'Utility Expense'])) {
             $targetEmployeeId = $userEmployeeId;
         }
 
@@ -660,9 +668,13 @@ class ExpenseRequestController extends Controller
             'status' => $initialStatus,
         ]);
 
+        $amountNotice = (float)$expenseRequest->amount > 0
+            ? " for ETB " . number_format($expenseRequest->amount, 2)
+            : " (pay amount to be set by Finance Head)";
+
         $successMsg = $needsEmployeeApproval
-            ? "Expense Request #{$expenseRequest->request_number} for ETB " . number_format($expenseRequest->amount, 2) . " submitted! Sent to the assigned employee for confirmation before HR/Coordinator review."
-            : "Expense Request #{$expenseRequest->request_number} for ETB " . number_format($expenseRequest->amount, 2) . " submitted successfully and sent to HR / Coordinator for review!";
+            ? "Expense Request #{$expenseRequest->request_number}{$amountNotice} submitted! Sent to the assigned employee for confirmation before HR/Coordinator review."
+            : "Expense Request #{$expenseRequest->request_number}{$amountNotice} submitted successfully and sent to HR / Coordinator for review!";
 
         return redirect('/expense-requests?tab=my_requests')->with('success', $successMsg);
     }
@@ -758,7 +770,10 @@ class ExpenseRequestController extends Controller
                 'hr_reviewed_at' => now(),
             ]);
 
-            $message = "Request #{$expenseRequest->request_number} (ETB " . number_format($expenseRequest->amount, 2) . ") approved by HR / Coordinator and routed to Finance Head.";
+            $amountLabel = (float)$expenseRequest->amount > 0
+                ? " (ETB " . number_format($expenseRequest->amount, 2) . ")"
+                : " (Pay amount to be set by Finance Head)";
+            $message = "Request #{$expenseRequest->request_number}{$amountLabel} approved by HR / Coordinator and routed to Finance Head.";
         } else {
             $expenseRequest->update([
                 'status' => ExpenseRequest::STATUS_PENDING_GM,
@@ -983,10 +998,13 @@ class ExpenseRequestController extends Controller
     {
         $this->authorize('financeAssign', $expenseRequest);
 
+        $isZeroAmount = (float)($expenseRequest->amount ?? 0) <= 0;
+
         $validated = $request->validate([
             'coa_id' => 'required|exists:chart_of_accounts,id',
             'assigned_finance_staff_id' => 'nullable|exists:users,id',
             'bank_account_id' => 'nullable|exists:bank_accounts,id',
+            'pay_amount' => $isZeroAmount ? 'required|numeric|min:0.01' : 'nullable|numeric|min:0.01',
         ]);
 
         if (!in_array($expenseRequest->status, [ExpenseRequest::STATUS_APPROVED_ASSIGNED, ExpenseRequest::STATUS_ASSIGNED])) {
@@ -1003,7 +1021,7 @@ class ExpenseRequestController extends Controller
             ?? ($bankAccount ? $bankAccount->assigned_to : null)
             ?? auth()->id();
 
-        $expenseRequest->update([
+        $updateData = [
             'status' => ExpenseRequest::STATUS_ASSIGNED,
             'coa_id' => $coa->id,
             'chart_of_account_id' => $coa->id,
@@ -1012,7 +1030,53 @@ class ExpenseRequestController extends Controller
             'assigned_finance_staff_id' => $assignedStaffId,
             'finance_staff_id' => $assignedStaffId,
             'finance_assigned_at' => now(),
-        ]);
+        ];
+
+        // Pay amount added or updated by Finance Head
+        if ($request->filled('pay_amount') && (float)$request->input('pay_amount') > 0) {
+            $newPayAmount = round((float)$request->input('pay_amount'), 2);
+            $vatType = $expenseRequest->vat_type ?? 'none';
+            $vatRate = (float)($expenseRequest->vat_rate ?? 15.00);
+            $hasWithholding = (bool)($expenseRequest->has_withholding ?? false);
+            $withholdingRate = (float)($expenseRequest->withholding_rate ?: 3.00);
+
+            $vatAmount = 0.0;
+            $baseAmount = $newPayAmount;
+            $withholdingAmount = 0.0;
+            $netAmount = $newPayAmount;
+
+            if ($vatType === 'exclusive') {
+                $vatAmount = round($newPayAmount * ($vatRate / 100), 2);
+                $baseAmount = $newPayAmount;
+                $totalGrossWithVat = $newPayAmount + $vatAmount;
+                if ($hasWithholding) {
+                    $withholdingAmount = round($baseAmount * ($withholdingRate / 100), 2);
+                }
+                $netAmount = max(0, $totalGrossWithVat - $withholdingAmount);
+            } elseif ($vatType === 'inclusive' || $vatType === 'vat_b') {
+                $baseAmount = round($newPayAmount / (1 + ($vatRate / 100)), 2);
+                $vatAmount = round($newPayAmount - $baseAmount, 2);
+                if ($hasWithholding) {
+                    $withholdingAmount = round($baseAmount * ($withholdingRate / 100), 2);
+                }
+                $netAmount = max(0, $newPayAmount - $withholdingAmount);
+            } else {
+                $baseAmount = $newPayAmount;
+                $vatAmount = 0.0;
+                if ($hasWithholding) {
+                    $withholdingAmount = round($baseAmount * ($withholdingRate / 100), 2);
+                }
+                $netAmount = max(0, $newPayAmount - $withholdingAmount);
+            }
+
+            $updateData['amount'] = $baseAmount;
+            $updateData['gross_amount'] = ($vatType === 'exclusive') ? ($baseAmount + $vatAmount) : $newPayAmount;
+            $updateData['vat_amount'] = $vatAmount;
+            $updateData['withholding_amount'] = $withholdingAmount;
+            $updateData['net_amount'] = $netAmount;
+        }
+
+        $expenseRequest->update($updateData);
 
         // If linked to a Purchase Request, sync ProcurementPayment assignment
         if ($expenseRequest->purchase_request_id) {
@@ -1025,7 +1089,7 @@ class ExpenseRequestController extends Controller
                         [
                             'method'                    => 'cash',
                             'coa_account_id'            => $coa->id,
-                            'amount'                    => $expenseRequest->amount,
+                            'amount'                    => $updateData['amount'] ?? $expenseRequest->amount,
                             'assigned_finance_staff_id' => $assignedStaffId,
                             'notes'                     => "Assigned via Expense Request #{$expenseRequest->request_number}",
                             'status'                    => 'pending_payment',
@@ -1040,8 +1104,16 @@ class ExpenseRequestController extends Controller
 
         $assignedStaff = User::find($assignedStaffId);
         $staffName = $assignedStaff ? $assignedStaff->name : 'Finance Staff';
+        $finalDisburseAmount = $updateData['net_amount'] ?? ($updateData['amount'] ?? $expenseRequest->amount);
 
-        return back()->with('success', "Request #{$expenseRequest->request_number} assigned to finance staff member ({$staffName})!");
+        \App\Models\ActivityLog::log(
+            'assigned',
+            "Finance Head assigned Request #{$expenseRequest->request_number} to {$staffName} with approved pay amount of ETB " . number_format($finalDisburseAmount, 2),
+            'Expense Requests',
+            $expenseRequest
+        );
+
+        return back()->with('success', "Request #{$expenseRequest->request_number} assigned to finance staff member ({$staffName}) with approved pay amount of ETB " . number_format($finalDisburseAmount, 2) . "!");
     }
 
     /**
@@ -1237,6 +1309,11 @@ class ExpenseRequestController extends Controller
 
             if ($disbursedAmount <= 0) {
                 $disbursedAmount = $calcNet > 0 ? $calcNet : (float)$expenseRequest->amount;
+            }
+
+            if ($disbursedAmount <= 0) {
+                DB::rollBack();
+                return back()->with('error', 'Pay amount must be added by Finance Head before marking as paid.');
             }
 
             $fsNoScanned   = trim((string)($request->input('fs_no') ?: ''));

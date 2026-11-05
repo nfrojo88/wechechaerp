@@ -70,6 +70,7 @@
                                         'Transport' => 'fa-car',
                                         'Office Material' => 'fa-boxes-packing',
                                         'Loading & Unloading', 'Loading / Unloading', 'Loading Unloading' => 'fa-truck-ramp-box',
+                                        'Utility Expense', 'Utility' => 'fa-bolt',
                                         'Contract Work' => 'fa-file-signature',
                                         default => 'fa-list',
                                     };
@@ -78,7 +79,7 @@
                                     <i class="fa-solid {{ $catIcon }} me-1 text-primary"></i>
                                     {{ $req->category }}
                                 </span>
-                                @if(in_array($req->category, ['Transport', 'Loading & Unloading', 'Loading / Unloading', 'Loading Unloading']))
+                                @if(in_array($req->category, ['Transport', 'Loading & Unloading', 'Loading / Unloading', 'Loading Unloading', 'Utility Expense', 'Utility']))
                                     <div class="mt-1 small" style="font-size: 0.72rem; line-height: 1.35;">
                                         @if($req->employee)
                                             <div class="text-truncate text-muted"><i class="fa-solid fa-id-badge text-info me-1"></i>For: <strong class="text-dark">{{ $req->employee->full_name }}</strong></div>

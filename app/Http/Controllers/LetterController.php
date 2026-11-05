@@ -335,6 +335,7 @@ class LetterController extends Controller
             'Contract Work'      => 'Contract Work (የኮንትራት ስራ)',
             'Office Material'    => 'Office Material (የቢሮ እቃ)',
             'Maintenance'        => 'Maintenance & Repairs (ጥገና)',
+            'Utility Expense'    => 'Utility Expense (የፍጆታ ወጪ)',
             'Other'              => 'Other Expense (ሌሎች ወጪዎች)',
         ];
 
