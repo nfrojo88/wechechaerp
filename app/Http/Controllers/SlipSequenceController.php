@@ -12,6 +12,8 @@ class SlipSequenceController extends Controller
     public function __construct()
     {
         $this->middleware('auth');
+        @ini_set('max_execution_time', 120);
+        @set_time_limit(120);
     }
 
     /**
@@ -19,6 +21,8 @@ class SlipSequenceController extends Controller
      */
     public function index()
     {
+        @ini_set('max_execution_time', 120);
+        @set_time_limit(120);
         $sequences = SlipSequence::with('store')->latest()->paginate(20);
         $stores = Store::where('is_active', true)->orderBy('name')->get();
         

@@ -95,18 +95,27 @@
                                 </div>
                             </td>
                             <td>
+                                @if($seq->status === 'full')
+                                <span class="badge bg-secondary fs-6">Complete</span>
+                                @else
                                 <div class="badge bg-primary fs-6">{{ $seq->getNextSlipNumber() }}</div>
+                                @endif
                             </td>
                             <td>
+                                @php
+                                    $capacity = (int) $seq->book_end_no - (int) $seq->book_start_no + 1;
+                                    $pct = $seq->status === 'full' ? 100.0 : $seq->getPercentageUsed();
+                                    $used = min($capacity, max((int) $seq->used_count, (int) round(($pct / 100) * $capacity)));
+                                @endphp
                                 <div class="small">
-                                    <strong>{{ $seq->used_count }} / {{ $seq->book_end_no - $seq->book_start_no + 1 }}</strong>
+                                    <strong>{{ $used }} / {{ $capacity }}</strong>
                                     <div class="progress mt-2" style="height: 6px;">
-                                        <div class="progress-bar" role="progressbar" 
-                                             style="width: {{ $seq->getPercentageUsed() }}%;"
-                                             aria-valuenow="{{ $seq->getPercentageUsed() }}" 
+                                        <div class="progress-bar {{ $pct >= 90 ? 'bg-danger' : ($pct >= 70 ? 'bg-warning' : 'bg-primary') }}" role="progressbar" 
+                                             style="width: {{ $pct }}%;"
+                                             aria-valuenow="{{ $pct }}" 
                                              aria-valuemin="0" aria-valuemax="100"></div>
                                     </div>
-                                    <small class="text-muted">{{ $seq->getPercentageUsed() }}% used</small>
+                                    <small class="text-muted">{{ $pct }}% used</small>
                                 </div>
                             </td>
                             <td>

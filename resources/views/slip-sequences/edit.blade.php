@@ -1043,17 +1043,26 @@
                                     @endif
                                 </td>
                                 <td>
+                                    @if($bSeq->status === 'full')
+                                    <span class="badge bg-secondary font-monospace fs-6">Complete</span>
+                                    @else
                                     <span class="badge bg-primary font-monospace fs-6">#{{ $bSeq->getNextSlipNumber() }}</span>
+                                    @endif
                                 </td>
                                 <td>
+                                    @php
+                                        $bCapacity = (int) $bSeq->book_end_no - (int) $bSeq->book_start_no + 1;
+                                        $bPct = $bSeq->status === 'full' ? 100.0 : $bSeq->getPercentageUsed();
+                                        $bRem = $bSeq->status === 'full' ? 0 : $bSeq->getRemainingSlips();
+                                    @endphp
                                     <div class="small">
-                                        <strong>{{ $bSeq->used_count }} / {{ $bSeq->book_end_no - $bSeq->book_start_no + 1 }}</strong> used
+                                        <strong>{{ $bSeq->used_count }} / {{ $bCapacity }}</strong> used
                                         <div class="progress mt-1" style="height: 6px;">
-                                            <div class="progress-bar {{ $bSeq->getPercentageUsed() > 85 ? 'bg-danger' : 'bg-primary' }}" 
+                                            <div class="progress-bar {{ $bPct > 85 ? 'bg-danger' : 'bg-primary' }}" 
                                                  role="progressbar" 
-                                                 style="width: {{ min(100, $bSeq->getPercentageUsed()) }}%;"></div>
+                                                 style="width: {{ min(100, $bPct) }}%;"></div>
                                         </div>
-                                        <span class="text-muted" style="font-size: 0.72rem;">{{ $bSeq->getPercentageUsed() }}% used &bull; {{ $bSeq->getRemainingSlips() }} remaining</span>
+                                        <span class="text-muted" style="font-size: 0.72rem;">{{ $bPct }}% used &bull; {{ $bRem }} remaining</span>
                                     </div>
                                 </td>
                                 <td>

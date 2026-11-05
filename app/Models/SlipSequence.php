@@ -173,6 +173,10 @@ class SlipSequence extends Model
      */
     public function getNextSlipNumber(?\Illuminate\Support\Collection $assignedSlips = null): int
     {
+        if ($this->status === 'full') {
+            return (int) $this->book_end_no;
+        }
+
         $next = $this->nextFreeNumber(null, $assignedSlips);
         return $next !== null ? $next : (int)$this->current_slip_no;
     }
@@ -241,6 +245,9 @@ class SlipSequence extends Model
         if ($capacity === 0) {
             return 0.0;
         }
+        if ($this->status === 'full') {
+            return 100.0;
+        }
         $remaining = $this->getRemainingSlips($assignedSlips);
         $used = $capacity - $remaining;
         return round(($used / $capacity) * 100, 2);
@@ -253,6 +260,10 @@ class SlipSequence extends Model
      */
     public function getRemainingSlips(?\Illuminate\Support\Collection $assignedSlips = null): int
     {
+        if ($this->status === 'full') {
+            return 0;
+        }
+
         $nextFree = $this->nextFreeNumber(null, $assignedSlips);
         if ($nextFree === null) {
             return 0;
@@ -330,13 +341,12 @@ class SlipSequence extends Model
             return null;
         };
 
-        // 1. Find all matching Delivery Receipts across the database
-        $receipts = DeliveryReceipt::where(function ($q) use ($storeId, $prefix, $start, $end) {
-                $q->where('store_id', $storeId)
-                  ->orWhere('to_store_id', $storeId)
-                  ->orWhereNotNull('dr_no')
-                  ->orWhereNotNull('reference_no')
-                  ->orWhereNotNull('challan_no');
+        // 1. Find all matching Delivery Receipts for this store
+        $receipts = DeliveryReceipt::where(function ($q) use ($storeId) {
+                if ($storeId > 0) {
+                    $q->where('store_id', $storeId)
+                      ->orWhere('to_store_id', $storeId);
+                }
             })
             ->with([
                 'purchaseRequest.project',
@@ -446,7 +456,7 @@ class SlipSequence extends Model
             }
         }
 
-        // 2. Find matching Transfers across the database (including withTrashed for cancelled/soft-deleted transfers)
+        // 2. Find matching Transfers for this store (including withTrashed for cancelled/soft-deleted transfers)
         $transfers = Transfer::withTrashed()
             ->with([
                 'fromStore', 
@@ -459,14 +469,10 @@ class SlipSequence extends Model
                 'driver'
             ])
             ->where(function ($q) use ($storeId) {
-                $q->where('from_store_id', $storeId)
-                  ->orWhere('to_store_id', $storeId)
-                  ->orWhereNotNull('outgoing_slip_no')
-                  ->orWhereNotNull('physical_slip_no')
-                  ->orWhereNotNull('receiving_slip_no')
-                  ->orWhereNotNull('dispatch_notes')
-                  ->orWhereNotNull('receiving_notes')
-                  ->orWhereNotNull('reason');
+                if ($storeId > 0) {
+                    $q->where('from_store_id', $storeId)
+                      ->orWhere('to_store_id', $storeId);
+                }
             })
             ->latest('id')
             ->get();
@@ -560,155 +566,64 @@ class SlipSequence extends Model
             }
         }
 
-        // 3. Find matching Inventory Movements with Slip or Transfer references
+        // 3. Find matching Inventory Movements with Slip or Transfer references for this store
         try {
-            $movements = InventoryMovement::where(function ($q) {
+            $movementsQuery = InventoryMovement::where(function ($q) {
                     $q->where('remarks', 'like', '%Slip%')
-                      ->orWhere('remarks', 'like', '%slip%')
-                      ->orWhere('remarks', 'like', '%Transfer%')
-                      ->orWhere('remarks', 'like', '%transfer%')
-                      ->orWhereIn('reference_type', [
-                          Transfer::class,
-                          'App\Models\Transfer',
-                          'Transfer',
-                          PurchaseRequest::class,
-                          'App\Models\PurchaseRequest',
-                      ]);
+                      ->orWhere('remarks', 'like', '%slip%');
                 })
-                ->with(['performer'])
-                ->latest('id')
-                ->take(1500)
+                ->with(['performer']);
+
+            if ($storeId > 0) {
+                $movementsQuery->where('store_id', $storeId);
+            }
+
+            $movements = $movementsQuery->latest('id')
+                ->take(100)
                 ->get();
 
             foreach ($movements as $mov) {
-                $isTransferRef = in_array($mov->reference_type, [
-                    Transfer::class,
-                    'App\Models\Transfer',
-                    'Transfer',
-                ]);
-
-                $tr = null;
-                if ($isTransferRef && $mov->reference_id) {
-                    $tr = Transfer::withTrashed()
-                        ->with(['fromStore', 'toStore', 'items.product', 'requestedBy', 'driver', 'dispatchedBy', 'receivedBy'])
-                        ->find($mov->reference_id);
-                }
-
-                // Extract slip number from remarks or linked transfer slip fields
                 $num = $extractSlipNumber($mov->remarks);
-                if ($num === null && $tr) {
-                    $num = $extractSlipNumber($tr->outgoing_slip_no)
-                        ?? $extractSlipNumber($tr->physical_slip_no)
-                        ?? $extractSlipNumber($tr->receiving_slip_no)
-                        ?? $extractSlipNumber($tr->dispatch_notes)
-                        ?? $extractSlipNumber($tr->receiving_notes);
-                }
-
                 if ($num !== null && !$assignedSlips->contains('numeric_no', $num)) {
-                    if ($tr) {
-                        // Transfer linked movement
-                        $itemsList = $tr->items->map(function ($it) {
-                            return [
-                                'name'     => $it->product?->name ?? 'Item',
-                                'quantity' => (float) ($it->sent_quantity > 0 ? $it->sent_quantity : ($it->received_quantity > 0 ? $it->received_quantity : ($it->requested_quantity ?? 0))),
-                                'unit'     => $it->product?->unit?->name ?? ($it->unit ?? $it->product?->unit ?? ''),
-                            ];
-                        });
-
-                        $isReceiving = ($mov->type === 'transfer_in');
-
-                        $assignedSlips->push([
-                            'slip_no'             => $this->formatSlipNumber($num),
-                            'numeric_no'          => $num,
-                            'source_type'         => 'transfer',
-                            'slip_type'           => $isReceiving ? 'receive' : 'send',
-                            'document_id'         => $tr->id,
-                            'document_ref'        => 'Transfer #' . $tr->transfer_no . ($isReceiving ? ' (Receive)' : ' (Dispatch)'),
-                            'document_url'        => route('store-manager.transfers.show', $tr->id),
-                            'status'              => $tr->deleted_at ? 'cancelled' : ($tr->status ?: 'completed'),
-                            'is_void'             => (bool)$tr->deleted_at || in_array($tr->status, ['rejected', 'cancelled']),
-                            'date'                => $mov->created_at,
-                            'store_name'          => ($isReceiving ? $tr->toStore?->name : $tr->fromStore?->name) ?? ($this->store?->name ?? 'Store'),
-                            'from_store_name'     => $tr->fromStore?->name ?? 'Source Store',
-                            'to_store_name'       => $tr->toStore?->name ?? 'Destination Store',
-                            'supplier_name'       => 'Store Transfer: ' . ($tr->fromStore?->name ?? 'Source') . ' ➔ ' . ($tr->toStore?->name ?? 'Destination'),
-                            'transfer_no'         => $tr->transfer_no,
-                            'transfer_id'         => $tr->id,
-                            'transfer_role'       => $isReceiving ? 'Transfer In' : 'Transfer Out',
-                            'transfer_status'     => $tr->status,
-                            'driver_name'         => $tr->driver?->full_name,
-                            'vehicle_plate_no'    => $tr->vehicle_plate_no,
-                            'purchase_request_id' => null,
-                            'pr_no'               => null,
-                            'pr_title'            => null,
-                            'pr_url'              => null,
-                            'project_name'        => $tr->toStore?->name ?? 'Transfer Destination',
-                            'purchase_order_ref'  => null,
-                            'po_id'               => null,
-                            'handled_by'          => $mov->performer?->name ?? ($tr->dispatchedBy?->name ?? 'Store Staff'),
-                            'items_count'         => $itemsList->count(),
-                            'items'               => $itemsList,
-                            'notes'               => $mov->remarks,
-                            'slip_file_url'       => $isReceiving ? $tr->receiving_slip_url : $tr->outgoing_slip_url,
-                        ]);
-                    } else {
-                        // PR or direct inventory movement
-                        $pr = null;
-                        if ($mov->reference_type === PurchaseRequest::class && $mov->reference_id) {
-                            $pr = PurchaseRequest::with(['project', 'requestedBy', 'items.product'])->find($mov->reference_id);
-                        }
-
-                        $itemsList = collect();
-                        if ($pr && $pr->items) {
-                            $itemsList = $pr->items->map(function ($it) {
-                                return [
-                                    'name'     => $it->product?->name ?? $it->item_name ?? 'Item',
-                                    'quantity' => (float) ($it->quantity ?? $it->received_quantity ?? 0),
-                                    'unit'     => $it->unit ?? $it->product?->unit ?? '',
-                                ];
-                            });
-                        }
-
-                        $assignedSlips->push([
-                            'slip_no'             => $this->formatSlipNumber($num),
-                            'numeric_no'          => $num,
-                            'source_type'         => 'inventory_movement',
-                            'slip_type'           => $slipType,
-                            'document_id'         => $mov->id,
-                            'document_ref'        => $pr ? 'PR #' . $pr->pr_no . ' (Stock In)' : 'Inventory Movement #' . $mov->id,
-                            'document_url'        => $pr ? route('purchase-requests.show', $pr->id) : route('store-manager.inventory.all'),
-                            'status'              => 'verified',
-                            'is_void'             => false,
-                            'date'                => $mov->created_at,
-                            'store_name'          => $this->store?->name ?? 'Store',
-                            'from_store_name'     => null,
-                            'to_store_name'       => null,
-                            'supplier_name'       => $pr?->supplier_name ?? ($this->store?->name ?? 'Store Intake'),
-                            'transfer_no'         => null,
-                            'transfer_id'         => null,
-                            'transfer_role'       => null,
-                            'transfer_status'     => null,
-                            'driver_name'         => null,
-                            'vehicle_plate_no'    => null,
-                            'purchase_request_id' => $pr?->id,
-                            'pr_no'               => $pr?->pr_no,
-                            'pr_title'            => $pr?->title ?? $pr?->item_name,
-                            'pr_url'              => $pr ? route('purchase-requests.show', $pr->id) : null,
-                            'project_name'        => $pr?->project?->name ?? ($this->store?->name ?? 'N/A'),
-                            'purchase_order_ref'  => null,
-                            'po_id'               => null,
-                            'handled_by'          => $mov->performer?->name ?? 'Store Staff',
-                            'items_count'         => $itemsList->count(),
-                            'items'               => $itemsList,
-                            'notes'               => $mov->remarks,
-                            'slip_file_url'       => null,
-                            'book_id'             => $this->id,
-                            'book_label'          => $this->label,
-                            'book_range'          => "{$this->book_start_no} - {$this->book_end_no}",
-                            'book_status'         => $this->status,
-                            'is_current_book'     => true,
-                        ]);
-                    }
+                    $assignedSlips->push([
+                        'slip_no'             => $this->formatSlipNumber($num),
+                        'numeric_no'          => $num,
+                        'source_type'         => 'inventory_movement',
+                        'slip_type'           => $slipType,
+                        'document_id'         => $mov->id,
+                        'document_ref'        => 'Inventory Movement #' . $mov->id,
+                        'document_url'        => route('store-manager.inventory.all'),
+                        'status'              => 'verified',
+                        'is_void'             => false,
+                        'date'                => $mov->created_at,
+                        'store_name'          => $this->store?->name ?? 'Store',
+                        'from_store_name'     => null,
+                        'to_store_name'       => null,
+                        'supplier_name'       => $this->store?->name ?? 'Store Intake',
+                        'transfer_no'         => null,
+                        'transfer_id'         => null,
+                        'transfer_role'       => null,
+                        'transfer_status'     => null,
+                        'driver_name'         => null,
+                        'vehicle_plate_no'    => null,
+                        'purchase_request_id' => null,
+                        'pr_no'               => null,
+                        'pr_title'            => null,
+                        'pr_url'              => null,
+                        'project_name'        => $this->store?->name ?? 'N/A',
+                        'purchase_order_ref'  => null,
+                        'po_id'               => null,
+                        'handled_by'          => $mov->performer?->name ?? 'Store Staff',
+                        'items_count'         => 0,
+                        'items'               => collect(),
+                        'notes'               => $mov->remarks,
+                        'slip_file_url'       => null,
+                        'book_id'             => $this->id,
+                        'book_label'          => $this->label,
+                        'book_range'          => "{$this->book_start_no} - {$this->book_end_no}",
+                        'book_status'         => $this->status,
+                        'is_current_book'     => true,
+                    ]);
                 }
             }
         } catch (\Throwable $e) {}
@@ -721,7 +636,7 @@ class SlipSequence extends Model
                 })
                 ->with(['purchaseRequest.project', 'purchaseRequest.requestedBy', 'purchaseRequest.items.product', 'actor'])
                 ->latest('id')
-                ->take(500)
+                ->take(100)
                 ->get();
 
             foreach ($logs as $log) {
