@@ -207,24 +207,25 @@
                                 </td>
                                 <td>
                                     @php
-                                        $catColor = match($item->category) {
-                                            'Service' => 'primary',
-                                            'Transport' => 'info',
-                                            'Loading & Unloading', 'Loading / Unloading', 'Loading Unloading' => 'warning',
-                                            'Utility Expense', 'Utility' => 'warning',
-                                            'Contract Work' => 'dark',
-                                            'Office Material' => 'secondary',
-                                            'Maintenance' => 'danger',
+                                        $isUtilityCat = str_contains($item->category, 'Utility') || str_contains($item->category, 'WiFi') || str_contains($item->category, 'Rent');
+                                        $catColor = match(true) {
+                                            $isUtilityCat => 'warning',
+                                            $item->category === 'Service' => 'primary',
+                                            $item->category === 'Transport' => 'info',
+                                            in_array($item->category, ['Loading & Unloading', 'Loading / Unloading', 'Loading Unloading']) => 'warning',
+                                            $item->category === 'Contract Work' => 'dark',
+                                            $item->category === 'Office Material' => 'secondary',
+                                            $item->category === 'Maintenance' => 'danger',
                                             default => 'primary',
                                         };
-                                        $catAmharic = match($item->category) {
-                                            'Service' => 'አገልግሎት',
-                                            'Transport' => 'ትራንስፖርት',
-                                            'Loading & Unloading', 'Loading / Unloading', 'Loading Unloading' => 'መጫን/ማውረድ',
-                                            'Utility Expense', 'Utility' => 'የፍጆታ ወጪ',
-                                            'Contract Work' => 'ኮንትራት ስራ',
-                                            'Office Material' => 'ቢሮ እቃ',
-                                            'Maintenance' => 'ጥገና',
+                                        $catAmharic = match(true) {
+                                            $isUtilityCat => 'የፍጆታ ወጪ',
+                                            $item->category === 'Service' => 'አገልግሎት',
+                                            $item->category === 'Transport' => 'ትራንስፖርት',
+                                            in_array($item->category, ['Loading & Unloading', 'Loading / Unloading', 'Loading Unloading']) => 'መጫን/ማውረድ',
+                                            $item->category === 'Contract Work' => 'ኮንትራት ስራ',
+                                            $item->category === 'Office Material' => 'ቢሮ እቃ',
+                                            $item->category === 'Maintenance' => 'ጥገና',
                                             default => '',
                                         };
                                     @endphp
@@ -453,6 +454,34 @@
                                                         <i class="fa-solid fa-check-circle me-1"></i> Paid
                                                     </a>
                                                 @endif
+
+                                            @elseif($item->type === 'utility_expense')
+                                                @php
+                                                    $exp = $item->raw_model;
+                                                    $isAssignedToMe = (int)$item->assigned_staff_id === (int)auth()->id() 
+                                                        || ($exp && (int)$exp->assigned_to === (int)auth()->id())
+                                                        || ($exp && $exp->coa && (int)$exp->coa->assigned_to === (int)auth()->id())
+                                                        || ($exp && $exp->bankAccount && (int)$exp->bankAccount->assigned_to === (int)auth()->id());
+                                                    $isFinHeadOrAdmin = !empty($isAdmin) || (!empty($isFinance) && (auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'finance_manager']) || str_contains(strtolower(auth()->user()->roles->pluck('name')->implode(' ')), 'head')));
+                                                @endphp
+
+                                                @if($item->status_key === 'finance_queue')
+                                                    @if($isAssignedToMe || $isFinHeadOrAdmin)
+                                                        <button type="button" class="btn btn-success btn-sm text-white fw-bold shadow-sm" 
+                                                                data-bs-toggle="modal" 
+                                                                data-bs-target="#payUtilityModal{{ $item->id_raw }}"
+                                                                title="Disburse payment for this Utility Expense">
+                                                            <i class="fa-solid fa-money-bill-wave me-1"></i> Pay
+                                                        </button>
+                                                    @endif
+                                                    <a href="{{ route('utility-expenses.index', ['search' => $item->item_code]) }}" class="btn btn-outline-warning btn-sm" title="View Utility Expense Details">
+                                                        <i class="fa-solid fa-bolt me-1"></i> Utility
+                                                    </a>
+                                                @elseif($item->status_key === 'paid')
+                                                    <a href="{{ route('utility-expenses.index', ['search' => $item->item_code]) }}" class="btn btn-success-subtle text-success border border-success-subtle btn-sm fw-semibold" title="View Paid Utility Bill">
+                                                        <i class="fa-solid fa-check-circle me-1"></i> Paid
+                                                    </a>
+                                                @endif
                                             @endif
                                         @endif
 
@@ -663,7 +692,80 @@
                         $hasBankInfo = true;
                     @endphp
 
-                    @if($hasBankInfo)
+                    @if($item->type === 'utility_expense')
+                        @php
+                            $uExp = $item->raw_model;
+                        @endphp
+                        {{-- ⚡ Utility Funding Account & Manager Card --}}
+                        <div class="card border border-warning border-opacity-50 rounded-4 mb-4 overflow-hidden shadow-xs">
+                            <div class="card-header bg-warning bg-opacity-10 py-3 px-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="rounded-circle p-2 text-dark bg-warning d-flex align-items-center justify-content-center" style="width:32px;height:32px;">
+                                        <i class="fa-solid fa-bolt fs-6"></i>
+                                    </span>
+                                    <div>
+                                        <h6 class="mb-0 fw-bold text-dark">Funding COA Account &amp; Assigned Manager (የሂሳብ ቋት እና ኃላፊ)</h6>
+                                        <small class="text-muted">Account from which funds are deducted and the assigned person responsible for disbursing payment.</small>
+                                    </div>
+                                </div>
+                                <span class="badge bg-warning text-dark font-monospace px-3 py-1.5 fs-6 shadow-xs">
+                                    <i class="fa-solid fa-sitemap me-1"></i>COA Account
+                                </span>
+                            </div>
+                            <div class="card-body p-3 bg-white">
+                                <div class="row g-3">
+                                    <div class="col-md-5">
+                                        <div class="p-3 rounded-3 bg-light border h-100">
+                                            <small class="text-muted text-uppercase fw-bold d-block mb-1" style="font-size:0.75rem;">
+                                                <i class="fa-solid fa-sitemap text-primary me-1"></i>Funding COA Account
+                                            </small>
+                                            <div class="fs-6 fw-bold text-dark">
+                                                {{ $item->coa_name ?? ($uExp && $uExp->coa ? '['.$uExp->coa->code.'] '.$uExp->coa->name : 'N/A') }}
+                                            </div>
+                                            @if($uExp && $uExp->coa)
+                                                <small class="text-muted d-block mt-1" style="font-size:0.75rem;">
+                                                    Current Balance: <strong class="text-success">ETB {{ number_format($uExp->coa->current_balance ?? 0, 2) }}</strong>
+                                                </small>
+                                            @endif
+                                            @if($uExp && $uExp->bankAccount)
+                                                <small class="text-muted d-block mt-1" style="font-size:0.75rem;">
+                                                    <i class="fa-solid fa-building-columns me-1 text-secondary"></i>Bank: <strong>{{ $uExp->bankAccount->bank_name }} ({{ $uExp->bankAccount->account_number }})</strong>
+                                                </small>
+                                            @endif
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="p-3 rounded-3 bg-light border h-100">
+                                            <small class="text-muted text-uppercase fw-bold d-block mb-1" style="font-size:0.75rem;">
+                                                <i class="fa-solid fa-user-check text-warning me-1"></i>Assigned to Pay (Account Manager)
+                                            </small>
+                                            <div class="fs-6 fw-bold text-dark">
+                                                {{ $item->assigned_staff_name ?? (optional(optional($uExp)->assignedPerson)->name ?? 'Staff') }}
+                                            </div>
+                                            @if($uExp && $uExp->assignedPerson)
+                                                <div class="small text-muted" style="font-size:0.75rem;">
+                                                    <i class="fa-regular fa-envelope me-1"></i>{{ $uExp->assignedPerson->email }}
+                                                </div>
+                                            @endif
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="p-3 rounded-3 bg-light border h-100">
+                                            <small class="text-muted text-uppercase fw-bold d-block mb-1" style="font-size:0.75rem;">
+                                                <i class="fa-solid fa-calendar text-info me-1"></i>Billing &amp; Due Date
+                                            </small>
+                                            <div class="small fw-semibold text-dark">
+                                                Period: {{ $uExp && $uExp->billing_period ? $uExp->billing_period : 'N/A' }}
+                                            </div>
+                                            <div class="small text-muted mt-1">
+                                                Due: {{ $uExp && $uExp->due_date ? $uExp->due_date->format('d M Y') : 'N/A' }}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    @elseif($hasBankInfo)
                         {{-- 💳 Beneficiary Bank & Payment Recipient Card --}}
                         <div class="card border border-success border-opacity-50 rounded-4 mb-4 overflow-hidden shadow-xs">
                             <div class="card-header bg-success bg-opacity-10 py-3 px-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -770,8 +872,8 @@
                             </div>
                             <div class="row g-2 small text-dark">
                                 <div class="col-md-6">
-                                    <span class="text-muted d-block">Assigned Finance Staff:</span>
-                                    <strong>{{ optional(optional($item->raw_model)->assignedFinanceStaff)->name ?? (optional(optional($item->raw_model)->assignedStaff)->name ?? (optional(optional($item->raw_model)->financeStaff)->name ?? 'Finance Department Pool')) }}</strong>
+                                    <span class="text-muted d-block">Assigned Finance Staff / Manager:</span>
+                                    <strong>{{ $item->assigned_staff_name ?? (optional(optional($item->raw_model)->assignedFinanceStaff)->name ?? (optional(optional($item->raw_model)->assignedStaff)->name ?? (optional(optional($item->raw_model)->financeStaff)->name ?? (optional(optional($item->raw_model)->assignedPerson)->name ?? 'Finance Department Pool')))) }}</strong>
                                 </div>
                                 <div class="col-md-6">
                                     <span class="text-muted d-block">Funding Source / Account:</span>
@@ -1136,6 +1238,30 @@
                                     <li class="mt-2 text-danger fw-semibold"><i class="fa-solid fa-triangle-exclamation me-2"></i> Rejection Reason: {{ $req->rejection_reason }}</li>
                                 @endif
                             </ul>
+                        </div>
+                    @endif
+
+                    @if($item->type === 'utility_expense')
+                        @php $uExp = $item->raw_model; @endphp
+                        <div class="p-3 border rounded-3 bg-light">
+                            <div class="fw-bold text-dark mb-2"><i class="fa-solid fa-timeline me-1 text-primary"></i> Utility Bill Status &amp; Timeline</div>
+                            <ul class="list-unstyled mb-0 small text-muted">
+                                <li class="mb-1"><i class="fa-solid fa-circle-dot me-2 text-secondary"></i> Bill recorded on: <strong class="text-dark">{{ optional($uExp->created_at)->format('M d, Y H:i') }}</strong> by {{ optional($uExp->creator)->name ?? 'Finance Head' }}</li>
+                                <li class="mb-1"><i class="fa-solid fa-user-check me-2 text-warning"></i> Assigned to Pay: <strong class="text-dark">{{ optional($uExp->assignedPerson)->name ?? 'Staff' }}</strong></li>
+                                @if($uExp->due_date)
+                                    <li class="mb-1"><i class="fa-solid fa-calendar me-2 text-info"></i> Due Date: <strong class="text-dark">{{ $uExp->due_date->format('M d, Y') }}</strong></li>
+                                @endif
+                                @if($uExp->paid_at)
+                                    <li class="mb-1 text-success"><i class="fa-solid fa-circle-check me-2"></i> <strong>Paid on {{ optional($uExp->paid_at)->format('M d, Y H:i') }}</strong> by {{ optional($uExp->payer)->name ?? 'Staff' }} | Method: {{ ucfirst(str_replace('_', ' ', $uExp->payment_method ?? 'Bank')) }} | Ref: {{ $uExp->payment_reference ?? 'N/A' }}</li>
+                                @endif
+                            </ul>
+                            @if($uExp->payment_receipt)
+                                <div class="mt-2 pt-2 border-top">
+                                    <a href="{{ asset('storage/' . $uExp->payment_receipt) }}" target="_blank" class="btn btn-outline-success btn-sm rounded-pill">
+                                        <i class="fa-solid fa-receipt me-1"></i> View Disbursed Payment Slip / Receipt
+                                    </a>
+                                </div>
+                            @endif
                         </div>
                     @endif
                 </div>
@@ -2545,6 +2671,110 @@
                         <button type="button" class="btn btn-light rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
                         <button type="submit" class="btn btn-warning rounded-pill px-4 fw-bold shadow-sm">
                             <i class="fa-solid fa-paper-plane me-1"></i> Send Back
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    @endif
+
+    @if($item->type === 'utility_expense' && $item->status_key === 'finance_queue')
+    @php
+        $uExp = $item->raw_model;
+        $isUtilityAssignedToMe = (int)$item->assigned_staff_id === (int)auth()->id() 
+            || ($uExp && (int)$uExp->assigned_to === (int)auth()->id())
+            || ($uExp && $uExp->coa && (int)$uExp->coa->assigned_to === (int)auth()->id())
+            || ($uExp && $uExp->bankAccount && (int)$uExp->bankAccount->assigned_to === (int)auth()->id());
+        $isFinHeadOrAdmin = !empty($isAdmin) || (!empty($isFinance) && (auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'finance_manager']) || str_contains(strtolower(auth()->user()->roles->pluck('name')->implode(' ')), 'head')));
+    @endphp
+
+    <!-- Pay Modal for Utility Expense -->
+    <div class="modal fade" id="payUtilityModal{{ $item->id_raw }}" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+                <form method="POST" action="{{ route('utility-expenses.pay', $item->id_raw) }}" enctype="multipart/form-data">
+                    @csrf
+                    <div class="modal-header bg-success text-white border-0 py-3 px-4">
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="badge bg-white bg-opacity-20 text-white p-2 rounded-3 fs-6">
+                                <i class="fa-solid fa-bolt"></i>
+                            </span>
+                            <div>
+                                <h5 class="modal-title fw-bold mb-0">Disburse Utility Payment: {{ $item->id_formatted }}</h5>
+                                <span class="text-white-50 small">Amount: <strong>ETB {{ number_format($item->net_amount, 2) }}</strong> &bull; Manager: <strong>{{ $item->assigned_staff_name ?? 'Assigned Staff' }}</strong></span>
+                            </div>
+                        </div>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body p-4 bg-white">
+                        <div class="p-3 bg-light rounded-3 mb-3 border border-warning-subtle">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span class="text-muted small text-uppercase fw-bold">Bill Due Amount:</span>
+                                <strong class="text-success fs-5">ETB {{ number_format($item->net_amount, 2) }}</strong>
+                            </div>
+                            <div class="small text-muted mb-1">
+                                <i class="fa-solid fa-sitemap me-1 text-primary"></i> Funding COA Account: 
+                                <strong>{{ $item->coa_name ?? ($uExp && $uExp->coa ? ('['.$uExp->coa->code.'] '.$uExp->coa->name) : 'Utility Account') }}</strong>
+                            </div>
+                            @if($uExp && $uExp->bankAccount)
+                            <div class="small text-muted mb-1">
+                                <i class="fa-solid fa-building-columns me-1 text-info"></i> Bank Account: 
+                                <strong>{{ $uExp->bankAccount->bank_name }} - {{ $uExp->bankAccount->account_number }}</strong>
+                            </div>
+                            @endif
+                            <div class="small text-muted"><i class="fa-solid fa-list me-1"></i> Purpose: {{ $item->description }}</div>
+                            <div class="alert alert-warning py-1 px-2 small mb-0 mt-2 border-0">
+                                <i class="fa-solid fa-triangle-exclamation me-1"></i> <strong>Automatic Account Deduction:</strong> Upon confirming payment, ETB {{ number_format($item->net_amount, 2) }} will be deducted from this account's balance.
+                            </div>
+                        </div>
+
+                        <div class="row g-2 mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold text-dark text-uppercase">Disbursed Amount (ETB) <span class="text-danger">*</span></label>
+                                <input type="number" step="0.01" min="0.01" name="paid_amount" class="form-control fw-bold text-success fs-6" value="{{ $item->net_amount }}" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold text-dark text-uppercase">Payment Method <span class="text-danger">*</span></label>
+                                <select name="payment_method" class="form-select fw-semibold" required>
+                                    <option value="bank_transfer" selected>Bank Transfer (የባንክ ዝውውር)</option>
+                                    <option value="telebirr">Telebirr (ቴሌብር)</option>
+                                    <option value="cbe_birr">CBE Birr (ሲቢኢ ብር)</option>
+                                    <option value="cash">Cash (ጥሬ ገንዘብ)</option>
+                                    <option value="cheque">Cheque (ቼክ)</option>
+                                    <option value="online">Online Payment</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="row g-2 mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold text-dark text-uppercase">Payment Date <span class="text-danger">*</span></label>
+                                <input type="date" name="payment_date" class="form-control" value="{{ date('Y-m-d') }}" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold text-dark text-uppercase">Transaction / Ref #</label>
+                                <input type="text" name="payment_reference" class="form-control font-monospace" placeholder="e.g. TXN-198273, FT-2601">
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-dark text-uppercase">
+                                <i class="fa-solid fa-receipt me-1 text-success"></i> Payment Receipt / Bank Slip
+                            </label>
+                            <input type="file" name="payment_receipt" class="form-control form-control-sm" accept=".pdf,.jpg,.jpeg,.png,.webp">
+                            <small class="text-muted" style="font-size:0.75rem;">Upload stamped bank voucher, payment confirmation screenshot, or receipt.</small>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-dark text-uppercase">Payment Remarks / Notes</label>
+                            <textarea name="payment_notes" class="form-control bg-light border-0" rows="2" placeholder="e.g. Disbursed utility payment to provider..."></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light border-0 py-3 px-4 d-flex justify-content-end gap-2">
+                        <button type="button" class="btn btn-light rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-success rounded-pill px-4 fw-bold shadow-sm">
+                            <i class="fa-solid fa-check-double me-1"></i> Confirm &amp; Disburse Payment (Deduct from Account)
                         </button>
                     </div>
                 </form>

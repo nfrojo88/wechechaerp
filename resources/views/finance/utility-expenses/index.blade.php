@@ -629,23 +629,43 @@
                         {{-- Account from COA --}}
                         <div class="col-md-6">
                             <label class="form-label fw-bold">Select Account from COA (የሂሳብ ቋት ይምረጡ) <span class="text-danger">*</span></label>
-                            <select name="coa_id" class="form-select fw-semibold" required>
+                            <select name="coa_id" id="createCoaId" class="form-select fw-semibold" onchange="onCoaChanged(this)" required>
                                 <option value="" disabled selected>-- Select COA Account to Pay From --</option>
                                 @foreach($coaAccounts as $acc)
-                                    <option value="{{ $acc->id }}">
+                                    @php
+                                        $managerId = $acc->assigned_to 
+                                            ?? optional($acc->manager)->id 
+                                            ?? optional($acc->bankAccounts->first())->assigned_to 
+                                            ?? '';
+                                        $managerName = optional($acc->manager)->name 
+                                            ?? optional(optional($acc->bankAccounts->first())->assignedStaff)->name 
+                                            ?? '';
+                                    @endphp
+                                    <option value="{{ $acc->id }}" 
+                                            data-manager-id="{{ $managerId }}" 
+                                            data-manager-name="{{ $managerName }}"
+                                            data-balance="{{ number_format($acc->current_balance ?? 0, 2) }}">
                                         [{{ $acc->code }}] {{ $acc->name }} (ETB {{ number_format($acc->current_balance ?? 0, 2) }})
+                                        @if($managerName)
+                                            — Mgr: {{ $managerName }}
+                                        @endif
                                     </option>
                                 @endforeach
                             </select>
+                            <div id="coaManagerNotice" class="d-none mt-1">
+                                <span class="badge bg-success-subtle text-success border border-success-subtle py-1 px-2 fw-medium">
+                                    <i class="fa-solid fa-user-check me-1"></i> Account Manager: <strong id="coaManagerNameText"></strong> (Auto-selected below)
+                                </span>
+                            </div>
                             <small class="text-muted d-block mt-1" style="font-size:0.75rem;">
-                                <i class="fa-solid fa-circle-info me-1"></i>Funds will be deducted from this account when payment is disbursed.
+                                <i class="fa-solid fa-circle-info me-1"></i>When you select an account, the manager assigned to manage it will be automatically selected to pay.
                             </small>
                         </div>
 
                         {{-- Assign Person to Pay --}}
                         <div class="col-md-6">
                             <label class="form-label fw-bold">Send to Assigned Person to Pay (ክፍያ የሚፈጽም ሰው) <span class="text-danger">*</span></label>
-                            <select name="assigned_to" class="form-select fw-semibold" required>
+                            <select name="assigned_to" id="createAssignedTo" class="form-select fw-semibold" required>
                                 <option value="" disabled selected>-- Select Person / Cashier / Staff to Pay --</option>
                                 @foreach($assignableUsers as $u)
                                     <option value="{{ $u->id }}" {{ Auth::id() == $u->id ? 'selected' : '' }}>
@@ -654,7 +674,7 @@
                                 @endforeach
                             </select>
                             <small class="text-muted d-block mt-1" style="font-size:0.75rem;">
-                                <i class="fa-solid fa-paper-plane me-1"></i>This person will receive the task in their queue to disburse payment.
+                                <i class="fa-solid fa-paper-plane me-1"></i>Automatically synced to the COA account manager. You can customize if needed.
                             </small>
                         </div>
 
@@ -715,10 +735,52 @@
 <script>
 function onUtilityTypeChanged(selectEl) {
     const selectedOpt = selectEl.options[selectEl.selectedIndex];
-    const defaultTitle = selectedOpt.getAttribute('data-default-title');
+    const defaultTitle = selectedOpt ? selectedOpt.getAttribute('data-default-title') : null;
     const titleInput = document.getElementById('createUtilityTitle');
     if (titleInput && defaultTitle && (!titleInput.value || titleInput.value.trim() === '')) {
         titleInput.value = defaultTitle;
+    }
+}
+
+function onCoaChanged(selectEl) {
+    const selectedOpt = selectEl.options[selectEl.selectedIndex];
+    if (!selectedOpt) return;
+
+    const managerId = selectedOpt.getAttribute('data-manager-id');
+    const managerName = selectedOpt.getAttribute('data-manager-name');
+    const assignedSelect = document.getElementById('createAssignedTo');
+    const managerNotice = document.getElementById('coaManagerNotice');
+    const managerNameText = document.getElementById('coaManagerNameText');
+
+    if (managerId && assignedSelect) {
+        let found = false;
+        for (let i = 0; i < assignedSelect.options.length; i++) {
+            if (assignedSelect.options[i].value === managerId) {
+                assignedSelect.selectedIndex = i;
+                found = true;
+                break;
+            }
+        }
+
+        if (!found && managerName) {
+            const newOpt = new Option('👤 ' + managerName + ' (Account Manager)', managerId, true, true);
+            assignedSelect.add(newOpt);
+        }
+
+        // Visual flash feedback on the assigned_to input
+        assignedSelect.classList.add('border-success', 'bg-success-subtle');
+        setTimeout(() => {
+            assignedSelect.classList.remove('bg-success-subtle');
+        }, 1200);
+
+        if (managerNotice && managerNameText) {
+            managerNameText.textContent = managerName || 'Assigned Account Manager';
+            managerNotice.classList.remove('d-none');
+        }
+    } else {
+        if (managerNotice) {
+            managerNotice.classList.add('d-none');
+        }
     }
 }
 </script>

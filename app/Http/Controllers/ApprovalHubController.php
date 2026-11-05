@@ -12,6 +12,7 @@ use App\Models\Project;
 use App\Models\ChartOfAccount;
 use App\Models\BankAccount;
 use App\Models\User;
+use App\Models\UtilityExpense;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -454,6 +455,86 @@ class ApprovalHubController extends Controller
             }
         } catch (\Throwable $e) {}
 
+        // 7. Utility Expenses (WiFi, Office Rent, Electricity, Water, Facilities)
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasTable('utility_expenses')) {
+                $utilityExpenses = UtilityExpense::with([
+                    'coa.manager',
+                    'bankAccount.assignedStaff',
+                    'creator',
+                    'assignedPerson.employee',
+                    'payer',
+                ])
+                ->latest()
+                ->get()
+                ->map(function ($exp) {
+                    $amount = (float) $exp->amount;
+                    $paidAmount = (float) ($exp->paid_amount ?: $exp->amount);
+
+                    [$statusLabel, $statusKey, $badgeColor] = match($exp->status) {
+                        UtilityExpense::STATUS_PENDING   => ['Pending Payment (Assigned)', 'finance_queue', 'warning'],
+                        UtilityExpense::STATUS_PAID      => ['Paid & Completed', 'paid', 'success'],
+                        UtilityExpense::STATUS_CANCELLED => ['Cancelled / Rejected', 'rejected', 'danger'],
+                        default                          => [ucfirst(str_replace('_', ' ', $exp->status)), 'finance_queue', 'secondary'],
+                    };
+
+                    $typeConfig = UtilityExpense::UTILITY_TYPES[$exp->utility_type] ?? [
+                        'label'       => ucfirst($exp->utility_type),
+                        'short_label' => ucfirst($exp->utility_type),
+                        'icon'        => 'fa-solid fa-receipt',
+                        'badge'       => 'bg-secondary',
+                    ];
+
+                    $desc = $exp->title;
+                    if ($exp->reference_no) {
+                        $desc .= ' [Ref: ' . $exp->reference_no . ']';
+                    }
+                    if ($exp->billing_period) {
+                        $desc .= ' (' . $exp->billing_period . ')';
+                    }
+                    if ($exp->description) {
+                        $desc .= ' — ' . $exp->description;
+                    }
+
+                    return (object) [
+                        'id_raw'              => $exp->id,
+                        'id_formatted'        => $exp->expense_number,
+                        'item_code'           => $exp->expense_number,
+                        'type'                => 'utility_expense',
+                        'date'                => $exp->paid_at ?? $exp->created_at,
+                        'project'             => 'Head Office / Institutional',
+                        'category'            => '⚡ ' . ($typeConfig['short_label'] ?? 'Utility') . ' Expense',
+                        'description'         => $desc,
+                        'applicant_name'      => $exp->creator?->name ?? 'Finance Head',
+                        'base_amount'         => $amount,
+                        'vat_amount'          => 0,
+                        'vat_type'            => 'none',
+                        'has_vat'             => false,
+                        'net_amount'          => $paidAmount,
+                        'status'              => $statusLabel,
+                        'status_raw'          => $exp->status,
+                        'status_key'          => $statusKey,
+                        'color'               => $badgeColor,
+                        'attachment'          => $exp->bill_attachment,
+                        'attachment_url'      => $exp->bill_attachment ? \Illuminate\Support\Facades\Storage::url($exp->bill_attachment) : null,
+                        'rejection_reason'    => null,
+                        'paid_at'             => $exp->paid_at,
+                        'paid_by_name'        => $exp->payer?->name ?? null,
+                        'payment_reference'   => $exp->payment_reference,
+                        'coa_name'            => $exp->coa ? ('[' . $exp->coa->code . '] ' . $exp->coa->name) : null,
+                        'bank_name'           => $exp->bankAccount?->bank_name ?? null,
+                        'assigned_staff_id'   => $exp->assigned_to,
+                        'assigned_staff_name' => $exp->assignedPerson?->name ?? null,
+                        'route_show'          => route('utility-expenses.index', ['search' => $exp->expense_number]),
+                        'route_approve'       => route('utility-expenses.pay', $exp->id),
+                        'route_reject'        => '#',
+                        'raw_model'           => $exp,
+                    ];
+                });
+                $items = $items->concat($utilityExpenses);
+            }
+        } catch (\Throwable $e) {}
+
         // Enrich items with official Expense Hub VAT Decisions if available
         try {
             if (\Illuminate\Support\Facades\Schema::hasTable('expense_hub_vat_decisions')) {
@@ -519,6 +600,12 @@ class ApprovalHubController extends Controller
                 if ($raw && isset($raw->assigned_finance_staff_id) && (int)$raw->assigned_finance_staff_id === $userId) {
                     return true;
                 }
+                if ($raw && isset($raw->assigned_to) && (int)$raw->assigned_to === $userId) {
+                    return true;
+                }
+                if ($raw && isset($raw->coa) && (int)($raw->coa->assigned_to ?? 0) === $userId) {
+                    return true;
+                }
                 if ($raw && isset($raw->finance_staff_id) && (int)$raw->finance_staff_id === $userId) {
                     return true;
                 }
@@ -534,6 +621,9 @@ class ApprovalHubController extends Controller
                     return true;
                 }
                 if ($raw && isset($raw->user_id) && (int)$raw->user_id === $userId) {
+                    return true;
+                }
+                if ($raw && isset($raw->created_by) && (int)$raw->created_by === $userId) {
                     return true;
                 }
                 if ($raw && isset($raw->requested_by) && (int)$raw->requested_by === $userId) {
@@ -556,6 +646,34 @@ class ApprovalHubController extends Controller
             // GM only sees pending GM reviews and approved/rejected history
             $items = $items->filter(function ($item) {
                 return in_array($item->status_key, ['pending_gm', 'finance_queue', 'paid', 'rejected']);
+            });
+        } else {
+            // Any other authenticated user (e.g. Account Manager) only sees items assigned to them or created/paid by them
+            $userId = (int) ($user ? $user->id : 0);
+            $items = $items->filter(function ($item) use ($userId) {
+                if (!in_array($item->status_key, ['finance_queue', 'paid', 'rejected'])) {
+                    return false;
+                }
+                $raw = $item->raw_model ?? null;
+                if ((int)($item->assigned_staff_id ?? 0) === $userId) {
+                    return true;
+                }
+                if ($raw && isset($raw->assigned_to) && (int)$raw->assigned_to === $userId) {
+                    return true;
+                }
+                if ($raw && isset($raw->coa) && (int)($raw->coa->assigned_to ?? 0) === $userId) {
+                    return true;
+                }
+                if ($raw && isset($raw->paid_by) && (int)$raw->paid_by === $userId) {
+                    return true;
+                }
+                if ($raw && isset($raw->created_by) && (int)$raw->created_by === $userId) {
+                    return true;
+                }
+                if ($raw && isset($raw->user_id) && (int)$raw->user_id === $userId) {
+                    return true;
+                }
+                return false;
             });
         }
 

@@ -162,7 +162,8 @@ class UtilityExpenseController extends Controller
         ];
 
         // Active Chart of Accounts available for selection
-        $coaAccounts = ChartOfAccount::where('is_active', true)
+        $coaAccounts = ChartOfAccount::with(['manager', 'bankAccounts.assignedStaff'])
+            ->where('is_active', true)
             ->whereIn('type', ['asset', 'expense'])
             ->orderBy('code')
             ->get();
@@ -197,7 +198,7 @@ class UtilityExpenseController extends Controller
             'title'           => 'required|string|max:255',
             'amount'          => 'required|numeric|min:0.01',
             'coa_id'          => 'required|exists:chart_of_accounts,id',
-            'assigned_to'     => 'required|exists:users,id',
+            'assigned_to'     => 'nullable|exists:users,id',
             'billing_period'  => 'nullable|string|max:100',
             'reference_no'    => 'nullable|string|max:100',
             'due_date'        => 'nullable|date',
@@ -206,8 +207,16 @@ class UtilityExpenseController extends Controller
             'bill_attachment' => 'nullable|file|mimes:pdf,jpg,jpeg,png,webp|max:10240',
         ]);
 
-        $coa = ChartOfAccount::findOrFail($validated['coa_id']);
+        $coa = ChartOfAccount::with(['manager', 'bankAccounts.assignedStaff'])->findOrFail($validated['coa_id']);
         $bankAccount = BankAccount::where('coa_id', $coa->id)->first();
+
+        // Determine assigned person: prioritize explicit input, then COA manager, then bank assigned staff, then current user
+        $assignedToId = !empty($validated['assigned_to'])
+            ? (int) $validated['assigned_to']
+            : ($coa->assigned_to
+                ?? optional($coa->manager)->id
+                ?? optional($bankAccount)->assigned_to
+                ?? Auth::id());
 
         $attachmentPath = null;
         if ($request->hasFile('bill_attachment')) {
@@ -225,7 +234,7 @@ class UtilityExpenseController extends Controller
             'coa_id'          => $coa->id,
             'bank_account_id' => $bankAccount ? $bankAccount->id : null,
             'created_by'      => Auth::id(),
-            'assigned_to'     => $validated['assigned_to'],
+            'assigned_to'     => $assignedToId,
             'billing_period'  => $validated['billing_period'] ?? null,
             'reference_no'    => $validated['reference_no'] ?? null,
             'due_date'        => $validated['due_date'] ?? null,
@@ -235,7 +244,7 @@ class UtilityExpenseController extends Controller
             'bill_attachment' => $attachmentPath,
         ]);
 
-        $assignedUser = User::find($validated['assigned_to']);
+        $assignedUser = User::find($assignedToId);
         $assignedName = $assignedUser ? $assignedUser->name : 'staff';
 
         return redirect()->route('utility-expenses.index')
@@ -248,9 +257,11 @@ class UtilityExpenseController extends Controller
         $userRoleNames = strtolower(implode(' ', $user->getRoleNames()->toArray()));
         $isFinanceHead = str_contains($userRoleNames, 'finance_head') || str_contains($userRoleNames, 'finance_manager') || $user->hasAnyRole(['Finance head', 'finance_head', 'admin', 'global_admin']);
         $isAdmin = $user->hasAnyRole(['admin', 'global_admin']);
-        $isAssigned = $utilityExpense->assigned_to === $user->id;
+        $isAssigned = (int) $utilityExpense->assigned_to === (int) $user->id;
+        $isCoaManager = ($utilityExpense->coa && (int) $utilityExpense->coa->assigned_to === (int) $user->id)
+            || ($utilityExpense->bankAccount && (int) $utilityExpense->bankAccount->assigned_to === (int) $user->id);
 
-        if (!$isFinanceHead && !$isAdmin && !$isAssigned) {
+        if (!$isFinanceHead && !$isAdmin && !$isAssigned && !$isCoaManager) {
             return back()->with('error', 'You are not authorized to disburse payment for this utility expense.');
         }
 
@@ -288,21 +299,48 @@ class UtilityExpenseController extends Controller
                 'payment_receipt'   => $receiptPath ?? $utilityExpense->payment_receipt,
             ]);
 
-            // Deduct balance from the funding COA and linked Bank Account
+            // Deduct balance from the funding COA
             if ($utilityExpense->coa_id) {
                 $coa = ChartOfAccount::find($utilityExpense->coa_id);
                 if ($coa) {
                     $coa->decrement('current_balance', $disbursedAmount);
-                    $bankAccount = BankAccount::where('coa_id', $coa->id)->first();
-                    if ($bankAccount) {
-                        $bankAccount->decrement('current_balance', $disbursedAmount);
+                }
+            }
+
+            // Deduct balance from linked Bank Account and log BankTransaction if exists
+            $bankAccount = null;
+            if ($utilityExpense->bank_account_id) {
+                $bankAccount = BankAccount::find($utilityExpense->bank_account_id);
+            } elseif ($utilityExpense->coa_id) {
+                $bankAccount = BankAccount::where('coa_id', $utilityExpense->coa_id)->first();
+            }
+
+            if ($bankAccount) {
+                $bankAccount->decrement('current_balance', $disbursedAmount);
+                $newBal = $bankAccount->fresh()->current_balance;
+
+                if (class_exists(\App\Models\BankTransaction::class) && Schema::hasTable('bank_transactions')) {
+                    try {
+                        \App\Models\BankTransaction::create([
+                            'bank_account_id' => $bankAccount->id,
+                            'transaction_date'=> $validated['payment_date'] ?? now()->toDateString(),
+                            'type'            => 'withdrawal',
+                            'amount'          => $disbursedAmount,
+                            'balance_after'   => $newBal,
+                            'reference_no'    => $validated['payment_reference'] ?? $utilityExpense->expense_number,
+                            'reference_type'  => 'UtilityExpense',
+                            'reference_id'    => $utilityExpense->id,
+                            'description'     => "Utility Expense Payment #{$utilityExpense->expense_number}: {$utilityExpense->title}",
+                            'is_reconciled'   => true,
+                        ]);
+                    } catch (\Throwable $e) {
+                        Log::error('BankTransaction creation for UtilityExpense failed: ' . $e->getMessage());
                     }
                 }
             }
         });
 
-        return redirect()->route('utility-expenses.index')
-            ->with('success', "Payment of ETB " . number_format($validated['paid_amount'], 2) . " for {$utilityExpense->expense_number} ({$utilityExpense->title}) was recorded successfully.");
+        return back()->with('success', "Payment of ETB " . number_format($validated['paid_amount'], 2) . " for {$utilityExpense->expense_number} ({$utilityExpense->title}) was recorded successfully and deducted from the account balance.");
     }
 
     public function destroy(UtilityExpense $utilityExpense)
