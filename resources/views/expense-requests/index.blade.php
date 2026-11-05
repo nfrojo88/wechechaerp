@@ -22,10 +22,7 @@
                 <span class="fs-6 text-muted ms-2">(Employee Expense Request Module)</span>
             </h3>
         </div>
-        <div class="d-flex flex-wrap gap-2">
-            <button type="button" class="btn btn-warning text-dark shadow-sm px-3 fw-bold" onclick="openUtilityExpenseModal()">
-                <i class="fa-solid fa-bolt me-1"></i> New Utility Expense
-            </button>
+        <div class="d-flex gap-2">
             <button type="button" class="btn btn-success shadow-sm px-3 fw-bold" data-bs-toggle="modal" data-bs-target="#createRequestModal">
                 <i class="fa-solid fa-plus me-1"></i> Request Money
             </button>
@@ -59,38 +56,6 @@
                 @endforeach
             </ul>
             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        </div>
-    @endif
-
-    {{-- Utility Expense Management Spotlight Banner --}}
-    @if(in_array(request('category'), ['Utility Expense', 'Utility']))
-        <div class="card border-0 shadow-sm mb-4" style="background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); border-left: 5px solid #f59e0b !important;">
-            <div class="card-body p-3 p-md-4">
-                <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
-                    <div class="d-flex align-items-start gap-3">
-                        <div class="rounded-circle bg-warning text-dark d-flex align-items-center justify-content-center p-3 shadow-sm flex-shrink-0" style="width: 52px; height: 52px;">
-                            <i class="fa-solid fa-bolt fs-4"></i>
-                        </div>
-                        <div>
-                            <div class="d-flex align-items-center gap-2 flex-wrap">
-                                <h4 class="fw-bold mb-0 text-dark">Utility Expenses (የፍጆታ ወጪ አስተዳደር)</h4>
-                                <span class="badge bg-warning text-dark fw-bold px-2 py-1"><i class="fa-solid fa-bolt me-1"></i>Utility Expense Mode</span>
-                            </div>
-                            <p class="text-muted small mb-0 mt-1">
-                                Utility expenses (electricity, water, communications, office utilities) must be assigned to the beneficiary employee receiving funds (self-assignment prohibited). The Finance Head determines/sets the final payout amount and funding COA.
-                            </p>
-                        </div>
-                    </div>
-                    <div class="d-flex gap-2 flex-shrink-0">
-                        <button type="button" class="btn btn-warning text-dark fw-bold px-3 shadow-sm" onclick="openUtilityExpenseModal()">
-                            <i class="fa-solid fa-plus-circle me-1"></i> Create Utility Expense
-                        </button>
-                        <a href="{{ route('expense-requests.index') }}" class="btn btn-outline-secondary btn-sm d-flex align-items-center">
-                            <i class="fa-solid fa-arrow-left me-1"></i> All Expenses
-                        </a>
-                    </div>
-                </div>
-            </div>
         </div>
     @endif
 
@@ -1982,7 +1947,6 @@
                                 <option value="Service">🤝 Service (አገልግሎት)</option>
                                 <option value="Transport">🚚 Transport (ትራንስፖርት)</option>
                                 <option value="Loading & Unloading">📦 Loading &amp; Unloading (መጫን እና ማውረድ)</option>
-                                <option value="Utility Expense">⚡ Utility Expense (የፍጆታ ወጪ)</option>
                                 <option value="Contract Work">📝 Contract Work (የኮንትራት ስራ)</option>
                                 <option value="Office Material">📁 Office Material (የቢሮ እቃ)</option>
                                 <option value="Maintenance">🔧 Maintenance &amp; Repairs (ጥገና)</option>
@@ -2291,25 +2255,6 @@
 
 
 <script>
-function openUtilityExpenseModal() {
-    const modalEl = document.getElementById('createRequestModal');
-    if (!modalEl) return;
-    const catSelect = document.getElementById('categorySelect');
-    if (catSelect) {
-        catSelect.value = 'Utility Expense';
-        toggleCategoryOptions();
-    }
-    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-    modal.show();
-}
-
-document.addEventListener('DOMContentLoaded', function () {
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('create') === 'utility' || (urlParams.get('category') === 'Utility Expense' && urlParams.get('new') === '1')) {
-        openUtilityExpenseModal();
-    }
-});
-
 function toggleCategoryOptions() {
     const category = document.getElementById('categorySelect').value;
     const group = document.getElementById('otherReasonGroup');

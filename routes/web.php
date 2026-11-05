@@ -1988,6 +1988,12 @@ Route::middleware(['auth'])->group(function () {
     Route::post('finance/credit-store/{creditStore}/assign-expense', [App\Http\Controllers\Finance\CreditStoreController::class, 'assignExpense'])->name('finance.credit-store.assign-expense');
     Route::post('finance/credit-store/{creditStore}/sync-amount', [App\Http\Controllers\Finance\CreditStoreController::class, 'syncAmount'])->name('finance.credit-store.sync-amount');
 
+    // Utility Expenses (Finance Head / Office Bills & Assigned Disbursements)
+    Route::get('finance/utility-expenses', [App\Http\Controllers\Finance\UtilityExpenseController::class, 'index'])->name('utility-expenses.index');
+    Route::post('finance/utility-expenses', [App\Http\Controllers\Finance\UtilityExpenseController::class, 'store'])->name('utility-expenses.store');
+    Route::post('finance/utility-expenses/{utilityExpense}/pay', [App\Http\Controllers\Finance\UtilityExpenseController::class, 'pay'])->name('utility-expenses.pay');
+    Route::delete('finance/utility-expenses/{utilityExpense}', [App\Http\Controllers\Finance\UtilityExpenseController::class, 'destroy'])->name('utility-expenses.destroy');
+
     // Global Slip Sequence Resource & API
     Route::resource('slip-sequences', App\Http\Controllers\SlipSequenceController::class);
     Route::get('api/slip-sequences/{storeId}/{slipType}', [App\Http\Controllers\SlipSequenceController::class, 'getNextSlip'])->name('api.slip-sequences.next');
