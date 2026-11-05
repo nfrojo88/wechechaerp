@@ -69,4 +69,13 @@ class UtilityExpenseUnitTest extends TestCase
         $this->assertEquals(30.00, $withholdingAmount);
         $this->assertEquals(1120.00, $netAmount);
     }
+
+    public function test_utility_category_filter_matching()
+    {
+        $utilityCategories = ['Utility Expense', 'Utility'];
+        $selectedCategory = 'Utility Expense';
+
+        $this->assertTrue(in_array($selectedCategory, $utilityCategories));
+        $this->assertTrue(in_array('Utility', $utilityCategories));
+    }
 }

@@ -19,7 +19,7 @@ class ProductController extends Controller
 
     public function index(Request $request)
     {
-        $query = Product::latest();
+        $query = Product::query();
 
         if ($request->filled('search')) {
             $search = $request->input('search');
@@ -41,6 +41,18 @@ class ProductController extends Controller
 
         if ($request->filled('asset_status')) {
             $query->where('asset_status', $request->input('asset_status'));
+        }
+
+        // Order alphabetically by product/material name by default
+        $sort = $request->input('sort', 'name');
+        $direction = strtolower($request->input('direction', 'asc')) === 'desc' ? 'desc' : 'asc';
+
+        if (in_array($sort, ['name', 'sku', 'category', 'unit', 'unit_price', 'max_stock'])) {
+            $query->orderBy($sort, $direction)->orderBy('id', 'asc');
+        } elseif ($sort === 'created_at') {
+            $query->orderBy('created_at', $direction);
+        } else {
+            $query->orderBy('name', 'asc')->orderBy('id', 'asc');
         }
 
         $products    = $query->paginate(20)->appends($request->query());

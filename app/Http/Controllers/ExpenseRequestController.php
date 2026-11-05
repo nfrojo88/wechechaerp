@@ -302,7 +302,11 @@ class ExpenseRequestController extends Controller
         }
 
         if ($request->filled('category')) {
-            $query->where('category', $request->category);
+            if (in_array($request->category, ['Utility Expense', 'Utility'])) {
+                $query->whereIn('category', ['Utility Expense', 'Utility']);
+            } else {
+                $query->where('category', $request->category);
+            }
         }
 
         /** @var \Illuminate\Pagination\LengthAwarePaginator $requests */
@@ -1867,7 +1871,11 @@ class ExpenseRequestController extends Controller
         }
 
         if ($request->filled('category')) {
-            $query->where('category', $request->category);
+            if (in_array($request->category, ['Utility Expense', 'Utility'])) {
+                $query->whereIn('category', ['Utility Expense', 'Utility']);
+            } else {
+                $query->where('category', $request->category);
+            }
         }
 
         /** @var \Illuminate\Pagination\LengthAwarePaginator $paidRequests */

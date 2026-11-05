@@ -271,11 +271,33 @@
             <li><a href="{{ route('coa.index') }}" class="sidebar-nav-link {{ request()->routeIs('coa.*') && !request()->routeIs('coa-transfers.*') ? 'active' : '' }}"><i class="fa-solid fa-sitemap"></i><span>Chart of Accounts</span></a></li>
             <li><a href="{{ route('coa-transfers.index') }}" class="sidebar-nav-link {{ request()->routeIs('coa-transfers.*') ? 'active' : '' }}"><i class="fa-solid fa-money-bill-transfer text-success"></i><span>COA Transfers</span></a></li>
             <li>
-                <a href="{{ route('expense-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('expense-requests.*') || request()->is('expense-requests*') ? 'active' : '' }}">
+                <a href="{{ route('expense-requests.index') }}" class="sidebar-nav-link {{ (request()->routeIs('expense-requests.*') || request()->is('expense-requests*')) && request('category') !== 'Utility Expense' ? 'active' : '' }}">
                     <i class="fa-solid fa-hand-holding-dollar text-success"></i>
                     <span>Ask Money (Expenses)</span>
                     @if($adminFinPendingCount > 0)
                         <span class="badge bg-warning text-dark rounded-pill ms-auto" style="font-size:0.6rem;">{{ $adminFinPendingCount }}</span>
+                    @endif
+                </a>
+            </li>
+            <li>
+                <a href="{{ route('expense-requests.index', ['category' => 'Utility Expense']) }}" class="sidebar-nav-link {{ (request()->routeIs('expense-requests.*') || request()->is('expense-requests*')) && request('category') === 'Utility Expense' ? 'active' : '' }}">
+                    <i class="fa-solid fa-bolt text-warning"></i>
+                    <span>Utility Expenses (የፍጆታ ወጪ)</span>
+                    @php
+                        $adminUtilityCount = 0;
+                        try {
+                            $adminUtilityCount = \App\Models\ExpenseRequest::whereIn('category', [\App\Models\ExpenseRequest::CATEGORY_UTILITY, 'Utility'])
+                                ->where(function($q) {
+                                    $q->where('status', 'like', 'Pending%')
+                                      ->orWhereIn('status', [
+                                          \App\Models\ExpenseRequest::STATUS_APPROVED_ASSIGNED,
+                                          \App\Models\ExpenseRequest::STATUS_ASSIGNED,
+                                      ]);
+                                })->count();
+                        } catch (\Throwable $e) {}
+                    @endphp
+                    @if($adminUtilityCount > 0)
+                        <span class="badge bg-warning text-dark rounded-pill ms-auto" style="font-size:0.6rem;">{{ $adminUtilityCount }}</span>
                     @endif
                 </a>
             </li>
@@ -765,9 +787,15 @@
     </a>
 </li>
 <li class="sidebar-nav-item">
-    <a href="{{ route('expense-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('expense-requests.*') ? 'active' : '' }}">
+    <a href="{{ route('expense-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('expense-requests.*') && request('category') !== 'Utility Expense' ? 'active' : '' }}">
         <i class="fa-solid fa-receipt text-warning"></i>
         <span>All Expense Requests</span>
+    </a>
+</li>
+<li class="sidebar-nav-item">
+    <a href="{{ route('expense-requests.index', ['category' => 'Utility Expense']) }}" class="sidebar-nav-link {{ request()->routeIs('expense-requests.*') && request('category') === 'Utility Expense' ? 'active' : '' }}">
+        <i class="fa-solid fa-bolt text-warning"></i>
+        <span>Utility Expenses (የፍጆታ ወጪ)</span>
     </a>
 </li>
 <li class="sidebar-nav-item">
@@ -2430,6 +2458,38 @@
             <a href="{{ route('expenses.index') }}" class="sidebar-nav-link {{ request()->routeIs('expenses.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-arrow-trend-down text-danger"></i>
                 <span>Expenses</span>
+            </a>
+        </li>
+
+        <!-- Utility Expenses (Finance Head / Allocation & Pay Management) -->
+        <li class="sidebar-nav-item">
+            <a href="{{ route('expense-requests.index', ['category' => 'Utility Expense']) }}" class="sidebar-nav-link {{ (request()->routeIs('expense-requests.*') || request()->is('expense-requests*')) && request('category') === 'Utility Expense' ? 'active' : '' }}">
+                <i class="fa-solid fa-bolt text-warning"></i>
+                <span>Utility Expenses (የፍጆታ ወጪ)</span>
+                @php
+                    $finHeadUtilityCount = 0;
+                    try {
+                        $finHeadUtilityCount = \App\Models\ExpenseRequest::whereIn('category', [\App\Models\ExpenseRequest::CATEGORY_UTILITY, 'Utility'])
+                            ->where(function($q) {
+                                $q->where('status', 'like', 'Pending%')
+                                  ->orWhereIn('status', [
+                                      \App\Models\ExpenseRequest::STATUS_APPROVED_ASSIGNED,
+                                      \App\Models\ExpenseRequest::STATUS_ASSIGNED,
+                                  ]);
+                            })->count();
+                    } catch (\Throwable $e) {}
+                @endphp
+                @if($finHeadUtilityCount > 0)
+                    <span class="badge bg-warning text-dark rounded-pill ms-auto fw-bold" style="font-size:0.65rem;">{{ $finHeadUtilityCount }}</span>
+                @endif
+            </a>
+        </li>
+
+        <!-- Ask Money (All Expense Requests) -->
+        <li class="sidebar-nav-item">
+            <a href="{{ route('expense-requests.index') }}" class="sidebar-nav-link {{ (request()->routeIs('expense-requests.*') || request()->is('expense-requests*')) && request('category') !== 'Utility Expense' ? 'active' : '' }}">
+                <i class="fa-solid fa-hand-holding-dollar text-success"></i>
+                <span>Ask Money (Expenses)</span>
             </a>
         </li>
 

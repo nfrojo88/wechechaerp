@@ -2508,6 +2508,11 @@ class StoreManagerController extends Controller
         return redirect()->route('products.index', $request->query());
     }
 
+    public function productCatalog(Request $request)
+    {
+        return redirect()->route('products.index', $request->query());
+    }
+
     /**
      * Create Product
      */

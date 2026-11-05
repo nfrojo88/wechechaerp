@@ -102,7 +102,7 @@
     <div class="card-body py-3">
         <form action="{{ route('products.index') }}" method="GET">
             <div class="row g-2 align-items-end">
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <label class="form-label small fw-semibold text-muted mb-1">Search</label>
                     <div class="input-group input-group-sm">
                         <span class="input-group-text bg-white">
@@ -121,7 +121,7 @@
                         @endforeach
                     </select>
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-2">
                     <label class="form-label small fw-semibold text-muted mb-1">Status</label>
                     <select name="asset_status" class="form-select form-select-sm">
                         <option value="">All Statuses</option>
@@ -131,11 +131,20 @@
                     </select>
                 </div>
                 <div class="col-md-2">
+                    <label class="form-label small fw-semibold text-muted mb-1">Sort Order</label>
+                    <select name="sort" class="form-select form-select-sm">
+                        <option value="name" {{ request('sort', 'name') === 'name' ? 'selected' : '' }}>Alphabetical (A → Z)</option>
+                        <option value="sku" {{ request('sort') === 'sku' ? 'selected' : '' }}>By SKU</option>
+                        <option value="category" {{ request('sort') === 'category' ? 'selected' : '' }}>By Category</option>
+                        <option value="created_at" {{ request('sort') === 'created_at' ? 'selected' : '' }}>Newest First</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
                     <div class="d-flex gap-1">
                         <button type="submit" class="btn btn-primary btn-sm w-100">
                             <i class="fas fa-filter me-1"></i> Filter
                         </button>
-                        @if(request()->hasAny(['search','category','asset_status']))
+                        @if(request()->hasAny(['search','category','asset_status','sort','direction']))
                         <a href="{{ route('products.index') }}" class="btn btn-outline-secondary btn-sm" title="Clear filters">
                             <i class="fas fa-times"></i>
                         </a>
@@ -154,8 +163,20 @@
             <table class="table table-hover align-middle mb-0" style="font-size:.875rem;">
                 <thead class="table-light border-bottom">
                     <tr>
-                        <th class="ps-3 py-3 products-th" style="width:120px;">SKU</th>
-                        <th class="py-3 products-th">Name</th>
+                        <th class="ps-3 py-3 products-th" style="width:120px;">
+                            <a href="{{ route('products.index', array_merge(request()->query(), ['sort' => 'sku', 'direction' => (request('sort') === 'sku' && request('direction', 'asc') === 'asc') ? 'desc' : 'asc'])) }}" class="text-dark text-decoration-none d-inline-flex align-items-center gap-1">
+                                SKU
+                                @if(request('sort') === 'sku')
+                                    <i class="fa-solid {{ request('direction', 'asc') === 'desc' ? 'fa-sort-down' : 'fa-sort-up' }} text-primary"></i>
+                                @endif
+                            </a>
+                        </th>
+                        <th class="py-3 products-th">
+                            <a href="{{ route('products.index', array_merge(request()->query(), ['sort' => 'name', 'direction' => (request('sort', 'name') === 'name' && request('direction', 'asc') === 'asc') ? 'desc' : 'asc'])) }}" class="text-dark text-decoration-none d-inline-flex align-items-center gap-1">
+                                Name
+                                <i class="fa-solid {{ request('sort', 'name') === 'name' && request('direction') === 'desc' ? 'fa-arrow-down-z-a' : 'fa-arrow-down-a-z' }} text-primary" title="Sorted Alphabetically (A to Z)"></i>
+                            </a>
+                        </th>
                         <th class="py-3 products-th" style="width:150px;">Category</th>
                         <th class="py-3 products-th" style="width:75px;">Unit</th>
                         <th class="py-3 products-th text-end" style="width:140px;">Unit Price</th>
