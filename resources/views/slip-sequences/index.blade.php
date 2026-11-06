@@ -146,6 +146,15 @@
                                     </button>
                                 </form>
                                 @endif
+                                @if($seq->used_count == 0)
+                                <form action="{{ route('store-manager.slip-sequences.destroy', $seq) }}" method="POST" class="d-inline" onsubmit="return confirm('Delete sequence book #{{ $seq->book_start_no }}–#{{ $seq->book_end_no }}? There are no slips added in this sequence.');">
+                                    @csrf
+                                    @method('DELETE')
+                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete Sequence Book (No Slips Added)">
+                                        <i class="fas fa-trash-alt"></i>
+                                    </button>
+                                </form>
+                                @endif
                             </td>
                         </tr>
                         @empty

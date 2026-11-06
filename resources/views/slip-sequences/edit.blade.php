@@ -61,6 +61,16 @@
             <button type="button" class="btn btn-sm btn-primary shadow-sm" data-bs-toggle="modal" data-bs-target="#nextBookModal">
                 <i class="fas fa-plus-circle me-1"></i>Next Book
             </button>
+            <form action="{{ route('store-manager.slip-sequences.destroy', $slipSequence) }}" method="POST" class="d-inline" onsubmit="return confirm('{{ $slipSequence->used_count == 0 ? "Are you sure you want to delete this sequence book (#{$slipSequence->book_start_no}–#{$slipSequence->book_end_no})? There are no slips added in this sequence." : "Warning: This sequence book (#{$slipSequence->book_start_no}–#{$slipSequence->book_end_no}) has {$slipSequence->used_count} slip(s) recorded. Deleting it will unassign those slips to Manual/Other history. Are you sure you want to delete this sequence book?" }}');">
+                @csrf
+                @method('DELETE')
+                @if($slipSequence->used_count > 0)
+                <input type="hidden" name="force" value="1">
+                @endif
+                <button type="submit" class="btn btn-sm btn-outline-danger shadow-sm" title="Delete Sequence Book">
+                    <i class="fas fa-trash-alt me-1"></i>Delete Book
+                </button>
+            </form>
             <a href="{{ route('store-manager.slip-history.index', ['store_id' => $slipSequence->store_id, 'slip_type' => $slipSequence->slip_type]) }}" class="btn btn-sm btn-outline-secondary shadow-sm">
                 <i class="fas fa-history me-1"></i>Slip History
             </a>
@@ -654,14 +664,27 @@
 
                                 <!-- Actions -->
                                 <td class="text-end pe-2">
-                                    <a href="{{ $slip['document_url'] }}" class="btn btn-sm btn-outline-primary" target="_blank" title="View Document">
-                                        <i class="fas fa-eye me-1"></i>View
-                                    </a>
-                                    @if($slip['pr_url'])
-                                    <a href="{{ $slip['pr_url'] }}" class="btn btn-sm btn-outline-secondary" target="_blank" title="View Purchase Request">
-                                        <i class="fas fa-external-link-alt"></i>
-                                    </a>
-                                    @endif
+                                    <div class="d-flex justify-content-end gap-1">
+                                        <a href="{{ $slip['document_url'] }}" class="btn btn-sm btn-outline-primary" target="_blank" title="View Document">
+                                            <i class="fas fa-eye me-1"></i>View
+                                        </a>
+                                        @if($slip['pr_url'])
+                                        <a href="{{ $slip['pr_url'] }}" class="btn btn-sm btn-outline-secondary" target="_blank" title="View Purchase Request">
+                                            <i class="fas fa-external-link-alt"></i>
+                                        </a>
+                                        @endif
+                                        <form action="{{ route('store-manager.slip-history.destroy') }}" method="POST" class="d-inline" onsubmit="return confirm('Delete this slip (#{{ $slip['slip_no'] }}) from slip history?');">
+                                            @csrf
+                                            @method('DELETE')
+                                            <input type="hidden" name="source_type" value="{{ $slip['source_type'] }}">
+                                            <input type="hidden" name="document_id" value="{{ $slip['document_id'] }}">
+                                            <input type="hidden" name="slip_no" value="{{ $slip['slip_no'] }}">
+                                            <input type="hidden" name="numeric_no" value="{{ $slip['numeric_no'] }}">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete Slip Record">
+                                                <i class="fas fa-trash-alt"></i>
+                                            </button>
+                                        </form>
+                                    </div>
                                 </td>
                             </tr>
                             @empty
@@ -895,14 +918,27 @@
 
                                 <!-- Actions -->
                                 <td class="text-end pe-2">
-                                    <a href="{{ $slip['document_url'] }}" class="btn btn-sm btn-outline-primary" target="_blank" title="View Document">
-                                        <i class="fas fa-eye me-1"></i>View
-                                    </a>
-                                    @if($slip['pr_url'])
-                                    <a href="{{ $slip['pr_url'] }}" class="btn btn-sm btn-outline-secondary" target="_blank" title="View Purchase Request">
-                                        <i class="fas fa-external-link-alt"></i>
-                                    </a>
-                                    @endif
+                                    <div class="d-flex justify-content-end gap-1">
+                                        <a href="{{ $slip['document_url'] }}" class="btn btn-sm btn-outline-primary" target="_blank" title="View Document">
+                                            <i class="fas fa-eye me-1"></i>View
+                                        </a>
+                                        @if($slip['pr_url'])
+                                        <a href="{{ $slip['pr_url'] }}" class="btn btn-sm btn-outline-secondary" target="_blank" title="View Purchase Request">
+                                            <i class="fas fa-external-link-alt"></i>
+                                        </a>
+                                        @endif
+                                        <form action="{{ route('store-manager.slip-history.destroy') }}" method="POST" class="d-inline" onsubmit="return confirm('Delete this slip (#{{ $slip['slip_no'] }}) from slip history?');">
+                                            @csrf
+                                            @method('DELETE')
+                                            <input type="hidden" name="source_type" value="{{ $slip['source_type'] }}">
+                                            <input type="hidden" name="document_id" value="{{ $slip['document_id'] }}">
+                                            <input type="hidden" name="slip_no" value="{{ $slip['slip_no'] }}">
+                                            <input type="hidden" name="numeric_no" value="{{ $slip['numeric_no'] }}">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete Slip Record">
+                                                <i class="fas fa-trash-alt"></i>
+                                            </button>
+                                        </form>
+                                    </div>
                                 </td>
                             </tr>
                             @empty

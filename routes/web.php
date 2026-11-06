@@ -1996,6 +1996,8 @@ Route::middleware(['auth'])->group(function () {
 
     // Global Slip Sequence Resource & API
     Route::resource('slip-sequences', App\Http\Controllers\SlipSequenceController::class);
+    Route::delete('slip-history', [App\Http\Controllers\SlipSequenceController::class, 'destroyHistorySlip'])->name('slip-history.destroy-global');
+    Route::post('slip-history/delete-unassigned', [App\Http\Controllers\SlipSequenceController::class, 'destroyUnassignedHistory'])->name('slip-history.delete-unassigned-global');
     Route::get('api/slip-sequences/{storeId}/{slipType}', [App\Http\Controllers\SlipSequenceController::class, 'getNextSlip'])->name('api.slip-sequences.next');
     Route::post('api/slip-sequences/void-missing', [App\Http\Controllers\SlipSequenceController::class, 'voidMissing'])->name('api.slip-sequences.void-missing');
     Route::get('api/slip-sequences/{slipSequence}/cross-check', [App\Http\Controllers\SlipSequenceController::class, 'crossCheck'])->name('api.slip-sequences.cross-check');
@@ -2548,6 +2550,8 @@ Route::middleware(['auth'])->group(function () {
         
         // Slip Sequences (GRN/SIN Configuration & History)
         Route::get('slip-history', [App\Http\Controllers\SlipSequenceController::class, 'history'])->name('slip-history.index');
+        Route::delete('slip-history', [App\Http\Controllers\SlipSequenceController::class, 'destroyHistorySlip'])->name('slip-history.destroy');
+        Route::post('slip-history/delete-unassigned', [App\Http\Controllers\SlipSequenceController::class, 'destroyUnassignedHistory'])->name('slip-history.delete-unassigned');
         Route::resource('slip-sequences', App\Http\Controllers\SlipSequenceController::class);
         Route::post('slip-sequences/{slipSequence}/next-book', [App\Http\Controllers\SlipSequenceController::class, 'storeNextBook'])->name('slip-sequences.next-book');
         Route::post('slip-sequences/{slipSequence}/deactivate', [App\Http\Controllers\SlipSequenceController::class, 'deactivate'])->name('slip-sequences.deactivate');

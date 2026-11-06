@@ -494,4 +494,253 @@ class SlipSequenceController extends Controller
 
         return back()->with('info', "Checked all currently added slips in Store Manager and Store Keeper sections: All sequences are continuous with zero missing gaps.");
     }
+
+    /**
+     * Delete empty sequence book (where no slips are added) or force delete.
+     */
+    public function destroy(SlipSequence $slipSequence, Request $request = null)
+    {
+        $req = $request ?: request();
+        $assignedSlips = method_exists($slipSequence, 'getAssignedSlipsDetail')
+            ? $slipSequence->getAssignedSlipsDetail()
+            : collect();
+
+        $hasSlips = ($slipSequence->used_count > 0) || $assignedSlips->isNotEmpty();
+
+        if ($hasSlips && !$req->boolean('force')) {
+            return back()->withErrors([
+                'error' => "Cannot delete sequence book #{$slipSequence->book_start_no}–#{$slipSequence->book_end_no}: {$assignedSlips->count()} slip(s) are recorded in this sequence book. You must delete or unassign the slips first."
+            ]);
+        }
+
+        $label = $slipSequence->label;
+        $range = "#{$slipSequence->book_start_no}–#{$slipSequence->book_end_no}";
+        $storeId = $slipSequence->store_id;
+        $slipType = $slipSequence->slip_type;
+
+        $slipSequence->delete();
+
+        // Maintain active sequence for remaining books
+        $remainingActive = SlipSequence::where('store_id', $storeId)
+            ->where('slip_type', $slipType)
+            ->where('status', 'active')
+            ->first();
+
+        if (!$remainingActive) {
+            $latestBook = SlipSequence::where('store_id', $storeId)
+                ->where('slip_type', $slipType)
+                ->where('status', '!=', 'full')
+                ->latest('book_end_no')
+                ->first();
+
+            if ($latestBook) {
+                $latestBook->update(['status' => 'active']);
+                $latestBook->recalculate(save: true);
+            }
+        }
+
+        $msg = "Slip sequence book {$label} ({$range}) deleted successfully.";
+        if ($req->wantsJson() || $req->ajax()) {
+            return response()->json(['success' => true, 'message' => $msg]);
+        }
+
+        return redirect()->route('store-manager.slip-sequences.index')->with('success', $msg);
+    }
+
+    /**
+     * Delete an individual slip history record.
+     */
+    public function destroyHistorySlip(Request $request)
+    {
+        $request->validate([
+            'source_type' => 'required|string|in:delivery_receipt,transfer,inventory_movement,void',
+            'document_id' => 'required|integer',
+            'slip_no'     => 'nullable|string',
+            'numeric_no'  => 'nullable|integer',
+        ]);
+
+        $sourceType = (string) $request->input('source_type');
+        $documentId = (int) $request->input('document_id');
+        $slipNo = $request->input('slip_no');
+        $numericNo = $request->input('numeric_no') ? (int) $request->input('numeric_no') : null;
+
+        $deleted = $this->deleteSlipItem($sourceType, $documentId, $numericNo, $slipNo);
+
+        $this->recalculateAllSequences();
+
+        $displayName = $slipNo ? "#{$slipNo}" : ($numericNo ? "#{$numericNo}" : "record");
+
+        if (!$deleted) {
+            $errMsg = "Could not find or delete slip {$displayName} from {$sourceType}.";
+            if ($request->wantsJson() || $request->ajax()) {
+                return response()->json(['success' => false, 'error' => $errMsg], 404);
+            }
+            return back()->withErrors(['error' => $errMsg]);
+        }
+
+        $msg = "Slip {$displayName} removed from slip history successfully.";
+        if ($request->wantsJson() || $request->ajax()) {
+            return response()->json(['success' => true, 'message' => $msg]);
+        }
+
+        return back()->with('success', $msg);
+    }
+
+    /**
+     * Bulk delete all slips from slip history that have no sequence book assigned (Manual / Other).
+     */
+    public function destroyUnassignedHistory(Request $request)
+    {
+        $filters = [
+            'store_id'  => $request->input('store_id'),
+            'slip_type' => $request->input('slip_type'),
+        ];
+
+        $allSlips = collect();
+        if (method_exists(SlipSequence::class, 'getGlobalSlipHistory')) {
+            $allSlips = SlipSequence::getGlobalSlipHistory($filters);
+        }
+
+        $unassigned = $allSlips->filter(function ($slip) {
+            return empty($slip['book_id']) || ($slip['book_range'] ?? '') === 'Manual / Other';
+        });
+
+        $count = 0;
+        foreach ($unassigned as $slip) {
+            $deleted = $this->deleteSlipItem(
+                $slip['source_type'],
+                (int) $slip['document_id'],
+                $slip['numeric_no'] ? (int) $slip['numeric_no'] : null,
+                $slip['slip_no'] ?? null
+            );
+            if ($deleted) {
+                $count++;
+            }
+        }
+
+        $this->recalculateAllSequences();
+
+        $msg = "Deleted {$count} slip record(s) with no sequence book assigned.";
+        if ($request->wantsJson() || $request->ajax()) {
+            return response()->json(['success' => true, 'message' => $msg, 'deleted_count' => $count]);
+        }
+
+        return back()->with('success', $msg);
+    }
+
+    /**
+     * Helper to delete/clear a slip item from DeliveryReceipt, Transfer, or InventoryMovement.
+     */
+    protected function deleteSlipItem(string $sourceType, int $documentId, ?int $numericNo, ?string $slipNo): bool
+    {
+        if ($sourceType === 'delivery_receipt' || $sourceType === 'void') {
+            $receipt = DeliveryReceipt::find($documentId);
+            if ($receipt) {
+                try {
+                    $receipt->items()->delete();
+                } catch (\Throwable $e) {}
+
+                if (!empty($receipt->slip_receipt_path)) {
+                    try {
+                        \App\Services\FileUploadService::delete($receipt->slip_receipt_path);
+                    } catch (\Throwable $e) {}
+                }
+
+                $receipt->delete();
+                return true;
+            }
+        } elseif ($sourceType === 'transfer') {
+            $transfer = \App\Models\Transfer::withTrashed()->find($documentId);
+            if ($transfer) {
+                $matched = false;
+                if ($numericNo !== null && (int)$this->extractFirstNumber($transfer->outgoing_slip_no) === $numericNo) {
+                    $transfer->outgoing_slip_no = null;
+                    $matched = true;
+                } elseif (!empty($slipNo) && $transfer->outgoing_slip_no == $slipNo) {
+                    $transfer->outgoing_slip_no = null;
+                    $matched = true;
+                }
+
+                if ($numericNo !== null && (int)$this->extractFirstNumber($transfer->receiving_slip_no) === $numericNo) {
+                    $transfer->receiving_slip_no = null;
+                    $matched = true;
+                } elseif (!empty($slipNo) && $transfer->receiving_slip_no == $slipNo) {
+                    $transfer->receiving_slip_no = null;
+                    $matched = true;
+                }
+
+                if ($numericNo !== null && (int)$this->extractFirstNumber($transfer->physical_slip_no) === $numericNo) {
+                    $transfer->physical_slip_no = null;
+                    $matched = true;
+                } elseif (!empty($slipNo) && $transfer->physical_slip_no == $slipNo) {
+                    $transfer->physical_slip_no = null;
+                    $matched = true;
+                }
+
+                if (!$matched) {
+                    if ($transfer->outgoing_slip_no) {
+                        $transfer->outgoing_slip_no = null;
+                    } elseif ($transfer->receiving_slip_no) {
+                        $transfer->receiving_slip_no = null;
+                    } elseif ($transfer->physical_slip_no) {
+                        $transfer->physical_slip_no = null;
+                    }
+                }
+
+                $transfer->save();
+
+                // Clean mirrored delivery receipts
+                try {
+                    DeliveryReceipt::where('transfer_id', $transfer->id)
+                        ->when($numericNo, function ($q) use ($numericNo) {
+                            $q->where(function ($sub) use ($numericNo) {
+                                $sub->where('dr_no', 'like', "%{$numericNo}%")
+                                    ->orWhere('reference_no', 'like', "%{$numericNo}%");
+                            });
+                        })
+                        ->delete();
+                } catch (\Throwable $e) {}
+
+                return true;
+            }
+        } elseif ($sourceType === 'inventory_movement') {
+            try {
+                $movement = \App\Models\InventoryMovement::find($documentId);
+                if ($movement) {
+                    $movement->delete();
+                    return true;
+                }
+            } catch (\Throwable $e) {}
+        }
+
+        return false;
+    }
+
+    /**
+     * Helper to extract first integer in text.
+     */
+    protected function extractFirstNumber($str): ?int
+    {
+        if (empty($str)) return null;
+        if (preg_match_all('/\d+/', (string) $str, $matches)) {
+            foreach ($matches[0] as $match) {
+                $val = (int) $match;
+                if ($val > 0) return $val;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Recalculate all sequence books to synchronize current counters and status.
+     */
+    protected function recalculateAllSequences(): void
+    {
+        try {
+            $sequences = SlipSequence::all();
+            foreach ($sequences as $seq) {
+                $seq->recalculate(save: true);
+            }
+        } catch (\Throwable $e) {}
+    }
 }

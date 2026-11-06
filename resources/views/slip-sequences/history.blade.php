@@ -3,6 +3,13 @@
 @section('title', 'Slip History & Archives')
 
 @section('content')
+@php
+    $procurementSlipsCount = $allSlips->where('source_type', 'delivery_receipt')->count();
+    $transferSlipsCount = $allSlips->where('source_type', 'transfer')->count();
+    $unassignedSlipsCount = $allSlips->filter(fn($s) => empty($s['book_id']) || ($s['book_range'] ?? '') === 'Manual / Other')->count();
+    $activeBooksCount = $sequences->where('status', 'active')->count();
+    $completedBooksCount = $sequences->where('status', 'full')->count();
+@endphp
 <div class="container-fluid">
     <!-- Header -->
     <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
@@ -15,6 +22,14 @@
             </small>
         </div>
         <div class="d-flex align-items-center gap-2 flex-wrap">
+            @if($unassignedSlipsCount > 0)
+            <form action="{{ route('store-manager.slip-history.delete-unassigned') }}" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to delete all {{ $unassignedSlipsCount }} slip(s) with NO sequence book added? This will remove orphaned/unassigned slip records.');">
+                @csrf
+                <button type="submit" class="btn btn-sm btn-outline-danger shadow-sm fw-semibold" title="Delete all slips with no sequence book assigned">
+                    <i class="fas fa-trash-alt me-1"></i>Delete Slips with No Sequence ({{ $unassignedSlipsCount }})
+                </button>
+            </form>
+            @endif
             <button type="button" class="btn btn-sm btn-outline-secondary shadow-sm" onclick="window.print()">
                 <i class="fas fa-print me-1"></i>Print Report
             </button>
@@ -43,12 +58,6 @@
     </div>
 
     <!-- Metric Stat Cards -->
-    @php
-        $procurementSlipsCount = $allSlips->where('source_type', 'delivery_receipt')->count();
-        $transferSlipsCount = $allSlips->where('source_type', 'transfer')->count();
-        $activeBooksCount = $sequences->where('status', 'active')->count();
-        $completedBooksCount = $sequences->where('status', 'full')->count();
-    @endphp
     <div class="row g-3 mb-4">
         <div class="col-xl-3 col-sm-6">
             <div class="card shadow-sm border-start border-4 border-primary h-100">
@@ -224,13 +233,13 @@
         <div class="card-body p-3">
             <form method="GET" action="{{ route('store-manager.slip-history.index') }}" class="row g-2 align-items-end">
                 <!-- Store Filter -->
-                <div class="col-md-3 col-sm-6">
-                    <label class="form-label small fw-bold text-muted text-uppercase mb-1">Store / Warehouse</label>
+                <div class="col-md-2 col-sm-6">
+                    <label class="form-label small fw-bold text-muted text-uppercase mb-1">Store</label>
                     <select name="store_id" class="form-select form-select-sm">
-                        <option value="">All Stores & Warehouses</option>
+                        <option value="">All Stores</option>
                         @foreach($stores as $st)
                         <option value="{{ $st->id }}" {{ (string)($filters['store_id'] ?? '') === (string)$st->id ? 'selected' : '' }}>
-                            {{ $st->name }} ({{ $st->type }})
+                            {{ $st->name }}
                         </option>
                         @endforeach
                     </select>
@@ -246,9 +255,23 @@
                     </select>
                 </div>
 
+                <!-- Sequence Book Filter -->
+                <div class="col-md-2 col-sm-6">
+                    <label class="form-label small fw-bold text-muted text-uppercase mb-1">Sequence Book</label>
+                    <select name="sequence_id" class="form-select form-select-sm">
+                        <option value="">All Books</option>
+                        <option value="none" {{ ($filters['sequence_id'] ?? '') === 'none' ? 'selected' : '' }}>No Sequence Added (Manual/Other)</option>
+                        @foreach($sequences as $sq)
+                        <option value="{{ $sq->id }}" {{ (string)($filters['sequence_id'] ?? '') === (string)$sq->id ? 'selected' : '' }}>
+                            #{{ $sq->book_start_no }}–#{{ $sq->book_end_no }} ({{ $sq->store->name ?? 'Store' }})
+                        </option>
+                        @endforeach
+                    </select>
+                </div>
+
                 <!-- Source Type Filter -->
                 <div class="col-md-2 col-sm-6">
-                    <label class="form-label small fw-bold text-muted text-uppercase mb-1">Transaction Source</label>
+                    <label class="form-label small fw-bold text-muted text-uppercase mb-1">Source</label>
                     <select name="source_type" class="form-select form-select-sm">
                         <option value="">All Sources</option>
                         <option value="delivery_receipt" {{ ($filters['source_type'] ?? '') === 'delivery_receipt' ? 'selected' : '' }}>Procurement GRN</option>
@@ -257,13 +280,13 @@
                 </div>
 
                 <!-- Search Input -->
-                <div class="col-md-3 col-sm-6">
-                    <label class="form-label small fw-bold text-muted text-uppercase mb-1">Search Keywords</label>
+                <div class="col-md-2 col-sm-6">
+                    <label class="form-label small fw-bold text-muted text-uppercase mb-1">Keywords</label>
                     <div class="input-group input-group-sm">
                         <span class="input-group-text bg-light"><i class="fas fa-search text-muted"></i></span>
                         <input type="text" name="search" class="form-control form-control-sm" 
                                value="{{ $filters['search'] ?? '' }}" 
-                               placeholder="Slip #, PR #, transfer #, driver, project...">
+                               placeholder="Slip, PR, TR...">
                     </div>
                 </div>
 
@@ -289,9 +312,12 @@
                 </h6>
                 <small class="text-muted">Showing {{ $allSlips->count() }} slips matching your active filters</small>
             </div>
-            <div class="d-flex align-items-center gap-2">
+            <div class="d-flex align-items-center gap-2 flex-wrap">
                 <span class="badge bg-success">{{ $procurementSlipsCount }} Procurement</span>
                 <span class="badge text-white" style="background-color: #4f46e5;">{{ $transferSlipsCount }} Transfers</span>
+                @if($unassignedSlipsCount > 0)
+                <span class="badge bg-warning text-dark"><i class="fas fa-exclamation-circle me-1"></i>{{ $unassignedSlipsCount }} No Sequence Added</span>
+                @endif
             </div>
         </div>
 
@@ -323,9 +349,15 @@
                             <br><span class="badge bg-danger mt-1">VOID</span>
                             @endif
                             <div class="mt-1">
+                                @if(empty($slip['book_id']))
+                                <span class="badge bg-warning text-dark border" style="font-size: 0.68rem;" title="No Sequence Book Assigned (Manual / Other)">
+                                    <i class="fas fa-exclamation-circle me-1"></i>No Sequence Added
+                                </span>
+                                @else
                                 <span class="badge {{ $slip['book_status'] === 'active' ? 'bg-success' : 'bg-secondary' }} text-white border" style="font-size: 0.68rem;" title="Sequence Book Range">
                                     <i class="fas fa-book me-1"></i>{{ $slip['book_range'] }}
                                 </span>
+                                @endif
                             </div>
                             <div class="small text-muted mt-1">Leaf: {{ $slip['numeric_no'] }}</div>
                         </td>
@@ -514,6 +546,17 @@
                                     <i class="fas fa-book"></i>
                                 </a>
                                 @endif
+                                <form action="{{ route('store-manager.slip-history.destroy') }}" method="POST" class="d-inline" onsubmit="return confirm('Delete this slip (#{{ $slip['slip_no'] }}) from slip history?');">
+                                    @csrf
+                                    @method('DELETE')
+                                    <input type="hidden" name="source_type" value="{{ $slip['source_type'] }}">
+                                    <input type="hidden" name="document_id" value="{{ $slip['document_id'] }}">
+                                    <input type="hidden" name="slip_no" value="{{ $slip['slip_no'] }}">
+                                    <input type="hidden" name="numeric_no" value="{{ $slip['numeric_no'] }}">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete Slip Record">
+                                        <i class="fas fa-trash-alt"></i>
+                                    </button>
+                                </form>
                             </div>
                         </td>
                     </tr>

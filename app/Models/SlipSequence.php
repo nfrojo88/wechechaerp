@@ -772,7 +772,7 @@ class SlipSequence extends Model
         $storeId = !empty($filters['store_id']) ? (int) $filters['store_id'] : null;
         $slipType = !empty($filters['slip_type']) ? (string) $filters['slip_type'] : null;
         $sourceType = !empty($filters['source_type']) ? (string) $filters['source_type'] : null;
-        $sequenceId = !empty($filters['sequence_id']) ? (int) $filters['sequence_id'] : null;
+        $sequenceId = !empty($filters['sequence_id']) ? $filters['sequence_id'] : null;
         $search = !empty($filters['search']) ? trim(strtolower((string) $filters['search'])) : null;
 
         // Load all sequence books for book attribution
@@ -865,7 +865,11 @@ class SlipSequence extends Model
                 }
 
                 $book = $findBookForSlip($numeric, $receipt->store_id, $recSlipType);
-                if ($sequenceId && (!$book || $book->id !== $sequenceId)) {
+                if ($sequenceId === 'none' || $sequenceId === 'unassigned') {
+                    if ($book !== null) {
+                        continue;
+                    }
+                } elseif ($sequenceId && (!$book || (int)$book->id !== (int)$sequenceId)) {
                     continue;
                 }
 
@@ -996,7 +1000,11 @@ class SlipSequence extends Model
                     }
 
                     $book = $findBookForSlip($num, $trStoreId, $trSlipType);
-                    if ($sequenceId && (!$book || $book->id !== $sequenceId)) {
+                    if ($sequenceId === 'none' || $sequenceId === 'unassigned') {
+                        if ($book !== null) {
+                            continue;
+                        }
+                    } elseif ($sequenceId && (!$book || (int)$book->id !== (int)$sequenceId)) {
                         continue;
                     }
 
@@ -1091,7 +1099,13 @@ class SlipSequence extends Model
                 if ($slipType && $movSlipType !== $slipType) continue;
 
                 $book = $findBookForSlip($num, null, $movSlipType);
-                if ($sequenceId && (!$book || $book->id !== $sequenceId)) continue;
+                if ($sequenceId === 'none' || $sequenceId === 'unassigned') {
+                    if ($book !== null) {
+                        continue;
+                    }
+                } elseif ($sequenceId && (!$book || (int)$book->id !== (int)$sequenceId)) {
+                    continue;
+                }
 
                 $dupKey = 'mov_' . $mov->id . '_' . $num;
                 if ($assignedSlips->has($dupKey)) continue;
