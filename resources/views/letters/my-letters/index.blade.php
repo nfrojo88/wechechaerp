@@ -199,7 +199,12 @@
 
                             {{-- Handled / Addressed Person --}}
                             <td>
-                                @if($letter->addressedTo)
+                                @if($letter->employee)
+                                    <div class="fw-semibold text-dark small">
+                                        <i class="fa-solid fa-user-tie text-success me-1"></i>{{ $letter->employee->full_name }}
+                                    </div>
+                                    <div class="text-muted" style="font-size: 0.72rem;">Emp Code: {{ $letter->employee->employee_code }}</div>
+                                @elseif($letter->addressedTo)
                                     <div class="fw-semibold text-dark small">
                                         <i class="fa-solid fa-user-check text-success me-1"></i>{{ $letter->addressedTo->name }}
                                     </div>

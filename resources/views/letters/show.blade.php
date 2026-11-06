@@ -52,12 +52,14 @@
                 <span class="badge {{ $badgeClass }} px-2.5 py-1">{{ ucfirst($letter->status) }}</span>
             </div>
             <p class="text-muted small mb-0">
-                Created on <strong>{{ $letter->created_at->format('M d, Y H:i') }}</strong> by <strong>{{ $letter->creator->name ?? 'Employee' }}</strong>
+                Created on <strong>{{ $letter->created_at->format('M d, Y H:i') }}</strong> by <strong>{{ $letter->creator?->name ?? 'Employee' }}</strong>
                 @if($letter->registered_at)
-                    &bull; Registered on <strong>{{ $letter->registered_at->format('M d, Y H:i') }}</strong> by <strong>{{ $letter->registeredBy->name ?? 'Secretary' }}</strong>
+                    &bull; Registered on <strong>{{ $letter->registered_at->format('M d, Y H:i') }}</strong> by <strong>{{ $letter->registeredBy?->name ?? 'Secretary' }}</strong>
                 @endif
                 @if($letter->addressedTo)
-                    &bull; Addressed to: <strong class="text-primary">{{ $letter->addressedTo->name }}</strong>
+                    &bull; Addressed to: <strong class="text-primary">{{ $letter->addressedTo?->name }}</strong>
+                @elseif($letter->employee)
+                    &bull; Addressed to: <strong class="text-primary">{{ $letter->employee?->full_name }}</strong>
                 @endif
             </p>
         </div>
@@ -182,14 +184,14 @@
                         <div class="col-md-6">
                             <div class="p-2 border rounded bg-white">
                                 <span class="text-muted d-block">Addressed / Handled By:</span>
-                                <strong class="text-dark">{{ $letter->addressedTo->name ?? 'Not yet assigned' }}</strong>
+                                <strong class="text-dark">{{ $letter->addressedTo?->name ?? ($letter->employee?->full_name ?? 'Not yet assigned') }}</strong>
                             </div>
                         </div>
                         @if($letter->registered_at)
                         <div class="col-md-6">
                             <div class="p-2 border rounded bg-white">
                                 <span class="text-muted d-block">Registered By:</span>
-                                <strong class="text-success">{{ $letter->registeredBy->name ?? 'Secretary' }} ({{ $letter->registered_at->format('M d, Y H:i') }})</strong>
+                                <strong class="text-success">{{ $letter->registeredBy?->name ?? 'Secretary' }} ({{ $letter->registered_at->format('M d, Y H:i') }})</strong>
                             </div>
                         </div>
                         @endif

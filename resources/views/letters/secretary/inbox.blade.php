@@ -290,8 +290,8 @@
                                                 </div>
                                                 <small class="text-muted" style="font-size: 0.7rem;">Employee Code: {{ $letter->employee->employee_code }}</small>
                                             @elseif($letter->addressedTo)
-                                                <div class="fw-semibold text-dark small">{{ $letter->addressedTo->name }}</div>
-                                                <small class="text-muted" style="font-size: 0.7rem;">{{ $letter->addressedTo->email }}</small>
+                                                <div class="fw-semibold text-dark small">{{ $letter->addressedTo->name ?? 'N/A' }}</div>
+                                                <small class="text-muted" style="font-size: 0.7rem;">{{ $letter->addressedTo->email ?? '' }}</small>
                                             @endif
                                         </div>
                                         @if(!$isRegistered && !$isRejected)
@@ -347,7 +347,7 @@
                             <td class="pe-3 text-end">
                                 <div class="d-flex flex-column align-items-end gap-1">
                                     @if($canRegister)
-                                        <form action="{{ route('letters.register', $letter->id) }}" method="POST" onsubmit="return confirm('Register this letter now? Dispatch will be recorded for {{ addslashes($letter->addressedTo->name ?? ($letter->employee->full_name ?? 'the assigned recipient')) }}.');" class="mb-1">
+                                        <form action="{{ route('letters.register', $letter->id) }}" method="POST" onsubmit="return confirm('Register this letter now? Dispatch will be recorded for {{ addslashes($letter->addressedTo?->name ?? ($letter->employee?->full_name ?? 'the assigned recipient')) }}.');" class="mb-1">
                                             @csrf
                                             <button type="submit" class="btn btn-sm btn-success rounded-pill px-3 py-1 fw-bold shadow-xs">
                                                 <i class="fa-solid fa-stamp me-1"></i> Register Letter
@@ -472,7 +472,7 @@
                                     <div class="row g-2 small">
                                         <div class="col-6 col-sm-4">
                                             <span class="text-muted d-block">Submitted By:</span>
-                                            <strong class="text-dark">{{ $letter->creator->name ?? ($letter->sender ?? 'N/A') }}</strong>
+                                            <strong class="text-dark">{{ $letter->creator?->name ?? ($letter->sender ?? 'N/A') }}</strong>
                                         </div>
                                         <div class="col-6 col-sm-4">
                                             <span class="text-muted d-block">Submission Date:</span>
@@ -495,8 +495,10 @@
                                             <span class="fw-semibold text-dark">
                                                 @if($letter->employee)
                                                     <i class="fa-solid fa-user-tie text-success me-1"></i>{{ $letter->employee->full_name }}
+                                                @elseif($letter->addressedTo)
+                                                    {{ $letter->addressedTo->name }}
                                                 @else
-                                                    {{ $letter->addressedTo->name ?: 'Not assigned yet' }}
+                                                    <span class="text-muted fst-italic">Not assigned yet</span>
                                                 @endif
                                             </span>
                                         </div>
@@ -568,8 +570,8 @@
                                         <div class="small">
                                             <div><strong>Ref #:</strong> <span class="font-monospace text-primary fw-bold">{{ $letter->letter_number }}</span></div>
                                             <div><strong>Category:</strong> {{ $letter->category }}</div>
-                                            <div><strong>Dispatched To:</strong> {{ $letter->addressedTo->name ?? 'N/A' }}</div>
-                                            <div><strong>Registered By:</strong> {{ $letter->registeredBy->name ?? 'Secretary' }} on {{ optional($letter->registered_at)->format('d M Y, h:i A') }}</div>
+                                            <div><strong>Dispatched To:</strong> {{ $letter->addressedTo?->name ?? ($letter->employee?->full_name ?? 'N/A') }}</div>
+                                            <div><strong>Registered By:</strong> {{ $letter->registeredBy?->name ?? 'Secretary' }} on {{ optional($letter->registered_at)->format('d M Y, h:i A') }}</div>
                                         </div>
                                         <div class="mt-3">
                                             <a href="{{ route('letters.show', $letter->id) }}" class="btn btn-sm btn-success w-100">
@@ -585,7 +587,7 @@
                                         </h6>
                                         <p class="small text-muted mb-2">This letter was rejected by the Secretary and was not registered.</p>
                                         <div class="small mb-2">
-                                            <div><strong>Blocked By:</strong> {{ $letter->closer->name ?? 'Secretary' }}</div>
+                                            <div><strong>Blocked By:</strong> {{ $letter->closer?->name ?? 'Secretary' }}</div>
                                             <div><strong>Date:</strong> {{ optional($letter->closed_at)->format('d M Y, h:i A') }}</div>
                                         </div>
                                         <div class="p-2 bg-white rounded border border-danger-subtle small">
