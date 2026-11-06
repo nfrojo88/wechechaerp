@@ -18,6 +18,7 @@
     $isFinanceHeadUser = in_array('finance_head', $rawUserRoles) || in_array('finance_manager', $rawUserRoles) || in_array('finance', $rawUserRoles) || in_array('accountant', $rawUserRoles);
     $isGeneralServiceUser = in_array('general_service', $rawUserRoles) || in_array('general_services', $rawUserRoles);
     $currentTab = $activeTab ?? 'pending';
+    $searchKey = trim(request('search', ''));
 @endphp
 
 @section('title', $isAuditorUser ? 'Procurement Status & Compliance (Read-Only)' : 'Procurement — My Queue & History')
@@ -192,7 +193,18 @@
         <div class="card-body p-3">
             <form method="GET" action="{{ route('procurement.my-queue') }}" class="row g-2 align-items-center">
                 <input type="hidden" name="tab" value="{{ $currentTab }}">
-                <div class="col-md-3">
+                <div class="col-12 col-md-4 col-lg-3">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text bg-white text-muted"><i class="fas fa-search"></i></span>
+                        <input type="text" name="search" class="form-control" placeholder="Search by product name, SKU, PR #..." value="{{ request('search') }}" autocomplete="off">
+                        @if(request('search'))
+                            <a href="{{ route('procurement.my-queue', array_merge(request()->except('search'), ['tab' => $currentTab])) }}" class="btn btn-outline-secondary" title="Clear search">
+                                <i class="fas fa-times"></i>
+                            </a>
+                        @endif
+                    </div>
+                </div>
+                <div class="col-12 col-md-4 col-lg-3">
                     <select name="project_id" class="form-select form-select-sm">
                         <option value="">-- All Projects --</option>
                         @foreach($projects as $p)
@@ -200,7 +212,7 @@
                         @endforeach
                     </select>
                 </div>
-                <div class="col-md-3">
+                <div class="col-6 col-md-2 col-lg-2">
                     <select name="status" class="form-select form-select-sm">
                         <option value="">-- All Statuses --</option>
                         @foreach(\App\Models\PurchaseRequest::statusLabels() as $key => $lbl)
@@ -208,18 +220,29 @@
                         @endforeach
                     </select>
                 </div>
-                <div class="col-md-3">
+                <div class="col-6 col-md-2 col-lg-2">
                     <select name="request_type" class="form-select form-select-sm">
                         <option value="">-- All Request Channels --</option>
                         <option value="mr" {{ request('request_type') == 'mr' ? 'selected' : '' }}>📋 Site Requisitions (MR Flow)</option>
                         <option value="direct_pr" {{ request('request_type') == 'direct_pr' ? 'selected' : '' }}>🏢 Direct Purchase Requests</option>
                     </select>
                 </div>
-                <div class="col-md-3 d-flex gap-2">
-                    <button type="submit" class="btn btn-sm btn-secondary flex-grow-1"><i class="fas fa-filter me-1"></i> Filter</button>
-                    <a href="{{ route('procurement.my-queue', ['tab' => $currentTab]) }}" class="btn btn-sm btn-outline-secondary"><i class="fas fa-undo me-1"></i> Reset</a>
+                <div class="col-12 col-md-12 col-lg-2 d-flex gap-2">
+                    <button type="submit" class="btn btn-sm btn-primary flex-grow-1 fw-semibold"><i class="fas fa-filter me-1"></i> Filter</button>
+                    <a href="{{ route('procurement.my-queue', ['tab' => $currentTab]) }}" class="btn btn-sm btn-outline-secondary" title="Reset all filters"><i class="fas fa-undo me-1"></i> Reset</a>
                 </div>
             </form>
+            @if(request('search'))
+                <div class="mt-2 pt-2 border-top d-flex align-items-center justify-content-between flex-wrap gap-2 text-muted small">
+                    <div>
+                        <i class="fas fa-search text-primary me-1"></i>
+                        Showing results filtered by product / keyword: <strong class="text-dark">"{{ request('search') }}"</strong>
+                    </div>
+                    <a href="{{ route('procurement.my-queue', array_merge(request()->except('search'), ['tab' => $currentTab])) }}" class="text-decoration-none small text-danger fw-semibold">
+                        <i class="fas fa-times-circle me-1"></i> Clear product search
+                    </a>
+                </div>
+            @endif
         </div>
     </div>
 
@@ -275,9 +298,19 @@
                                 </div>
                                 <div class="procurement-materials-list d-flex flex-column gap-1" style="max-height: 160px; overflow-y: auto;">
                                     @foreach($mr->items as $itm)
-                                        <div class="d-flex align-items-center justify-content-between p-1 bg-white rounded border text-nowrap shadow-2xs" style="font-size:0.78rem;">
+                                        @php
+                                            $emItmMatch = $searchKey !== '' && (
+                                                stripos($itm->product->name ?? '', $searchKey) !== false ||
+                                                stripos($itm->product->sku ?? '', $searchKey) !== false ||
+                                                stripos($itm->notes ?? '', $searchKey) !== false
+                                            );
+                                        @endphp
+                                        <div class="d-flex align-items-center justify-content-between p-1 {{ $emItmMatch ? 'bg-warning bg-opacity-25 border border-warning fw-semibold' : 'bg-white rounded border' }} text-nowrap shadow-2xs" style="font-size:0.78rem;">
                                             <span class="fw-semibold text-dark text-truncate me-2" style="max-width: 200px;" title="{{ $itm->product->name }}">
-                                                <i class="fa-solid fa-cube text-danger me-1"></i>{{ $itm->product->name ?? 'Material' }}
+                                                <i class="fa-solid fa-cube {{ $emItmMatch ? 'text-warning' : 'text-danger' }} me-1"></i>{{ $itm->product->name ?? 'Material' }}
+                                                @if($emItmMatch)
+                                                    <span class="badge bg-warning text-dark border border-warning px-1 py-0.5 ms-1" style="font-size:0.6rem;">Match</span>
+                                                @endif
                                             </span>
                                             <span class="badge bg-light text-dark border font-monospace px-1.5 py-0.5 fw-bold">
                                                 {{ (float)$itm->quantity }} {{ $itm->product->unit ?? 'Units' }}
@@ -418,9 +451,19 @@
                                 </div>
                                 <div class="procurement-materials-list d-flex flex-column gap-1" style="max-height: 160px; overflow-y: auto;">
                                     @foreach($cmr->items as $it)
-                                        <div class="d-flex align-items-center justify-content-between p-1 bg-white rounded border text-nowrap shadow-2xs" style="font-size:0.78rem;">
+                                        @php
+                                            $cEmItmMatch = $searchKey !== '' && (
+                                                stripos($it->product->name ?? '', $searchKey) !== false ||
+                                                stripos($it->product->sku ?? '', $searchKey) !== false ||
+                                                stripos($it->notes ?? '', $searchKey) !== false
+                                            );
+                                        @endphp
+                                        <div class="d-flex align-items-center justify-content-between p-1 {{ $cEmItmMatch ? 'bg-warning bg-opacity-25 border border-warning fw-semibold' : 'bg-white rounded border' }} text-nowrap shadow-2xs" style="font-size:0.78rem;">
                                             <span class="fw-semibold text-dark text-truncate me-2" style="max-width: 200px;" title="{{ $it->product->name }}">
-                                                <i class="fa-solid fa-cube text-primary me-1"></i>{{ $it->product->name ?? 'Material' }}
+                                                <i class="fa-solid fa-cube {{ $cEmItmMatch ? 'text-warning' : 'text-primary' }} me-1"></i>{{ $it->product->name ?? 'Material' }}
+                                                @if($cEmItmMatch)
+                                                    <span class="badge bg-warning text-dark border border-warning px-1 py-0.5 ms-1" style="font-size:0.6rem;">Match</span>
+                                                @endif
                                             </span>
                                             <span class="badge bg-light text-dark border font-monospace px-1.5 py-0.5 fw-bold">
                                                 {{ (float)$it->quantity }} {{ $it->product->unit ?? 'Units' }}
@@ -638,10 +681,20 @@
                                     </div>
                                     <div class="procurement-materials-list d-flex flex-column gap-1" style="max-height: 180px; overflow-y: auto;">
                                         @foreach($mr->items as $mItm)
-                                            <div class="d-flex align-items-center justify-content-between p-1.5 bg-white rounded border text-nowrap shadow-2xs" style="font-size:0.78rem;">
+                                            @php
+                                                $mItmMatch = $searchKey !== '' && (
+                                                    stripos($mItm->product->name ?? '', $searchKey) !== false ||
+                                                    stripos($mItm->product->sku ?? '', $searchKey) !== false ||
+                                                    stripos($mItm->notes ?? '', $searchKey) !== false
+                                                );
+                                            @endphp
+                                            <div class="d-flex align-items-center justify-content-between p-1.5 {{ $mItmMatch ? 'bg-warning bg-opacity-25 border border-warning fw-semibold' : 'bg-white rounded border' }} text-nowrap shadow-2xs" style="font-size:0.78rem;">
                                                 <div class="d-flex align-items-center gap-1.5 text-truncate me-2" style="max-width: 220px;">
-                                                    <i class="fa-solid fa-cube text-primary" style="font-size:0.7rem;"></i>
+                                                    <i class="fa-solid fa-cube {{ $mItmMatch ? 'text-warning' : 'text-primary' }}" style="font-size:0.7rem;"></i>
                                                     <strong class="text-dark text-truncate" title="{{ $mItm->product->name }}">{{ $mItm->product->name ?? 'Material' }}</strong>
+                                                    @if($mItmMatch)
+                                                        <span class="badge bg-warning text-dark border border-warning px-1 py-0.5" style="font-size:0.6rem;">Match</span>
+                                                    @endif
                                                 </div>
                                                 <span class="badge bg-light text-dark border font-monospace px-1.5 py-0.5 fw-bold">
                                                     {{ (float)$mItm->quantity }} {{ $mItm->product->unit ?? 'Units' }}
@@ -834,10 +887,20 @@
                                     </div>
                                     <div class="procurement-materials-list d-flex flex-column gap-1" style="max-height: 180px; overflow-y: auto;">
                                         @foreach($pr->items as $pItm)
-                                            <div class="d-flex align-items-center justify-content-between p-1.5 bg-white rounded border text-nowrap shadow-2xs" style="font-size:0.78rem;">
+                                            @php
+                                                $pItmMatch = $searchKey !== '' && (
+                                                    stripos($pItm->product->name ?? '', $searchKey) !== false ||
+                                                    stripos($pItm->product->sku ?? '', $searchKey) !== false ||
+                                                    stripos($pItm->specifications ?? '', $searchKey) !== false
+                                                );
+                                            @endphp
+                                            <div class="d-flex align-items-center justify-content-between p-1.5 {{ $pItmMatch ? 'bg-warning bg-opacity-25 border border-warning fw-semibold' : 'bg-white rounded border' }} text-nowrap shadow-2xs" style="font-size:0.78rem;">
                                                 <div class="d-flex align-items-center gap-1.5 text-truncate me-2" style="max-width: 220px;">
-                                                    <i class="fa-solid fa-cube text-primary" style="font-size:0.7rem;"></i>
+                                                    <i class="fa-solid fa-cube {{ $pItmMatch ? 'text-warning' : 'text-primary' }}" style="font-size:0.7rem;"></i>
                                                     <strong class="text-dark text-truncate" title="{{ $pItm->product->name }}">{{ $pItm->product->name ?? 'Material' }}</strong>
+                                                    @if($pItmMatch)
+                                                        <span class="badge bg-warning text-dark border border-warning px-1 py-0.5" style="font-size:0.6rem;">Match</span>
+                                                    @endif
                                                 </div>
                                                 <div class="font-monospace text-end">
                                                     <span class="badge bg-light text-dark border px-1.5 py-0.5 fw-bold">
@@ -950,13 +1013,22 @@
                             @if(($materialRequestsQueue->isEmpty() ?? true) && $myPrs->isEmpty())
                             <tr>
                                 <td colspan="8" class="text-center py-5 text-muted">
-                                    <i class="fas fa-check-circle fa-3x mb-3 text-success d-block"></i>
-                                    <h6 class="fw-bold text-dark">No pending procurement or requisition items awaiting your action right now!</h6>
-                                    @if($kpi['my_created'] > 0)
-                                        <p class="small text-muted mb-3">You have <strong>{{ $kpi['my_created'] }}</strong> created request(s) in your history.</p>
-                                        <a href="{{ route('procurement.my-queue', array_merge(request()->query(), ['tab' => 'my_created'])) }}" class="btn btn-sm btn-outline-primary fw-bold">
-                                            <i class="fas fa-history me-1"></i> View My Created Requests History
+                                    @if($searchKey !== '')
+                                        <i class="fas fa-search fa-3x mb-3 text-secondary opacity-50 d-block"></i>
+                                        <h6 class="fw-bold text-dark">No pending requests matched "{{ $searchKey }}"</h6>
+                                        <p class="small text-muted mb-3">Try checking other tabs or clearing your product search filter.</p>
+                                        <a href="{{ route('procurement.my-queue', array_merge(request()->except('search'), ['tab' => 'pending'])) }}" class="btn btn-sm btn-outline-secondary">
+                                            <i class="fas fa-undo me-1"></i> Clear Search Filter
                                         </a>
+                                    @else
+                                        <i class="fas fa-check-circle fa-3x mb-3 text-success d-block"></i>
+                                        <h6 class="fw-bold text-dark">No pending procurement or requisition items awaiting your action right now!</h6>
+                                        @if($kpi['my_created'] > 0)
+                                            <p class="small text-muted mb-3">You have <strong>{{ $kpi['my_created'] }}</strong> created request(s) in your history.</p>
+                                            <a href="{{ route('procurement.my-queue', array_merge(request()->query(), ['tab' => 'my_created'])) }}" class="btn btn-sm btn-outline-primary fw-bold">
+                                                <i class="fas fa-history me-1"></i> View My Created Requests History
+                                            </a>
+                                        @endif
                                     @endif
                                 </td>
                             </tr>
@@ -1043,10 +1115,20 @@
                                     </div>
                                     <div class="procurement-materials-list d-flex flex-column gap-1" style="max-height: 180px; overflow-y: auto;">
                                         @foreach($cPr->items as $itm)
-                                            <div class="d-flex align-items-center justify-content-between p-1.5 bg-white rounded border text-nowrap shadow-2xs" style="font-size:0.78rem;">
+                                            @php
+                                                $cItmMatch = $searchKey !== '' && (
+                                                    stripos($itm->product->name ?? '', $searchKey) !== false ||
+                                                    stripos($itm->product->sku ?? '', $searchKey) !== false ||
+                                                    stripos($itm->specifications ?? '', $searchKey) !== false
+                                                );
+                                            @endphp
+                                            <div class="d-flex align-items-center justify-content-between p-1.5 {{ $cItmMatch ? 'bg-warning bg-opacity-25 border border-warning fw-semibold' : 'bg-white rounded border' }} text-nowrap shadow-2xs" style="font-size:0.78rem;">
                                                 <div class="d-flex align-items-center gap-1.5 text-truncate me-2" style="max-width: 220px;">
-                                                    <i class="fa-solid fa-cube text-primary" style="font-size:0.7rem;"></i>
+                                                    <i class="fa-solid fa-cube {{ $cItmMatch ? 'text-warning' : 'text-primary' }}" style="font-size:0.7rem;"></i>
                                                     <strong class="text-dark text-truncate" title="{{ $itm->product->name }}">{{ $itm->product->name ?? 'Material' }}</strong>
+                                                    @if($cItmMatch)
+                                                        <span class="badge bg-warning text-dark border border-warning px-1 py-0.5" style="font-size:0.6rem;">Match</span>
+                                                    @endif
                                                 </div>
                                                 <div class="font-monospace text-end">
                                                     <span class="badge bg-light text-dark border px-1.5 py-0.5 fw-bold">
@@ -1128,11 +1210,19 @@
                             <tr>
                                 <td colspan="8" class="text-center py-5 text-muted">
                                     <i class="fas fa-folder-open fa-3x mb-3 text-secondary opacity-50 d-block"></i>
-                                    <h6 class="fw-bold text-dark">No created purchase requests found in your history.</h6>
-                                    <p class="small text-muted mb-3">When you create new purchase or material requests, they will be tracked here through every stage.</p>
-                                    <a href="{{ route('purchase-requests.create') }}" class="btn btn-sm btn-primary">
-                                        <i class="fas fa-plus me-1"></i> Create First Purchase Request
-                                    </a>
+                                    @if($searchKey !== '')
+                                        <h6 class="fw-bold text-dark">No created purchase requests matched "{{ $searchKey }}"</h6>
+                                        <p class="small text-muted mb-3">Try checking other tabs or clearing your product search filter.</p>
+                                        <a href="{{ route('procurement.my-queue', array_merge(request()->except('search'), ['tab' => 'my_created'])) }}" class="btn btn-sm btn-outline-secondary">
+                                            <i class="fas fa-undo me-1"></i> Clear Search Filter
+                                        </a>
+                                    @else
+                                        <h6 class="fw-bold text-dark">No created purchase requests found in your history.</h6>
+                                        <p class="small text-muted mb-3">When you create new purchase or material requests, they will be tracked here through every stage.</p>
+                                        <a href="{{ route('purchase-requests.create') }}" class="btn btn-sm btn-primary">
+                                            <i class="fas fa-plus me-1"></i> Create First Purchase Request
+                                        </a>
+                                    @endif
                                 </td>
                             </tr>
                             @endforelse
@@ -1175,10 +1265,20 @@
                                     </div>
                                     <div class="procurement-materials-list d-flex flex-column gap-1" style="max-height: 180px; overflow-y: auto;">
                                         @foreach($cMr->items as $mItm)
-                                            <div class="d-flex align-items-center justify-content-between p-1.5 bg-white rounded border text-nowrap shadow-2xs" style="font-size:0.78rem;">
+                                            @php
+                                                $cMrMatch = $searchKey !== '' && (
+                                                    stripos($mItm->product->name ?? '', $searchKey) !== false ||
+                                                    stripos($mItm->product->sku ?? '', $searchKey) !== false ||
+                                                    stripos($mItm->notes ?? '', $searchKey) !== false
+                                                );
+                                            @endphp
+                                            <div class="d-flex align-items-center justify-content-between p-1.5 {{ $cMrMatch ? 'bg-warning bg-opacity-25 border border-warning fw-semibold' : 'bg-white rounded border' }} text-nowrap shadow-2xs" style="font-size:0.78rem;">
                                                 <div class="d-flex align-items-center gap-1.5 text-truncate me-2" style="max-width: 200px;">
-                                                    <i class="fa-solid fa-cube text-primary" style="font-size:0.7rem;"></i>
+                                                    <i class="fa-solid fa-cube {{ $cMrMatch ? 'text-warning' : 'text-primary' }}" style="font-size:0.7rem;"></i>
                                                     <strong class="text-dark text-truncate" title="{{ $mItm->product->name }}">{{ $mItm->product->name ?? 'Material' }}</strong>
+                                                    @if($cMrMatch)
+                                                        <span class="badge bg-warning text-dark border border-warning px-1 py-0.5" style="font-size:0.6rem;">Match</span>
+                                                    @endif
                                                 </div>
                                                 <span class="badge bg-light text-dark border font-monospace px-1.5 py-0.5 fw-bold">
                                                     {{ (float)$mItm->quantity }} {{ $mItm->product->unit ?? 'Units' }}
@@ -1311,10 +1411,20 @@
                                     </div>
                                     <div class="procurement-materials-list d-flex flex-column gap-1" style="max-height: 180px; overflow-y: auto;">
                                         @foreach($compPr->items as $cItm)
-                                            <div class="d-flex align-items-center justify-content-between p-1.5 bg-white rounded border text-nowrap shadow-2xs" style="font-size:0.78rem;">
+                                            @php
+                                                $compItmMatch = $searchKey !== '' && (
+                                                    stripos($cItm->product->name ?? '', $searchKey) !== false ||
+                                                    stripos($cItm->product->sku ?? '', $searchKey) !== false ||
+                                                    stripos($cItm->specifications ?? '', $searchKey) !== false
+                                                );
+                                            @endphp
+                                            <div class="d-flex align-items-center justify-content-between p-1.5 {{ $compItmMatch ? 'bg-warning bg-opacity-25 border border-warning fw-semibold' : 'bg-white rounded border' }} text-nowrap shadow-2xs" style="font-size:0.78rem;">
                                                 <div class="d-flex align-items-center gap-1.5 text-truncate me-2" style="max-width: 190px;">
-                                                    <i class="fa-solid fa-cube text-success" style="font-size:0.7rem;"></i>
+                                                    <i class="fa-solid fa-cube {{ $compItmMatch ? 'text-warning' : 'text-success' }}" style="font-size:0.7rem;"></i>
                                                     <strong class="text-dark text-truncate" title="{{ $cItm->product->name }}">{{ $cItm->product->name ?? 'Material' }}</strong>
+                                                    @if($compItmMatch)
+                                                        <span class="badge bg-warning text-dark border border-warning px-1 py-0.5" style="font-size:0.6rem;">Match</span>
+                                                    @endif
                                                 </div>
                                                 <span class="badge bg-light text-dark border px-1.5 py-0.5 font-monospace fw-bold">
                                                     {{ (float)$cItm->quantity }} {{ $cItm->unit ?? ($cItm->product->unit ?? 'Units') }}
@@ -1375,8 +1485,16 @@
                             <tr>
                                 <td colspan="7" class="text-center py-5 text-muted">
                                     <i class="fas fa-check-double fa-3x mb-3 text-secondary opacity-50 d-block"></i>
-                                    <h6 class="fw-bold text-dark">No completed store intake records found.</h6>
-                                    <p class="small text-muted mb-0">Once materials are received at the store and verified under receiving slips, they will be archived here.</p>
+                                    @if($searchKey !== '')
+                                        <h6 class="fw-bold text-dark">No completed requests matched "{{ $searchKey }}"</h6>
+                                        <p class="small text-muted mb-3">Try checking other tabs or clearing your product search filter.</p>
+                                        <a href="{{ route('procurement.my-queue', array_merge(request()->except('search'), ['tab' => 'completed'])) }}" class="btn btn-sm btn-outline-secondary">
+                                            <i class="fas fa-undo me-1"></i> Clear Search Filter
+                                        </a>
+                                    @else
+                                        <h6 class="fw-bold text-dark">No completed store intake records found.</h6>
+                                        <p class="small text-muted mb-0">Once materials are received at the store and verified under receiving slips, they will be archived here.</p>
+                                    @endif
                                 </td>
                             </tr>
                             @endforelse
@@ -1462,10 +1580,20 @@
                                     </div>
                                     <div class="procurement-materials-list d-flex flex-column gap-1" style="max-height: 180px; overflow-y: auto;">
                                         @foreach($aPr->items as $aItm)
-                                            <div class="d-flex align-items-center justify-content-between p-1.5 bg-white rounded border text-nowrap shadow-2xs" style="font-size:0.78rem;">
+                                            @php
+                                                $aItmMatch = $searchKey !== '' && (
+                                                    stripos($aItm->product->name ?? '', $searchKey) !== false ||
+                                                    stripos($aItm->product->sku ?? '', $searchKey) !== false ||
+                                                    stripos($aItm->specifications ?? '', $searchKey) !== false
+                                                );
+                                            @endphp
+                                            <div class="d-flex align-items-center justify-content-between p-1.5 {{ $aItmMatch ? 'bg-warning bg-opacity-25 border border-warning fw-semibold' : 'bg-white rounded border' }} text-nowrap shadow-2xs" style="font-size:0.78rem;">
                                                 <div class="d-flex align-items-center gap-1.5 text-truncate me-2" style="max-width: 190px;">
-                                                    <i class="fa-solid fa-cube text-primary" style="font-size:0.7rem;"></i>
+                                                    <i class="fa-solid fa-cube {{ $aItmMatch ? 'text-warning' : 'text-primary' }}" style="font-size:0.7rem;"></i>
                                                     <strong class="text-dark text-truncate" title="{{ $aItm->product->name }}">{{ $aItm->product->name ?? 'Material' }}</strong>
+                                                    @if($aItmMatch)
+                                                        <span class="badge bg-warning text-dark border border-warning px-1 py-0.5" style="font-size:0.6rem;">Match</span>
+                                                    @endif
                                                 </div>
                                                 <div class="font-monospace text-end">
                                                     <span class="badge bg-light text-dark border px-1.5 py-0.5 fw-bold">
@@ -1518,7 +1646,19 @@
                             </tr>
                             @empty
                             <tr>
-                                <td colspan="9" class="text-center py-5 text-muted">No purchase requests found.</td>
+                                <td colspan="9" class="text-center py-5 text-muted">
+                                    @if($searchKey !== '')
+                                        <i class="fas fa-search fa-2x mb-2 text-secondary opacity-50 d-block"></i>
+                                        <div>No purchase requests found matching "{{ $searchKey }}".</div>
+                                        <div class="mt-2">
+                                            <a href="{{ route('procurement.my-queue', array_merge(request()->except('search'), ['tab' => 'all'])) }}" class="btn btn-sm btn-outline-secondary">
+                                                <i class="fas fa-undo me-1"></i> Clear Search Filter
+                                            </a>
+                                        </div>
+                                    @else
+                                        No purchase requests found.
+                                    @endif
+                                </td>
                             </tr>
                             @endforelse
                         </tbody>
@@ -1618,10 +1758,20 @@
                                     </div>
                                     <div class="procurement-materials-list d-flex flex-column gap-1" style="max-height: 180px; overflow-y: auto;">
                                         @foreach($dPr->items as $itm)
-                                            <div class="d-flex align-items-center justify-content-between p-1.5 bg-white rounded border text-nowrap shadow-2xs" style="font-size:0.78rem;">
+                                            @php
+                                                $dItmMatch = $searchKey !== '' && (
+                                                    stripos($itm->product->name ?? '', $searchKey) !== false ||
+                                                    stripos($itm->product->sku ?? '', $searchKey) !== false ||
+                                                    stripos($itm->specifications ?? '', $searchKey) !== false
+                                                );
+                                            @endphp
+                                            <div class="d-flex align-items-center justify-content-between p-1.5 {{ $dItmMatch ? 'bg-warning bg-opacity-25 border border-warning fw-semibold' : 'bg-white rounded border' }} text-nowrap shadow-2xs" style="font-size:0.78rem;">
                                                 <div class="d-flex align-items-center gap-1.5 text-truncate me-2" style="max-width: 190px;">
-                                                    <i class="fa-solid fa-cube text-danger" style="font-size:0.7rem;"></i>
+                                                    <i class="fa-solid fa-cube {{ $dItmMatch ? 'text-warning' : 'text-danger' }}" style="font-size:0.7rem;"></i>
                                                     <strong class="text-dark text-truncate" title="{{ $itm->product->name }}">{{ $itm->product->name ?? 'Item' }}</strong>
+                                                    @if($dItmMatch)
+                                                        <span class="badge bg-warning text-dark border border-warning px-1 py-0.5" style="font-size:0.6rem;">Match</span>
+                                                    @endif
                                                 </div>
                                                 <span class="badge bg-light text-dark border px-1.5 py-0.5 font-monospace fw-bold">
                                                     {{ (float)$itm->quantity }} {{ $itm->unit ?? ($itm->product->unit ?? 'Units') }}
@@ -1692,8 +1842,16 @@
                                 <tr>
                                     <td colspan="7" class="text-center py-5 text-muted">
                                         <i class="fas fa-trash-can fa-3x mb-3 text-secondary opacity-50 d-block"></i>
-                                        <h6 class="fw-bold text-dark">No deleted or cancelled requisitions found.</h6>
-                                        <p class="small text-muted mb-0">Any requisitions or purchase requests that get cancelled, rejected, or soft-deleted are kept in this category.</p>
+                                        @if($searchKey !== '')
+                                            <h6 class="fw-bold text-dark">No deleted or cancelled requisitions matched "{{ $searchKey }}"</h6>
+                                            <p class="small text-muted mb-3">Try clearing your search filter.</p>
+                                            <a href="{{ route('procurement.my-queue', array_merge(request()->except('search'), ['tab' => 'deleted'])) }}" class="btn btn-sm btn-outline-secondary">
+                                                <i class="fas fa-undo me-1"></i> Clear Search Filter
+                                            </a>
+                                        @else
+                                            <h6 class="fw-bold text-dark">No deleted or cancelled requisitions found.</h6>
+                                            <p class="small text-muted mb-0">Any requisitions or purchase requests that get cancelled, rejected, or soft-deleted are kept in this category.</p>
+                                        @endif
                                     </td>
                                 </tr>
                                 @endif
@@ -1747,10 +1905,20 @@
                                     </div>
                                     <div class="procurement-materials-list d-flex flex-column gap-1" style="max-height: 180px; overflow-y: auto;">
                                         @foreach($dMr->items as $itm)
-                                            <div class="d-flex align-items-center justify-content-between p-1.5 bg-white rounded border text-nowrap shadow-2xs" style="font-size:0.78rem;">
+                                            @php
+                                                $dMrMatch = $searchKey !== '' && (
+                                                    stripos($itm->product->name ?? '', $searchKey) !== false ||
+                                                    stripos($itm->product->sku ?? '', $searchKey) !== false ||
+                                                    stripos($itm->notes ?? '', $searchKey) !== false
+                                                );
+                                            @endphp
+                                            <div class="d-flex align-items-center justify-content-between p-1.5 {{ $dMrMatch ? 'bg-warning bg-opacity-25 border border-warning fw-semibold' : 'bg-white rounded border' }} text-nowrap shadow-2xs" style="font-size:0.78rem;">
                                                 <div class="d-flex align-items-center gap-1.5 text-truncate me-2" style="max-width: 190px;">
-                                                    <i class="fa-solid fa-cube text-secondary" style="font-size:0.7rem;"></i>
+                                                    <i class="fa-solid fa-cube {{ $dMrMatch ? 'text-warning' : 'text-secondary' }}" style="font-size:0.7rem;"></i>
                                                     <strong class="text-dark text-truncate" title="{{ $itm->product->name }}">{{ $itm->product->name ?? 'Item' }}</strong>
+                                                    @if($dMrMatch)
+                                                        <span class="badge bg-warning text-dark border border-warning px-1 py-0.5" style="font-size:0.6rem;">Match</span>
+                                                    @endif
                                                 </div>
                                                 <span class="badge bg-light text-dark border px-1.5 py-0.5 font-monospace fw-bold">
                                                     {{ (float)($itm->quantity_requested ?? $itm->quantity ?? 0) }} {{ $itm->unit ?? ($itm->product->unit ?? 'Units') }}

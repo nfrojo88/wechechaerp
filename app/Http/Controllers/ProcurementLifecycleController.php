@@ -228,6 +228,64 @@ class ProcurementLifecycleController extends Controller
             }
         };
 
+        $searchTerm = trim($request->input('search', $request->input('product_name', '')));
+        $cleanSearch = ltrim($searchTerm, '#');
+
+        $applyPrSearch = function ($q) use ($searchTerm, $cleanSearch) {
+            if ($searchTerm !== '') {
+                $q->where(function ($sub) use ($searchTerm, $cleanSearch) {
+                    $sub->whereHas('items', function ($iq) use ($searchTerm) {
+                        $iq->where(function ($itemSub) use ($searchTerm) {
+                            $itemSub->where('specifications', 'like', "%{$searchTerm}%")
+                                    ->orWhereHas('product', function ($pq) use ($searchTerm) {
+                                        $pq->withTrashed()
+                                           ->where(function ($prodSub) use ($searchTerm) {
+                                               $prodSub->where('name', 'like', "%{$searchTerm}%")
+                                                       ->orWhere('sku', 'like', "%{$searchTerm}%");
+                                           });
+                                    });
+                        });
+                    })
+                    ->orWhere('pr_no', 'like', "%{$searchTerm}%");
+
+                    if ($cleanSearch !== '' && $cleanSearch !== $searchTerm) {
+                        $sub->orWhere('pr_no', 'like', "%{$cleanSearch}%");
+                    }
+
+                    $sub->orWhereHas('materialRequest', function ($mq) use ($searchTerm, $cleanSearch) {
+                        $mq->where('reference_number', 'like', "%{$searchTerm}%");
+                        if ($cleanSearch !== '' && $cleanSearch !== $searchTerm) {
+                            $mq->orWhere('reference_number', 'like', "%{$cleanSearch}%");
+                        }
+                    });
+                });
+            }
+        };
+
+        $applyMrSearch = function ($q) use ($searchTerm, $cleanSearch) {
+            if ($searchTerm !== '') {
+                $q->where(function ($sub) use ($searchTerm, $cleanSearch) {
+                    $sub->whereHas('items', function ($iq) use ($searchTerm) {
+                        $iq->where(function ($itemSub) use ($searchTerm) {
+                            $itemSub->where('notes', 'like', "%{$searchTerm}%")
+                                    ->orWhereHas('product', function ($pq) use ($searchTerm) {
+                                        $pq->withTrashed()
+                                           ->where(function ($prodSub) use ($searchTerm) {
+                                               $prodSub->where('name', 'like', "%{$searchTerm}%")
+                                                       ->orWhere('sku', 'like', "%{$searchTerm}%");
+                                           });
+                                    });
+                        });
+                    })
+                    ->orWhere('reference_number', 'like', "%{$searchTerm}%");
+
+                    if ($cleanSearch !== '' && $cleanSearch !== $searchTerm) {
+                        $sub->orWhere('reference_number', 'like', "%{$cleanSearch}%");
+                    }
+                });
+            }
+        };
+
         // 1. Identify owner roles to query
         $targetRoles = [];
         if ($isAdmin || $isAuditor) {
@@ -349,6 +407,7 @@ class ProcurementLifecycleController extends Controller
         // Apply strict destination store filter for Store Keeper
         $applyPrStoreScope($prQuery);
         $applyTypeFilter($prQuery);
+        $applyPrSearch($prQuery);
 
         if ($request->filled('project_id')) {
             $prQuery->where('project_id', $request->project_id);
@@ -362,7 +421,7 @@ class ProcurementLifecycleController extends Controller
         // 3. Emergency / Pending MR approval queue for Planning Team (must have items and be awaiting action)
         $emergencyMrs = collect();
         if ($user->hasRole('planning') || $user->hasRole('planning_manager') || $isPlanning || $isAdmin) {
-            $emergencyMrs = MaterialRequest::with(['project', 'creator', 'requestedBy', 'maintenanceRequest', 'items.product', 'purchaseRequests'])
+            $emergencyMrsQuery = MaterialRequest::with(['project', 'creator', 'requestedBy', 'maintenanceRequest', 'items.product', 'purchaseRequests'])
                 ->whereHas('items')
                 ->where('planning_approval_status', 'pending')
                 ->whereNotIn('status', ['planning_approved', 'approved_for_petty_cash', 'sent_to_store_manager', 'sent_to_pr', 'transferred', 'transfer_created', 'approved', 'rejected', 'cancelled', 'completed'])
@@ -371,15 +430,18 @@ class ProcurementLifecycleController extends Controller
                       ->orWhereHas('purchaseRequests', function($pq) {
                           $pq->whereIn('status', [PurchaseRequest::STATUS_PENDING_PLANNING, 'pending_planning', PurchaseRequest::STATUS_DRAFT]);
                       });
-                })
-                ->latest()
-                ->get();
+                });
+            if ($request->filled('project_id')) {
+                $emergencyMrsQuery->where('project_id', $request->project_id);
+            }
+            $applyMrSearch($emergencyMrsQuery);
+            $emergencyMrs = $emergencyMrsQuery->latest()->get();
         }
 
         // 3b. Emergency MRs approved by Planning awaiting Coordinator review & dispatch
         $coordinatorEmergencyMrs = collect();
         if ($isCoordinator || $isAdmin) {
-            $coordinatorEmergencyMrs = MaterialRequest::with(['project', 'store', 'creator', 'requestedBy', 'maintenanceRequest', 'items.product', 'purchaseRequests'])
+            $coordinatorEmergencyMrsQuery = MaterialRequest::with(['project', 'store', 'creator', 'requestedBy', 'maintenanceRequest', 'items.product', 'purchaseRequests'])
                 ->whereHas('items')
                 ->where(function($q) {
                     $q->where('status', 'planning_approved')
@@ -391,9 +453,12 @@ class ProcurementLifecycleController extends Controller
                       ->orWhereHas('purchaseRequests', function($pq) {
                           $pq->whereIn('status', [PurchaseRequest::STATUS_PENDING_HR_APPROVAL, 'pending_hr_approval']);
                       });
-                })
-                ->latest()
-                ->get();
+                });
+            if ($request->filled('project_id')) {
+                $coordinatorEmergencyMrsQuery->where('project_id', $request->project_id);
+            }
+            $applyMrSearch($coordinatorEmergencyMrsQuery);
+            $coordinatorEmergencyMrs = $coordinatorEmergencyMrsQuery->latest()->get();
         }
 
         // 4. Material & Maintenance Requisitions (Store & Coordinator Procurement Phase - must have items)
@@ -406,6 +471,7 @@ class ProcurementLifecycleController extends Controller
 
         // Apply strict destination store filter for Store Keeper
         $applyMrStoreScope($mrQuery);
+        $applyMrSearch($mrQuery);
 
         if ($request->filled('project_id')) {
             $mrQuery->where('project_id', $request->project_id);
@@ -451,6 +517,8 @@ class ProcurementLifecycleController extends Controller
         }
 
         $applyTypeFilter($createdPrQuery);
+        $applyPrSearch($createdPrQuery);
+        $applyMrSearch($createdMrQuery);
 
         if ($request->filled('project_id')) {
             $createdPrQuery->where('project_id', $request->project_id);
@@ -464,9 +532,7 @@ class ProcurementLifecycleController extends Controller
         $myCreatedPrs = $createdPrQuery->paginate(15, ['*'], 'created_pr_page')->withQueryString();
         $myCreatedMrs = $createdMrQuery->take(50)->get();
 
-        $myCreatedCount = ($isAdmin || $isAuditor)
-            ? (PurchaseRequest::where(function($q) { $q->whereHas('items')->orWhere('status', PurchaseRequest::STATUS_TRANSFERRED); })->count() + MaterialRequest::where(function($q) { $q->whereHas('items')->orWhere('status', 'transferred'); })->whereDoesntHave('purchaseRequests')->count())
-            : (PurchaseRequest::where(function($q) { $q->whereHas('items')->orWhere('status', PurchaseRequest::STATUS_TRANSFERRED); })->where('requested_by', $user->id)->count() + MaterialRequest::where(function($q) { $q->whereHas('items')->orWhere('status', 'transferred'); })->whereDoesntHave('purchaseRequests')->where('created_by', $user->id)->count());
+        $myCreatedCount = $myCreatedPrs->total() + (clone $createdMrQuery)->count();
 
         // 6. Completed History (must have items or be transferred to store transfer)
         $completedPrQuery = PurchaseRequest::with(['project', 'requestedBy', 'store', 'materialRequest', 'items.product', 'deliveryReceipts'])
@@ -483,6 +549,7 @@ class ProcurementLifecycleController extends Controller
 
         $applyPrStoreScope($completedPrQuery);
         $applyTypeFilter($completedPrQuery);
+        $applyPrSearch($completedPrQuery);
 
         if ($request->filled('project_id')) {
             $completedPrQuery->where('project_id', $request->project_id);
@@ -499,6 +566,7 @@ class ProcurementLifecycleController extends Controller
 
         $applyPrStoreScope($allPrQuery);
         $applyTypeFilter($allPrQuery);
+        $applyPrSearch($allPrQuery);
 
         if ($request->filled('project_id')) {
             $allPrQuery->where('project_id', $request->project_id);
@@ -526,6 +594,7 @@ class ProcurementLifecycleController extends Controller
 
         $applyPrStoreScope($deletedPrQuery);
         $applyTypeFilter($deletedPrQuery);
+        $applyPrSearch($deletedPrQuery);
 
         if ($request->filled('project_id')) {
             $deletedPrQuery->where('project_id', $request->project_id);
@@ -543,17 +612,30 @@ class ProcurementLifecycleController extends Controller
             $deletedMrQuery->where('created_by', $user->id);
         }
         $applyMrStoreScope($deletedMrQuery);
+        $applyMrSearch($deletedMrQuery);
         if ($request->filled('project_id')) {
             $deletedMrQuery->where('project_id', $request->project_id);
         }
         $deletedMrs = $deletedMrQuery->take(50)->get();
 
-        $deletedCount = $deletedPrs->total() + $deletedMrs->count();
+        $deletedCount = $deletedPrs->total() + (clone $deletedMrQuery)->count();
 
         // 9. Summary Counters
-        $pendingCount = $isAuditor
-            ? PurchaseRequest::whereHas('items')->where('status', '!=', PurchaseRequest::STATUS_INTAKE_COMPLETE)->count()
-            : ($myPrs->total() + $materialRequestsQueue->count() + $coordinatorEmergencyMrs->count());
+        if ($isAuditor) {
+            $auditorPendingQ = PurchaseRequest::whereHas('items')->where('status', '!=', PurchaseRequest::STATUS_INTAKE_COMPLETE);
+            $applyPrStoreScope($auditorPendingQ);
+            $applyTypeFilter($auditorPendingQ);
+            $applyPrSearch($auditorPendingQ);
+            if ($request->filled('project_id')) {
+                $auditorPendingQ->where('project_id', $request->project_id);
+            }
+            if ($request->filled('status')) {
+                $auditorPendingQ->where('status', $request->status);
+            }
+            $pendingCount = $auditorPendingQ->count();
+        } else {
+            $pendingCount = $myPrs->total() + $materialRequestsQueue->count() + $coordinatorEmergencyMrs->count();
+        }
 
         $completedCountQuery = PurchaseRequest::where(function($q) {
             $q->where('status', PurchaseRequest::STATUS_INTAKE_COMPLETE)
@@ -565,6 +647,10 @@ class ProcurementLifecycleController extends Controller
         });
         $applyPrStoreScope($completedCountQuery);
         $applyTypeFilter($completedCountQuery);
+        $applyPrSearch($completedCountQuery);
+        if ($request->filled('project_id')) {
+            $completedCountQuery->where('project_id', $request->project_id);
+        }
 
         $allPrCountQuery = PurchaseRequest::where(function($q) {
             $q->whereHas('items')
@@ -572,6 +658,13 @@ class ProcurementLifecycleController extends Controller
         });
         $applyPrStoreScope($allPrCountQuery);
         $applyTypeFilter($allPrCountQuery);
+        $applyPrSearch($allPrCountQuery);
+        if ($request->filled('project_id')) {
+            $allPrCountQuery->where('project_id', $request->project_id);
+        }
+        if ($request->filled('status')) {
+            $allPrCountQuery->where('status', $request->status);
+        }
 
         $kpi = [
             'my_pending'                     => $pendingCount,
