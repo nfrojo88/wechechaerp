@@ -41,7 +41,7 @@
         <div class="card-body p-2 bg-light">
             <ul class="nav nav-pills nav-fill gap-1 flex-nowrap overflow-auto" id="expenseTabs" style="white-space: nowrap;">
                 <li class="nav-item">
-                    <a class="nav-link rounded-3 fw-semibold py-2 {{ $activeTab === 'all' ? 'active shadow-sm bg-dark text-white' : 'text-secondary bg-white' }}" 
+                    <a class="nav-link rounded-3 fw-semibold py-2 {{ $activeTab === 'all' ? 'active shadow-sm bg-dark text-white' : 'text-secondary bg-white' }}"
                        href="{{ request()->fullUrlWithQuery(['tab' => 'all', 'page' => 1]) }}">
                         <i class="fa-solid fa-list me-1"></i> All Expenses
                         <span class="badge {{ $activeTab === 'all' ? 'bg-primary text-white' : 'bg-secondary' }} ms-1">{{ $tabCounts['all'] }}</span>
@@ -49,7 +49,7 @@
                 </li>
                 @if(!empty($isAdmin) || !empty($isHR) || $isAuditorUser)
                 <li class="nav-item">
-                    <a class="nav-link rounded-3 fw-semibold py-2 {{ $activeTab === 'pending_hr' ? 'active shadow-sm bg-warning text-dark' : 'text-secondary bg-white' }}" 
+                    <a class="nav-link rounded-3 fw-semibold py-2 {{ $activeTab === 'pending_hr' ? 'active shadow-sm bg-warning text-dark' : 'text-secondary bg-white' }}"
                        href="{{ request()->fullUrlWithQuery(['tab' => 'pending_hr', 'page' => 1]) }}">
                         <i class="fa-solid fa-user-check me-1"></i> HR Review
                         <span class="badge {{ $activeTab === 'pending_hr' ? 'bg-dark text-white' : 'bg-warning text-dark' }} ms-1">{{ $tabCounts['pending_hr'] }}</span>
@@ -58,7 +58,7 @@
                 @endif
                 @if(!empty($isAdmin) || !empty($isGM) || $isAuditorUser)
                 <li class="nav-item">
-                    <a class="nav-link rounded-3 fw-semibold py-2 {{ $activeTab === 'pending_gm' ? 'active shadow-sm bg-info text-white' : 'text-secondary bg-white' }}" 
+                    <a class="nav-link rounded-3 fw-semibold py-2 {{ $activeTab === 'pending_gm' ? 'active shadow-sm bg-info text-white' : 'text-secondary bg-white' }}"
                        href="{{ request()->fullUrlWithQuery(['tab' => 'pending_gm', 'page' => 1]) }}">
                         <i class="fa-solid fa-user-shield me-1"></i> GM Review
                         <span class="badge {{ $activeTab === 'pending_gm' ? 'bg-white text-info' : 'bg-info text-white' }} ms-1">{{ $tabCounts['pending_gm'] }}</span>
@@ -66,21 +66,21 @@
                 </li>
                 @endif
                 <li class="nav-item">
-                    <a class="nav-link rounded-3 fw-semibold py-2 {{ in_array($activeTab, ['finance_queue', 'not_paid', 'unpaid']) ? 'active shadow-sm bg-warning text-dark' : 'text-secondary bg-white' }}" 
+                    <a class="nav-link rounded-3 fw-semibold py-2 {{ in_array($activeTab, ['finance_queue', 'not_paid', 'unpaid']) ? 'active shadow-sm bg-warning text-dark' : 'text-secondary bg-white' }}"
                        href="{{ request()->fullUrlWithQuery(['tab' => 'not_paid', 'page' => 1]) }}">
                         <i class="fa-solid fa-hourglass-half me-1 text-warning"></i> {{ $isAuditorUser ? 'Unpaid Records' : 'Not Paid / Pending Payment' }}
                         <span class="badge {{ in_array($activeTab, ['finance_queue', 'not_paid', 'unpaid']) ? 'bg-dark text-white' : 'bg-warning text-dark' }} ms-1">{{ $tabCounts['not_paid'] ?? 0 }}</span>
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link rounded-3 fw-semibold py-2 {{ $activeTab === 'paid' ? 'active shadow-sm bg-success text-white' : 'text-secondary bg-white' }}" 
+                    <a class="nav-link rounded-3 fw-semibold py-2 {{ $activeTab === 'paid' ? 'active shadow-sm bg-success text-white' : 'text-secondary bg-white' }}"
                        href="{{ request()->fullUrlWithQuery(['tab' => 'paid', 'page' => 1]) }}">
                         <i class="fa-solid fa-circle-check me-1"></i> Paid History
                         <span class="badge {{ $activeTab === 'paid' ? 'bg-white text-success' : 'bg-success text-white' }} ms-1">{{ $tabCounts['paid'] }}</span>
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link rounded-3 fw-semibold py-2 {{ $activeTab === 'rejected' ? 'active shadow-sm bg-danger text-white' : 'text-secondary bg-white' }}" 
+                    <a class="nav-link rounded-3 fw-semibold py-2 {{ $activeTab === 'rejected' ? 'active shadow-sm bg-danger text-white' : 'text-secondary bg-white' }}"
                        href="{{ request()->fullUrlWithQuery(['tab' => 'rejected', 'page' => 1]) }}">
                         <i class="fa-solid fa-circle-xmark me-1"></i> Rejected
                         <span class="badge {{ $activeTab === 'rejected' ? 'bg-white text-danger' : 'bg-danger text-white' }} ms-1">{{ $tabCounts['rejected'] }}</span>
@@ -96,7 +96,7 @@
         <div class="card-body p-3">
             <form method="GET" action="{{ url('/expenses') }}" class="row g-2 align-items-end">
                 <input type="hidden" name="tab" value="{{ $activeTab }}">
-                
+
                 <div class="col-md-2">
                     <label class="form-label small text-muted mb-1 fw-bold">Search</label>
                     <div class="input-group input-group-sm">
@@ -233,7 +233,7 @@
                                         {{ $item->category }} {{ $catAmharic ? "({$catAmharic})" : '' }}
                                     </span>
                                     @if($item->category === 'Transport' && $item->type === 'expense_request' && isset($item->raw_model))
-                                        @php 
+                                        @php
                                             $tReq = $item->raw_model;
                                             $tAppr = (is_array($tReq->approver_info ?? null) ? $tReq->approver_info : (method_exists($tReq, 'getApproverInfoAttribute') ? $tReq->getApproverInfoAttribute() : []));
                                             $tName = $tAppr['name'] ?? (optional($tReq->gmApprover)->name ?? (optional($tReq->gmReviewer)->name ?? (optional($tReq->hrReviewer)->name ?? null)));
@@ -269,6 +269,15 @@
                                             <i class="fa-solid fa-receipt me-1"></i>VAT {{ (float)($item->vat_amount ?? 0) > 0 ? '+ETB ' . number_format($item->vat_amount, 2) : '15%' }}
                                         </span>
                                     @endif
+                                    @php
+                                        $rowWht = (float)($item->withholding_amount ?? (optional($item->raw_model)->withholding_amount ?? 0));
+                                        $rowHasWht = !empty($item->has_withholding) || (optional($item->raw_model)->has_withholding ?? false) || $rowWht > 0;
+                                    @endphp
+                                    @if($rowHasWht)
+                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle d-inline-block mt-1 ms-1" style="font-size: 0.65rem;" title="Withholding Tax: -ETB {{ number_format($rowWht, 2) }}">
+                                            <i class="fa-solid fa-file-invoice-dollar me-1"></i>WHT {{ $rowWht > 0 ? '-ETB ' . number_format($rowWht, 2) : '3%' }}
+                                        </span>
+                                    @endif
                                 </td>
                                 <td class="text-center">
                                     <span class="badge bg-{{ $item->color }} rounded-pill px-2 py-1" style="font-size: .75rem;">
@@ -278,9 +287,9 @@
                                 <td class="text-end pe-4">
                                     <div class="btn-group btn-group-sm">
                                         <!-- Detail Button -->
-                                        <button type="button" class="btn btn-light border btn-sm rounded-start-3" 
-                                                data-bs-toggle="modal" 
-                                                data-bs-target="#detailModal{{ $item->id_raw }}_{{ $item->type }}" 
+                                        <button type="button" class="btn btn-light border btn-sm rounded-start-3"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#detailModal{{ $item->id_raw }}_{{ $item->type }}"
                                                 title="View Details">
                                             <i class="fa-solid fa-eye text-primary"></i>
                                         </button>
@@ -288,11 +297,11 @@
                                         @if(!$isAuditorUser)
                                             @if($item->type === 'expense_request')
                                                 @php $req = $item->raw_model; @endphp
-                                                
+
                                                 <!-- HR / Coordinator Review Action Button -->
                                                 @if($req->status === \App\Models\ExpenseRequest::STATUS_PENDING_HR && (auth()->user()->hasAnyRole(['HR Manager', 'hr_manager', 'HR Officer', 'hr_officer', 'Coordinator', 'coordinator', 'admin', 'global_admin']) || auth()->user()->can('hr.view')))
-                                                    <button type="button" class="btn btn-warning btn-sm text-dark fw-semibold" 
-                                                            data-bs-toggle="modal" 
+                                                    <button type="button" class="btn btn-warning btn-sm text-dark fw-semibold"
+                                                            data-bs-toggle="modal"
                                                             data-bs-target="#hrReviewModal{{ $req->id }}"
                                                             title="Review & Approve">
                                                         <i class="fa-solid fa-user-check me-1"></i> HR/Coordinator Review
@@ -301,8 +310,8 @@
 
                                                 <!-- GM Review Action Button -->
                                                 @if($req->status === \App\Models\ExpenseRequest::STATUS_PENDING_GM && (auth()->user()->hasAnyRole(['General Manager', 'gm', 'admin', 'global_admin'])))
-                                                    <button type="button" class="btn btn-info btn-sm text-white fw-semibold" 
-                                                            data-bs-toggle="modal" 
+                                                    <button type="button" class="btn btn-info btn-sm text-white fw-semibold"
+                                                            data-bs-toggle="modal"
                                                             data-bs-target="#gmReviewModal{{ $req->id }}"
                                                             title="GM Review">
                                                         <i class="fa-solid fa-user-shield me-1"></i> GM Review
@@ -314,9 +323,9 @@
                                                     @php
                                                         $authUser = auth()->user();
                                                         $authRoleNames = strtolower(implode(' ', $authUser->getRoleNames()->toArray()));
-                                                        $isFinHeadOrAdmin = $authUser->hasAnyRole(['Finance head', 'finance_head', 'finance_manager', 'admin', 'global_admin']) 
-                                                            || str_contains($authRoleNames, 'finance_head') 
-                                                            || str_contains($authRoleNames, 'finance_manager') 
+                                                        $isFinHeadOrAdmin = $authUser->hasAnyRole(['Finance head', 'finance_head', 'finance_manager', 'admin', 'global_admin'])
+                                                            || str_contains($authRoleNames, 'finance_head')
+                                                            || str_contains($authRoleNames, 'finance_manager')
                                                             || str_contains($authRoleNames, 'admin');
 
                                                         $isAssignedToMe = (
@@ -326,15 +335,15 @@
                                                     @endphp
 
                                                     @if($isAssignedToMe || $isFinHeadOrAdmin)
-                                                        <button type="button" class="btn btn-success btn-sm text-white fw-bold shadow-sm" 
-                                                                data-bs-toggle="modal" 
+                                                        <button type="button" class="btn btn-success btn-sm text-white fw-bold shadow-sm"
+                                                                data-bs-toggle="modal"
                                                                 data-bs-target="#payModal{{ $req->id }}"
                                                                 title="Pay this assigned expense">
                                                             <i class="fa-solid fa-money-bill-wave me-1"></i> Pay
                                                         </button>
                                                         @can('sendBackToFinanceHead', $req)
-                                                            <button type="button" class="btn btn-outline-warning btn-sm fw-semibold ms-1" 
-                                                                    data-bs-toggle="modal" 
+                                                            <button type="button" class="btn btn-outline-warning btn-sm fw-semibold ms-1"
+                                                                    data-bs-toggle="modal"
                                                                     data-bs-target="#sendBackToFinanceHeadModal{{ $req->id }}"
                                                                     title="Send back to Finance Head">
                                                                 <i class="fa-solid fa-arrow-left me-1"></i> Return
@@ -342,8 +351,8 @@
                                                         @endcan
                                                     @endif
                                                     @if($isFinHeadOrAdmin)
-                                                        <button type="button" class="btn btn-primary btn-sm text-white fw-semibold ms-1" 
-                                                                data-bs-toggle="modal" 
+                                                        <button type="button" class="btn btn-primary btn-sm text-white fw-semibold ms-1"
+                                                                data-bs-toggle="modal"
                                                                 data-bs-target="#financeAssignModal{{ $req->id }}"
                                                                 title="Assign Account &amp; Finance Custodian">
                                                             <i class="fa-solid fa-user-tag me-1"></i> Assign
@@ -365,7 +374,7 @@
                                                 <!-- Paid Indicator Button -->
                                                 @if($req->status === \App\Models\ExpenseRequest::STATUS_PAID)
                                                     <button type="button" class="btn btn-success-subtle text-success border border-success-subtle btn-sm fw-semibold"
-                                                            data-bs-toggle="modal" 
+                                                            data-bs-toggle="modal"
                                                             data-bs-target="#detailModal{{ $item->id_raw }}_{{ $item->type }}">
                                                         <i class="fa-solid fa-check-circle me-1"></i> Paid
                                                     </button>
@@ -384,9 +393,9 @@
                                                     @php
                                                         $prAuthUser = auth()->user();
                                                         $prAuthRoleNames = strtolower(implode(' ', $prAuthUser ? $prAuthUser->getRoleNames()->toArray() : []));
-                                                        $prIsFinHeadOrAdmin = $prAuthUser && ($prAuthUser->hasAnyRole(['Finance head', 'finance_head', 'finance_manager', 'admin', 'global_admin']) 
-                                                            || str_contains($prAuthRoleNames, 'finance_head') 
-                                                            || str_contains($prAuthRoleNames, 'finance_manager') 
+                                                        $prIsFinHeadOrAdmin = $prAuthUser && ($prAuthUser->hasAnyRole(['Finance head', 'finance_head', 'finance_manager', 'admin', 'global_admin'])
+                                                            || str_contains($prAuthRoleNames, 'finance_head')
+                                                            || str_contains($prAuthRoleNames, 'finance_manager')
                                                             || str_contains($prAuthRoleNames, 'admin'));
                                                         $prPayment = optional($item->raw_model)->payment;
                                                         $isAssignedToMe = (
@@ -395,14 +404,14 @@
                                                     @endphp
 
                                                     @if($isAssignedToMe || $prIsFinHeadOrAdmin)
-                                                        <button type="button" class="btn btn-success btn-sm text-white fw-bold shadow-sm" 
-                                                                data-bs-toggle="modal" 
+                                                        <button type="button" class="btn btn-success btn-sm text-white fw-bold shadow-sm"
+                                                                data-bs-toggle="modal"
                                                                 data-bs-target="#payPrModal{{ $item->id_raw }}"
                                                                 title="Disburse payment for this Purchase Request">
                                                             <i class="fa-solid fa-money-bill-wave me-1"></i> Pay
                                                         </button>
                                                         <button type="button" class="btn btn-outline-warning btn-sm fw-semibold ms-1"
-                                                                data-bs-toggle="modal" 
+                                                                data-bs-toggle="modal"
                                                                 data-bs-target="#prSendBackToFinanceHeadModal{{ $item->id_raw }}"
                                                                 title="Send PR payment task back to Finance Head">
                                                             <i class="fa-solid fa-arrow-left me-1"></i> Return
@@ -426,21 +435,21 @@
 
                                                 @if($item->status_key === 'finance_queue')
                                                     @if($isAssignedToMe)
-                                                        <button type="button" class="btn btn-success btn-sm text-white fw-bold shadow-sm" 
-                                                                data-bs-toggle="modal" 
+                                                        <button type="button" class="btn btn-success btn-sm text-white fw-bold shadow-sm"
+                                                                data-bs-toggle="modal"
                                                                 data-bs-target="#payOfficeModal{{ $item->id_raw }}"
                                                                 title="Disburse payment for this Office Request">
                                                             <i class="fa-solid fa-money-bill-wave me-1"></i> Pay
                                                         </button>
-                                                        <button type="button" class="btn btn-outline-warning btn-sm fw-semibold ms-1" 
-                                                                data-bs-toggle="modal" 
+                                                        <button type="button" class="btn btn-outline-warning btn-sm fw-semibold ms-1"
+                                                                data-bs-toggle="modal"
                                                                 data-bs-target="#officeSendBackToFinanceHeadModal{{ $item->id_raw }}"
                                                                 title="Send Office Request back to Finance Head">
                                                             <i class="fa-solid fa-arrow-left me-1"></i> Return
                                                         </button>
                                                     @elseif($isFinHeadOrAdmin)
-                                                        <button type="button" class="btn btn-sm text-white fw-bold shadow-sm" style="background:#7c3aed;" 
-                                                                data-bs-toggle="modal" 
+                                                        <button type="button" class="btn btn-sm text-white fw-bold shadow-sm" style="background:#7c3aed;"
+                                                                data-bs-toggle="modal"
                                                                 data-bs-target="#financeOfficeAssignModal{{ $item->id_raw }}"
                                                                 title="Assign Funding Account &amp; Staff">
                                                             <i class="fa-solid fa-user-tag me-1"></i> Assign
@@ -458,7 +467,7 @@
                                             @elseif($item->type === 'utility_expense')
                                                 @php
                                                     $exp = $item->raw_model;
-                                                    $isAssignedToMe = (int)$item->assigned_staff_id === (int)auth()->id() 
+                                                    $isAssignedToMe = (int)$item->assigned_staff_id === (int)auth()->id()
                                                         || ($exp && (int)$exp->assigned_to === (int)auth()->id())
                                                         || ($exp && $exp->coa && (int)$exp->coa->assigned_to === (int)auth()->id())
                                                         || ($exp && $exp->bankAccount && (int)$exp->bankAccount->assigned_to === (int)auth()->id());
@@ -467,8 +476,8 @@
 
                                                 @if($item->status_key === 'finance_queue')
                                                     @if($isAssignedToMe || $isFinHeadOrAdmin)
-                                                        <button type="button" class="btn btn-success btn-sm text-white fw-bold shadow-sm" 
-                                                                data-bs-toggle="modal" 
+                                                        <button type="button" class="btn btn-success btn-sm text-white fw-bold shadow-sm"
+                                                                data-bs-toggle="modal"
                                                                 data-bs-target="#payUtilityModal{{ $item->id_raw }}"
                                                                 title="Disburse payment for this Utility Expense">
                                                             <i class="fa-solid fa-money-bill-wave me-1"></i> Pay
@@ -612,7 +621,7 @@
                             // In ExpenseRequest, user_id is the person who asked (e.g. General Admin)
                             $askingUser = $rawReq->user ?? null;
                             if ($askingUser) {
-                                $askingEmployee = optional($askingUser)->employee 
+                                $askingEmployee = optional($askingUser)->employee
                                     ?? \App\Models\Employee::withoutGlobalScope(\App\Scopes\NotDeadFileScope::class)->where('user_id', $askingUser->id)->first()
                                     ?? ($askingUser->email ? \App\Models\Employee::withoutGlobalScope(\App\Scopes\NotDeadFileScope::class)->where('email', $askingUser->email)->first() : null);
                             }
@@ -625,7 +634,7 @@
                             // In MaintenanceRequest, reportedBy is the person who reported/asked
                             $askingUser = $mReq->reportedBy ?? null;
                             if ($askingUser) {
-                                $askingEmployee = optional($askingUser)->employee 
+                                $askingEmployee = optional($askingUser)->employee
                                     ?? \App\Models\Employee::withoutGlobalScope(\App\Scopes\NotDeadFileScope::class)->where('user_id', $askingUser->id)->first()
                                     ?? ($askingUser->email ? \App\Models\Employee::withoutGlobalScope(\App\Scopes\NotDeadFileScope::class)->where('email', $askingUser->email)->first() : null);
                             }
@@ -637,7 +646,7 @@
                             $pr = $item->raw_model ?? null;
                             $askingUser = $pr ? ($pr->requestedBy ?? null) : null;
                             if ($askingUser) {
-                                $askingEmployee = optional($askingUser)->employee 
+                                $askingEmployee = optional($askingUser)->employee
                                     ?? \App\Models\Employee::withoutGlobalScope(\App\Scopes\NotDeadFileScope::class)->where('user_id', $askingUser->id)->first()
                                     ?? ($askingUser->email ? \App\Models\Employee::withoutGlobalScope(\App\Scopes\NotDeadFileScope::class)->where('email', $askingUser->email)->first() : null);
                             }
@@ -892,8 +901,8 @@
                     @endif
 
                     @if($item->type === 'expense_request')
-                        @php 
-                            $req = $item->raw_model; 
+                        @php
+                            $req = $item->raw_model;
                             $pcr = $req->linked_replenishment;
                         @endphp
 
@@ -1288,8 +1297,8 @@
     </div>
 
     @if($item->type === 'expense_request')
-        @php 
-            $req = $item->raw_model; 
+        @php
+            $req = $item->raw_model;
             $pcr = $req->linked_replenishment;
         @endphp
 
@@ -1641,9 +1650,9 @@
                                         @csrf
                                         <div class="mb-3">
                                             <label class="form-label small fw-bold text-dark">Chart of Account (COA) <span class="text-danger">*</span></label>
-                                            <select name="coa_id" 
+                                            <select name="coa_id"
                                                     id="coaSelect{{ $req->id }}"
-                                                    class="form-select form-select-sm bg-white" 
+                                                    class="form-select form-select-sm bg-white"
                                                     onchange="autoSelectFinanceStaff(this, {{ $req->id }})"
                                                     required>
                                                 <option value="" data-staff-id="" data-staff-name="">-- Select COA Account --</option>
@@ -1653,8 +1662,8 @@
                                                         $assignedStaffId = $coa->assigned_to ?? '';
                                                         $assignedStaffName = ($coa->manager ? ($coa->manager->name ?? '') : '');
                                                     @endphp
-                                                    <option value="{{ $coa->id }}" 
-                                                            data-staff-id="{{ $assignedStaffId }}" 
+                                                    <option value="{{ $coa->id }}"
+                                                            data-staff-id="{{ $assignedStaffId }}"
                                                             data-staff-name="{{ $assignedStaffName }}"
                                                             {{ $isSelected ? 'selected' : '' }}>
                                                         {{ $coa->code }} - {{ $coa->name }}
@@ -1664,8 +1673,8 @@
                                         </div>
                                         <div class="mb-3">
                                             <label class="form-label small fw-bold text-dark">Assigned Finance Staff</label>
-                                            <select name="assigned_finance_staff_id" 
-                                                    id="financeStaffSelect{{ $req->id }}" 
+                                            <select name="assigned_finance_staff_id"
+                                                    id="financeStaffSelect{{ $req->id }}"
                                                     class="form-select form-select-sm bg-white">
                                                 <option value="">Auto-assigned from COA or Select Staff...</option>
                                                 @foreach($financeStaff as $st)
@@ -1718,9 +1727,9 @@
                                 @csrf
                                 <div class="mb-3">
                                     <label class="form-label small fw-bold text-dark">Chart of Account (COA) <span class="text-danger">*</span></label>
-                                    <select name="coa_id" 
+                                    <select name="coa_id"
                                             id="coaSelect{{ $req->id }}"
-                                            class="form-select form-select-sm bg-white" 
+                                            class="form-select form-select-sm bg-white"
                                             onchange="autoSelectFinanceStaff(this, {{ $req->id }})"
                                             required>
                                         <option value="" data-staff-id="" data-staff-name="">-- Select COA Account --</option>
@@ -1730,8 +1739,8 @@
                                                 $assignedStaffId = $coa->assigned_to ?? '';
                                                 $assignedStaffName = ($coa->manager ? ($coa->manager->name ?? '') : '');
                                             @endphp
-                                            <option value="{{ $coa->id }}" 
-                                                    data-staff-id="{{ $assignedStaffId }}" 
+                                            <option value="{{ $coa->id }}"
+                                                    data-staff-id="{{ $assignedStaffId }}"
                                                     data-staff-name="{{ $assignedStaffName }}"
                                                     {{ $isSelected ? 'selected' : '' }}>
                                                 {{ $coa->code }} - {{ $coa->name }}
@@ -1741,8 +1750,8 @@
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label small fw-bold text-dark">Assigned Finance Staff / Custodian</label>
-                                    <select name="assigned_finance_staff_id" 
-                                            id="financeStaffSelect{{ $req->id }}" 
+                                    <select name="assigned_finance_staff_id"
+                                            id="financeStaffSelect{{ $req->id }}"
                                             class="form-select form-select-sm bg-white">
                                         <option value="">Auto-assigned from COA or Select Staff...</option>
                                         @foreach($financeStaff as $st)
@@ -1949,8 +1958,8 @@
                                     <label class="form-label small fw-bold text-dark text-uppercase">
                                         <i class="fa-solid fa-calculator text-success me-1"></i>Gross / Base Invoice Amount (ETB)
                                     </label>
-                                    <input type="number" step="0.01" min="0.01" name="gross_amount" id="modalGrossAmount{{ $req->id }}" 
-                                           class="form-control form-control-sm fw-bold fs-6 text-dark" 
+                                    <input type="number" step="0.01" min="0.01" name="gross_amount" id="modalGrossAmount{{ $req->id }}"
+                                           class="form-control form-control-sm fw-bold fs-6 text-dark"
                                            value="{{ $req->gross_amount ?? $req->amount }}"
                                            oninput="recalculateDisbursement({{ $req->id }})">
                                 </div>
@@ -1982,8 +1991,8 @@
                                     <div class="col-md-6">
                                         <label class="form-label small fw-semibold mb-1">Withholding Tax (የቅድመ ግብር 3%)</label>
                                         <div class="form-check form-switch mt-1">
-                                            <input class="form-check-input" type="checkbox" role="switch" name="has_withholding" value="1" 
-                                                   id="modalWithholdingToggle{{ $req->id }}" 
+                                            <input class="form-check-input" type="checkbox" role="switch" name="has_withholding" value="1"
+                                                   id="modalWithholdingToggle{{ $req->id }}"
                                                    {{ ($req->has_withholding ?? false) ? 'checked' : '' }}
                                                    onchange="recalculateDisbursement({{ $req->id }})">
                                             <label class="form-check-label small" for="modalWithholdingToggle{{ $req->id }}">
@@ -2027,8 +2036,8 @@
                                     </div>
                                     <div class="row g-2 align-items-center">
                                         <div class="col-md-7">
-                                            <input type="file" name="withholding_receipt" id="modalWithholdingReceipt{{ $req->id }}" 
-                                                   class="form-control form-control-sm disburse-wht-ocr-input" 
+                                            <input type="file" name="withholding_receipt" id="modalWithholdingReceipt{{ $req->id }}"
+                                                   class="form-control form-control-sm disburse-wht-ocr-input"
                                                    data-target-input="modalWithholdingReceiptNo{{ $req->id }}"
                                                    data-feedback-id="disburseWhtFeedback{{ $req->id }}"
                                                    accept="image/jpeg,image/png,image/jpg,application/pdf,image/webp"
@@ -2037,9 +2046,9 @@
                                             <small class="text-muted" style="font-size:0.75rem;">Upload official Withholding receipt image or PDF (OCR auto-reads voucher #).</small>
                                         </div>
                                         <div class="col-md-5">
-                                            <input type="text" name="withholding_receipt_number" id="modalWithholdingReceiptNo{{ $req->id }}" 
-                                                   class="form-control form-control-sm" 
-                                                   placeholder="WHT Receipt / Voucher #" 
+                                            <input type="text" name="withholding_receipt_number" id="modalWithholdingReceiptNo{{ $req->id }}"
+                                                   class="form-control form-control-sm"
+                                                   placeholder="WHT Receipt / Voucher #"
                                                    value="{{ $req->withholding_receipt_number ?? '' }}">
                                             <small class="text-muted" style="font-size:0.75rem;">Voucher / Receipt Serial # (Optional)</small>
                                         </div>
@@ -2047,7 +2056,7 @@
                                     <div id="disburseWhtFeedback{{ $req->id }}" class="mt-2"></div>
                                     @if(!empty($req->withholding_receipt))
                                         <div class="mt-2 text-success small">
-                                            <i class="fa-solid fa-circle-check me-1"></i> Existing slip uploaded: 
+                                            <i class="fa-solid fa-circle-check me-1"></i> Existing slip uploaded:
                                             <a href="{{ $req->withholding_receipt_url }}" target="_blank" class="fw-bold text-decoration-underline text-success">View Current Withholding Slip</a>
                                         </div>
                                     @endif
@@ -2066,8 +2075,8 @@
                                 </div>
                                 <div class="row g-2 align-items-center">
                                     <div class="col-12">
-                                        <input type="file" name="attachment" id="modalExpenseReceipt{{ $req->id }}" 
-                                               class="form-control form-control-sm disburse-ocr-input" 
+                                        <input type="file" name="attachment" id="modalExpenseReceipt{{ $req->id }}"
+                                               class="form-control form-control-sm disburse-ocr-input"
                                                data-type="expense"
                                                data-req-id="{{ $req->id }}"
                                                data-feedback-id="disburseOcrFeedback{{ $req->id }}"
@@ -2215,8 +2224,8 @@
                                 <label class="form-label small fw-bold text-dark text-uppercase">
                                     <i class="fa-solid fa-calculator text-success me-1"></i>Gross / Base Invoice Amount (ETB) <span class="text-danger">*</span>
                                 </label>
-                                <input type="number" step="0.01" min="0.01" name="gross_amount" id="modalPrGrossAmount{{ $item->id_raw }}" 
-                                       class="form-control form-control-sm fw-bold fs-6 text-dark" 
+                                <input type="number" step="0.01" min="0.01" name="gross_amount" id="modalPrGrossAmount{{ $item->id_raw }}"
+                                       class="form-control form-control-sm fw-bold fs-6 text-dark"
                                        value="{{ $item->net_amount }}"
                                        oninput="recalculatePrDisbursement('{{ $item->id_raw }}')">
                             </div>
@@ -2248,8 +2257,8 @@
                                 <div class="col-md-6">
                                     <label class="form-label small fw-semibold mb-1">Withholding Tax (የቅድመ ግብር)</label>
                                     <div class="form-check form-switch mt-1">
-                                        <input class="form-check-input" type="checkbox" role="switch" name="has_withholding" value="1" 
-                                               id="modalPrWithholdingToggle{{ $item->id_raw }}" 
+                                        <input class="form-check-input" type="checkbox" role="switch" name="has_withholding" value="1"
+                                               id="modalPrWithholdingToggle{{ $item->id_raw }}"
                                                onchange="recalculatePrDisbursement('{{ $item->id_raw }}')">
                                         <label class="form-check-label small" for="modalPrWithholdingToggle{{ $item->id_raw }}">
                                             Apply Withholding Deduction
@@ -2298,16 +2307,16 @@
                                 </div>
                                 <div class="row g-2 align-items-center">
                                     <div class="col-md-7">
-                                        <input type="file" name="withholding_receipt" id="modalPrWithholdingReceipt{{ $item->id_raw }}" 
-                                               class="form-control form-control-sm disburse-wht-ocr-input" 
+                                        <input type="file" name="withholding_receipt" id="modalPrWithholdingReceipt{{ $item->id_raw }}"
+                                               class="form-control form-control-sm disburse-wht-ocr-input"
                                                data-target-input="modalPrWithholdingReceiptNo{{ $item->id_raw }}"
                                                data-feedback-id="disbursePrWhtFeedback{{ $item->id_raw }}"
                                                accept="image/jpeg,image/png,image/jpg,application/pdf,image/webp">
                                         <small class="text-muted" style="font-size:0.75rem;">Upload official Withholding receipt image or PDF (optional at payout).</small>
                                     </div>
                                     <div class="col-md-5">
-                                        <input type="text" name="withholding_receipt_number" id="modalPrWithholdingReceiptNo{{ $item->id_raw }}" 
-                                               class="form-control form-control-sm" 
+                                        <input type="text" name="withholding_receipt_number" id="modalPrWithholdingReceiptNo{{ $item->id_raw }}"
+                                               class="form-control form-control-sm"
                                                placeholder="WHT Receipt / Voucher #">
                                         <small class="text-muted" style="font-size:0.75rem;">Voucher / Receipt Serial #</small>
                                     </div>
@@ -2328,8 +2337,8 @@
                             </div>
                             <div class="row g-2 align-items-center">
                                 <div class="col-12">
-                                    <input type="file" name="receipt_file" id="modalPrExpenseReceipt{{ $item->id_raw }}" 
-                                           class="form-control form-control-sm disburse-ocr-input" 
+                                    <input type="file" name="receipt_file" id="modalPrExpenseReceipt{{ $item->id_raw }}"
+                                           class="form-control form-control-sm disburse-ocr-input"
                                            data-type="purchase"
                                            data-req-id="{{ $item->id_raw }}"
                                            data-feedback-id="disbursePrOcrFeedback{{ $item->id_raw }}"
@@ -2421,8 +2430,8 @@
     @endif
 
     @if($item->type === 'office_supply_request' && $item->status_key === 'finance_queue')
-    @php 
-        $officeReq = $item->raw_model; 
+    @php
+        $officeReq = $item->raw_model;
         $isOfficeAssignedToMe = (int)$item->assigned_staff_id === (int)auth()->id() || ($officeReq && $officeReq->coa && (int)$officeReq->coa->assigned_to === (int)auth()->id());
     @endphp
 
@@ -2458,7 +2467,7 @@
                                         <select name="coa_id" id="modalCoaSelect{{ $item->id_raw }}" class="form-select form-select-sm bg-light border-0" onchange="syncModalCoaToStaff('{{ $item->id_raw }}')" required>
                                             <option value="" disabled selected>-- Select Expense Account --</option>
                                             @foreach($chartOfAccounts as $coa)
-                                                <option value="{{ $coa->id }}" 
+                                                <option value="{{ $coa->id }}"
                                                         data-staff-id="{{ $coa->assigned_to }}"
                                                         data-staff-name="{{ $coa->manager ? ($coa->manager->name ?? '') : '' }}"
                                                         {{ optional($officeReq)->coa_id == $coa->id ? 'selected' : '' }}>
@@ -2523,7 +2532,7 @@
                                 <select name="coa_id" id="modalCoaSelect{{ $item->id_raw }}" class="form-select form-select-sm bg-light border-0" onchange="syncModalCoaToStaff('{{ $item->id_raw }}')" required>
                                     <option value="" disabled selected>-- Select Expense Account --</option>
                                     @foreach($chartOfAccounts as $coa)
-                                        <option value="{{ $coa->id }}" 
+                                        <option value="{{ $coa->id }}"
                                                 data-staff-id="{{ $coa->assigned_to }}"
                                                 data-staff-name="{{ $coa->manager ? ($coa->manager->name ?? '') : '' }}"
                                                 {{ $officeReq->coa_id == $coa->id ? 'selected' : '' }}>
@@ -2597,8 +2606,8 @@
                                     <i class="fa-solid fa-wand-magic-sparkles me-1"></i> AI Vision OCR Enabled
                                 </span>
                             </div>
-                            <input type="file" name="attachment" id="modalOfficeExpenseReceipt{{ $item->id_raw }}" 
-                                   class="form-control form-control-sm disburse-ocr-input" 
+                            <input type="file" name="attachment" id="modalOfficeExpenseReceipt{{ $item->id_raw }}"
+                                   class="form-control form-control-sm disburse-ocr-input"
                                    data-type="office"
                                    data-req-id="{{ $item->id_raw }}"
                                    data-feedback-id="disburseOfficeOcrFeedback{{ $item->id_raw }}"
@@ -2682,7 +2691,7 @@
     @if($item->type === 'utility_expense' && $item->status_key === 'finance_queue')
     @php
         $uExp = $item->raw_model;
-        $isUtilityAssignedToMe = (int)$item->assigned_staff_id === (int)auth()->id() 
+        $isUtilityAssignedToMe = (int)$item->assigned_staff_id === (int)auth()->id()
             || ($uExp && (int)$uExp->assigned_to === (int)auth()->id())
             || ($uExp && $uExp->coa && (int)$uExp->coa->assigned_to === (int)auth()->id())
             || ($uExp && $uExp->bankAccount && (int)$uExp->bankAccount->assigned_to === (int)auth()->id());
@@ -2691,7 +2700,7 @@
 
     <!-- Pay Modal for Utility Expense -->
     <div class="modal fade" id="payUtilityModal{{ $item->id_raw }}" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
             <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
                 <form method="POST" action="{{ route('utility-expenses.pay', $item->id_raw) }}" enctype="multipart/form-data">
                     @csrf
@@ -2702,7 +2711,7 @@
                             </span>
                             <div>
                                 <h5 class="modal-title fw-bold mb-0">Disburse Utility Payment: {{ $item->id_formatted }}</h5>
-                                <span class="text-white-50 small">Amount: <strong>ETB {{ number_format($item->net_amount, 2) }}</strong> &bull; Manager: <strong>{{ $item->assigned_staff_name ?? 'Assigned Staff' }}</strong></span>
+                                <span class="text-white-50 small">Base Due: <strong>ETB {{ number_format($uExp->gross_amount ?? $uExp->amount, 2) }}</strong> &bull; Manager: <strong>{{ $item->assigned_staff_name ?? 'Assigned Staff' }}</strong></span>
                             </div>
                         </div>
                         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -2710,29 +2719,143 @@
                     <div class="modal-body p-4 bg-white">
                         <div class="p-3 bg-light rounded-3 mb-3 border border-warning-subtle">
                             <div class="d-flex justify-content-between align-items-center mb-1">
-                                <span class="text-muted small text-uppercase fw-bold">Bill Due Amount:</span>
-                                <strong class="text-success fs-5">ETB {{ number_format($item->net_amount, 2) }}</strong>
+                                <span class="text-muted small text-uppercase fw-bold">Original Bill Amount:</span>
+                                <strong class="text-success fs-5">ETB {{ number_format($uExp->gross_amount ?? $uExp->amount, 2) }}</strong>
                             </div>
                             <div class="small text-muted mb-1">
-                                <i class="fa-solid fa-sitemap me-1 text-primary"></i> Funding COA Account: 
+                                <i class="fa-solid fa-sitemap me-1 text-primary"></i> Funding COA Account:
                                 <strong>{{ $item->coa_name ?? ($uExp && $uExp->coa ? ('['.$uExp->coa->code.'] '.$uExp->coa->name) : 'Utility Account') }}</strong>
                             </div>
                             @if($uExp && $uExp->bankAccount)
                             <div class="small text-muted mb-1">
-                                <i class="fa-solid fa-building-columns me-1 text-info"></i> Bank Account: 
+                                <i class="fa-solid fa-building-columns me-1 text-info"></i> Bank Account:
                                 <strong>{{ $uExp->bankAccount->bank_name }} - {{ $uExp->bankAccount->account_number }}</strong>
                             </div>
                             @endif
                             <div class="small text-muted"><i class="fa-solid fa-list me-1"></i> Purpose: {{ $item->description }}</div>
                             <div class="alert alert-warning py-1 px-2 small mb-0 mt-2 border-0">
-                                <i class="fa-solid fa-triangle-exclamation me-1"></i> <strong>Automatic Account Deduction:</strong> Upon confirming payment, ETB {{ number_format($item->net_amount, 2) }} will be deducted from this account's balance.
+                                <i class="fa-solid fa-triangle-exclamation me-1"></i> <strong>Automatic Account Deduction:</strong> Upon confirming payment, the net disbursed amount will be deducted from this account's balance.
                             </div>
                         </div>
 
+                        <!-- Gross / Base Invoice Amount -->
+                        <div class="row g-2 mb-3">
+                            <div class="col-md-12">
+                                <label class="form-label small fw-bold text-dark text-uppercase">
+                                    <i class="fa-solid fa-calculator text-success me-1"></i>Gross / Base Invoice Amount (ETB) <span class="text-danger">*</span>
+                                </label>
+                                <input type="number" step="0.01" min="0.01" name="gross_amount" id="modalUtilityGrossAmount{{ $item->id_raw }}"
+                                       class="form-control form-control-sm fw-bold fs-6 text-dark"
+                                       value="{{ $uExp->gross_amount ?? $uExp->amount }}"
+                                       oninput="recalculateUtilityDisbursement('{{ $item->id_raw }}')" required>
+                            </div>
+                        </div>
+
+                        <!-- Utility Tax & Deduction Options (VAT & Withholding) -->
+                        <div class="card border border-primary-subtle bg-light-subtle rounded-3 p-3 mb-3" id="utilityTaxPanel{{ $item->id_raw }}">
+                            <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom">
+                                <strong class="text-primary small text-uppercase">
+                                    <i class="fa-solid fa-receipt me-1"></i>Utility Tax &amp; Deduction Config (VAT &amp; Withholding)
+                                </strong>
+                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-0">Tax Calculation</span>
+                            </div>
+
+                            <div class="row g-3">
+                                <!-- VAT Option -->
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-semibold mb-1">VAT Option (ቫት)</label>
+                                    <select name="vat_type" id="modalUtilityVatType{{ $item->id_raw }}" class="form-select form-select-sm" onchange="recalculateUtilityDisbursement('{{ $item->id_raw }}')">
+                                        <option value="none" {{ ($uExp->vat_type ?? 'none') === 'none' ? 'selected' : '' }}>No VAT (0% / ያለ ቫት)</option>
+                                        <option value="exclusive" {{ ($uExp->vat_type ?? '') === 'exclusive' ? 'selected' : '' }}>15% VAT Added (+15% ተጨማሪ ቫት)</option>
+                                        <option value="vat_b" {{ in_array(($uExp->vat_type ?? ''), ['vat_b', 'inclusive']) ? 'selected' : '' }}>15% VAT Included / VAT B (ከቫት 15% ጋር የተካተተ - ቫት ቢ)</option>
+                                    </select>
+                                    <input type="hidden" name="vat_rate" id="modalUtilityVatRate{{ $item->id_raw }}" value="{{ $uExp->vat_rate ?? 15.00 }}">
+                                    <input type="hidden" name="vat_amount" id="modalUtilityVatAmount{{ $item->id_raw }}" value="{{ $uExp->vat_amount ?? 0 }}">
+                                </div>
+
+                                <!-- Withholding Tax -->
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-semibold mb-1">Withholding Tax (የቅድመ ግብር 3%)</label>
+                                    <div class="form-check form-switch mt-1">
+                                        <input class="form-check-input" type="checkbox" role="switch" name="has_withholding" value="1"
+                                               id="modalUtilityWithholdingToggle{{ $item->id_raw }}"
+                                               {{ ($uExp->has_withholding ?? false) ? 'checked' : '' }}
+                                               onchange="recalculateUtilityDisbursement('{{ $item->id_raw }}')">
+                                        <label class="form-check-label small" for="modalUtilityWithholdingToggle{{ $item->id_raw }}">
+                                            Apply 3% Service Withholding Deduction
+                                        </label>
+                                    </div>
+                                    <input type="hidden" name="withholding_rate" id="modalUtilityWithholdingRate{{ $item->id_raw }}" value="{{ $uExp->withholding_rate ?? 3.00 }}">
+                                    <input type="hidden" name="withholding_amount" id="modalUtilityWithholdingAmount{{ $item->id_raw }}" value="{{ $uExp->withholding_amount ?? 0 }}">
+                                </div>
+                            </div>
+
+                            <!-- Real-time Breakdown Summary Table -->
+                            <div class="mt-3 p-2 bg-white rounded border shadow-sm">
+                                <div class="row text-center g-2 small">
+                                    <div class="col-3 border-end">
+                                        <span class="text-muted d-block" style="font-size:0.75rem;">Base Amount</span>
+                                        <strong class="text-dark" id="displayUtilityBaseAmount{{ $item->id_raw }}">ETB {{ number_format($uExp->gross_amount ?? $uExp->amount, 2) }}</strong>
+                                    </div>
+                                    <div class="col-3 border-end">
+                                        <span class="text-muted d-block" style="font-size:0.75rem;">VAT (15%)</span>
+                                        <strong class="text-info" id="displayUtilityVatAmount{{ $item->id_raw }}">+ ETB {{ number_format($uExp->vat_amount ?? 0, 2) }}</strong>
+                                    </div>
+                                    <div class="col-3 border-end">
+                                        <span class="text-muted d-block" style="font-size:0.75rem;">Withholding (3%)</span>
+                                        <strong class="text-danger" id="displayUtilityWhtAmount{{ $item->id_raw }}">- ETB {{ number_format($uExp->withholding_amount ?? 0, 2) }}</strong>
+                                    </div>
+                                    <div class="col-3">
+                                        <span class="text-muted d-block" style="font-size:0.75rem;">Net Payable</span>
+                                        <strong class="text-success" id="displayUtilityNetAmount{{ $item->id_raw }}">ETB {{ number_format($uExp->effective_payable_amount ?? $item->net_amount, 2) }}</strong>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Withholding Tax Receipt & Voucher Upload Section (Visible & Required when 3% WHT is ON) -->
+                            <div id="utilityWithholdingReceiptSection{{ $item->id_raw }}" class="mt-3 p-3 bg-white rounded-3 border border-danger-subtle shadow-sm" style="{{ ($uExp->has_withholding ?? false) ? '' : 'display:none;' }}">
+                                <div class="d-flex align-items-center justify-content-between mb-2">
+                                    <label class="form-label small fw-bold text-danger text-uppercase mb-0">
+                                        <i class="fa-solid fa-file-invoice-dollar me-1"></i>Withholding Tax Receipt / Slip Upload (የቅድመ ግብር ደረሰኝ) <span class="text-danger">*</span>
+                                    </label>
+                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-0">Required for 3% WHT</span>
+                                </div>
+                                <div class="row g-2 align-items-center">
+                                    <div class="col-md-7">
+                                        <input type="file" name="withholding_receipt" id="modalUtilityWithholdingReceipt{{ $item->id_raw }}"
+                                               class="form-control form-control-sm disburse-wht-ocr-input"
+                                               data-target-input="modalUtilityWithholdingReceiptNo{{ $item->id_raw }}"
+                                               data-feedback-id="disburseUtilityWhtFeedback{{ $item->id_raw }}"
+                                               accept="image/jpeg,image/png,image/jpg,application/pdf,image/webp"
+                                               data-has-existing="{{ !empty($uExp->withholding_receipt) ? '1' : '0' }}"
+                                               {{ ($uExp->has_withholding ?? false) && empty($uExp->withholding_receipt) ? 'required' : '' }}>
+                                        <small class="text-muted" style="font-size:0.75rem;">Upload official Withholding receipt image or PDF (OCR auto-reads voucher #).</small>
+                                    </div>
+                                    <div class="col-md-5">
+                                        <input type="text" name="withholding_receipt_number" id="modalUtilityWithholdingReceiptNo{{ $item->id_raw }}"
+                                               class="form-control form-control-sm"
+                                               placeholder="WHT Receipt / Voucher #"
+                                               value="{{ $uExp->withholding_receipt_number ?? '' }}">
+                                        <small class="text-muted" style="font-size:0.75rem;">Voucher / Receipt Serial # (Optional)</small>
+                                    </div>
+                                </div>
+                                <div id="disburseUtilityWhtFeedback{{ $item->id_raw }}" class="mt-2"></div>
+                                @if(!empty($uExp->withholding_receipt))
+                                    <div class="mt-2 text-success small">
+                                        <i class="fa-solid fa-circle-check me-1"></i> Existing slip uploaded:
+                                        <a href="{{ $uExp->withholding_receipt_url }}" target="_blank" class="fw-bold text-decoration-underline text-success">View Current Withholding Slip</a>
+                                    </div>
+                                @endif
+                            </div>
+                        </div>
+
+                        <input type="hidden" name="net_amount" id="modalUtilityNetAmount{{ $item->id_raw }}" value="{{ $uExp->effective_payable_amount ?? $item->net_amount }}">
+
                         <div class="row g-2 mb-3">
                             <div class="col-md-6">
-                                <label class="form-label small fw-bold text-dark text-uppercase">Disbursed Amount (ETB) <span class="text-danger">*</span></label>
-                                <input type="number" step="0.01" min="0.01" name="paid_amount" class="form-control fw-bold text-success fs-6" value="{{ $item->net_amount }}" required>
+                                <label class="form-label small fw-bold text-dark text-uppercase">Net Disbursed Amount (ETB) <span class="text-danger">*</span></label>
+                                <input type="number" step="0.01" min="0.01" name="paid_amount" id="modalUtilityPaidAmount{{ $item->id_raw }}" class="form-control fw-bold text-success fs-6" value="{{ $uExp->effective_payable_amount ?? $item->net_amount }}" required>
+                                <small class="text-muted" style="font-size:0.75rem;">Actual cash / bank withdrawal amount</small>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label small fw-bold text-dark text-uppercase">Payment Method <span class="text-danger">*</span></label>
@@ -2774,7 +2897,7 @@
                     <div class="modal-footer bg-light border-0 py-3 px-4 d-flex justify-content-end gap-2">
                         <button type="button" class="btn btn-light rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
                         <button type="submit" class="btn btn-success rounded-pill px-4 fw-bold shadow-sm">
-                            <i class="fa-solid fa-check-double me-1"></i> Confirm &amp; Disburse Payment (Deduct from Account)
+                            <i class="fa-solid fa-check-double me-1"></i> Confirm &amp; Disburse Payment (<span id="btnUtilityPayAmount{{ $item->id_raw }}">ETB {{ number_format($uExp->effective_payable_amount ?? $item->net_amount, 2) }}</span>)
                         </button>
                     </div>
                 </form>
@@ -2832,7 +2955,7 @@ function recalculateDisbursement(reqId) {
     const grossInput = document.getElementById('modalGrossAmount' + reqId);
     const vatTypeSelect = document.getElementById('modalVatType' + reqId);
     const whtToggle = document.getElementById('modalWithholdingToggle' + reqId);
-    
+
     if (!grossInput) return;
     const gross = parseFloat(grossInput.value) || 0;
     const vatType = vatTypeSelect ? vatTypeSelect.value : 'none';
@@ -2922,7 +3045,7 @@ function recalculatePrDisbursement(prId) {
     const vatTypeSelect = document.getElementById('modalPrVatType' + prId);
     const whtToggle = document.getElementById('modalPrWithholdingToggle' + prId);
     const whtRateSelect = document.getElementById('modalPrWithholdingRate' + prId);
-    
+
     if (!grossInput) return;
     const gross = parseFloat(grossInput.value) || 0;
     const vatType = vatTypeSelect ? vatTypeSelect.value : 'none';
@@ -2990,6 +3113,94 @@ function recalculatePrDisbursement(prId) {
     if (whtReceiptGroup) whtReceiptGroup.style.display = hasWht ? 'block' : 'none';
 }
 
+/**
+ * Real-time VAT and Withholding Tax calculation for Utility Expenses
+ */
+function recalculateUtilityDisbursement(id) {
+    const grossInput = document.getElementById('modalUtilityGrossAmount' + id);
+    const vatTypeSelect = document.getElementById('modalUtilityVatType' + id);
+    const whtToggle = document.getElementById('modalUtilityWithholdingToggle' + id);
+
+    if (!grossInput) return;
+    const gross = parseFloat(grossInput.value) || 0;
+    const vatType = vatTypeSelect ? vatTypeSelect.value : 'none';
+    const vatRate = 15.00;
+    const hasWht = whtToggle ? whtToggle.checked : false;
+    const whtRate = 3.00;
+
+    let vatAmount = 0.0;
+    let baseAmount = gross;
+    let whtAmount = 0.0;
+    let netAmount = gross;
+
+    if (vatType === 'exclusive') {
+        vatAmount = Math.round(gross * (vatRate / 100) * 100) / 100;
+        baseAmount = gross;
+        const totalGrossWithVat = gross + vatAmount;
+        if (hasWht) {
+            whtAmount = Math.round(baseAmount * (whtRate / 100) * 100) / 100;
+        }
+        netAmount = Math.round((totalGrossWithVat - whtAmount) * 100) / 100;
+    } else if (vatType === 'inclusive' || vatType === 'vat_b') {
+        baseAmount = Math.round((gross / (1 + (vatRate / 100))) * 100) / 100;
+        vatAmount = Math.round((gross - baseAmount) * 100) / 100;
+        if (hasWht) {
+            whtAmount = Math.round(baseAmount * (whtRate / 100) * 100) / 100;
+        }
+        netAmount = Math.round((gross - whtAmount) * 100) / 100;
+    } else {
+        baseAmount = gross;
+        vatAmount = 0.0;
+        if (hasWht) {
+            whtAmount = Math.round(baseAmount * (whtRate / 100) * 100) / 100;
+        }
+        netAmount = Math.round((gross - whtAmount) * 100) / 100;
+    }
+
+    // Set hidden inputs
+    const hiddenVat = document.getElementById('modalUtilityVatAmount' + id);
+    const hiddenWht = document.getElementById('modalUtilityWithholdingAmount' + id);
+    const hiddenNet = document.getElementById('modalUtilityNetAmount' + id);
+    const hiddenPaid = document.getElementById('modalUtilityPaidAmount' + id);
+
+    if (hiddenVat) hiddenVat.value = vatAmount.toFixed(2);
+    if (hiddenWht) hiddenWht.value = whtAmount.toFixed(2);
+    if (hiddenNet) hiddenNet.value = netAmount.toFixed(2);
+    if (hiddenPaid) hiddenPaid.value = netAmount.toFixed(2);
+
+    // Update display labels
+    const dispBase = document.getElementById('displayUtilityBaseAmount' + id);
+    const dispVat = document.getElementById('displayUtilityVatAmount' + id);
+    const dispWht = document.getElementById('displayUtilityWhtAmount' + id);
+    const dispNet = document.getElementById('displayUtilityNetAmount' + id);
+    const btnPaySpan = document.getElementById('btnUtilityPayAmount' + id);
+
+    const fmt = num => 'ETB ' + num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    if (dispBase) dispBase.innerText = fmt(baseAmount);
+    if (dispVat) dispVat.innerText = (vatAmount > 0 ? '+ ' : '') + fmt(vatAmount);
+    if (dispWht) dispWht.innerText = (whtAmount > 0 ? '- ' : '') + fmt(whtAmount);
+    if (dispNet) dispNet.innerText = fmt(netAmount);
+    if (btnPaySpan) btnPaySpan.innerText = fmt(netAmount);
+
+    // Toggle Withholding Receipt Upload Requirement and Visibility
+    const whtReceiptGroup = document.getElementById('utilityWithholdingReceiptSection' + id);
+    const whtReceiptInput = document.getElementById('modalUtilityWithholdingReceipt' + id);
+    if (whtReceiptGroup) {
+        if (hasWht) {
+            whtReceiptGroup.style.display = 'block';
+            if (whtReceiptInput && whtReceiptInput.dataset.hasExisting !== '1') {
+                whtReceiptInput.required = true;
+            }
+        } else {
+            whtReceiptGroup.style.display = 'none';
+            if (whtReceiptInput) {
+                whtReceiptInput.required = false;
+            }
+        }
+    }
+}
+
 
 // Auto-trigger on modal open to reflect current COA custodian and tax state
 document.addEventListener('DOMContentLoaded', function () {
@@ -3014,6 +3225,13 @@ document.addEventListener('DOMContentLoaded', function () {
         modal.addEventListener('shown.bs.modal', function () {
             const prId = modal.id.replace('payPrModal', '');
             recalculatePrDisbursement(prId);
+        });
+    });
+
+    document.querySelectorAll('[id^="payUtilityModal"]').forEach(function (modal) {
+        modal.addEventListener('shown.bs.modal', function () {
+            const utilId = modal.id.replace('payUtilityModal', '');
+            recalculateUtilityDisbursement(utilId);
         });
     });
 
@@ -3129,7 +3347,7 @@ function initDisbursementOcr() {
             const formData = new FormData();
             formData.append('receipt_file', file);
 
-            const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') 
+            const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
                 || form?.querySelector('input[name="_token"]')?.value;
 
             fetch('{{ route("purchases.receipt-scan") }}', {
@@ -3216,7 +3434,7 @@ function initDisbursementOcr() {
                                     </button>
                                 ` : ''}
                             </div>
-                            
+
                             <div class="row g-2 small text-dark mt-1">
                                 <div class="col-6 col-md-3">
                                     <span class="text-muted d-block" style="font-size:0.7rem;">Vendor / Supplier</span>
@@ -3380,7 +3598,7 @@ function initDisbursementOcr() {
             const formData = new FormData();
             formData.append('receipt_file', file);
 
-            const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') 
+            const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
                 || form?.querySelector('input[name="_token"]')?.value;
 
             fetch('{{ route("purchases.receipt-scan") }}', {

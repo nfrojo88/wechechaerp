@@ -35,6 +35,16 @@ class UtilityExpenseController extends Controller
                     $table->string('reference_no', 100)->nullable();
                     $table->date('due_date')->nullable();
                     $table->decimal('amount', 15, 2);
+                    $table->decimal('gross_amount', 15, 2)->nullable();
+                    $table->string('vat_type', 30)->default('none');
+                    $table->decimal('vat_rate', 5, 2)->default(15.00);
+                    $table->decimal('vat_amount', 15, 2)->default(0.00);
+                    $table->boolean('has_withholding')->default(false);
+                    $table->decimal('withholding_rate', 5, 2)->default(3.00);
+                    $table->decimal('withholding_amount', 15, 2)->default(0.00);
+                    $table->string('withholding_receipt', 500)->nullable();
+                    $table->string('withholding_receipt_number', 100)->nullable();
+                    $table->decimal('net_amount', 15, 2)->nullable();
                     $table->unsignedBigInteger('coa_id');
                     $table->unsignedBigInteger('bank_account_id')->nullable();
                     $table->unsignedBigInteger('created_by');
@@ -59,6 +69,39 @@ class UtilityExpenseController extends Controller
                     $table->index('assigned_to');
                     $table->index('coa_id');
                     $table->index('utility_type');
+                });
+            } else {
+                Schema::table('utility_expenses', function (Blueprint $table) {
+                    if (!Schema::hasColumn('utility_expenses', 'gross_amount')) {
+                        $table->decimal('gross_amount', 15, 2)->nullable()->after('amount');
+                    }
+                    if (!Schema::hasColumn('utility_expenses', 'vat_type')) {
+                        $table->string('vat_type', 30)->default('none')->after('gross_amount');
+                    }
+                    if (!Schema::hasColumn('utility_expenses', 'vat_rate')) {
+                        $table->decimal('vat_rate', 5, 2)->default(15.00)->after('vat_type');
+                    }
+                    if (!Schema::hasColumn('utility_expenses', 'vat_amount')) {
+                        $table->decimal('vat_amount', 15, 2)->default(0.00)->after('vat_rate');
+                    }
+                    if (!Schema::hasColumn('utility_expenses', 'has_withholding')) {
+                        $table->boolean('has_withholding')->default(false)->after('vat_amount');
+                    }
+                    if (!Schema::hasColumn('utility_expenses', 'withholding_rate')) {
+                        $table->decimal('withholding_rate', 5, 2)->default(3.00)->after('has_withholding');
+                    }
+                    if (!Schema::hasColumn('utility_expenses', 'withholding_amount')) {
+                        $table->decimal('withholding_amount', 15, 2)->default(0.00)->after('withholding_rate');
+                    }
+                    if (!Schema::hasColumn('utility_expenses', 'withholding_receipt')) {
+                        $table->string('withholding_receipt', 500)->nullable()->after('withholding_amount');
+                    }
+                    if (!Schema::hasColumn('utility_expenses', 'withholding_receipt_number')) {
+                        $table->string('withholding_receipt_number', 100)->nullable()->after('withholding_receipt');
+                    }
+                    if (!Schema::hasColumn('utility_expenses', 'net_amount')) {
+                        $table->decimal('net_amount', 15, 2)->nullable()->after('withholding_receipt_number');
+                    }
                 });
             }
         } catch (\Throwable $e) {
@@ -269,34 +312,113 @@ class UtilityExpenseController extends Controller
             return back()->with('error', 'This utility expense is already marked as paid.');
         }
 
+        self::ensureTableExists();
+
         $validated = $request->validate([
-            'payment_method'    => 'required|string|max:50',
-            'payment_reference' => 'nullable|string|max:100',
-            'payment_date'      => 'required|date',
-            'paid_amount'       => 'required|numeric|min:0.01',
-            'payment_notes'     => 'nullable|string',
-            'payment_receipt'   => 'nullable|file|mimes:pdf,jpg,jpeg,png,webp|max:10240',
+            'payment_method'             => 'required|string|max:50',
+            'payment_reference'          => 'nullable|string|max:100',
+            'payment_date'               => 'required|date',
+            'paid_amount'                => 'required|numeric|min:0.01',
+            'payment_notes'              => 'nullable|string',
+            'payment_receipt'            => 'nullable|file|mimes:pdf,jpg,jpeg,png,webp|max:10240',
+            'gross_amount'               => 'nullable|numeric|min:0.01',
+            'vat_type'                   => 'nullable|string|in:none,exclusive,vat_b,inclusive',
+            'vat_rate'                   => 'nullable|numeric|min:0|max:100',
+            'vat_amount'                 => 'nullable|numeric|min:0',
+            'has_withholding'            => 'nullable',
+            'withholding_rate'           => 'nullable|numeric|min:0|max:100',
+            'withholding_amount'         => 'nullable|numeric|min:0',
+            'withholding_receipt'        => 'nullable|file|mimes:pdf,jpg,jpeg,png,webp|max:10240',
+            'withholding_receipt_number' => 'nullable|string|max:100',
+            'net_amount'                 => 'nullable|numeric|min:0',
         ]);
 
-        $receiptPath = null;
+        $receiptPath = $utilityExpense->payment_receipt;
         if ($request->hasFile('payment_receipt')) {
-            $file = $request->file('payment_receipt');
-            $receiptPath = $file->store('utility_receipts', 'public');
+            if (class_exists(\App\Services\FileUploadService::class)) {
+                $receiptPath = \App\Services\FileUploadService::upload($request->file('payment_receipt'), 'utility_receipts');
+            } else {
+                $receiptPath = $request->file('payment_receipt')->store('utility_receipts', 'public');
+            }
         }
 
-        DB::transaction(function () use ($utilityExpense, $validated, $receiptPath, $user) {
-            $disbursedAmount = (float) $validated['paid_amount'];
+        $withholdingReceiptPath = $utilityExpense->withholding_receipt;
+        if ($request->hasFile('withholding_receipt')) {
+            if (class_exists(\App\Services\FileUploadService::class)) {
+                $withholdingReceiptPath = \App\Services\FileUploadService::upload($request->file('withholding_receipt'), 'withholding_receipts');
+            } else {
+                $withholdingReceiptPath = $request->file('withholding_receipt')->store('withholding_receipts', 'public');
+            }
+        }
 
+        // Tax & Withholding calculations
+        $hasWithholding = $request->boolean('has_withholding') || in_array($request->input('has_withholding'), [1, '1', true, 'true', 'on'], true);
+        $vatType = $validated['vat_type'] ?? ($utilityExpense->vat_type ?? 'none');
+        $vatRate = isset($validated['vat_rate']) ? (float)$validated['vat_rate'] : (float)($utilityExpense->vat_rate ?? 15.00);
+        $grossAmount = isset($validated['gross_amount']) ? (float)$validated['gross_amount'] : (float)($utilityExpense->gross_amount ?: $utilityExpense->amount);
+
+        // Calculate VAT
+        $vatAmount = isset($validated['vat_amount']) ? (float)$validated['vat_amount'] : 0.00;
+        if ($vatType === 'exclusive' && $vatAmount <= 0) {
+            $vatAmount = round($grossAmount * ($vatRate / 100), 2);
+        } elseif (in_array(strtolower($vatType), ['inclusive', 'vat_b']) && $vatAmount <= 0) {
+            $base = round($grossAmount / (1 + ($vatRate / 100)), 2);
+            $vatAmount = round($grossAmount - $base, 2);
+        }
+
+        // Calculate Withholding Tax (applied on base amount before VAT according to Ethiopian tax rules)
+        $withholdingRate = isset($validated['withholding_rate']) ? (float)$validated['withholding_rate'] : (float)($utilityExpense->withholding_rate ?? 3.00);
+        $withholdingAmount = 0.00;
+        if ($hasWithholding) {
+            if (isset($validated['withholding_amount']) && (float)$validated['withholding_amount'] > 0) {
+                $withholdingAmount = (float)$validated['withholding_amount'];
+            } else {
+                $taxableBase = in_array(strtolower($vatType), ['inclusive', 'vat_b'])
+                    ? round($grossAmount / (1 + ($vatRate / 100)), 2)
+                    : $grossAmount;
+                $withholdingAmount = round($taxableBase * ($withholdingRate / 100), 2);
+            }
+        }
+
+        $disbursedAmount = (float) $validated['paid_amount'];
+        $netAmount = isset($validated['net_amount']) ? (float)$validated['net_amount'] : $disbursedAmount;
+
+        DB::transaction(function () use (
+            $utilityExpense,
+            $validated,
+            $receiptPath,
+            $withholdingReceiptPath,
+            $user,
+            $disbursedAmount,
+            $grossAmount,
+            $vatType,
+            $vatRate,
+            $vatAmount,
+            $hasWithholding,
+            $withholdingRate,
+            $withholdingAmount,
+            $netAmount
+        ) {
             $utilityExpense->update([
-                'status'            => UtilityExpense::STATUS_PAID,
-                'paid_amount'       => $disbursedAmount,
-                'paid_by'           => $user->id,
-                'paid_at'           => now(),
-                'payment_method'    => $validated['payment_method'],
-                'payment_reference' => $validated['payment_reference'] ?? null,
-                'payment_date'      => $validated['payment_date'],
-                'payment_notes'     => $validated['payment_notes'] ?? null,
-                'payment_receipt'   => $receiptPath ?? $utilityExpense->payment_receipt,
+                'status'                     => UtilityExpense::STATUS_PAID,
+                'gross_amount'               => $grossAmount,
+                'vat_type'                   => $vatType,
+                'vat_rate'                   => $vatRate,
+                'vat_amount'                 => $vatAmount,
+                'has_withholding'            => $hasWithholding,
+                'withholding_rate'           => $withholdingRate,
+                'withholding_amount'         => $withholdingAmount,
+                'withholding_receipt'        => $withholdingReceiptPath,
+                'withholding_receipt_number' => $validated['withholding_receipt_number'] ?? $utilityExpense->withholding_receipt_number,
+                'net_amount'                 => $netAmount,
+                'paid_amount'                => $disbursedAmount,
+                'paid_by'                    => $user->id,
+                'paid_at'                    => now(),
+                'payment_method'             => $validated['payment_method'],
+                'payment_reference'          => $validated['payment_reference'] ?? null,
+                'payment_date'               => $validated['payment_date'],
+                'payment_notes'              => $validated['payment_notes'] ?? null,
+                'payment_receipt'            => $receiptPath,
             ]);
 
             // Deduct balance from the funding COA

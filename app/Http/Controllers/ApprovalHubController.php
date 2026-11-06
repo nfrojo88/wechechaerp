@@ -458,6 +458,8 @@ class ApprovalHubController extends Controller
         // 7. Utility Expenses (WiFi, Office Rent, Electricity, Water, Facilities)
         try {
             if (\Illuminate\Support\Facades\Schema::hasTable('utility_expenses')) {
+                \App\Http\Controllers\Finance\UtilityExpenseController::ensureTableExists();
+
                 $utilityExpenses = UtilityExpense::with([
                     'coa.manager',
                     'bankAccount.assignedStaff',
@@ -469,7 +471,7 @@ class ApprovalHubController extends Controller
                 ->get()
                 ->map(function ($exp) {
                     $amount = (float) $exp->amount;
-                    $paidAmount = (float) ($exp->paid_amount ?: $exp->amount);
+                    $paidAmount = (float) ($exp->paid_amount ?: ($exp->net_amount ?: $exp->amount));
 
                     [$statusLabel, $statusKey, $badgeColor] = match($exp->status) {
                         UtilityExpense::STATUS_PENDING   => ['Pending Payment (Assigned)', 'finance_queue', 'warning'],
@@ -496,39 +498,58 @@ class ApprovalHubController extends Controller
                         $desc .= ' — ' . $exp->description;
                     }
 
+                    $baseAmount = (float) ($exp->gross_amount > 0 ? $exp->gross_amount : $amount);
+                    $vatType = $exp->vat_type ?? 'none';
+                    $vatAmount = (float) ($exp->vat_amount ?? 0);
+                    if ($vatAmount <= 0 && in_array(strtolower($vatType), ['inclusive', 'vat_b'])) {
+                        $rate = (float) ($exp->vat_rate > 0 ? $exp->vat_rate : 15.0);
+                        $base = round($baseAmount / (1 + ($rate / 100)), 2);
+                        $vatAmount = round($baseAmount - $base, 2);
+                    }
+                    $hasVat = ($vatAmount > 0) || in_array(strtolower($vatType), ['inclusive', 'exclusive', 'vat_b', 'with_vat', 'standard']);
+                    $withholdingAmount = (float) ($exp->withholding_amount ?? 0);
+                    $withholdingRate = (float) ($exp->withholding_rate ?? 3.00);
+                    $hasWithholding = (bool) ($exp->has_withholding || $withholdingAmount > 0);
+                    $netAmount = (float) ($exp->paid_amount ?: ($exp->net_amount ?: $amount));
+
                     return (object) [
-                        'id_raw'              => $exp->id,
-                        'id_formatted'        => $exp->expense_number,
-                        'item_code'           => $exp->expense_number,
-                        'type'                => 'utility_expense',
-                        'date'                => $exp->paid_at ?? $exp->created_at,
-                        'project'             => 'Head Office / Institutional',
-                        'category'            => '⚡ ' . ($typeConfig['short_label'] ?? 'Utility') . ' Expense',
-                        'description'         => $desc,
-                        'applicant_name'      => $exp->creator?->name ?? 'Finance Head',
-                        'base_amount'         => $amount,
-                        'vat_amount'          => 0,
-                        'vat_type'            => 'none',
-                        'has_vat'             => false,
-                        'net_amount'          => $paidAmount,
-                        'status'              => $statusLabel,
-                        'status_raw'          => $exp->status,
-                        'status_key'          => $statusKey,
-                        'color'               => $badgeColor,
-                        'attachment'          => $exp->bill_attachment,
-                        'attachment_url'      => $exp->bill_attachment ? \Illuminate\Support\Facades\Storage::url($exp->bill_attachment) : null,
-                        'rejection_reason'    => null,
-                        'paid_at'             => $exp->paid_at,
-                        'paid_by_name'        => $exp->payer?->name ?? null,
-                        'payment_reference'   => $exp->payment_reference,
-                        'coa_name'            => $exp->coa ? ('[' . $exp->coa->code . '] ' . $exp->coa->name) : null,
-                        'bank_name'           => $exp->bankAccount?->bank_name ?? null,
-                        'assigned_staff_id'   => $exp->assigned_to,
-                        'assigned_staff_name' => $exp->assignedPerson?->name ?? null,
-                        'route_show'          => route('utility-expenses.index', ['search' => $exp->expense_number]),
-                        'route_approve'       => route('utility-expenses.pay', $exp->id),
-                        'route_reject'        => '#',
-                        'raw_model'           => $exp,
+                        'id_raw'                     => $exp->id,
+                        'id_formatted'               => $exp->expense_number,
+                        'item_code'                  => $exp->expense_number,
+                        'type'                       => 'utility_expense',
+                        'date'                       => $exp->paid_at ?? $exp->created_at,
+                        'project'                    => 'Head Office / Institutional',
+                        'category'                   => '⚡ ' . ($typeConfig['short_label'] ?? 'Utility') . ' Expense',
+                        'description'                => $desc,
+                        'applicant_name'             => $exp->creator?->name ?? 'Finance Head',
+                        'base_amount'                => $baseAmount,
+                        'vat_amount'                 => $vatAmount,
+                        'vat_type'                   => $vatType,
+                        'has_vat'                    => $hasVat,
+                        'net_amount'                 => $netAmount,
+                        'has_withholding'            => $hasWithholding,
+                        'withholding_rate'           => $withholdingRate,
+                        'withholding_amount'         => $withholdingAmount,
+                        'withholding_receipt'        => $exp->withholding_receipt,
+                        'withholding_receipt_number' => $exp->withholding_receipt_number,
+                        'status'                     => $statusLabel,
+                        'status_raw'                 => $exp->status,
+                        'status_key'                 => $statusKey,
+                        'color'                      => $badgeColor,
+                        'attachment'                 => $exp->bill_attachment,
+                        'attachment_url'             => $exp->bill_attachment ? \Illuminate\Support\Facades\Storage::url($exp->bill_attachment) : null,
+                        'rejection_reason'           => null,
+                        'paid_at'                    => $exp->paid_at,
+                        'paid_by_name'               => $exp->payer?->name ?? null,
+                        'payment_reference'          => $exp->payment_reference,
+                        'coa_name'                   => $exp->coa ? ('[' . $exp->coa->code . '] ' . $exp->coa->name) : null,
+                        'bank_name'                  => $exp->bankAccount?->bank_name ?? null,
+                        'assigned_staff_id'          => $exp->assigned_to,
+                        'assigned_staff_name'        => $exp->assignedPerson?->name ?? null,
+                        'route_show'                 => route('utility-expenses.index', ['search' => $exp->expense_number]),
+                        'route_approve'              => route('utility-expenses.pay', $exp->id),
+                        'route_reject'               => '#',
+                        'raw_model'                  => $exp,
                     ];
                 });
                 $items = $items->concat($utilityExpenses);

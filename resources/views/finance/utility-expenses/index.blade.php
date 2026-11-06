@@ -128,14 +128,14 @@
         <div class="card-header bg-white border-bottom-0 pt-3 px-3">
             <ul class="nav nav-tabs card-header-tabs gap-1">
                 <li class="nav-item">
-                    <a class="nav-link fw-semibold {{ $tab === 'all' ? 'active text-primary fw-bold' : 'text-secondary' }}" 
+                    <a class="nav-link fw-semibold {{ $tab === 'all' ? 'active text-primary fw-bold' : 'text-secondary' }}"
                        href="{{ route('utility-expenses.index', array_merge(request()->except('page', 'tab'), ['tab' => 'all'])) }}">
                         <i class="fa-solid fa-list me-1"></i> All Utilities (ሁሉንም)
                         <span class="badge bg-secondary ms-1">{{ $counters['total_count'] }}</span>
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link fw-semibold {{ $tab === 'pending' ? 'active text-warning-emphasis fw-bold' : 'text-secondary' }}" 
+                    <a class="nav-link fw-semibold {{ $tab === 'pending' ? 'active text-warning-emphasis fw-bold' : 'text-secondary' }}"
                        href="{{ route('utility-expenses.index', array_merge(request()->except('page', 'tab'), ['tab' => 'pending'])) }}">
                         <i class="fa-solid fa-clock-rotate-left me-1"></i> Assigned to Pay (ክፍያ በመጠባበቅ ላይ)
                         @if($counters['pending_count'] > 0)
@@ -144,7 +144,7 @@
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link fw-semibold {{ $tab === 'paid' ? 'active text-success fw-bold' : 'text-secondary' }}" 
+                    <a class="nav-link fw-semibold {{ $tab === 'paid' ? 'active text-success fw-bold' : 'text-secondary' }}"
                        href="{{ route('utility-expenses.index', array_merge(request()->except('page', 'tab'), ['tab' => 'paid'])) }}">
                         <i class="fa-solid fa-circle-check me-1"></i> Paid History (የተከፈሉ)
                         <span class="badge bg-success ms-1">{{ $counters['paid_count'] }}</span>
@@ -158,7 +158,7 @@
             <div class="p-3 bg-light border-bottom">
                 <form method="GET" action="{{ route('utility-expenses.index') }}" class="row g-2 align-items-center">
                     <input type="hidden" name="tab" value="{{ $tab }}">
-                    
+
                     <div class="col-md-3">
                         <div class="input-group input-group-sm">
                             <span class="input-group-text bg-white"><i class="fa-solid fa-magnifying-glass text-muted"></i></span>
@@ -252,9 +252,19 @@
                             </td>
                             <td>
                                 <span class="fw-bold fs-6 text-dark font-monospace">
-                                    {{ number_format($exp->amount, 2) }}
+                                    {{ number_format($exp->paid_amount ?: ($exp->net_amount ?: $exp->amount), 2) }}
                                 </span>
                                 <small class="text-muted d-block" style="font-size:0.7rem;">ETB</small>
+                                @if($exp->vat_amount > 0 || in_array($exp->vat_type, ['exclusive', 'vat_b', 'inclusive']))
+                                    <span class="badge bg-info-subtle text-info border border-info-subtle d-inline-block mt-1" style="font-size: 0.65rem;">
+                                        VAT {{ (float)$exp->vat_amount > 0 ? '+ETB ' . number_format($exp->vat_amount, 2) : '15%' }}
+                                    </span>
+                                @endif
+                                @if($exp->has_withholding || $exp->withholding_amount > 0)
+                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle d-inline-block mt-1 ms-1" style="font-size: 0.65rem;">
+                                        WHT {{ (float)$exp->withholding_amount > 0 ? '-ETB ' . number_format($exp->withholding_amount, 2) : '3%' }}
+                                    </span>
+                                @endif
                             </td>
                             <td>
                                 @if($exp->coa)
@@ -319,7 +329,12 @@
                                         <i class="fa-solid fa-receipt me-1"></i>Receipt
                                     </a>
                                 @endif
-                                @if(!$exp->bill_attachment && !$exp->payment_receipt)
+                                @if($exp->withholding_receipt)
+                                    <a href="{{ $exp->withholding_receipt_url }}" target="_blank" class="badge bg-danger-subtle text-danger border border-danger-subtle py-1 px-2 text-decoration-none shadow-xs mt-1 d-inline-block" title="View Withholding Receipt">
+                                        <i class="fa-solid fa-file-invoice-dollar me-1"></i>WHT Slip
+                                    </a>
+                                @endif
+                                @if(!$exp->bill_attachment && !$exp->payment_receipt && !$exp->withholding_receipt)
                                     <span class="text-muted small">—</span>
                                 @endif
                             </td>
@@ -354,13 +369,13 @@
                         {{-- Record Payment Modal --}}
                         @if($canPay)
                         <div class="modal fade" id="payModal{{ $exp->id }}" tabindex="-1" aria-hidden="true">
-                            <div class="modal-dialog modal-dialog-centered">
+                            <div class="modal-dialog modal-lg modal-dialog-centered">
                                 <div class="modal-content border-0 shadow rounded-4 overflow-hidden">
                                     <form method="POST" action="{{ route('utility-expenses.pay', $exp->id) }}" enctype="multipart/form-data">
                                         @csrf
                                         <div class="modal-header bg-success text-white py-3 px-4">
                                             <h5 class="modal-title fw-bold">
-                                                <i class="fa-solid fa-money-bill-wave me-2"></i>Disburse Utility Payment
+                                                <i class="fa-solid fa-money-bill-wave me-2"></i>Disburse Utility Payment: {{ $exp->expense_number }}
                                             </h5>
                                             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                                         </div>
@@ -369,18 +384,135 @@
                                             <div class="p-3 bg-light rounded-3 border mb-3">
                                                 <div class="d-flex justify-content-between align-items-center mb-1">
                                                     <span class="badge bg-primary-subtle text-primary fw-bold font-monospace">{{ $exp->expense_number }}</span>
-                                                    <span class="fw-bold fs-5 text-success">ETB {{ number_format($exp->amount, 2) }}</span>
+                                                    <span class="fw-bold fs-5 text-success">ETB {{ number_format($exp->gross_amount ?? $exp->amount, 2) }}</span>
                                                 </div>
                                                 <div class="fw-bold text-dark">{{ $exp->title }}</div>
                                                 <div class="small text-muted mt-1">
                                                     <i class="fa-solid fa-sitemap me-1 text-primary"></i>COA: <strong>[{{ $exp->coa->code ?? '' }}] {{ $exp->coa->name ?? 'General COA' }}</strong>
                                                 </div>
+                                                @if($exp->bankAccount)
+                                                <div class="small text-muted mt-1">
+                                                    <i class="fa-solid fa-building-columns me-1 text-info"></i>Bank: <strong>{{ $exp->bankAccount->bank_name }} - {{ $exp->bankAccount->account_number }}</strong>
+                                                </div>
+                                                @endif
                                             </div>
+
+                                            <!-- Gross / Base Invoice Amount -->
+                                            <div class="row g-2 mb-3">
+                                                <div class="col-md-12">
+                                                    <label class="form-label small fw-bold text-dark text-uppercase">
+                                                        <i class="fa-solid fa-calculator text-success me-1"></i>Gross / Base Invoice Amount (ETB) <span class="text-danger">*</span>
+                                                    </label>
+                                                    <input type="number" step="0.01" min="0.01" name="gross_amount" id="modalUtilityGrossAmount{{ $exp->id }}"
+                                                           class="form-control form-control-sm fw-bold fs-6 text-dark"
+                                                           value="{{ $exp->gross_amount ?? $exp->amount }}"
+                                                           oninput="recalculateUtilityDisbursement('{{ $exp->id }}')" required>
+                                                </div>
+                                            </div>
+
+                                            <!-- Utility Tax & Deduction Options (VAT & Withholding) -->
+                                            <div class="card border border-primary-subtle bg-light-subtle rounded-3 p-3 mb-3" id="utilityTaxPanel{{ $exp->id }}">
+                                                <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom">
+                                                    <strong class="text-primary small text-uppercase">
+                                                        <i class="fa-solid fa-receipt me-1"></i>Utility Tax &amp; Deduction Config (VAT &amp; Withholding)
+                                                    </strong>
+                                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-0">Tax Calculation</span>
+                                                </div>
+
+                                                <div class="row g-3">
+                                                    <!-- VAT Option -->
+                                                    <div class="col-md-6">
+                                                        <label class="form-label small fw-semibold mb-1">VAT Option (ቫት)</label>
+                                                        <select name="vat_type" id="modalUtilityVatType{{ $exp->id }}" class="form-select form-select-sm" onchange="recalculateUtilityDisbursement('{{ $exp->id }}')">
+                                                            <option value="none" {{ ($exp->vat_type ?? 'none') === 'none' ? 'selected' : '' }}>No VAT (0% / ያለ ቫት)</option>
+                                                            <option value="exclusive" {{ ($exp->vat_type ?? '') === 'exclusive' ? 'selected' : '' }}>15% VAT Added (+15% ተጨማሪ ቫት)</option>
+                                                            <option value="vat_b" {{ in_array(($exp->vat_type ?? ''), ['vat_b', 'inclusive']) ? 'selected' : '' }}>15% VAT Included / VAT B (ከቫት 15% ጋር የተካተተ - ቫት ቢ)</option>
+                                                        </select>
+                                                        <input type="hidden" name="vat_rate" id="modalUtilityVatRate{{ $exp->id }}" value="{{ $exp->vat_rate ?? 15.00 }}">
+                                                        <input type="hidden" name="vat_amount" id="modalUtilityVatAmount{{ $exp->id }}" value="{{ $exp->vat_amount ?? 0 }}">
+                                                    </div>
+
+                                                    <!-- Withholding Tax -->
+                                                    <div class="col-md-6">
+                                                        <label class="form-label small fw-semibold mb-1">Withholding Tax (የቅድመ ግብር 3%)</label>
+                                                        <div class="form-check form-switch mt-1">
+                                                            <input class="form-check-input" type="checkbox" role="switch" name="has_withholding" value="1"
+                                                                   id="modalUtilityWithholdingToggle{{ $exp->id }}"
+                                                                   {{ ($exp->has_withholding ?? false) ? 'checked' : '' }}
+                                                                   onchange="recalculateUtilityDisbursement('{{ $exp->id }}')">
+                                                            <label class="form-check-label small" for="modalUtilityWithholdingToggle{{ $exp->id }}">
+                                                                Apply 3% Service Withholding Deduction
+                                                            </label>
+                                                        </div>
+                                                        <input type="hidden" name="withholding_rate" id="modalUtilityWithholdingRate{{ $exp->id }}" value="{{ $exp->withholding_rate ?? 3.00 }}">
+                                                        <input type="hidden" name="withholding_amount" id="modalUtilityWithholdingAmount{{ $exp->id }}" value="{{ $exp->withholding_amount ?? 0 }}">
+                                                    </div>
+                                                </div>
+
+                                                <!-- Real-time Breakdown Summary Table -->
+                                                <div class="mt-3 p-2 bg-white rounded border shadow-sm">
+                                                    <div class="row text-center g-2 small">
+                                                        <div class="col-3 border-end">
+                                                            <span class="text-muted d-block" style="font-size:0.75rem;">Base Amount</span>
+                                                            <strong class="text-dark" id="displayUtilityBaseAmount{{ $exp->id }}">ETB {{ number_format($exp->gross_amount ?? $exp->amount, 2) }}</strong>
+                                                        </div>
+                                                        <div class="col-3 border-end">
+                                                            <span class="text-muted d-block" style="font-size:0.75rem;">VAT (15%)</span>
+                                                            <strong class="text-info" id="displayUtilityVatAmount{{ $exp->id }}">+ ETB {{ number_format($exp->vat_amount ?? 0, 2) }}</strong>
+                                                        </div>
+                                                        <div class="col-3 border-end">
+                                                            <span class="text-muted d-block" style="font-size:0.75rem;">Withholding (3%)</span>
+                                                            <strong class="text-danger" id="displayUtilityWhtAmount{{ $exp->id }}">- ETB {{ number_format($exp->withholding_amount ?? 0, 2) }}</strong>
+                                                        </div>
+                                                        <div class="col-3">
+                                                            <span class="text-muted d-block" style="font-size:0.75rem;">Net Payable</span>
+                                                            <strong class="text-success" id="displayUtilityNetAmount{{ $exp->id }}">ETB {{ number_format($exp->effective_payable_amount ?? $exp->amount, 2) }}</strong>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Withholding Tax Receipt & Voucher Upload Section (Visible & Required when 3% WHT is ON) -->
+                                                <div id="utilityWithholdingReceiptSection{{ $exp->id }}" class="mt-3 p-3 bg-white rounded-3 border border-danger-subtle shadow-sm" style="{{ ($exp->has_withholding ?? false) ? '' : 'display:none;' }}">
+                                                    <div class="d-flex align-items-center justify-content-between mb-2">
+                                                        <label class="form-label small fw-bold text-danger text-uppercase mb-0">
+                                                            <i class="fa-solid fa-file-invoice-dollar me-1"></i>Withholding Tax Receipt / Slip Upload (የቅድመ ግብር ደረሰኝ) <span class="text-danger">*</span>
+                                                        </label>
+                                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-0">Required for 3% WHT</span>
+                                                    </div>
+                                                    <div class="row g-2 align-items-center">
+                                                        <div class="col-md-7">
+                                                            <input type="file" name="withholding_receipt" id="modalUtilityWithholdingReceipt{{ $exp->id }}"
+                                                                   class="form-control form-control-sm disburse-wht-ocr-input"
+                                                                   data-target-input="modalUtilityWithholdingReceiptNo{{ $exp->id }}"
+                                                                   accept="image/jpeg,image/png,image/jpg,application/pdf,image/webp"
+                                                                   data-has-existing="{{ !empty($exp->withholding_receipt) ? '1' : '0' }}"
+                                                                   {{ ($exp->has_withholding ?? false) && empty($exp->withholding_receipt) ? 'required' : '' }}>
+                                                            <small class="text-muted" style="font-size:0.75rem;">Upload official Withholding receipt image or PDF.</small>
+                                                        </div>
+                                                        <div class="col-md-5">
+                                                            <input type="text" name="withholding_receipt_number" id="modalUtilityWithholdingReceiptNo{{ $exp->id }}"
+                                                                   class="form-control form-control-sm"
+                                                                   placeholder="WHT Receipt / Voucher #"
+                                                                   value="{{ $exp->withholding_receipt_number ?? '' }}">
+                                                            <small class="text-muted" style="font-size:0.75rem;">Voucher / Receipt Serial # (Optional)</small>
+                                                        </div>
+                                                    </div>
+                                                    @if(!empty($exp->withholding_receipt))
+                                                        <div class="mt-2 text-success small">
+                                                            <i class="fa-solid fa-circle-check me-1"></i> Existing slip uploaded:
+                                                            <a href="{{ $exp->withholding_receipt_url }}" target="_blank" class="fw-bold text-decoration-underline text-success">View Current Withholding Slip</a>
+                                                        </div>
+                                                    @endif
+                                                </div>
+                                            </div>
+
+                                            <input type="hidden" name="net_amount" id="modalUtilityNetAmount{{ $exp->id }}" value="{{ $exp->effective_payable_amount ?? $exp->amount }}">
 
                                             <div class="row g-3">
                                                 <div class="col-md-6">
-                                                    <label class="form-label fw-bold small">Payment Amount (ETB) <span class="text-danger">*</span></label>
-                                                    <input type="number" step="0.01" min="0.01" name="paid_amount" class="form-control fw-bold fs-6" value="{{ $exp->amount }}" required>
+                                                    <label class="form-label fw-bold small">Net Disbursed Amount (ETB) <span class="text-danger">*</span></label>
+                                                    <input type="number" step="0.01" min="0.01" name="paid_amount" id="modalUtilityPaidAmount{{ $exp->id }}" class="form-control fw-bold fs-6 text-success" value="{{ $exp->effective_payable_amount ?? $exp->amount }}" required>
+                                                    <small class="text-muted" style="font-size:0.75rem;">Actual cash / bank withdrawal amount</small>
                                                 </div>
 
                                                 <div class="col-md-6">
@@ -400,7 +532,7 @@
 
                                                 <div class="col-md-6">
                                                     <label class="form-label fw-bold small">Transaction Ref / Cheque #</label>
-                                                    <input type="text" name="payment_reference" class="form-control" placeholder="e.g. TXN-9988123 or Chq #">
+                                                    <input type="text" name="payment_reference" class="form-control font-monospace" placeholder="e.g. TXN-9988123 or Chq #">
                                                 </div>
 
                                                 <div class="col-12">
@@ -418,7 +550,7 @@
                                         <div class="modal-footer bg-light py-2 px-4">
                                             <button type="button" class="btn btn-secondary rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
                                             <button type="submit" class="btn btn-success fw-bold rounded-pill px-4">
-                                                <i class="fa-solid fa-check me-1"></i> Confirm &amp; Disburse Payment
+                                                <i class="fa-solid fa-check me-1"></i> Confirm &amp; Disburse Payment (<span id="btnUtilityPayAmount{{ $exp->id }}">ETB {{ number_format($exp->effective_payable_amount ?? $exp->amount, 2) }}</span>)
                                             </button>
                                         </div>
                                     </form>
@@ -533,6 +665,33 @@
                                             </div>
                                             @endif
 
+                                            {{-- Tax & Deduction Breakdown --}}
+                                            @if($exp->vat_amount > 0 || $exp->withholding_amount > 0 || in_array($exp->vat_type, ['exclusive', 'vat_b', 'inclusive']) || $exp->has_withholding)
+                                            <div class="col-12">
+                                                <div class="p-3 bg-white rounded-3 border">
+                                                    <h6 class="fw-bold text-primary mb-2"><i class="fa-solid fa-receipt me-1"></i>Tax &amp; Deduction Breakdown</h6>
+                                                    <div class="row text-center g-2 small">
+                                                        <div class="col-3 border-end">
+                                                            <span class="text-muted d-block" style="font-size:0.75rem;">Gross/Base</span>
+                                                            <strong class="text-dark">ETB {{ number_format($exp->gross_amount ?: $exp->amount, 2) }}</strong>
+                                                        </div>
+                                                        <div class="col-3 border-end">
+                                                            <span class="text-muted d-block" style="font-size:0.75rem;">VAT ({{ $exp->vat_type === 'vat_b' ? 'VAT B Incl.' : ($exp->vat_type === 'exclusive' ? '+15%' : '0%') }})</span>
+                                                            <strong class="text-info">{{ (float)$exp->vat_amount > 0 ? '+ ETB ' . number_format($exp->vat_amount, 2) : 'ETB 0.00' }}</strong>
+                                                        </div>
+                                                        <div class="col-3 border-end">
+                                                            <span class="text-muted d-block" style="font-size:0.75rem;">Withholding ({{ $exp->withholding_rate ?? 3 }}%)</span>
+                                                            <strong class="text-danger">{{ (float)$exp->withholding_amount > 0 ? '- ETB ' . number_format($exp->withholding_amount, 2) : 'ETB 0.00' }}</strong>
+                                                        </div>
+                                                        <div class="col-3">
+                                                            <span class="text-muted d-block" style="font-size:0.75rem;">Net Amount</span>
+                                                            <strong class="text-success">ETB {{ number_format($exp->paid_amount ?: ($exp->net_amount ?: $exp->amount), 2) }}</strong>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            @endif
+
                                             {{-- Attachments --}}
                                             <div class="col-12">
                                                 <div class="d-flex gap-2 flex-wrap">
@@ -544,6 +703,11 @@
                                                     @if($exp->payment_receipt)
                                                         <a href="{{ asset('storage/' . $exp->payment_receipt) }}" target="_blank" class="btn btn-sm btn-outline-success">
                                                             <i class="fa-solid fa-receipt me-1"></i> View Payment Receipt
+                                                        </a>
+                                                    @endif
+                                                    @if($exp->withholding_receipt)
+                                                        <a href="{{ $exp->withholding_receipt_url }}" target="_blank" class="btn btn-sm btn-outline-danger">
+                                                            <i class="fa-solid fa-file-invoice-dollar me-1"></i> View Withholding Receipt @if($exp->withholding_receipt_number) (Ref: {{ $exp->withholding_receipt_number }}) @endif
                                                         </a>
                                                     @endif
                                                 </div>
@@ -633,16 +797,16 @@
                                 <option value="" disabled selected>-- Select COA Account to Pay From --</option>
                                 @foreach($coaAccounts as $acc)
                                     @php
-                                        $managerId = $acc->assigned_to 
-                                            ?? optional($acc->manager)->id 
-                                            ?? optional($acc->bankAccounts->first())->assigned_to 
+                                        $managerId = $acc->assigned_to
+                                            ?? optional($acc->manager)->id
+                                            ?? optional($acc->bankAccounts->first())->assigned_to
                                             ?? '';
-                                        $managerName = optional($acc->manager)->name 
-                                            ?? optional(optional($acc->bankAccounts->first())->assignedStaff)->name 
+                                        $managerName = optional($acc->manager)->name
+                                            ?? optional(optional($acc->bankAccounts->first())->assignedStaff)->name
                                             ?? '';
                                     @endphp
-                                    <option value="{{ $acc->id }}" 
-                                            data-manager-id="{{ $managerId }}" 
+                                    <option value="{{ $acc->id }}"
+                                            data-manager-id="{{ $managerId }}"
                                             data-manager-name="{{ $managerName }}"
                                             data-balance="{{ number_format($acc->current_balance ?? 0, 2) }}">
                                         [{{ $acc->code }}] {{ $acc->name }} (ETB {{ number_format($acc->current_balance ?? 0, 2) }})
@@ -783,5 +947,102 @@ function onCoaChanged(selectEl) {
         }
     }
 }
+
+/**
+ * Real-time VAT and Withholding Tax calculation for Utility Expenses
+ */
+function recalculateUtilityDisbursement(id) {
+    const grossInput = document.getElementById('modalUtilityGrossAmount' + id);
+    const vatTypeSelect = document.getElementById('modalUtilityVatType' + id);
+    const whtToggle = document.getElementById('modalUtilityWithholdingToggle' + id);
+
+    if (!grossInput) return;
+    const gross = parseFloat(grossInput.value) || 0;
+    const vatType = vatTypeSelect ? vatTypeSelect.value : 'none';
+    const vatRate = 15.00;
+    const hasWht = whtToggle ? whtToggle.checked : false;
+    const whtRate = 3.00;
+
+    let vatAmount = 0.0;
+    let baseAmount = gross;
+    let whtAmount = 0.0;
+    let netAmount = gross;
+
+    if (vatType === 'exclusive') {
+        vatAmount = Math.round(gross * (vatRate / 100) * 100) / 100;
+        baseAmount = gross;
+        const totalGrossWithVat = gross + vatAmount;
+        if (hasWht) {
+            whtAmount = Math.round(baseAmount * (whtRate / 100) * 100) / 100;
+        }
+        netAmount = Math.round((totalGrossWithVat - whtAmount) * 100) / 100;
+    } else if (vatType === 'inclusive' || vatType === 'vat_b') {
+        baseAmount = Math.round((gross / (1 + (vatRate / 100))) * 100) / 100;
+        vatAmount = Math.round((gross - baseAmount) * 100) / 100;
+        if (hasWht) {
+            whtAmount = Math.round(baseAmount * (whtRate / 100) * 100) / 100;
+        }
+        netAmount = Math.round((gross - whtAmount) * 100) / 100;
+    } else {
+        baseAmount = gross;
+        vatAmount = 0.0;
+        if (hasWht) {
+            whtAmount = Math.round(baseAmount * (whtRate / 100) * 100) / 100;
+        }
+        netAmount = Math.round((gross - whtAmount) * 100) / 100;
+    }
+
+    // Set hidden inputs
+    const hiddenVat = document.getElementById('modalUtilityVatAmount' + id);
+    const hiddenWht = document.getElementById('modalUtilityWithholdingAmount' + id);
+    const hiddenNet = document.getElementById('modalUtilityNetAmount' + id);
+    const hiddenPaid = document.getElementById('modalUtilityPaidAmount' + id);
+
+    if (hiddenVat) hiddenVat.value = vatAmount.toFixed(2);
+    if (hiddenWht) hiddenWht.value = whtAmount.toFixed(2);
+    if (hiddenNet) hiddenNet.value = netAmount.toFixed(2);
+    if (hiddenPaid) hiddenPaid.value = netAmount.toFixed(2);
+
+    // Update display labels
+    const dispBase = document.getElementById('displayUtilityBaseAmount' + id);
+    const dispVat = document.getElementById('displayUtilityVatAmount' + id);
+    const dispWht = document.getElementById('displayUtilityWhtAmount' + id);
+    const dispNet = document.getElementById('displayUtilityNetAmount' + id);
+    const btnPaySpan = document.getElementById('btnUtilityPayAmount' + id);
+
+    const fmt = num => 'ETB ' + num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    if (dispBase) dispBase.innerText = fmt(baseAmount);
+    if (dispVat) dispVat.innerText = (vatAmount > 0 ? '+ ' : '') + fmt(vatAmount);
+    if (dispWht) dispWht.innerText = (whtAmount > 0 ? '- ' : '') + fmt(whtAmount);
+    if (dispNet) dispNet.innerText = fmt(netAmount);
+    if (btnPaySpan) btnPaySpan.innerText = fmt(netAmount);
+
+    // Toggle Withholding Receipt Upload Requirement and Visibility
+    const whtReceiptGroup = document.getElementById('utilityWithholdingReceiptSection' + id);
+    const whtReceiptInput = document.getElementById('modalUtilityWithholdingReceipt' + id);
+    if (whtReceiptGroup) {
+        if (hasWht) {
+            whtReceiptGroup.style.display = 'block';
+            if (whtReceiptInput && whtReceiptInput.dataset.hasExisting !== '1') {
+                whtReceiptInput.required = true;
+            }
+        } else {
+            whtReceiptGroup.style.display = 'none';
+            if (whtReceiptInput) {
+                whtReceiptInput.required = false;
+            }
+        }
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('[id^="payModal"]').forEach(function (modal) {
+        modal.addEventListener('shown.bs.modal', function () {
+            const expId = modal.id.replace('payModal', '');
+            recalculateUtilityDisbursement(expId);
+        });
+    });
+});
 </script>
 @endsection

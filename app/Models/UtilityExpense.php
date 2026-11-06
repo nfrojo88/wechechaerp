@@ -85,6 +85,16 @@ class UtilityExpense extends Model
         'reference_no',
         'due_date',
         'amount',
+        'gross_amount',
+        'vat_type',
+        'vat_rate',
+        'vat_amount',
+        'has_withholding',
+        'withholding_rate',
+        'withholding_amount',
+        'withholding_receipt',
+        'withholding_receipt_number',
+        'net_amount',
         'coa_id',
         'bank_account_id',
         'created_by',
@@ -103,11 +113,18 @@ class UtilityExpense extends Model
     ];
 
     protected $casts = [
-        'amount'       => 'decimal:2',
-        'paid_amount'  => 'decimal:2',
-        'due_date'     => 'date',
-        'payment_date' => 'date',
-        'paid_at'      => 'datetime',
+        'amount'             => 'decimal:2',
+        'gross_amount'       => 'decimal:2',
+        'vat_rate'           => 'decimal:2',
+        'vat_amount'         => 'decimal:2',
+        'has_withholding'    => 'boolean',
+        'withholding_rate'   => 'decimal:2',
+        'withholding_amount' => 'decimal:2',
+        'net_amount'         => 'decimal:2',
+        'paid_amount'        => 'decimal:2',
+        'due_date'           => 'date',
+        'payment_date'       => 'date',
+        'paid_at'            => 'datetime',
     ];
 
     // Relations
@@ -154,6 +171,92 @@ class UtilityExpense extends Model
             self::STATUS_CANCELLED => '<span class="badge bg-danger-subtle text-danger border border-danger fw-bold px-2 py-1"><i class="fa-solid fa-circle-xmark me-1"></i>Cancelled</span>',
             default                => '<span class="badge bg-warning text-dark fw-bold px-2 py-1"><i class="fa-solid fa-clock-rotate-left me-1"></i>Assigned to Pay (ክፍያ በመጠባበቅ ላይ)</span>',
         };
+    }
+
+    /**
+     * Get accessible URL for withholding tax receipt.
+     */
+    public function getWithholdingReceiptUrlAttribute(): ?string
+    {
+        if (empty($this->withholding_receipt)) {
+            return null;
+        }
+        if (class_exists(\App\Services\FileUploadService::class)) {
+            return \App\Services\FileUploadService::url($this->withholding_receipt);
+        }
+        if (str_starts_with($this->withholding_receipt, 'http://') || str_starts_with($this->withholding_receipt, 'https://')) {
+            return $this->withholding_receipt;
+        }
+        return asset('storage/' . ltrim($this->withholding_receipt, '/'));
+    }
+
+    /**
+     * Whether this utility bill has VAT applied.
+     */
+    public function getHasVatAttribute(): bool
+    {
+        return ((float)($this->vat_amount ?? 0) > 0)
+            || in_array(strtolower($this->vat_type ?? 'none'), ['inclusive', 'exclusive', 'vat_b', 'with_vat', 'standard']);
+    }
+
+    /**
+     * Calculate Withholding Tax deduction following Ethiopian tax regulations.
+     */
+    public function getCalculatedWithholdingAmountAttribute(): float
+    {
+        if (!$this->has_withholding && empty($this->withholding_receipt)) {
+            return 0.0;
+        }
+
+        if ((float)($this->withholding_amount ?? 0) > 0) {
+            return round((float)$this->withholding_amount, 2);
+        }
+
+        $gross = (float)($this->gross_amount > 0 ? $this->gross_amount : $this->amount);
+        $vatRate = (float)($this->vat_rate ?? 15.00);
+        $vatType = $this->vat_type ?? 'none';
+        $whtRate = (float)($this->withholding_rate ?: 3.00);
+
+        // In Ethiopian tax regulations, WHT is calculated on the taxable base before VAT
+        $taxableBase = in_array(strtolower($vatType), ['inclusive', 'vat_b'])
+            ? round($gross / (1 + ($vatRate / 100)), 2)
+            : $gross;
+
+        return round($taxableBase * ($whtRate / 100), 2);
+    }
+
+    /**
+     * Get effective payable / net amount with strict WHT and VAT.
+     */
+    public function getEffectivePayableAmountAttribute(): float
+    {
+        if ((float)($this->net_amount ?? 0) > 0) {
+            return (float)$this->net_amount;
+        }
+
+        if ((float)($this->paid_amount ?? 0) > 0) {
+            return (float)$this->paid_amount;
+        }
+
+        $gross = (float)($this->gross_amount > 0 ? $this->gross_amount : $this->amount);
+        $wht = $this->calculated_withholding_amount;
+
+        if ($wht > 0) {
+            $vatType = strtolower($this->vat_type ?? 'none');
+            $vatAmount = (float)($this->vat_amount ?? 0);
+
+            if ($vatType === 'exclusive') {
+                return max(0.0, round(($gross + $vatAmount) - $wht, 2));
+            }
+            return max(0.0, round($gross - $wht, 2));
+        }
+
+        if (strtolower($this->vat_type ?? 'none') === 'exclusive') {
+            $vatAmount = (float)($this->vat_amount ?? 0);
+            return round($gross + $vatAmount, 2);
+        }
+
+        return round($gross, 2);
     }
 
     public static function generateNextNumber(): string
