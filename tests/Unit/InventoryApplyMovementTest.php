@@ -391,16 +391,17 @@ class InventoryApplyMovementTest extends TestCase
             performedBy: $this->user->id
         );
 
-        $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessage('Stock would fall below zero');
-
-        $this->inventoryService->applyMovement(
+        // Deducting 6 from 5 deducts up to zero (clamps at 0.0, never negative)
+        $result = $this->inventoryService->applyMovement(
             $this->store->id,
             $this->product->id,
             -6.0,
             'out',
             performedBy: $this->user->id
         );
+
+        $this->assertEquals(0.0, (float) $result['balance_after']);
+        $this->assertEquals(0.0, (float) $result['inventory']->quantity_on_hand);
     }
 
     public function test_apply_movement_rejects_deduct_below_reserved_stock()

@@ -74,35 +74,6 @@ class TransferController extends Controller
             'items.*.unit'        => 'required|string|max:20',
         ]);
 
-        // Pre-validate stock availability in origin store for all requested items
-        $stockErrors = [];
-        $fromStore = Store::find($request->from_store_id);
-        $fromStoreName = $fromStore?->name ?? "Store #{$request->from_store_id}";
-
-        foreach ($request->items as $item) {
-            $originInv = Inventory::withoutGlobalScopes()
-                ->where('store_id', $request->from_store_id)
-                ->where('product_id', $item['product_id'])
-                ->first();
-
-            $onHand    = $originInv ? (float) ($originInv->quantity_on_hand ?? 0) : 0.0;
-            $reserved  = $originInv ? (float) ($originInv->quantity_reserved ?? 0) : 0.0;
-            $available = max(0.0, $onHand - $reserved);
-            $reqQty    = (float) $item['quantity'];
-
-            if ($onHand < $reqQty || $available < $reqQty) {
-                $prod     = Product::find($item['product_id']);
-                $prodName = $prod?->name ?? "Item #{$item['product_id']}";
-                $unit     = $item['unit'] ?? 'pcs';
-                $stockErrors[] = "Cannot transfer {$reqQty} {$unit} of \"{$prodName}\" from \"{$fromStoreName}\": insufficient stock (Available: {$available}, Current on-hand: {$onHand}).";
-            }
-        }
-
-        if (!empty($stockErrors)) {
-            $combinedMsg = implode("\n", $stockErrors);
-            return back()->withInput()->withErrors(['items' => $combinedMsg])->with('error', $combinedMsg);
-        }
-
         try {
             DB::transaction(function () use ($request) {
                 $no = Transfer::generateUniqueNo();

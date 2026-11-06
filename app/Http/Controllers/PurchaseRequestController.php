@@ -746,8 +746,8 @@ class PurchaseRequestController extends Controller
         $fromStore = Store::find($request->from_store_id);
         $fromStoreName = $fromStore?->name ?? "Store #{$request->from_store_id}";
 
-        // Validate stock availability in the selected source store before any changes
-        $stockErrors = [];
+        // Deduct up to zero: check if any items exceed available stock to note in remarks/success
+        $deductedToZeroItems = [];
         foreach ($request->items as $itemData) {
             $prItem = PurchaseRequestItem::where('purchase_request_id', $purchaseRequest->id)
                 ->where('id', $itemData['item_id'])
@@ -763,43 +763,11 @@ class PurchaseRequestController extends Controller
                 ->where('product_id', $prItem->product_id)
                 ->first();
 
-            $onHand    = $originInv ? (float) $originInv->quantity_on_hand : 0.0;
-            $reserved  = $originInv ? (float) $originInv->quantity_reserved : 0.0;
-            $available = max(0.0, $onHand - $reserved);
-
-            if ($onHand < $transferQty || $available < $transferQty) {
+            $onHand = $originInv ? (float) $originInv->quantity_on_hand : 0.0;
+            if ($onHand < $transferQty) {
                 $prodName = $prItem->product?->name ?? "Item #{$prItem->product_id}";
-                $unit     = $prItem->unit ?? 'pcs';
-
-                // Look for alternative stores with available stock
-                $altStores = Inventory::withoutGlobalScopes()
-                    ->with('store')
-                    ->where('product_id', $prItem->product_id)
-                    ->where('store_id', '!=', $request->from_store_id)
-                    ->where('quantity_on_hand', '>', 0)
-                    ->get()
-                    ->map(function ($inv) use ($unit) {
-                        $stAvail = max(0.0, (float)$inv->quantity_on_hand - (float)$inv->quantity_reserved);
-                        return ($inv->store->name ?? 'Store #' . $inv->store_id) . ' (' . number_format($stAvail, 1) . ' ' . $unit . ' available)';
-                    })
-                    ->filter()
-                    ->implode(', ');
-
-                $tip = !empty($altStores)
-                    ? " Alternative store(s) with stock: {$altStores}."
-                    : " No other stores currently have stock on hand. Please route this item for purchase instead.";
-
-                if ($onHand <= 0) {
-                    $stockErrors[] = "Cannot transfer {$transferQty} {$unit} of \"{$prodName}\" from \"{$fromStoreName}\": this store currently has NO stock (Current on-hand: {$onHand}).{$tip}";
-                } else {
-                    $stockErrors[] = "Cannot transfer {$transferQty} {$unit} of \"{$prodName}\" from \"{$fromStoreName}\": insufficient stock (Available: {$available}, Current on-hand: {$onHand}).{$tip}";
-                }
+                $deductedToZeroItems[] = $prodName;
             }
-        }
-
-        if (!empty($stockErrors)) {
-            $combinedMsg = implode("\n", $stockErrors);
-            return back()->withInput()->withErrors(['transfer_error' => $combinedMsg])->with('error', $combinedMsg);
         }
 
         try {
@@ -915,6 +883,9 @@ class PurchaseRequestController extends Controller
 
         $remaining = $purchaseRequest->fresh()->items()->count();
         $msg = "Store Transfer #{$createdTransfer->transfer_no} created with {$transferredCount} item(s).";
+        if (!empty($deductedToZeroItems)) {
+            $msg .= " Origin store stock was deducted up to zero (capped at 0.00, not negative).";
+        }
         if ($remaining > 0) {
             $msg .= " Remaining {$remaining} item(s) are in PR #{$purchaseRequest->pr_no} ready to be sent to Purchase Team.";
         }
@@ -1001,45 +972,6 @@ class PurchaseRequestController extends Controller
         $createdTransfers = [];
         $transferItemsCount = 0;
         $purchaseItemsCount = 0;
-
-        // Pre-validate stock for all items allocated to 'transfer'
-        $stockErrors = [];
-        foreach ($request->allocations as $alloc) {
-            if (($alloc['action'] ?? null) !== 'transfer') continue;
-
-            $fromStoreId = $alloc['from_store_id'] ?? null;
-            if (!$fromStoreId) continue;
-
-            $prItem = PurchaseRequestItem::where('purchase_request_id', $purchaseRequest->id)
-                ->where('id', $alloc['item_id'])
-                ->first();
-            if (!$prItem || !$prItem->product_id) continue;
-
-            $transferQty = (float)($alloc['transfer_qty'] ?? 0);
-            $qty = min($transferQty > 0 ? $transferQty : (float)$prItem->quantity, (float)$prItem->quantity);
-            if ($qty <= 0) continue;
-
-            $originInv = Inventory::withoutGlobalScopes()
-                ->where('store_id', $fromStoreId)
-                ->where('product_id', $prItem->product_id)
-                ->first();
-
-            $onHand    = $originInv ? (float) $originInv->quantity_on_hand : 0.0;
-            $reserved  = $originInv ? (float) $originInv->quantity_reserved : 0.0;
-            $available = max(0.0, $onHand - $reserved);
-
-            if ($onHand < $qty || $available < $qty) {
-                $prodName = $prItem->product?->name ?? "Item #{$prItem->product_id}";
-                $fromStoreName = Store::find($fromStoreId)?->name ?? "Store #{$fromStoreId}";
-                $unit = $prItem->unit ?? 'pcs';
-                $stockErrors[] = "Cannot transfer {$qty} {$unit} of \"{$prodName}\" from \"{$fromStoreName}\": insufficient stock (Available: {$available}, Current on-hand: {$onHand}).";
-            }
-        }
-
-        if (!empty($stockErrors)) {
-            $combinedMsg = implode("\n", $stockErrors);
-            return back()->withInput()->withErrors(['allocation_error' => $combinedMsg])->with('error', $combinedMsg);
-        }
 
         try {
             DB::transaction(function () use ($request, $purchaseRequest, $destinationStoreId, &$createdTransfers, &$transferItemsCount, &$purchaseItemsCount) {

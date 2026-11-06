@@ -5221,25 +5221,27 @@ function updateSelectiveTransferStockDisplay() {
 
         if (availableInStore <= 0) {
             hasShortfall = true;
-            shortfallMessages.push(`<strong>${item.name}</strong>: 0 available in this store (On-hand: ${onHandInStore}, Requested: ${reqQty} ${item.unit})`);
+            shortfallMessages.push(`<strong>${item.name}</strong>: Current stock is ${onHandInStore} (Deduction will cap at 0.00)`);
             if (badgeContainer) {
-                badgeContainer.innerHTML = `<span class="badge bg-danger small"><i class="fas fa-times-circle me-1"></i>0 available in this store (On-hand: ${onHandInStore})</span>`;
+                badgeContainer.innerHTML = `<span class="badge bg-warning text-dark small"><i class="fas fa-arrow-down me-1"></i>Deducts to 0 in store (On-hand: ${onHandInStore})</span>`;
             }
-            if (qtyInput) qtyInput.classList.add('is-invalid');
+            if (qtyInput) qtyInput.classList.remove('is-invalid');
             if (feedback) {
                 feedback.style.display = 'block';
-                feedback.textContent = `Insufficient stock in this store (0 available)`;
+                feedback.className = 'small text-muted mt-1';
+                feedback.textContent = `Stock will be deducted up to 0.00 (not negative)`;
             }
         } else if (reqQty > availableInStore) {
             hasShortfall = true;
-            shortfallMessages.push(`<strong>${item.name}</strong>: Only ${availableInStore} ${item.unit} available (Requested: ${reqQty})`);
+            shortfallMessages.push(`<strong>${item.name}</strong>: ${availableInStore} ${item.unit} available (Deduction will cap at 0.00)`);
             if (badgeContainer) {
-                badgeContainer.innerHTML = `<span class="badge bg-warning text-dark small"><i class="fas fa-exclamation-triangle me-1"></i>Partial: ${availableInStore} ${item.unit} available</span>`;
+                badgeContainer.innerHTML = `<span class="badge bg-warning text-dark small"><i class="fas fa-arrow-down me-1"></i>Deducts to 0 in store (Avail: ${availableInStore})</span>`;
             }
-            if (qtyInput) qtyInput.classList.add('is-invalid');
+            if (qtyInput) qtyInput.classList.remove('is-invalid');
             if (feedback) {
                 feedback.style.display = 'block';
-                feedback.textContent = `Only ${availableInStore} available in this store`;
+                feedback.className = 'small text-muted mt-1';
+                feedback.textContent = `Stock will be deducted up to 0.00 (not negative)`;
             }
         } else {
             if (badgeContainer) {
@@ -5255,20 +5257,20 @@ function updateSelectiveTransferStockDisplay() {
     if (alertBox) {
         alertBox.style.display = 'block';
         if (hasShortfall) {
-            alertBox.className = 'alert alert-danger py-2 small mb-3';
+            alertBox.className = 'alert alert-warning py-2 small mb-3';
             alertBox.innerHTML = `
                 <div class="d-flex align-items-center mb-1">
-                    <i class="fas fa-triangle-exclamation me-2 fs-6"></i>
-                    <strong>Insufficient Stock in "${selectedStoreName}":</strong>
+                    <i class="fas fa-circle-info me-2 fs-6 text-warning"></i>
+                    <strong>Stock Notice for "${selectedStoreName}":</strong>
                 </div>
                 <ul class="mb-1 ps-3">
                     ${shortfallMessages.map(m => `<li>${m}</li>`).join('')}
                 </ul>
-                <div class="mt-1">
-                    Please choose a store marked with <strong>★ In Stock</strong>, reduce transfer quantity, or route to <strong>Purchase Team</strong>.
+                <div class="mt-1 small">
+                    <i class="fas fa-check-circle text-success me-1"></i> Stock will be deducted up to zero (capped at 0.00 — will not fall below zero). You can proceed with this transfer.
                 </div>
             `;
-            if (submitBtn) submitBtn.disabled = true;
+            if (submitBtn) submitBtn.disabled = false;
         } else {
             alertBox.className = 'alert alert-success py-2 small mb-3';
             alertBox.innerHTML = `<i class="fas fa-circle-check me-1"></i> All selected items are verified in stock in <strong>${selectedStoreName}</strong>. Ready to transfer.`;

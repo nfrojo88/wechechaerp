@@ -36,6 +36,16 @@ class Inventory extends Model
 
     protected static function booted()
     {
+        static::saving(function (Inventory $inventory) {
+            // Guarantee stock on hand never falls below zero: deduct up to zero
+            if ($inventory->quantity_on_hand !== null && (float)$inventory->quantity_on_hand < 0) {
+                $inventory->quantity_on_hand = 0;
+            }
+            if ($inventory->quantity_reserved !== null && (float)$inventory->quantity_reserved < 0) {
+                $inventory->quantity_reserved = 0;
+            }
+        });
+
         static::saved(function (Inventory $inventory) {
             if (static::$isSyncing) {
                 return;

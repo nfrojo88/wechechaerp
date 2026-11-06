@@ -200,21 +200,13 @@ class SelectiveTransferStockValidationTest extends TestCase
         ]);
     }
 
-    public function test_selective_transfer_blocks_deduction_when_stock_is_negative()
+    public function test_selective_transfer_deducts_up_to_zero_when_stock_is_negative()
     {
         // Setup negative stock (-6.0) in origin store matching user scenario
         Inventory::create([
             'store_id' => $this->storeOrigin->id,
             'product_id' => $this->product->id,
             'quantity_on_hand' => -6.0,
-            'quantity_reserved' => 0.0,
-        ]);
-
-        // Stock available in alternative store
-        Inventory::create([
-            'store_id' => $this->storeAlternative->id,
-            'product_id' => $this->product->id,
-            'quantity_on_hand' => 12.0,
             'quantity_reserved' => 0.0,
         ]);
 
@@ -237,23 +229,19 @@ class SelectiveTransferStockValidationTest extends TestCase
 
         $response = $controller->selectiveTransfer($request, $this->pr);
 
-        // Verify response is a redirect back with error, NOT an unhandled 500 InvalidArgumentException
         $this->assertTrue($response->isRedirection());
-        $session = session()->all();
-        $this->assertArrayHasKey('errors', $session);
-        $errors = $session['errors']->getBag('default');
-        $this->assertTrue($errors->has('transfer_error'));
+        $this->assertEquals(1, \App\Models\Transfer::count());
 
-        $errorMsg = $errors->first('transfer_error');
-        $this->assertStringContainsString('Cannot transfer 4 pcs of "Reinforcement Bar 16mm" from "Site Store"', $errorMsg);
-        $this->assertStringContainsString('NO stock (Current on-hand: -6)', $errorMsg);
-        $this->assertStringContainsString('Central Warehouse', $errorMsg);
+        // Origin store was -6.0, now deducted up to zero (never negative!)
+        $originInv = Inventory::where('store_id', $this->storeOrigin->id)->where('product_id', $this->product->id)->first();
+        $this->assertEquals(0.0, (float)$originInv->quantity_on_hand);
 
-        // Ensure no transfer record was created
-        $this->assertEquals(0, \App\Models\Transfer::count());
+        // Destination store received the 4 units
+        $destInv = Inventory::where('store_id', $this->storeDest->id)->where('product_id', $this->product->id)->first();
+        $this->assertEquals(4.0, (float)$destInv->quantity_on_hand);
     }
 
-    public function test_selective_transfer_blocks_deduction_when_stock_is_insufficient()
+    public function test_selective_transfer_deducts_up_to_zero_when_stock_is_insufficient()
     {
         // Setup on-hand = 2.0 (less than requested 4.0)
         Inventory::create([
@@ -283,13 +271,15 @@ class SelectiveTransferStockValidationTest extends TestCase
         $response = $controller->selectiveTransfer($request, $this->pr);
 
         $this->assertTrue($response->isRedirection());
-        $session = session()->all();
-        $this->assertArrayHasKey('errors', $session);
-        $errors = $session['errors']->getBag('default');
-        $this->assertTrue($errors->has('transfer_error'));
-        $this->assertStringContainsString('insufficient stock (Available: 2, Current on-hand: 2)', $errors->first('transfer_error'));
+        $this->assertEquals(1, \App\Models\Transfer::count());
 
-        $this->assertEquals(0, \App\Models\Transfer::count());
+        // Origin on-hand 2.0 deducted up to zero (0.0, never negative!)
+        $originInv = Inventory::where('store_id', $this->storeOrigin->id)->where('product_id', $this->product->id)->first();
+        $this->assertEquals(0.0, (float)$originInv->quantity_on_hand);
+
+        // Destination store received 4.0
+        $destInv = Inventory::where('store_id', $this->storeDest->id)->where('product_id', $this->product->id)->first();
+        $this->assertEquals(4.0, (float)$destInv->quantity_on_hand);
     }
 
     public function test_selective_transfer_succeeds_when_stock_is_sufficient()
@@ -334,7 +324,7 @@ class SelectiveTransferStockValidationTest extends TestCase
         $this->assertEquals(6.0, (float)$originInv->quantity_on_hand);
     }
 
-    public function test_transfer_controller_store_blocks_insufficient_stock()
+    public function test_transfer_controller_store_deducts_up_to_zero()
     {
         // Setup only 1 unit on hand
         Inventory::create([
@@ -365,13 +355,14 @@ class SelectiveTransferStockValidationTest extends TestCase
         $response = $controller->store($request);
 
         $this->assertTrue($response->isRedirection());
-        $session = session()->all();
-        $this->assertArrayHasKey('errors', $session);
-        $errors = $session['errors']->getBag('default');
-        $this->assertTrue($errors->has('items'));
-        $this->assertStringContainsString('insufficient stock (Available: 1, Current on-hand: 1)', $errors->first('items'));
+        $this->assertEquals(1, \App\Models\Transfer::count());
 
-        // No transfer created
-        $this->assertEquals(0, \App\Models\Transfer::count());
+        // Origin on-hand 1.0 deducted up to zero (0.0, never negative!)
+        $originInv = Inventory::where('store_id', $this->storeOrigin->id)->where('product_id', $this->product->id)->first();
+        $this->assertEquals(0.0, (float)$originInv->quantity_on_hand);
+
+        // Destination store received 5.0
+        $destInv = Inventory::where('store_id', $this->storeDest->id)->where('product_id', $this->product->id)->first();
+        $this->assertEquals(5.0, (float)$destInv->quantity_on_hand);
     }
 }

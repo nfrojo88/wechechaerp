@@ -70,22 +70,11 @@ class InventoryService
             $newOnHand   = round($balanceBefore + $quantityDelta, 3);
             $newReserved = round($reservedBefore + $reservedDelta, 3);
 
-            // 1. Strict Rule: Quantity on hand cannot fall below zero
-            if ($newOnHand < -0.0001) {
-                throw new \InvalidArgumentException(
-                    "Cannot deduct " . abs($quantityDelta) . " units. Stock would fall below zero (Current on-hand: {$balanceBefore})."
-                );
-            }
+            // 1. Rule: Quantity on hand cannot fall below zero (deduct up to zero, never negative)
             $newOnHand = max(0.0, $newOnHand);
 
-            // 2. Strict Rule: Quantity on hand cannot fall below reserved quantity (Assigned stock protection)
-            if ($newOnHand < $newReserved - 0.0001) {
-                $available = max(0.0, $balanceBefore - $reservedBefore);
-                throw new \InvalidArgumentException(
-                    "Cannot deduct " . abs($quantityDelta) . " units: only {$available} available, {$reservedBefore} are currently assigned/reserved to staff."
-                );
-            }
-            $newReserved = max(0.0, $newReserved);
+            // 2. Rule: Reserved quantity cannot exceed on-hand quantity or fall below zero
+            $newReserved = max(0.0, min($newOnHand, $newReserved));
 
             // 3. Cost calculation on stock-in
             if ($quantityDelta > 0 && $unitCost !== null && $unitCost > 0) {
