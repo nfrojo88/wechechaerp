@@ -170,8 +170,14 @@ class ProductController extends Controller
 
     public function destroy(Product $product)
     {
-        $product->delete();
-        return redirect()->route('products.index')->with('success', 'Product archived.');
+        $name = $product->name;
+        $sku = $product->sku;
+
+        // Completely and permanently delete this material and all its references from the entire system
+        app(\App\Services\ProductPurgeService::class)->purgeProduct($product);
+
+        $skuLabel = !empty($sku) ? " [SKU: {$sku}]" : "";
+        return redirect()->route('products.index')->with('success', "Material '{$name}'{$skuLabel} has been completely and permanently deleted from the entire system.");
     }
 
     /**

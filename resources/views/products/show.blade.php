@@ -28,6 +28,14 @@
             <i class="fas fa-trash-can me-1"></i> Complete Delete (SKU)
         </button>
         @endif
+        @can('products.delete')
+        <form method="POST" action="{{ route('products.destroy', $product) }}" class="d-inline" onsubmit="return confirm('Are you sure you want to completely delete {{ addslashes($product->name) }} from the entire system? It will be permanently removed from inventory, fixed assets, and catalog.')">
+            @csrf @method('DELETE')
+            <button type="submit" class="btn btn-outline-danger shadow-sm">
+                <i class="fas fa-trash-can me-1"></i> Delete Material
+            </button>
+        </form>
+        @endcan
         @can('products.edit')
         <a href="{{ route('products.edit', $product) }}" class="btn btn-primary">
             <i class="fas fa-pen me-1"></i> Edit Product

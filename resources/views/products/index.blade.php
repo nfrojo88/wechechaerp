@@ -274,10 +274,10 @@
                                 @endcan
                                 @can('products.delete')
                                 <form method="POST" action="{{ route('products.destroy', $product) }}"
-                                      class="d-inline" onsubmit="return confirm('Archive this product?')">
+                                      class="d-inline" onsubmit="return confirm('Are you sure you want to completely delete {{ addslashes($product->name) }} from the entire system? It will be permanently removed from inventory, fixed assets, and catalog.')">
                                     @csrf @method('DELETE')
-                                    <button class="btn btn-sm btn-act-delete" title="Archive">
-                                        <i class="fas fa-archive" style="font-size:.75rem;"></i>
+                                    <button class="btn btn-sm btn-act-delete" title="Completely Delete Material from System">
+                                        <i class="fas fa-trash-can" style="font-size:.75rem;"></i>
                                     </button>
                                 </form>
                                 @endcan

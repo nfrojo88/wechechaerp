@@ -25,6 +25,21 @@ class ProductPurgeService
     }
 
     /**
+     * Completely and permanently purge a Product model instance from the entire system.
+     *
+     * @param Product $product
+     * @return bool True if purged successfully.
+     */
+    public function purgeProduct(Product $product): bool
+    {
+        return $this->purgeInternal(
+            productIds: [$product->id],
+            sku: $product->sku,
+            productName: $product->name
+        );
+    }
+
+    /**
      * Completely and permanently purge multiple material / product SKUs in bulk.
      *
      * @param array $skus
@@ -87,57 +102,85 @@ class ProductPurgeService
      */
     protected function purgeSingleSkuInternal(string $sku): bool
     {
-        $sku = trim($sku);
-        if (empty($sku)) return false;
+        return $this->purgeInternal([], $sku);
+    }
+
+    /**
+     * Internal worker to purge product IDs and/or SKU and all cascades within an atomic transaction.
+     */
+    public function purgeInternal(array $productIds = [], ?string $sku = null, ?string $productName = null): bool
+    {
+        $sku = trim((string)$sku);
 
         // Strip numeric list prefix e.g. "1\tFA-BUST", "1. FA-BUST", "1 FA-BUST"
         if (preg_match('/^[0-9]+[\.\t\s]+(.+)$/', $sku, $m)) {
             $sku = trim($m[1]);
         }
 
-        $variants = [$sku, strtoupper($sku), strtolower($sku)];
-        if (str_contains($sku, ' ')) {
-            $variants[] = str_replace(' ', '', $sku);
-            $variants[] = str_replace(' ', '-', $sku);
-            $variants[] = str_replace(' ', '_', $sku);
+        $variants = [];
+        if (!empty($sku)) {
+            $variants = [$sku, strtoupper($sku), strtolower($sku)];
+            if (str_contains($sku, ' ')) {
+                $variants[] = str_replace(' ', '', $sku);
+                $variants[] = str_replace(' ', '-', $sku);
+                $variants[] = str_replace(' ', '_', $sku);
+            }
+            if (str_starts_with(strtoupper($sku), 'FE-')) {
+                $variants[] = 'FA-' . substr(strtoupper($sku), 3);
+            }
+            $variants = array_values(array_unique(array_filter($variants)));
         }
-        if (str_starts_with(strtoupper($sku), 'FE-')) {
-            $variants[] = 'FA-' . substr(strtoupper($sku), 3);
-        }
-        $variants = array_values(array_unique(array_filter($variants)));
         $variantsLower = array_map('strtolower', $variants);
 
-        $skuUpper = strtoupper($sku);
-        $skuLower = strtolower($sku);
+        $skuUpper = !empty($sku) ? strtoupper($sku) : '';
+        $skuLower = !empty($sku) ? strtolower($sku) : '';
 
         // 1. Resolve matching products (including soft-deleted)
-        $productIds = [];
         if (Schema::hasTable('products')) {
-            try {
-                $matchingProducts = Product::withTrashed()
-                    ->where(function ($q) use ($variants, $variantsLower) {
-                        $q->whereIn('sku', $variants)
-                          ->orWhereIn(DB::raw('LOWER(TRIM(sku))'), $variantsLower);
-                    })
-                    ->get();
-                $productIds = $matchingProducts->pluck('id')->toArray();
-            } catch (\Throwable $e) {}
+            if (!empty($variants)) {
+                try {
+                    $matchingProducts = Product::withTrashed()
+                        ->where(function ($q) use ($variants, $variantsLower) {
+                            $q->whereIn('sku', $variants)
+                              ->orWhereIn(DB::raw('LOWER(TRIM(sku))'), $variantsLower);
+                        })
+                        ->get();
+                    $foundIds = $matchingProducts->pluck('id')->toArray();
+                    $productIds = array_merge($productIds, $foundIds);
+                    if (empty($productName) && $matchingProducts->isNotEmpty()) {
+                        $productName = $matchingProducts->first()->name;
+                    }
+                } catch (\Throwable $e) {}
 
-            // Also check raw query in case model global scopes, soft delete settings, or mutators hide it
-            try {
-                $rawIds = DB::table('products')
-                    ->where(function ($q) use ($variants, $variantsLower) {
-                        $q->whereIn('sku', $variants)
-                          ->orWhereIn(DB::raw('LOWER(TRIM(sku))'), $variantsLower);
-                        foreach ($variants as $v) {
-                            $q->orWhere('sku', 'like', $v . '_DELETED_%');
-                        }
-                    })
-                    ->pluck('id')
-                    ->toArray();
-                $productIds = array_unique(array_merge($productIds, $rawIds));
-            } catch (\Throwable $e) {}
+                // Also check raw query in case model global scopes, soft delete settings, or mutators hide it
+                try {
+                    $rawIds = DB::table('products')
+                        ->where(function ($q) use ($variants, $variantsLower) {
+                            $q->whereIn('sku', $variants)
+                              ->orWhereIn(DB::raw('LOWER(TRIM(sku))'), $variantsLower);
+                            foreach ($variants as $v) {
+                                $q->orWhere('sku', 'like', $v . '_DELETED_%');
+                            }
+                        })
+                        ->pluck('id')
+                        ->toArray();
+                    $productIds = array_unique(array_merge($productIds, $rawIds));
+                } catch (\Throwable $e) {}
+            }
+
+            // Also check by exact product name if available
+            if (!empty($productName)) {
+                try {
+                    $nameIds = Product::withTrashed()
+                        ->whereRaw('LOWER(TRIM(name)) = ?', [strtolower(trim($productName))])
+                        ->pluck('id')
+                        ->toArray();
+                    $productIds = array_unique(array_merge($productIds, $nameIds));
+                } catch (\Throwable $e) {}
+            }
         }
+
+        $productIds = array_values(array_unique(array_filter($productIds)));
 
         // 2. Resolve matching Fixed Assets (code_prefix, sku, description, or linked product_id)
         $faIds = [];
@@ -158,7 +201,7 @@ class ProductPurgeService
             $faQuery = DB::table('fixed_assets');
             $hasCondition = false;
 
-            if (Schema::hasColumn('fixed_assets', 'code_prefix')) {
+            if (Schema::hasColumn('fixed_assets', 'code_prefix') && !empty($prefixes)) {
                 $faQuery->where(function ($q) use ($prefixes) {
                     $q->whereIn('code_prefix', $prefixes)
                       ->orWhereIn(DB::raw('LOWER(TRIM(code_prefix))'), array_map('strtolower', $prefixes));
@@ -166,14 +209,14 @@ class ProductPurgeService
                 $hasCondition = true;
             }
 
-            if (Schema::hasColumn('fixed_assets', 'sku')) {
+            if (Schema::hasColumn('fixed_assets', 'sku') && !empty($variants)) {
                 $faQuery->orWhere(function ($q) use ($variants) {
                     $q->whereIn('sku', $variants);
                 });
                 $hasCondition = true;
             }
 
-            if (Schema::hasColumn('fixed_assets', 'description')) {
+            if (Schema::hasColumn('fixed_assets', 'description') && !empty($variants)) {
                 $faQuery->orWhere(function ($q) use ($variants) {
                     foreach ($variants as $v) {
                         $q->orWhere('description', 'like', "%SKU: {$v}%");
@@ -183,9 +226,12 @@ class ProductPurgeService
             }
 
             if (Schema::hasColumn('fixed_assets', 'name')) {
-                $faQuery->orWhere(function ($q) use ($variants) {
+                $faQuery->orWhere(function ($q) use ($variants, $productName) {
                     foreach ($variants as $v) {
                         $q->orWhere('name', 'like', "%{$v}%");
+                    }
+                    if (!empty($productName)) {
+                        $q->orWhereRaw('LOWER(TRIM(name)) = ?', [strtolower(trim($productName))]);
                     }
                 });
                 $hasCondition = true;
@@ -206,7 +252,7 @@ class ProductPurgeService
         }
 
         // 3. Perform atomic cascaded purge
-        DB::transaction(function () use ($productIds, $faIds, $sku, $skuUpper, $skuLower) {
+        DB::transaction(function () use ($productIds, $faIds, $sku, $skuUpper, $skuLower, $variants, $productName) {
             $safeDeleteByColumn = function (string $table, string $column, array $ids) {
                 if (empty($ids)) return;
                 try {
@@ -354,6 +400,30 @@ class ProductPurgeService
                         ->delete();
                 }
             } catch (\Throwable $e) {}
+
+            // 16. Record in purged_materials so seeder / sync NEVER recreates it
+            if (Schema::hasTable('purged_materials')) {
+                try {
+                    $skusToRecord = array_filter(array_merge([$sku], $variants));
+                    if (empty($skusToRecord) && !empty($productName)) {
+                        $skusToRecord = ['NAME:' . strtoupper(trim($productName))];
+                    }
+                    $toInsert = [];
+                    foreach ($skusToRecord as $sk) {
+                        $toInsert[] = [
+                            'sku'        => $sk,
+                            'name'       => $productName ?: $sk,
+                            'purged_by'  => Auth::id() ?: 1,
+                            'purged_at'  => now(),
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ];
+                    }
+                    if (!empty($toInsert)) {
+                        DB::table('purged_materials')->insertOrIgnore($toInsert);
+                    }
+                } catch (\Throwable $e) {}
+            }
 
             $actorId = Auth::id() ?: 1;
             Log::info("ProductPurgeService: Material SKU '{$sku}' permanently deleted (Actor ID: {$actorId})");

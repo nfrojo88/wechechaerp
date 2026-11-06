@@ -208,11 +208,28 @@ class FixedAsset extends Model
             $prefix = strtoupper(trim($this->code_prefix ?: 'AST'));
             $sku = 'FA-' . $prefix;
 
+            // Check if this material was intentionally purged
+            if (\Illuminate\Support\Facades\Schema::hasTable('purged_materials')) {
+                $isPurged = \Illuminate\Support\Facades\DB::table('purged_materials')
+                    ->where('sku', $sku)
+                    ->orWhere(\Illuminate\Support\Facades\DB::raw('LOWER(TRIM(sku))'), strtolower(trim($sku)))
+                    ->orWhereRaw('LOWER(TRIM(name)) = ?', [strtolower(trim($this->name))])
+                    ->exists();
+                if ($isPurged) {
+                    return null;
+                }
+            }
+
             // 1. Sync Material Catalog (Product)
             $product = Product::withTrashed()->where('sku', $sku)
                 ->orWhere(function($q) {
                     $q->where('name', $this->name)->where('category', 'Fixed Asset');
                 })->first();
+
+            // If product was trashed by user, NEVER auto-restore it
+            if ($product && $product->trashed()) {
+                return null;
+            }
 
             $storeName = $this->store ? $this->store->name : 'Main Store';
             $inStoreCount = $this->units()->where('status', FixedAssetUnit::STATUS_IN_STORE)->count();
@@ -236,9 +253,6 @@ class FixedAsset extends Model
             ];
 
             if ($product) {
-                if ($product->trashed()) {
-                    $product->restore();
-                }
                 $product->update($productData);
             } else {
                 $product = Product::create($productData);
@@ -443,6 +457,20 @@ class FixedAsset extends Model
             $syncedCount = 0;
 
             foreach ($products as $prod) {
+                if ($prod->trashed()) {
+                    continue;
+                }
+                if (\Illuminate\Support\Facades\Schema::hasTable('purged_materials')) {
+                    $isPurged = \Illuminate\Support\Facades\DB::table('purged_materials')
+                        ->where('sku', $prod->sku)
+                        ->orWhere(\Illuminate\Support\Facades\DB::raw('LOWER(TRIM(sku))'), strtolower(trim($prod->sku ?? '')))
+                        ->orWhereRaw('LOWER(TRIM(name)) = ?', [strtolower(trim($prod->name ?? ''))])
+                        ->exists();
+                    if ($isPurged) {
+                        continue;
+                    }
+                }
+
                 // Find all store inventories for this product
                 $storeInvs = Inventory::with('store')
                     ->where('product_id', $prod->id)

@@ -83,6 +83,18 @@ class ProductSeeder extends Seeder
                 // If SKU is empty, skip or generate SKU from ID
                 $sku = $item->sku ?: ('MAT-' . str_pad($item->id, 4, '0', STR_PAD_LEFT));
 
+                // 1. NEVER recreate materials that have been purged
+                if (Schema::hasTable('purged_materials')) {
+                    $isPurged = DB::table('purged_materials')
+                        ->where('sku', $sku)
+                        ->orWhere(DB::raw('LOWER(TRIM(sku))'), strtolower(trim($sku)))
+                        ->orWhere('sku', 'like', $sku . '%')
+                        ->exists();
+                    if ($isPurged) {
+                        continue;
+                    }
+                }
+
                 $data = [
                     'name'                => $item->name ?: 'Unnamed Product',
                     'unit'                => $item->unit ?: 'PCS',
@@ -103,10 +115,14 @@ class ProductSeeder extends Seeder
                     'purchase_threshold'  => $item->purchase_threshold ?? 5.00,
                 ];
 
-                // Check if product exists by SKU
-                $existing = Product::where('sku', $sku)->first();
+                // Check if product exists by SKU (including trashed)
+                $existing = Product::withTrashed()->where('sku', $sku)->first();
 
                 if ($existing) {
+                    if ($existing->trashed()) {
+                        // Product was deleted by user: DO NOT restore it
+                        continue;
+                    }
                     // Update non-duplicate product record with missing info
                     $existing->update($data);
                     $updated++;
