@@ -2403,6 +2403,16 @@
                                     $totalNetStock = $itemStocks->sum('net_available');
                                     $hasStock = $totalNetStock > 0 || $totalRawStock > 0;
 
+                                    $storeStockMap = [];
+                                    foreach ($itemStocks as $st) {
+                                        $storeStockMap[$st->store_id] = [
+                                            'store_id'      => $st->store_id,
+                                            'store_name'    => $st->store->name ?? ('Store #' . $st->store_id),
+                                            'on_hand'       => (float) $st->quantity_on_hand,
+                                            'net_available' => (float) ($st->net_available ?? max(0, (float)$st->quantity_on_hand - (float)($st->in_transfer_qty ?? 0))),
+                                        ];
+                                    }
+
                                     $reqQty = (float)$item->quantity;
                                     $purchQty = method_exists($item, 'getEffectivePurchasedQty') ? $item->getEffectivePurchasedQty() : (float)($item->purchased_quantity ?? 0);
                                     $remQty = max(0, $reqQty - $purchQty);
@@ -2422,6 +2432,7 @@
                                                data-estimated-cost="{{ (float)($item->estimated_unit_cost ?? 0) }}"
                                                data-has-stock="{{ ($totalNetStock > 0) ? '1' : '0' }}"
                                                data-stock-qty="{{ $totalNetStock }}"
+                                               data-store-stocks="{{ json_encode($storeStockMap) }}"
                                                onchange="updateSelectionToolbar()">
                                     </td>
                                     @endif
@@ -3688,10 +3699,10 @@
                     <div class="row g-3 mb-3">
                         <div class="col-md-6">
                             <label class="form-label fw-bold small text-uppercase">From Source Store <span class="text-danger">*</span></label>
-                            <select name="from_store_id" id="selTransferFromStore" class="form-select form-select-sm" required>
+                            <select name="from_store_id" id="selTransferFromStore" class="form-select form-select-sm" required onchange="updateSelectiveTransferStockDisplay()">
                                 <option value="">-- Choose Source Store (Where stock is located) --</option>
                                 @foreach($stores as $st)
-                                    <option value="{{ $st->id }}">{{ $st->name }} ({{ $st->code }})</option>
+                                    <option value="{{ $st->id }}" data-store-name="{{ $st->name }}" data-store-code="{{ $st->code }}">{{ $st->name }} ({{ $st->code }})</option>
                                 @endforeach
                             </select>
                         </div>
@@ -3704,6 +3715,9 @@
                                     </option>
                                 @endforeach
                             </select>
+                        </div>
+                        <div class="col-12">
+                            <div id="selTransferStockAlert" class="mt-1" style="display:none;"></div>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label fw-bold small text-uppercase">Required Delivery Date</label>
@@ -3733,7 +3747,7 @@
                 </div>
                 <div class="modal-footer bg-light border-top d-flex justify-content-between">
                     <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-info text-white btn-sm fw-bold px-4">
+                    <button type="submit" id="selTransferSubmitBtn" class="btn btn-info text-white btn-sm fw-bold px-4">
                         <i class="fas fa-exchange-alt me-1"></i> Confirm & Create Store Transfer
                     </button>
                 </div>
@@ -5056,6 +5070,12 @@ function getSelectedPrItems() {
     const checked = document.querySelectorAll('.pr-item-checkbox:checked');
     const items = [];
     checked.forEach(cb => {
+        let storeStocks = {};
+        try {
+            storeStocks = cb.dataset.storeStocks ? JSON.parse(cb.dataset.storeStocks) : {};
+        } catch (e) {
+            storeStocks = {};
+        }
         items.push({
             id: cb.dataset.itemId,
             productId: cb.dataset.productId,
@@ -5065,10 +5085,13 @@ function getSelectedPrItems() {
             estimatedCost: parseFloat(cb.dataset.estimatedCost || '0'),
             hasStock: cb.dataset.hasStock === '1',
             stockQty: parseFloat(cb.dataset.stockQty || '0'),
+            storeStocks: storeStocks,
         });
     });
     return items;
 }
+
+let currentSelectiveTransferItems = [];
 
 function openSelectiveTransferModal() {
     let items = getSelectedPrItems();
@@ -5079,29 +5102,179 @@ function openSelectiveTransferModal() {
         items = getSelectedPrItems();
     }
 
+    currentSelectiveTransferItems = items;
+
+    const fromStoreSelect = document.getElementById('selTransferFromStore');
+    let bestStoreId = null;
+    let highestTotalAvail = -1;
+
+    // Dynamically annotate store options with real stock for the selected items
+    if (fromStoreSelect) {
+        Array.from(fromStoreSelect.options).forEach(opt => {
+            if (!opt.value) return;
+            const sId = opt.value;
+            const baseName = opt.getAttribute('data-store-name') || opt.textContent.replace(/\s*—\s*.*$/, '').trim();
+            const baseCode = opt.getAttribute('data-store-code') || '';
+            const displayName = baseCode ? `${baseName} (${baseCode})` : baseName;
+
+            let totalAvailForStore = 0;
+            let allItemsHaveStock = true;
+
+            items.forEach(it => {
+                const stObj = it.storeStocks ? it.storeStocks[sId] : null;
+                const avail = stObj ? parseFloat(stObj.net_available || 0) : 0;
+                totalAvailForStore += avail;
+                if (avail < it.quantity) {
+                    allItemsHaveStock = false;
+                }
+            });
+
+            if (allItemsHaveStock && totalAvailForStore > 0) {
+                opt.textContent = `${displayName} — ★ In Stock (${totalAvailForStore.toFixed(1)} avail)`;
+                if (totalAvailForStore > highestTotalAvail) {
+                    highestTotalAvail = totalAvailForStore;
+                    bestStoreId = sId;
+                }
+            } else if (totalAvailForStore > 0) {
+                opt.textContent = `${displayName} — Partial Stock (${totalAvailForStore.toFixed(1)} avail)`;
+                if (!bestStoreId && totalAvailForStore > highestTotalAvail) {
+                    highestTotalAvail = totalAvailForStore;
+                    bestStoreId = sId;
+                }
+            } else {
+                opt.textContent = `${displayName} — (0 in stock / Out of stock)`;
+            }
+        });
+
+        if (bestStoreId) {
+            fromStoreSelect.value = bestStoreId;
+        }
+    }
+
+    renderSelectiveTransferItemsTbody();
+    updateSelectiveTransferStockDisplay();
+
+    const modal = new bootstrap.Modal(document.getElementById('selectiveTransferModal'));
+    modal.show();
+}
+
+function renderSelectiveTransferItemsTbody() {
     const tbody = document.getElementById('selTransferItemsTbody');
+    if (!tbody) return;
     tbody.innerHTML = '';
 
-    items.forEach((item, idx) => {
+    currentSelectiveTransferItems.forEach((item, idx) => {
         const tr = document.createElement('tr');
+        tr.id = `selTrRow_${item.id}`;
         tr.innerHTML = `
             <td>
                 <input type="hidden" name="items[${idx}][item_id]" value="${item.id}">
                 <strong>${item.name}</strong>
-                ${item.hasStock ? '<span class="badge bg-success ms-1 small">Stock Avail: ' + item.stockQty + '</span>' : '<span class="badge bg-secondary ms-1 small">0 in Stock</span>'}
+                <div id="selItemStockBadge_${item.id}" class="mt-1">
+                    ${item.hasStock ? '<span class="badge bg-success ms-1 small">Total ERP Stock: ' + item.stockQty + ' ' + item.unit + '</span>' : '<span class="badge bg-secondary ms-1 small">0 in Stock</span>'}
+                </div>
             </td>
             <td>
                 <input type="number" step="0.001" min="0.001" max="${item.quantity}" 
                        name="items[${idx}][quantity]" value="${item.quantity}" 
+                       id="selItemQtyInput_${item.id}"
+                       oninput="updateSelectiveTransferStockDisplay()"
                        class="form-control form-control-sm fw-bold" required>
+                <div id="selItemQtyFeedback_${item.id}" class="small text-danger mt-1" style="display:none;"></div>
             </td>
             <td><span class="badge bg-light text-dark border">${item.unit}</span></td>
         `;
         tbody.appendChild(tr);
     });
+}
 
-    const modal = new bootstrap.Modal(document.getElementById('selectiveTransferModal'));
-    modal.show();
+function updateSelectiveTransferStockDisplay() {
+    const fromStoreSelect = document.getElementById('selTransferFromStore');
+    const alertBox = document.getElementById('selTransferStockAlert');
+    const submitBtn = document.getElementById('selTransferSubmitBtn');
+    const selectedStoreId = fromStoreSelect ? fromStoreSelect.value : null;
+
+    if (!selectedStoreId) {
+        if (alertBox) {
+            alertBox.style.display = 'block';
+            alertBox.className = 'alert alert-info py-2 small mb-3';
+            alertBox.innerHTML = '<i class="fas fa-info-circle me-1"></i> Please choose a Source Store to verify stock availability.';
+        }
+        if (submitBtn) submitBtn.disabled = true;
+        return;
+    }
+
+    const selectedStoreName = fromStoreSelect.options[fromStoreSelect.selectedIndex]?.getAttribute('data-store-name') || fromStoreSelect.options[fromStoreSelect.selectedIndex]?.textContent || 'Selected Store';
+
+    let hasShortfall = false;
+    let shortfallMessages = [];
+
+    currentSelectiveTransferItems.forEach(item => {
+        const badgeContainer = document.getElementById(`selItemStockBadge_${item.id}`);
+        const qtyInput = document.getElementById(`selItemQtyInput_${item.id}`);
+        const feedback = document.getElementById(`selItemQtyFeedback_${item.id}`);
+
+        const storeInfo = item.storeStocks ? item.storeStocks[selectedStoreId] : null;
+        const availableInStore = storeInfo ? parseFloat(storeInfo.net_available || 0) : 0;
+        const onHandInStore = storeInfo ? parseFloat(storeInfo.on_hand || 0) : 0;
+        const reqQty = qtyInput ? parseFloat(qtyInput.value || '0') : item.quantity;
+
+        if (availableInStore <= 0) {
+            hasShortfall = true;
+            shortfallMessages.push(`<strong>${item.name}</strong>: 0 available in this store (On-hand: ${onHandInStore}, Requested: ${reqQty} ${item.unit})`);
+            if (badgeContainer) {
+                badgeContainer.innerHTML = `<span class="badge bg-danger small"><i class="fas fa-times-circle me-1"></i>0 available in this store (On-hand: ${onHandInStore})</span>`;
+            }
+            if (qtyInput) qtyInput.classList.add('is-invalid');
+            if (feedback) {
+                feedback.style.display = 'block';
+                feedback.textContent = `Insufficient stock in this store (0 available)`;
+            }
+        } else if (reqQty > availableInStore) {
+            hasShortfall = true;
+            shortfallMessages.push(`<strong>${item.name}</strong>: Only ${availableInStore} ${item.unit} available (Requested: ${reqQty})`);
+            if (badgeContainer) {
+                badgeContainer.innerHTML = `<span class="badge bg-warning text-dark small"><i class="fas fa-exclamation-triangle me-1"></i>Partial: ${availableInStore} ${item.unit} available</span>`;
+            }
+            if (qtyInput) qtyInput.classList.add('is-invalid');
+            if (feedback) {
+                feedback.style.display = 'block';
+                feedback.textContent = `Only ${availableInStore} available in this store`;
+            }
+        } else {
+            if (badgeContainer) {
+                badgeContainer.innerHTML = `<span class="badge bg-success small"><i class="fas fa-check-circle me-1"></i>Available in this store: ${availableInStore} ${item.unit}</span>`;
+            }
+            if (qtyInput) qtyInput.classList.remove('is-invalid');
+            if (feedback) {
+                feedback.style.display = 'none';
+            }
+        }
+    });
+
+    if (alertBox) {
+        alertBox.style.display = 'block';
+        if (hasShortfall) {
+            alertBox.className = 'alert alert-danger py-2 small mb-3';
+            alertBox.innerHTML = `
+                <div class="d-flex align-items-center mb-1">
+                    <i class="fas fa-triangle-exclamation me-2 fs-6"></i>
+                    <strong>Insufficient Stock in "${selectedStoreName}":</strong>
+                </div>
+                <ul class="mb-1 ps-3">
+                    ${shortfallMessages.map(m => `<li>${m}</li>`).join('')}
+                </ul>
+                <div class="mt-1">
+                    Please choose a store marked with <strong>★ In Stock</strong>, reduce transfer quantity, or route to <strong>Purchase Team</strong>.
+                </div>
+            `;
+            if (submitBtn) submitBtn.disabled = true;
+        } else {
+            alertBox.className = 'alert alert-success py-2 small mb-3';
+            alertBox.innerHTML = `<i class="fas fa-circle-check me-1"></i> All selected items are verified in stock in <strong>${selectedStoreName}</strong>. Ready to transfer.`;
+            if (submitBtn) submitBtn.disabled = false;
+        }
+    }
 }
 
 function openSelectiveSendPmModal() {

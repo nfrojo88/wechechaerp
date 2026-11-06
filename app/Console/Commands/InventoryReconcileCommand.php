@@ -66,6 +66,7 @@ class InventoryReconcileCommand extends Command
         $consistentCount = 0;
         $ledgerDriftCount = 0;
         $unitMismatchCount = 0;
+        $negativeCount = 0;
 
         foreach ($inventories as $inv) {
             $totalChecked++;
@@ -109,6 +110,7 @@ class InventoryReconcileCommand extends Command
             // Determine status
             $hasLedgerDrift = abs($ledgerDiff) >= 0.001;
             $hasUnitMismatch = $isFixedAsset && $unitDiff !== null && $unitDiff !== 0;
+            $hasNegativeOnHand = $onHand < -0.001;
 
             if ($hasLedgerDrift) {
                 $ledgerDriftCount++;
@@ -116,10 +118,15 @@ class InventoryReconcileCommand extends Command
             if ($hasUnitMismatch) {
                 $unitMismatchCount++;
             }
+            if ($hasNegativeOnHand) {
+                $negativeCount++;
+            }
 
-            if (!$hasLedgerDrift && !$hasUnitMismatch) {
+            if (!$hasLedgerDrift && !$hasUnitMismatch && !$hasNegativeOnHand) {
                 $consistentCount++;
                 $status = 'OK';
+            } elseif ($hasNegativeOnHand) {
+                $status = 'NEGATIVE ON-HAND';
             } elseif ($hasLedgerDrift && $hasUnitMismatch) {
                 $status = 'DRIFT & MISMATCH';
             } elseif ($hasLedgerDrift) {
@@ -143,6 +150,7 @@ class InventoryReconcileCommand extends Command
                 'status'            => $status,
                 'has_ledger_drift'  => $hasLedgerDrift,
                 'has_unit_mismatch' => $hasUnitMismatch,
+                'has_negative'      => $hasNegativeOnHand,
                 'raw_ledger_diff'   => $ledgerDiff,
                 'raw_ledger_sum'    => $ledgerSum,
                 'raw_on_hand'       => $onHand,
@@ -177,10 +185,11 @@ class InventoryReconcileCommand extends Command
         $this->line("Total items audited:     <comment>{$totalChecked}</comment>");
         $this->line("Consistent items:        <info>{$consistentCount}</info>");
         $this->line("Ledger drift items:      " . ($ledgerDriftCount > 0 ? "<error>{$ledgerDriftCount}</error>" : "<info>0</info>"));
+        $this->line("Negative on-hand items:  " . ($negativeCount > 0 ? "<error>{$negativeCount}</error>" : "<info>0</info>"));
         $this->line("Fixed Asset mismatches:  " . ($unitMismatchCount > 0 ? "<error>{$unitMismatchCount}</error>" : "<info>0</info>"));
 
         if (!$isRepair) {
-            if ($ledgerDriftCount > 0 || $unitMismatchCount > 0) {
+            if ($ledgerDriftCount > 0 || $unitMismatchCount > 0 || $negativeCount > 0) {
                 $this->warn("\nDiscrepancies found! To interactively resolve them, run:");
                 $this->line("  <comment>php artisan inventory:reconcile --repair</comment>");
             } else {
@@ -190,7 +199,7 @@ class InventoryReconcileCommand extends Command
         }
 
         // ─── INTERACTIVE REPAIR MODE ─────────────────────────────────────────
-        if ($ledgerDriftCount === 0 && $unitMismatchCount === 0) {
+        if ($ledgerDriftCount === 0 && $unitMismatchCount === 0 && $negativeCount === 0) {
             $this->info("\nNo discrepancies found to repair. Database is 100% consistent!");
             return Command::SUCCESS;
         }
@@ -207,7 +216,7 @@ class InventoryReconcileCommand extends Command
         $repairedCount = 0;
 
         foreach ($report as $item) {
-            if (!$item['has_ledger_drift'] && !$item['has_unit_mismatch']) {
+            if (!$item['has_ledger_drift'] && !$item['has_unit_mismatch'] && !($item['has_negative'] ?? false)) {
                 continue;
             }
 
@@ -221,8 +230,62 @@ class InventoryReconcileCommand extends Command
             $this->info("\n-------------------------------------------------------------");
             $this->comment("Item: [{$storeName}] {$productName} (SKU: {$item['sku']})");
 
+            // 0. Resolve Negative Stock
+            if ($item['has_negative']) {
+                $this->warn("  * Negative Stock: Inventory On-Hand is {$onHand}. Stock cannot fall below zero.");
+
+                $negChoice = $this->choice(
+                    "How would you like to resolve this negative stock balance?",
+                    [
+                        "1" => "Reset On-Hand to 0.000 (stock is physically depleted)",
+                        "2" => "Enter a verified physical count",
+                        "3" => "Skip this item",
+                    ],
+                    "1"
+                );
+
+                if ($negChoice === "1") {
+                    $delta = abs($onHand);
+                    try {
+                        $inventoryService->applyMovement(
+                            storeId: $inv->store_id,
+                            productId: $inv->product_id,
+                            quantityDelta: $delta,
+                            type: 'reconciliation',
+                            remarks: "Audit reconciliation: reset negative on-hand ({$onHand}) to 0.000",
+                            performedBy: auth()->id() ?? 1
+                        );
+                        $this->info("  -> Reset inventory on-hand from {$onHand} to 0.000.");
+                        $repairedCount++;
+                        $onHand = 0.0;
+                    } catch (\Throwable $e) {
+                        $this->error("  -> Failed to reset negative stock: " . $e->getMessage());
+                    }
+                } elseif ($negChoice === "2") {
+                    $customQty = (float) $this->ask("Enter verified physical stock count:", "0.0");
+                    $delta = round($customQty - $onHand, 3);
+                    try {
+                        $inventoryService->applyMovement(
+                            storeId: $inv->store_id,
+                            productId: $inv->product_id,
+                            quantityDelta: $delta,
+                            type: 'reconciliation',
+                            remarks: "Audit reconciliation: adjusted negative stock ({$onHand}) to verified count ({$customQty})",
+                            performedBy: auth()->id() ?? 1
+                        );
+                        $this->info("  -> Inventory on-hand set to verified count {$customQty}.");
+                        $repairedCount++;
+                        $onHand = $customQty;
+                    } catch (\Throwable $e) {
+                        $this->error("  -> Failed to adjust inventory: " . $e->getMessage());
+                    }
+                } else {
+                    $this->line("  -> Skipped negative stock adjustment.");
+                }
+            }
+
             // 1. Resolve Ledger Drift
-            if ($item['has_ledger_drift']) {
+            if ($item['has_ledger_drift'] && !$item['has_negative']) {
                 $this->warn("  * Ledger Drift: Inventory On-Hand is {$onHand}, but Movement Ledger sum is {$ledgerSum} (Diff: {$item['ledger_diff']})");
 
                 $choice = $this->choice(

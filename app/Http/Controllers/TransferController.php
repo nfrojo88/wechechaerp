@@ -10,6 +10,7 @@ use App\Models\Inventory;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 
 class TransferController extends Controller
 {
@@ -73,30 +74,66 @@ class TransferController extends Controller
             'items.*.unit'        => 'required|string|max:20',
         ]);
 
-        DB::transaction(function () use ($request) {
-            $no = Transfer::generateUniqueNo();
+        // Pre-validate stock availability in origin store for all requested items
+        $stockErrors = [];
+        $fromStore = Store::find($request->from_store_id);
+        $fromStoreName = $fromStore?->name ?? "Store #{$request->from_store_id}";
 
-            $transfer = Transfer::create([
-                'transfer_no'  => $no,
-                'from_store_id'=> $request->from_store_id,
-                'to_store_id'  => $request->to_store_id,
-                'requested_by' => Auth::id(),
-                'required_date'=> $request->required_date,
-                'reason'       => $request->reason,
-                'status'       => 'draft',
-            ]);
+        foreach ($request->items as $item) {
+            $originInv = Inventory::withoutGlobalScopes()
+                ->where('store_id', $request->from_store_id)
+                ->where('product_id', $item['product_id'])
+                ->first();
 
-            foreach ($request->items as $item) {
-                $transfer->items()->create([
-                    'product_id'          => $item['product_id'],
-                    'requested_quantity'  => $item['quantity'],
-                    'unit'                => $item['unit'],
-                ]);
+            $onHand    = $originInv ? (float) ($originInv->quantity_on_hand ?? 0) : 0.0;
+            $reserved  = $originInv ? (float) ($originInv->quantity_reserved ?? 0) : 0.0;
+            $available = max(0.0, $onHand - $reserved);
+            $reqQty    = (float) $item['quantity'];
+
+            if ($onHand < $reqQty || $available < $reqQty) {
+                $prod     = Product::find($item['product_id']);
+                $prodName = $prod?->name ?? "Item #{$item['product_id']}";
+                $unit     = $item['unit'] ?? 'pcs';
+                $stockErrors[] = "Cannot transfer {$reqQty} {$unit} of \"{$prodName}\" from \"{$fromStoreName}\": insufficient stock (Available: {$available}, Current on-hand: {$onHand}).";
             }
+        }
 
-            // Immediately deduct from origin store and add to destination store inventory
-            \App\Http\Controllers\StoreManagerController::syncTransferInventory($transfer);
-        });
+        if (!empty($stockErrors)) {
+            $combinedMsg = implode("\n", $stockErrors);
+            return back()->withInput()->withErrors(['items' => $combinedMsg])->with('error', $combinedMsg);
+        }
+
+        try {
+            DB::transaction(function () use ($request) {
+                $no = Transfer::generateUniqueNo();
+
+                $transfer = Transfer::create([
+                    'transfer_no'  => $no,
+                    'from_store_id'=> $request->from_store_id,
+                    'to_store_id'  => $request->to_store_id,
+                    'requested_by' => Auth::id(),
+                    'required_date'=> $request->required_date,
+                    'reason'       => $request->reason,
+                    'status'       => 'draft',
+                ]);
+
+                foreach ($request->items as $item) {
+                    $transfer->items()->create([
+                        'product_id'          => $item['product_id'],
+                        'requested_quantity'  => $item['quantity'],
+                        'unit'                => $item['unit'],
+                    ]);
+                }
+
+                // Immediately deduct from origin store and add to destination store inventory
+                \App\Http\Controllers\StoreManagerController::syncTransferInventory($transfer);
+            });
+        } catch (\InvalidArgumentException $e) {
+            return back()->withInput()->withErrors(['items' => $e->getMessage()])->with('error', $e->getMessage());
+        } catch (\Throwable $e) {
+            Log::error('Transfer create failed: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
+            return back()->withInput()->withErrors(['items' => 'Failed to create transfer: ' . $e->getMessage()])->with('error', 'Failed to create transfer: ' . $e->getMessage());
+        }
 
         return redirect()->route('transfers.index')->with('success', 'Transfer request created. Materials deducted from origin store and added to destination store inventory.');
     }

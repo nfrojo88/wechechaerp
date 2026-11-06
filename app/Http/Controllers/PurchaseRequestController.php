@@ -24,6 +24,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log;
 
 class PurchaseRequestController extends Controller
 {
@@ -742,93 +743,159 @@ class PurchaseRequestController extends Controller
         $createdTransfer = null;
         $transferredCount = 0;
 
-        DB::transaction(function () use ($request, $purchaseRequest, &$createdTransfer, &$transferredCount) {
-            $no = Transfer::generateUniqueNo();
+        $fromStore = Store::find($request->from_store_id);
+        $fromStoreName = $fromStore?->name ?? "Store #{$request->from_store_id}";
 
-            $transfer = Transfer::create([
-                'transfer_no'   => $no,
-                'from_store_id' => $request->from_store_id,
-                'to_store_id'   => $request->to_store_id,
-                'requested_by'  => Auth::id(),
-                'required_date' => $request->required_date ?? $purchaseRequest->required_date ?? now(),
-                'reason'        => $request->reason ?: ("Transferred from PR #{$purchaseRequest->pr_no} (" . ($purchaseRequest->project?->name ?? 'Project') . ")"),
-                'status'        => 'draft',
-            ]);
+        // Validate stock availability in the selected source store before any changes
+        $stockErrors = [];
+        foreach ($request->items as $itemData) {
+            $prItem = PurchaseRequestItem::where('purchase_request_id', $purchaseRequest->id)
+                ->where('id', $itemData['item_id'])
+                ->first();
 
-            // Check whether all items on the PR are being fully transferred
-            $totalPrItemsCount = $purchaseRequest->items()->count();
-            $fullyTransferredCount = 0;
-            foreach ($request->items as $itemData) {
-                $prItem = PurchaseRequestItem::where('purchase_request_id', $purchaseRequest->id)
-                    ->where('id', $itemData['item_id'])
-                    ->first();
-                if ($prItem && (float)$itemData['quantity'] >= (float)$prItem->quantity) {
-                    $fullyTransferredCount++;
+            if (!$prItem || !$prItem->product_id) continue;
+
+            $transferQty = min((float)$itemData['quantity'], (float)$prItem->quantity);
+            if ($transferQty <= 0) continue;
+
+            $originInv = Inventory::withoutGlobalScopes()
+                ->where('store_id', $request->from_store_id)
+                ->where('product_id', $prItem->product_id)
+                ->first();
+
+            $onHand    = $originInv ? (float) $originInv->quantity_on_hand : 0.0;
+            $reserved  = $originInv ? (float) $originInv->quantity_reserved : 0.0;
+            $available = max(0.0, $onHand - $reserved);
+
+            if ($onHand < $transferQty || $available < $transferQty) {
+                $prodName = $prItem->product?->name ?? "Item #{$prItem->product_id}";
+                $unit     = $prItem->unit ?? 'pcs';
+
+                // Look for alternative stores with available stock
+                $altStores = Inventory::withoutGlobalScopes()
+                    ->with('store')
+                    ->where('product_id', $prItem->product_id)
+                    ->where('store_id', '!=', $request->from_store_id)
+                    ->where('quantity_on_hand', '>', 0)
+                    ->get()
+                    ->map(function ($inv) use ($unit) {
+                        $stAvail = max(0.0, (float)$inv->quantity_on_hand - (float)$inv->quantity_reserved);
+                        return ($inv->store->name ?? 'Store #' . $inv->store_id) . ' (' . number_format($stAvail, 1) . ' ' . $unit . ' available)';
+                    })
+                    ->filter()
+                    ->implode(', ');
+
+                $tip = !empty($altStores)
+                    ? " Alternative store(s) with stock: {$altStores}."
+                    : " No other stores currently have stock on hand. Please route this item for purchase instead.";
+
+                if ($onHand <= 0) {
+                    $stockErrors[] = "Cannot transfer {$transferQty} {$unit} of \"{$prodName}\" from \"{$fromStoreName}\": this store currently has NO stock (Current on-hand: {$onHand}).{$tip}";
+                } else {
+                    $stockErrors[] = "Cannot transfer {$transferQty} {$unit} of \"{$prodName}\" from \"{$fromStoreName}\": insufficient stock (Available: {$available}, Current on-hand: {$onHand}).{$tip}";
                 }
             }
-            $isFullPrTransfer = ($fullyTransferredCount >= $totalPrItemsCount && $totalPrItemsCount > 0);
+        }
 
-            foreach ($request->items as $itemData) {
-                $prItem = PurchaseRequestItem::where('purchase_request_id', $purchaseRequest->id)
-                    ->where('id', $itemData['item_id'])
-                    ->first();
+        if (!empty($stockErrors)) {
+            $combinedMsg = implode("\n", $stockErrors);
+            return back()->withInput()->withErrors(['transfer_error' => $combinedMsg])->with('error', $combinedMsg);
+        }
 
-                if (!$prItem) continue;
+        try {
+            DB::transaction(function () use ($request, $purchaseRequest, &$createdTransfer, &$transferredCount) {
+                $no = Transfer::generateUniqueNo();
 
-                $transferQty = min((float)$itemData['quantity'], (float)$prItem->quantity);
-                if ($transferQty <= 0) continue;
-
-                $transfer->items()->create([
-                    'product_id'         => $prItem->product_id,
-                    'requested_quantity' => $transferQty,
-                    'unit'               => $prItem->unit ?? 'pcs',
+                $transfer = Transfer::create([
+                    'transfer_no'   => $no,
+                    'from_store_id' => $request->from_store_id,
+                    'to_store_id'   => $request->to_store_id,
+                    'requested_by'  => Auth::id(),
+                    'required_date' => $request->required_date ?? $purchaseRequest->required_date ?? now(),
+                    'reason'        => $request->reason ?: ("Transferred from PR #{$purchaseRequest->pr_no} (" . ($purchaseRequest->project?->name ?? 'Project') . ")"),
+                    'status'        => 'draft',
                 ]);
 
-                $transferredCount++;
-
-                if (!$isFullPrTransfer) {
-                    // For partial transfers only: remove or reduce transferred items so remaining items route to purchase
-                    if ($transferQty >= (float)$prItem->quantity) {
-                        $prItem->delete();
-                    } else {
-                        $prItem->decrement('quantity', $transferQty);
+                // Check whether all items on the PR are being fully transferred
+                $totalPrItemsCount = $purchaseRequest->items()->count();
+                $fullyTransferredCount = 0;
+                foreach ($request->items as $itemData) {
+                    $prItem = PurchaseRequestItem::where('purchase_request_id', $purchaseRequest->id)
+                        ->where('id', $itemData['item_id'])
+                        ->first();
+                    if ($prItem && (float)$itemData['quantity'] >= (float)$prItem->quantity) {
+                        $fullyTransferredCount++;
                     }
                 }
-            }
+                $isFullPrTransfer = ($fullyTransferredCount >= $totalPrItemsCount && $totalPrItemsCount > 0);
 
-            $createdTransfer = $transfer;
-            \App\Http\Controllers\StoreManagerController::syncTransferInventory($transfer);
+                foreach ($request->items as $itemData) {
+                    $prItem = PurchaseRequestItem::where('purchase_request_id', $purchaseRequest->id)
+                        ->where('id', $itemData['item_id'])
+                        ->first();
 
-            if ($isFullPrTransfer) {
-                $from = $purchaseRequest->status;
-                $purchaseRequest->update([
-                    'status'             => PurchaseRequest::STATUS_TRANSFERRED,
-                    'current_owner_role' => null,
-                ]);
-                PrWorkflowLog::create([
-                    'purchase_request_id' => $purchaseRequest->id,
-                    'from_stage'          => $from,
-                    'to_stage'            => PurchaseRequest::STATUS_TRANSFERRED,
-                    'action'              => 'full_store_transfer_created',
-                    'actor_role'          => 'store_manager',
-                    'notes'               => "All items fulfilled via Store Transfer #{$transfer->transfer_no}. PR locked in Procurement.",
-                    'actor_id'            => Auth::id(),
-                    'created_at'          => now(),
-                ]);
-            } else {
-                $remainingCount = $purchaseRequest->items()->count();
-                PrWorkflowLog::create([
-                    'purchase_request_id' => $purchaseRequest->id,
-                    'from_stage'          => $purchaseRequest->status,
-                    'to_stage'            => $purchaseRequest->status,
-                    'action'              => 'partial_store_transfer_created',
-                    'actor_role'          => 'store_manager',
-                    'notes'               => "Transferred {$transferredCount} item(s) to Store Transfer #{$transfer->transfer_no}. {$remainingCount} item(s) remaining for purchase.",
-                    'actor_id'            => Auth::id(),
-                    'created_at'          => now(),
-                ]);
-            }
-        });
+                    if (!$prItem) continue;
+
+                    $transferQty = min((float)$itemData['quantity'], (float)$prItem->quantity);
+                    if ($transferQty <= 0) continue;
+
+                    $transfer->items()->create([
+                        'product_id'         => $prItem->product_id,
+                        'requested_quantity' => $transferQty,
+                        'unit'               => $prItem->unit ?? 'pcs',
+                    ]);
+
+                    $transferredCount++;
+
+                    if (!$isFullPrTransfer) {
+                        // For partial transfers only: remove or reduce transferred items so remaining items route to purchase
+                        if ($transferQty >= (float)$prItem->quantity) {
+                            $prItem->delete();
+                        } else {
+                            $prItem->decrement('quantity', $transferQty);
+                        }
+                    }
+                }
+
+                $createdTransfer = $transfer;
+                \App\Http\Controllers\StoreManagerController::syncTransferInventory($transfer);
+
+                if ($isFullPrTransfer) {
+                    $from = $purchaseRequest->status;
+                    $purchaseRequest->update([
+                        'status'             => PurchaseRequest::STATUS_TRANSFERRED,
+                        'current_owner_role' => null,
+                    ]);
+                    PrWorkflowLog::create([
+                        'purchase_request_id' => $purchaseRequest->id,
+                        'from_stage'          => $from,
+                        'to_stage'            => PurchaseRequest::STATUS_TRANSFERRED,
+                        'action'              => 'full_store_transfer_created',
+                        'actor_role'          => 'store_manager',
+                        'notes'               => "All items fulfilled via Store Transfer #{$transfer->transfer_no}. PR locked in Procurement.",
+                        'actor_id'            => Auth::id(),
+                        'created_at'          => now(),
+                    ]);
+                } else {
+                    $remainingCount = $purchaseRequest->items()->count();
+                    PrWorkflowLog::create([
+                        'purchase_request_id' => $purchaseRequest->id,
+                        'from_stage'          => $purchaseRequest->status,
+                        'to_stage'            => $purchaseRequest->status,
+                        'action'              => 'partial_store_transfer_created',
+                        'actor_role'          => 'store_manager',
+                        'notes'               => "Transferred {$transferredCount} item(s) to Store Transfer #{$transfer->transfer_no}. {$remainingCount} item(s) remaining for purchase.",
+                        'actor_id'            => Auth::id(),
+                        'created_at'          => now(),
+                    ]);
+                }
+            });
+        } catch (\InvalidArgumentException $e) {
+            return back()->withInput()->withErrors(['transfer_error' => $e->getMessage()])->with('error', $e->getMessage());
+        } catch (\Throwable $e) {
+            Log::error('Store transfer error: ' . $e->getMessage(), ['pr_id' => $purchaseRequest->id, 'trace' => $e->getTraceAsString()]);
+            return back()->withInput()->withErrors(['transfer_error' => 'Store transfer failed: ' . $e->getMessage()])->with('error', 'Store transfer failed: ' . $e->getMessage());
+        }
 
         if (!$createdTransfer || $transferredCount === 0) {
             return back()->with('error', 'No valid items were selected for transfer.');
@@ -935,97 +1002,143 @@ class PurchaseRequestController extends Controller
         $transferItemsCount = 0;
         $purchaseItemsCount = 0;
 
-        DB::transaction(function () use ($request, $purchaseRequest, $destinationStoreId, &$createdTransfers, &$transferItemsCount, &$purchaseItemsCount) {
-            $transferItemsByStore = [];
-            $purchaseItemIds = [];
+        // Pre-validate stock for all items allocated to 'transfer'
+        $stockErrors = [];
+        foreach ($request->allocations as $alloc) {
+            if (($alloc['action'] ?? null) !== 'transfer') continue;
 
-            foreach ($request->allocations as $alloc) {
-                $prItem = PurchaseRequestItem::where('purchase_request_id', $purchaseRequest->id)
-                    ->where('id', $alloc['item_id'])
-                    ->first();
-                if (!$prItem) continue;
+            $fromStoreId = $alloc['from_store_id'] ?? null;
+            if (!$fromStoreId) continue;
 
-                $action = $alloc['action'];
-                $fromStoreId = $alloc['from_store_id'] ?? null;
-                $transferQty = (float)($alloc['transfer_qty'] ?? 0);
+            $prItem = PurchaseRequestItem::where('purchase_request_id', $purchaseRequest->id)
+                ->where('id', $alloc['item_id'])
+                ->first();
+            if (!$prItem || !$prItem->product_id) continue;
 
-                if ($action === 'transfer' && $fromStoreId) {
-                    $transferItemsByStore[$fromStoreId][] = [
-                        'pr_item' => $prItem,
-                        'qty'     => $transferQty > 0 ? $transferQty : (float)$prItem->quantity,
-                    ];
-                } elseif ($action === 'purchase') {
-                    $purchaseItemIds[] = $prItem->id;
-                }
+            $transferQty = (float)($alloc['transfer_qty'] ?? 0);
+            $qty = min($transferQty > 0 ? $transferQty : (float)$prItem->quantity, (float)$prItem->quantity);
+            if ($qty <= 0) continue;
+
+            $originInv = Inventory::withoutGlobalScopes()
+                ->where('store_id', $fromStoreId)
+                ->where('product_id', $prItem->product_id)
+                ->first();
+
+            $onHand    = $originInv ? (float) $originInv->quantity_on_hand : 0.0;
+            $reserved  = $originInv ? (float) $originInv->quantity_reserved : 0.0;
+            $available = max(0.0, $onHand - $reserved);
+
+            if ($onHand < $qty || $available < $qty) {
+                $prodName = $prItem->product?->name ?? "Item #{$prItem->product_id}";
+                $fromStoreName = Store::find($fromStoreId)?->name ?? "Store #{$fromStoreId}";
+                $unit = $prItem->unit ?? 'pcs';
+                $stockErrors[] = "Cannot transfer {$qty} {$unit} of \"{$prodName}\" from \"{$fromStoreName}\": insufficient stock (Available: {$available}, Current on-hand: {$onHand}).";
             }
+        }
 
-            // 1. Process Transfers
-            $transferLoopIndex = 0;
-            foreach ($transferItemsByStore as $fromStoreId => $items) {
-                $fallbackTo = ($fromStoreId == $destinationStoreId)
-                    ? (Store::where('id', '!=', $fromStoreId)->where('is_active', true)->value('id') ?? $destinationStoreId)
-                    : $destinationStoreId;
+        if (!empty($stockErrors)) {
+            $combinedMsg = implode("\n", $stockErrors);
+            return back()->withInput()->withErrors(['allocation_error' => $combinedMsg])->with('error', $combinedMsg);
+        }
 
-                $no = Transfer::generateUniqueNo($transferLoopIndex);
-                $transfer = Transfer::create([
-                    'transfer_no'   => $no,
-                    'from_store_id' => $fromStoreId,
-                    'to_store_id'   => $fallbackTo,
-                    'requested_by'  => Auth::id(),
-                    'required_date' => $purchaseRequest->required_date ?? now(),
-                    'reason'        => "Stock transfer for PR #{$purchaseRequest->pr_no} (" . ($purchaseRequest->project?->name ?? 'Project') . ")",
-                    'status'        => 'draft',
-                ]);
+        try {
+            DB::transaction(function () use ($request, $purchaseRequest, $destinationStoreId, &$createdTransfers, &$transferItemsCount, &$purchaseItemsCount) {
+                $transferItemsByStore = [];
+                $purchaseItemIds = [];
 
-                foreach ($items as $itm) {
-                    $prItem = $itm['pr_item'];
-                    $qty = min((float)$itm['qty'], (float)$prItem->quantity);
+                foreach ($request->allocations as $alloc) {
+                    $prItem = PurchaseRequestItem::where('purchase_request_id', $purchaseRequest->id)
+                        ->where('id', $alloc['item_id'])
+                        ->first();
+                    if (!$prItem) continue;
 
-                    $transfer->items()->create([
-                        'product_id'         => $prItem->product_id,
-                        'requested_quantity' => $qty,
-                        'unit'               => $prItem->unit ?? 'pcs',
-                    ]);
-                    $transferItemsCount++;
+                    $action = $alloc['action'];
+                    $fromStoreId = $alloc['from_store_id'] ?? null;
+                    $transferQty = (float)($alloc['transfer_qty'] ?? 0);
 
-                    if (empty($purchaseItemIds)) {
-                        // Full PR transfer: preserve all items on PR for audit trail
-                    } else {
-                        if ($qty >= (float)$prItem->quantity && !in_array($prItem->id, $purchaseItemIds)) {
-                            $prItem->delete();
-                        } else if ($qty < (float)$prItem->quantity) {
-                            $prItem->decrement('quantity', $qty);
-                        }
+                    if ($action === 'transfer' && $fromStoreId) {
+                        $transferItemsByStore[$fromStoreId][] = [
+                            'pr_item' => $prItem,
+                            'qty'     => $transferQty > 0 ? $transferQty : (float)$prItem->quantity,
+                        ];
+                    } elseif ($action === 'purchase') {
+                        $purchaseItemIds[] = $prItem->id;
                     }
                 }
 
-                \App\Http\Controllers\StoreManagerController::syncTransferInventory($transfer);
-                $createdTransfers[] = $transfer;
-                $transferLoopIndex++;
-            }
+                // 1. Process Transfers
+                $transferLoopIndex = 0;
+                foreach ($transferItemsByStore as $fromStoreId => $items) {
+                    $fallbackTo = ($fromStoreId == $destinationStoreId)
+                        ? (Store::where('id', '!=', $fromStoreId)->where('is_active', true)->value('id') ?? $destinationStoreId)
+                        : $destinationStoreId;
 
-            // 2. Process Purchase Items (Route PR to Procurement Manager)
-            $remainingPrItemsCount = $purchaseRequest->fresh()->items()->count();
-            if ($remainingPrItemsCount > 0 && !empty($purchaseItemIds)) {
-                $this->lifecycle->sendToProcurementManager($purchaseRequest, $request->notes ?: "Routed to Procurement for {$remainingPrItemsCount} items.");
-                $purchaseItemsCount = $remainingPrItemsCount;
-            } elseif ($remainingPrItemsCount === 0 || empty($purchaseItemIds)) {
-                $purchaseRequest->update([
-                    'status'             => PurchaseRequest::STATUS_TRANSFERRED,
-                    'current_owner_role' => null,
-                ]);
-                PrWorkflowLog::create([
-                    'purchase_request_id' => $purchaseRequest->id,
-                    'from_stage'          => PurchaseRequest::STATUS_PENDING_STORE_REVIEW,
-                    'to_stage'            => PurchaseRequest::STATUS_TRANSFERRED,
-                    'action'              => 'full_store_transfer_created',
-                    'actor_role'          => 'store_manager',
-                    'notes'               => "All items fulfilled via Store Transfer(s). PR locked in Procurement.",
-                    'actor_id'            => Auth::id(),
-                    'created_at'          => now(),
-                ]);
-            }
-        });
+                    $no = Transfer::generateUniqueNo($transferLoopIndex);
+                    $transfer = Transfer::create([
+                        'transfer_no'   => $no,
+                        'from_store_id' => $fromStoreId,
+                        'to_store_id'   => $fallbackTo,
+                        'requested_by'  => Auth::id(),
+                        'required_date' => $purchaseRequest->required_date ?? now(),
+                        'reason'        => "Stock transfer for PR #{$purchaseRequest->pr_no} (" . ($purchaseRequest->project?->name ?? 'Project') . ")",
+                        'status'        => 'draft',
+                    ]);
+
+                    foreach ($items as $itm) {
+                        $prItem = $itm['pr_item'];
+                        $qty = min((float)$itm['qty'], (float)$prItem->quantity);
+
+                        $transfer->items()->create([
+                            'product_id'         => $prItem->product_id,
+                            'requested_quantity' => $qty,
+                            'unit'               => $prItem->unit ?? 'pcs',
+                        ]);
+                        $transferItemsCount++;
+
+                        if (empty($purchaseItemIds)) {
+                            // Full PR transfer: preserve all items on PR for audit trail
+                        } else {
+                            if ($qty >= (float)$prItem->quantity && !in_array($prItem->id, $purchaseItemIds)) {
+                                $prItem->delete();
+                            } else if ($qty < (float)$prItem->quantity) {
+                                $prItem->decrement('quantity', $qty);
+                            }
+                        }
+                    }
+
+                    \App\Http\Controllers\StoreManagerController::syncTransferInventory($transfer);
+                    $createdTransfers[] = $transfer;
+                    $transferLoopIndex++;
+                }
+
+                // 2. Process Purchase Items (Route PR to Procurement Manager)
+                $remainingPrItemsCount = $purchaseRequest->fresh()->items()->count();
+                if ($remainingPrItemsCount > 0 && !empty($purchaseItemIds)) {
+                    $this->lifecycle->sendToProcurementManager($purchaseRequest, $request->notes ?: "Routed to Procurement for {$remainingPrItemsCount} items.");
+                    $purchaseItemsCount = $remainingPrItemsCount;
+                } elseif ($remainingPrItemsCount === 0 || empty($purchaseItemIds)) {
+                    $purchaseRequest->update([
+                        'status'             => PurchaseRequest::STATUS_TRANSFERRED,
+                        'current_owner_role' => null,
+                    ]);
+                    PrWorkflowLog::create([
+                        'purchase_request_id' => $purchaseRequest->id,
+                        'from_stage'          => PurchaseRequest::STATUS_PENDING_STORE_REVIEW,
+                        'to_stage'            => PurchaseRequest::STATUS_TRANSFERRED,
+                        'action'              => 'full_store_transfer_created',
+                        'actor_role'          => 'store_manager',
+                        'notes'               => "All items fulfilled via Store Transfer(s). PR locked in Procurement.",
+                        'actor_id'            => Auth::id(),
+                        'created_at'          => now(),
+                    ]);
+                }
+            });
+        } catch (\InvalidArgumentException $e) {
+            return back()->withInput()->withErrors(['allocation_error' => $e->getMessage()])->with('error', $e->getMessage());
+        } catch (\Throwable $e) {
+            Log::error('Split and process error: ' . $e->getMessage(), ['pr_id' => $purchaseRequest->id, 'trace' => $e->getTraceAsString()]);
+            return back()->withInput()->withErrors(['allocation_error' => 'Split & Process transfer failed: ' . $e->getMessage()])->with('error', 'Split & Process transfer failed: ' . $e->getMessage());
+        }
 
         $transferNos = collect($createdTransfers)->pluck('transfer_no')->implode(', ');
         $msg = "Processed successfully!";
