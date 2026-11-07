@@ -45,9 +45,6 @@
             <button type="button" class="btn btn-success shadow-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#updateSalaryModal" data-toggle="modal" data-target="#updateSalaryModal">
                 <i class="fa-solid fa-file-signature text-white-50 me-1"></i> Update Employee Salary
             </button>
-            <a href="{{ route('payrolls.create') }}" class="btn btn-primary shadow-sm fw-semibold">
-                <i class="fas fa-plus text-white-50 me-1"></i> Generate Payroll
-            </a>
         </div>
     </div>
 

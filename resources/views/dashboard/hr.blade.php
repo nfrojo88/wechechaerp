@@ -195,9 +195,9 @@
                         <i class="fa-solid fa-file-signature text-warning"></i>
                         <span>Record Official Notice</span>
                     </a>
-                    <a href="{{ route('payrolls.create') }}" class="wc-btn-touch wc-btn-outline w-100 justify-content-start">
+                    <a href="{{ route('payrolls.index') }}" class="wc-btn-touch wc-btn-outline w-100 justify-content-start">
                         <i class="fa-solid fa-money-check-dollar text-success"></i>
-                        <span>Generate Monthly Payroll</span>
+                        <span>Payroll Records</span>
                     </a>
                     <a href="{{ route('attendance.index') }}" class="wc-btn-touch wc-btn-outline w-100 justify-content-start">
                         <i class="fa-solid fa-clipboard-user text-primary"></i>

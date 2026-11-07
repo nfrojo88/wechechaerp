@@ -205,8 +205,8 @@
                         <i class="fas fa-folder-open me-2"></i>Employee Letter Archive
                     </a>
                     <hr class="my-1">
-                    <a href="{{ route('payrolls.create') }}" class="btn btn-outline-secondary w-100 text-start">
-                        <i class="fas fa-plus me-2 text-primary"></i>Generate Payroll
+                    <a href="{{ route('payrolls.index') }}" class="btn btn-outline-secondary w-100 text-start">
+                        <i class="fa-solid fa-file-invoice-dollar me-2 text-primary"></i>Payroll Records
                     </a>
                     <a href="{{ route('employees.create') }}" class="btn btn-outline-success w-100 text-start">
                         <i class="fas fa-user-plus me-2"></i>Add Employee
