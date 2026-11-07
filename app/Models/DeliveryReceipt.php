@@ -23,6 +23,22 @@ class DeliveryReceipt extends Model
         'voided_at'              => 'datetime',
     ];
 
+    protected static function booted()
+    {
+        static::deleted(function (DeliveryReceipt $receipt) {
+            try {
+                if ($receipt->store_id && $receipt->slip_type) {
+                    $seqs = SlipSequence::where('store_id', $receipt->store_id)
+                        ->where('slip_type', $receipt->slip_type)
+                        ->get();
+                    foreach ($seqs as $seq) {
+                        $seq->recalculate(save: true);
+                    }
+                }
+            } catch (\Throwable $e) {}
+        });
+    }
+
     public function getSlipReceiptUrlAttribute(): ?string
     {
         if (empty($this->slip_receipt_path)) {

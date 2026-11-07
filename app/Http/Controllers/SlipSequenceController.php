@@ -553,7 +553,7 @@ class SlipSequenceController extends Controller
     public function destroyHistorySlip(Request $request)
     {
         $request->validate([
-            'source_type' => 'required|string|in:delivery_receipt,transfer,inventory_movement,void',
+            'source_type' => 'required|string|in:delivery_receipt,procurement,petty_cash,transfer_out,transfer_in,transfer,manual,void,inventory_movement',
             'document_id' => 'required|integer',
             'slip_no'     => 'nullable|string',
             'numeric_no'  => 'nullable|integer',
@@ -633,7 +633,9 @@ class SlipSequenceController extends Controller
      */
     protected function deleteSlipItem(string $sourceType, int $documentId, ?int $numericNo, ?string $slipNo): bool
     {
-        if ($sourceType === 'delivery_receipt' || $sourceType === 'void') {
+        $deleted = false;
+
+        if (in_array($sourceType, ['delivery_receipt', 'procurement', 'petty_cash', 'transfer_out', 'transfer_in', 'manual', 'void']) || DeliveryReceipt::where('id', $documentId)->exists()) {
             $receipt = DeliveryReceipt::find($documentId);
             if ($receipt) {
                 try {
@@ -647,7 +649,7 @@ class SlipSequenceController extends Controller
                 }
 
                 $receipt->delete();
-                return true;
+                $deleted = true;
             }
         } elseif ($sourceType === 'transfer') {
             $transfer = \App\Models\Transfer::withTrashed()->find($documentId);
@@ -691,29 +693,53 @@ class SlipSequenceController extends Controller
 
                 // Clean mirrored delivery receipts
                 try {
-                    DeliveryReceipt::where('transfer_id', $transfer->id)
-                        ->when($numericNo, function ($q) use ($numericNo) {
-                            $q->where(function ($sub) use ($numericNo) {
-                                $sub->where('dr_no', 'like', "%{$numericNo}%")
-                                    ->orWhere('reference_no', 'like', "%{$numericNo}%");
-                            });
-                        })
-                        ->delete();
+                    $trReceipts = DeliveryReceipt::where('transfer_id', $transfer->id)->get();
+                    foreach ($trReceipts as $trReceipt) {
+                        $trNum = (int)$this->extractFirstNumber($trReceipt->dr_no)
+                              ?? (int)$this->extractFirstNumber($trReceipt->slip_no)
+                              ?? (int)$this->extractFirstNumber($trReceipt->reference_no);
+                        if ($numericNo === null || $trNum === $numericNo || $trReceipt->slip_no == $slipNo || $trReceipt->dr_no == $slipNo) {
+                            try { $trReceipt->items()->delete(); } catch (\Throwable $e) {}
+                            $trReceipt->delete();
+                        }
+                    }
                 } catch (\Throwable $e) {}
 
-                return true;
+                $deleted = true;
             }
         } elseif ($sourceType === 'inventory_movement') {
             try {
                 $movement = \App\Models\InventoryMovement::find($documentId);
                 if ($movement) {
                     $movement->delete();
-                    return true;
+                    $deleted = true;
                 }
             } catch (\Throwable $e) {}
         }
 
-        return false;
+        // Clean any dangling delivery receipt matching slip_no or numeric_no
+        if (!empty($numericNo) || !empty($slipNo)) {
+            try {
+                $dangling = DeliveryReceipt::where(function ($q) use ($numericNo, $slipNo) {
+                    if (!empty($slipNo)) {
+                        $q->where('slip_no', $slipNo)
+                          ->orWhere('dr_no', $slipNo);
+                    }
+                    if (!empty($numericNo)) {
+                        $q->orWhere('slip_no', (string)$numericNo)
+                          ->orWhere('dr_no', (string)$numericNo);
+                    }
+                })->get();
+
+                foreach ($dangling as $dReceipt) {
+                    try { $dReceipt->items()->delete(); } catch (\Throwable $e) {}
+                    $dReceipt->delete();
+                    $deleted = true;
+                }
+            } catch (\Throwable $e) {}
+        }
+
+        return $deleted;
     }
 
     /**

@@ -32,37 +32,60 @@ class SlipSequenceService
                 ->first();
 
             if ($fullSequence) {
+                // Check if full sequence actually has free slips (e.g. from deleted slips)
+                $assignedSlips = $fullSequence->getAssignedSlipsDetail();
+                $freeNum = $fullSequence->nextFreeNumber(null, $assignedSlips);
+
+                if ($freeNum !== null) {
+                    $fullSequence->updateQuietly([
+                        'status'          => 'active',
+                        'current_slip_no' => $freeNum,
+                        'used_count'      => $assignedSlips->unique('numeric_no')->count(),
+                    ]);
+                    $sequence = $fullSequence;
+                } else {
+                    return [
+                        'has_sequence'    => true,
+                        'sequence_id'     => $fullSequence->id,
+                        'label'           => $fullSequence->label,
+                        'prefix'          => $fullSequence->prefix,
+                        'book_start_no'   => (int)$fullSequence->book_start_no,
+                        'book_end_no'     => (int)$fullSequence->book_end_no,
+                        'current_slip_no' => (int)$fullSequence->current_slip_no,
+                        'formatted_slip'  => $fullSequence->formatSlipNumber((int)$fullSequence->current_slip_no),
+                        'remaining'       => 0,
+                        'percentage_used' => 100,
+                        'used_count'      => (int)$fullSequence->used_count,
+                        'is_full'         => true,
+                        'status'          => 'full',
+                        'error'           => "Slip sequence book '{$fullSequence->label}' (#{$fullSequence->book_start_no}–#{$fullSequence->book_end_no}) is full. Cannot issue more slips. Please activate the Next Book first.",
+                    ];
+                }
+            } else {
                 return [
-                    'has_sequence'    => true,
-                    'sequence_id'     => $fullSequence->id,
-                    'label'           => $fullSequence->label,
-                    'prefix'          => $fullSequence->prefix,
-                    'book_start_no'   => (int)$fullSequence->book_start_no,
-                    'book_end_no'     => (int)$fullSequence->book_end_no,
-                    'current_slip_no' => (int)$fullSequence->current_slip_no,
-                    'formatted_slip'  => $fullSequence->formatSlipNumber((int)$fullSequence->current_slip_no),
+                    'has_sequence'    => false,
+                    'is_full'         => false,
+                    'error'           => "No active slip sequence configured for this store and slip type ({$slipType}).",
+                    'current_slip_no' => null,
+                    'formatted_slip'  => null,
                     'remaining'       => 0,
-                    'percentage_used' => 100,
-                    'used_count'      => (int)$fullSequence->used_count,
-                    'is_full'         => true,
-                    'status'          => 'full',
-                    'error'           => "Slip sequence book '{$fullSequence->label}' (#{$fullSequence->book_start_no}–#{$fullSequence->book_end_no}) is full. Cannot issue more slips. Please activate the Next Book first.",
                 ];
             }
-
-            return [
-                'has_sequence'    => false,
-                'is_full'         => false,
-                'error'           => "No active slip sequence configured for this store and slip type ({$slipType}).",
-                'current_slip_no' => null,
-                'formatted_slip'  => null,
-                'remaining'       => 0,
-            ];
         }
 
         $assignedSlips = $sequence->getAssignedSlipsDetail();
         $nextFree = $sequence->nextFreeNumber(null, $assignedSlips);
-        $isFull = ($sequence->status === 'full') || ($nextFree === null);
+
+        // Auto-heal active sequence if it has free leaves
+        if ($nextFree !== null && $sequence->status === 'full') {
+            $sequence->updateQuietly([
+                'status'          => 'active',
+                'current_slip_no' => $nextFree,
+                'used_count'      => $assignedSlips->unique('numeric_no')->count(),
+            ]);
+        }
+
+        $isFull = ($nextFree === null);
         $expectedInt = $nextFree ?? (int)$sequence->current_slip_no;
         $formatted = $sequence->formatSlipNumber($expectedInt);
 
@@ -115,27 +138,48 @@ class SlipSequenceService
                     ->where('slip_type', $slipType)
                     ->where('status', 'full')
                     ->latest()
+                    ->lockForUpdate()
                     ->first();
 
                 if ($fullSequence) {
-                    throw new SlipSequenceException("Slip sequence book '{$fullSequence->label}' (#{$fullSequence->book_start_no}–#{$fullSequence->book_end_no}) is full. Cannot issue more slips. Please activate the Next Book first.");
+                    $assigned = $fullSequence->getAssignedSlipsDetail();
+                    $freeNum = $fullSequence->nextFreeNumber(null, $assigned);
+                    if ($freeNum !== null) {
+                        $fullSequence->updateQuietly([
+                            'status'          => 'active',
+                            'current_slip_no' => $freeNum,
+                            'used_count'      => $assigned->unique('numeric_no')->count(),
+                        ]);
+                        $sequence = $fullSequence;
+                    } else {
+                        throw new SlipSequenceException("Slip sequence book '{$fullSequence->label}' (#{$fullSequence->book_start_no}–#{$fullSequence->book_end_no}) is full. Cannot issue more slips. Please activate the Next Book first.");
+                    }
+                } else {
+                    $typeLabel = $slipType === 'receive' ? 'Receiving (GRN)' : 'Outgoing (SIN)';
+                    throw new SlipSequenceException("No active slip sequence configured for this store and slip type ({$typeLabel}). Please configure an active sequence book in Slip Sequences.");
                 }
-
-                $typeLabel = $slipType === 'receive' ? 'Receiving (GRN)' : 'Outgoing (SIN)';
-                throw new SlipSequenceException("No active slip sequence configured for this store and slip type ({$typeLabel}). Please configure an active sequence book in Slip Sequences.");
             }
 
             $assignedSlips = $sequence->getAssignedSlipsDetail();
             $nextFree = $sequence->nextFreeNumber(null, $assignedSlips);
 
-            if ($nextFree === null || $sequence->status === 'full') {
+            // Auto-heal active sequence if it has free leaves
+            if ($nextFree !== null && $sequence->status === 'full') {
+                $sequence->updateQuietly([
+                    'status'          => 'active',
+                    'current_slip_no' => $nextFree,
+                    'used_count'      => $assignedSlips->unique('numeric_no')->count(),
+                ]);
+            }
+
+            if ($nextFree === null) {
                 $sequence->updateQuietly(['status' => 'full']);
                 throw new SlipSequenceException("Slip sequence book '{$sequence->label}' (#{$sequence->book_start_no}–#{$sequence->book_end_no}) is full. Cannot issue more slips. Please activate the Next Book first.");
             }
 
             $targetInt = $nextFree;
 
-            // If user supplied a slip number, enforce strict rules:
+            // If user supplied a slip number, enforce rules:
             if (!empty($inputSlipNo) && trim((string)$inputSlipNo) !== '') {
                 $rawInput = trim((string)$inputSlipNo);
                 $parsedInt = $this->extractNumeric($rawInput, $sequence);
@@ -144,9 +188,21 @@ class SlipSequenceService
                     throw new SlipSequenceException("Invalid slip number '{$rawInput}'. Must contain numeric digits matching the book sequence.");
                 }
 
-                // 1. Book range validation
+                // 1. Book range validation (check active book or alternative book for this store)
                 if ($parsedInt < (int)$sequence->book_start_no || $parsedInt > (int)$sequence->book_end_no) {
-                    throw new SlipSequenceException("Slip number #{$rawInput} is outside the active sequence book range (#{$sequence->book_start_no}–#{$sequence->book_end_no}).");
+                    $altSeq = SlipSequence::where('store_id', $storeId)
+                        ->where('slip_type', $slipType)
+                        ->where('book_start_no', '<=', $parsedInt)
+                        ->where('book_end_no', '>=', $parsedInt)
+                        ->lockForUpdate()
+                        ->first();
+                    if ($altSeq) {
+                        $sequence = $altSeq;
+                        $assignedSlips = $sequence->getAssignedSlipsDetail();
+                        $nextFree = $sequence->nextFreeNumber(null, $assignedSlips);
+                    } else {
+                        throw new SlipSequenceException("Slip number #{$rawInput} is outside the active sequence book range (#{$sequence->book_start_no}–#{$sequence->book_end_no}).");
+                    }
                 }
 
                 // 2. Duplicate validation: is this number already registered in this book?
@@ -188,10 +244,14 @@ class SlipSequenceService
                 throw new SlipSequenceException("Duplicate Entry: Slip #{$targetFormatted} is already recorded in delivery receipt #{$duplicateExists->id} (recorded on {$duplicateExists->received_date}).");
             }
 
-            // Advance the sequence counter to the next free number after $targetInt
+            // Advance the sequence counter
             $followingFree = $sequence->nextFreeNumber($targetInt + 1, $assignedSlips);
-            $newCurrent = $followingFree ?? ((int)$sequence->book_end_no + 1);
-            $newStatus = ($followingFree === null) ? 'full' : 'active';
+            $overallFree = ($followingFree === null)
+                ? $sequence->nextFreeNumber(null, $assignedSlips->concat([['numeric_no' => $targetInt]]))
+                : $followingFree;
+
+            $newCurrent = $followingFree ?? ($overallFree ?? ((int)$sequence->book_end_no + 1));
+            $newStatus = ($overallFree === null) ? 'full' : 'active';
             $newUsed = $assignedSlips->unique('numeric_no')->count() + 1;
 
             $sequence->updateQuietly([

@@ -90,12 +90,32 @@ class SlipSequence extends Model
             ->all();
 
         $start = (int)$this->book_start_no;
+        $end = (int)$this->book_end_no;
+
         if ($fromNumber !== null) {
             $start = max($start, $fromNumber);
-        } elseif (!empty($this->current_slip_no) && (int)$this->current_slip_no >= $start) {
-            $start = (int)$this->current_slip_no;
+        } else {
+            // When current_slip_no is set within book range, consider it as candidate start
+            $configuredStart = (!empty($this->current_slip_no) && (int)$this->current_slip_no >= $start && (int)$this->current_slip_no <= $end)
+                ? (int)$this->current_slip_no
+                : $start;
+
+            if ($assignedSlips->isEmpty()) {
+                $start = $configuredStart;
+            } else {
+                $validNumbers = $assignedSlips->pluck('numeric_no')
+                    ->filter(fn($n) => $n !== null && (int)$n >= $start && (int)$n <= $end)
+                    ->map(fn($n) => (int)$n);
+
+                if ($validNumbers->isNotEmpty()) {
+                    $minUsed = $validNumbers->min();
+                    // Candidate start is min of lowest used slip and configured start (capped at book_end_no)
+                    $start = min($minUsed, $configuredStart);
+                } else {
+                    $start = $configuredStart;
+                }
+            }
         }
-        $end = (int)$this->book_end_no;
 
         for ($num = $start; $num <= $end; $num++) {
             if (!isset($usedSet[$num])) {
