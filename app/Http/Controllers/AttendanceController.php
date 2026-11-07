@@ -141,6 +141,7 @@ class AttendanceController extends Controller
                 $period = EthiopianCalendar::getCurrentPayrollPeriod();
             }
 
+            $period['is_custom'] = false;
             $selectedPeriodKey = $period['period_key'];
             $periodDays = $period['days'];
             $startDate  = $period['start_greg'];

@@ -317,6 +317,7 @@ class EthiopianCalendar
             'end_greg'       => $endDate,
             'total_days'     => count($days),
             'days'           => $days,
+            'is_custom'      => false,
         ];
     }
 

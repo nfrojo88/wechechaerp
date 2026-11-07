@@ -461,7 +461,7 @@
                 <select name="period" class="form-select-sm" onchange="this.form.submit()" title="Ethiopian Payroll Month">
                     <optgroup label="Ethiopian Payroll Months (26th–25th)">
                         @foreach($availablePeriods as $p)
-                        <option value="{{ $p['period_key'] }}" {{ (!$period['is_custom'] ?? false) && $p['period_key'] === $selectedPeriodKey ? 'selected' : '' }}>
+                        <option value="{{ $p['period_key'] }}" {{ empty($period['is_custom']) && $p['period_key'] === $selectedPeriodKey ? 'selected' : '' }}>
                             {{ $p['full_label'] }} ({{ $p['label_en'] }})
                         </option>
                         @endforeach
