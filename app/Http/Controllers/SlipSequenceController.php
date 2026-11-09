@@ -19,14 +19,51 @@ class SlipSequenceController extends Controller
     /**
      * Slip Sequence Configuration Dashboard
      */
-    public function index()
+    public function index(Request $request = null)
     {
         @ini_set('max_execution_time', 120);
         @set_time_limit(120);
+
+        $activeSequences = SlipSequence::with('store')
+            ->where('status', 'active')
+            ->orderBy('store_id')
+            ->orderBy('slip_type')
+            ->get();
+
+        $fullSequences = SlipSequence::with('store')
+            ->where('status', 'full')
+            ->orderBy('store_id')
+            ->orderBy('book_start_no', 'desc')
+            ->get();
+
+        $inactiveSequences = SlipSequence::with('store')
+            ->where('status', 'inactive')
+            ->orderBy('store_id')
+            ->orderBy('book_start_no', 'desc')
+            ->get();
+
         $sequences = SlipSequence::with('store')->latest()->paginate(20);
         $stores = Store::where('is_active', true)->orderBy('name')->get();
-        
-        return view('slip-sequences.index', compact('sequences', 'stores'));
+
+        $activeCount = $activeSequences->count();
+        $fullCount = $fullSequences->count();
+        $inactiveCount = $inactiveSequences->count();
+        $totalCount = SlipSequence::count();
+
+        $currentTab = $request ? $request->query('tab', 'active') : 'active';
+
+        return view('slip-sequences.index', compact(
+            'sequences',
+            'activeSequences',
+            'fullSequences',
+            'inactiveSequences',
+            'activeCount',
+            'fullCount',
+            'inactiveCount',
+            'totalCount',
+            'currentTab',
+            'stores'
+        ));
     }
 
     /**
