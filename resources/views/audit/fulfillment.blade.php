@@ -83,23 +83,27 @@
         </div>
 
         <div class="col-12 col-sm-6 col-xl-3">
-            <x-kpi-card
-                title="Fully Fulfilled"
-                :value="number_format($kpiFulfilledCount) . ' Lines'"
-                subtitle="Complete store intake verified"
-                icon="fa-solid fa-circle-check"
-                tone="success"
-            />
+            <a href="{{ request()->fullUrlWithQuery(['tab' => 'completed', 'page' => 1]) }}" class="text-decoration-none">
+                <x-kpi-card
+                    title="Completed &amp; Fulfilled"
+                    :value="number_format($kpiCompletedCount ?? $kpiFulfilledCount) . ' Lines'"
+                    subtitle="Closed or verified store intake"
+                    icon="fa-solid fa-circle-check"
+                    tone="success"
+                />
+            </a>
         </div>
 
         <div class="col-12 col-sm-6 col-xl-3">
-            <x-kpi-card
-                title="Total Lines Tracked"
-                :value="number_format($kpiTotalLines) . ' Lines'"
-                subtitle="Active procurement purchase items"
-                icon="fa-solid fa-boxes-stacked"
-                tone="primary"
-            />
+            <a href="{{ request()->fullUrlWithQuery(['tab' => 'all', 'page' => 1]) }}" class="text-decoration-none">
+                <x-kpi-card
+                    title="Total Lines Tracked"
+                    :value="number_format($kpiTotalLines) . ' Lines'"
+                    subtitle="Active procurement purchase items"
+                    icon="fa-solid fa-boxes-stacked"
+                    tone="primary"
+                />
+            </a>
         </div>
     </div>
 
@@ -113,6 +117,10 @@
             <a href="{{ request()->fullUrlWithQuery(['tab' => 'paid_not_received', 'page' => 1]) }}" class="btn btn-sm rounded-pill px-3 fw-bold {{ $tab === 'paid_not_received' ? 'btn-danger text-white' : 'btn-light text-danger border-0' }}">
                 <i class="fa-solid fa-triangle-exclamation me-1"></i> 🚨 Paid But Not Received
                 <span class="badge bg-white text-danger rounded-pill ms-1 fw-bold">{{ $kpiPaidNotReceivedCount }}</span>
+            </a>
+            <a href="{{ request()->fullUrlWithQuery(['tab' => 'completed', 'page' => 1]) }}" class="btn btn-sm rounded-pill px-3 fw-bold {{ $tab === 'completed' ? 'btn-success text-white' : 'btn-light text-muted border-0' }}">
+                <i class="fa-solid fa-circle-check me-1"></i> Completed &amp; Fulfilled
+                <span class="badge bg-white text-success rounded-pill ms-1 fw-bold">{{ $kpiCompletedCount ?? $kpiFulfilledCount }}</span>
             </a>
             <a href="{{ request()->fullUrlWithQuery(['tab' => 'all', 'page' => 1]) }}" class="btn btn-sm rounded-pill px-3 fw-bold {{ $tab === 'all' ? 'btn-primary' : 'btn-light text-muted border-0' }}">
                 <i class="fa-solid fa-list-check me-1"></i> All Materials
@@ -158,6 +166,8 @@
                         <option value="not_received" {{ request('status') == 'not_received' ? 'selected' : '' }}>Not Received (0% intake)</option>
                         <option value="partially_fulfilled" {{ request('status') == 'partially_fulfilled' ? 'selected' : '' }}>Partially Fulfilled</option>
                         <option value="fully_fulfilled" {{ request('status') == 'fully_fulfilled' ? 'selected' : '' }}>Fully Fulfilled (100%)</option>
+                        <option value="closed_not_accepted" {{ request('status') == 'closed_not_accepted' ? 'selected' : '' }}>Closed (Not Accepted)</option>
+                        <option value="partially_accepted_closed" {{ request('status') == 'partially_accepted_closed' ? 'selected' : '' }}>Closed (Partial Intake)</option>
                         <option value="over_received" {{ request('status') == 'over_received' ? 'selected' : '' }}>Over-Received (&gt;100%)</option>
                     </select>
                 </div>
@@ -240,20 +250,44 @@
                                     {{ number_format($row->purchased_qty, 2) }}
                                 </td>
                                 <td data-label="Received" class="py-3 text-end font-monospace font-tabular">
-                                    <strong class="{{ $row->received_qty > 0 ? 'text-success' : 'text-danger' }}">
+                                    <strong class="{{ $row->received_qty > 0 ? 'text-success' : 'text-muted' }}">
                                         {{ number_format($row->received_qty, 2) }}
                                     </strong>
+                                    @if(($row->unaccepted_qty ?? 0) > 0)
+                                        <div class="mt-1">
+                                            <span class="badge bg-danger bg-opacity-15 text-danger border border-danger-subtle rounded-pill font-monospace px-2 py-0.5 d-inline-block" title="{{ $row->rejection_reason ?? 'Not accepted during store intake' }}">
+                                                <i class="fa-solid fa-ban me-1"></i> Not Accepted: {{ number_format($row->unaccepted_qty, 2) }}
+                                            </span>
+                                            @if($row->rejection_reason)
+                                                <small class="text-danger d-block fst-italic" style="font-size: 0.7rem; max-width: 140px; margin-left: auto;">{{ Str::limit($row->rejection_reason, 30) }}</small>
+                                            @endif
+                                        </div>
+                                    @endif
                                 </td>
                                 <td data-label="Remaining" class="py-3 text-end font-monospace font-tabular">
-                                    <strong class="fs-6 {{ $row->remaining_qty > 0 ? 'text-danger' : 'text-muted' }}">
+                                    <strong class="fs-6 {{ $row->remaining_qty > 0 && !$row->is_fulfillment_closed ? 'text-danger' : 'text-muted' }}">
                                         {{ number_format($row->remaining_qty, 2) }}
                                     </strong>
-                                    @if($row->outstanding_value > 0)
+                                    @if($row->outstanding_value > 0 && !$row->is_fulfillment_closed)
                                         <small class="text-muted d-block font-monospace">ETB {{ number_format($row->outstanding_value, 2) }}</small>
                                     @endif
                                 </td>
                                 <td data-label="Fulfillment" class="py-3 text-center">
-                                    @if($row->fulfillment_status === 'fully_fulfilled')
+                                    @if($row->is_fulfillment_closed)
+                                        @if(($row->unaccepted_qty ?? 0) > 0 && $row->received_qty == 0)
+                                            <span class="badge bg-danger bg-opacity-20 text-danger border border-danger-subtle rounded-pill px-2.5 py-1">
+                                                <i class="fa-solid fa-ban me-1"></i>Closed (Not Accepted)
+                                            </span>
+                                        @elseif(($row->unaccepted_qty ?? 0) > 0 && $row->received_qty > 0)
+                                            <span class="badge bg-warning bg-opacity-25 text-dark border border-warning-subtle rounded-pill px-2.5 py-1">
+                                                <i class="fa-solid fa-check-double me-1"></i>Closed (Partial Intake)
+                                            </span>
+                                        @else
+                                            <span class="badge bg-success bg-opacity-25 text-success border border-success-subtle rounded-pill px-2.5 py-1">
+                                                <i class="fa-solid fa-circle-check me-1"></i>Fulfilled
+                                            </span>
+                                        @endif
+                                    @elseif($row->fulfillment_status === 'fully_fulfilled')
                                         <span class="badge bg-success bg-opacity-25 text-success border border-success-subtle rounded-pill px-2.5 py-1">
                                             <i class="fa-solid fa-check me-1"></i>Fully Fulfilled
                                         </span>
@@ -291,6 +325,31 @@
                                 </td>
                                 <td data-label="Action" class="pe-4 py-3 text-end">
                                     <div class="btn-group btn-group-sm shadow-xs">
+                                        @if(!$row->is_fulfillment_closed && $row->remaining_qty > 0)
+                                            <button type="button" class="btn btn-success fw-bold px-2.5 btn-open-fulfill-modal" style="min-height: 32px;"
+                                                data-item-id="{{ $row->item->id }}"
+                                                data-pr-id="{{ $row->pr?->id }}"
+                                                data-pr-no="{{ $row->pr?->pr_no ?? $row->pr?->request_number ?? ('PR #' . $row->pr?->id) }}"
+                                                data-product-name="{{ $row->product?->name ?? 'Material' }}"
+                                                data-sku="{{ $row->product?->sku ?? '' }}"
+                                                data-unit="{{ $row->product?->unit ?? 'pcs' }}"
+                                                data-target-qty="{{ $row->purchased_qty > 0 ? $row->purchased_qty : $row->approved_qty }}"
+                                                data-received-qty="{{ $row->received_qty }}"
+                                                data-unaccepted-qty="{{ $row->unaccepted_qty ?? 0 }}"
+                                                data-remaining-qty="{{ $row->remaining_qty }}"
+                                                data-unit-cost="{{ $row->unit_cost }}"
+                                                data-store-id="{{ $row->pr?->store_id }}"
+                                                data-store-name="{{ $row->pr?->store?->name ?? 'Main Store' }}"
+                                                title="Fulfill / Close intake for this line"
+                                            >
+                                                <i class="fa-solid fa-boxes-packing me-1"></i> Fulfill
+                                            </button>
+                                        @else
+                                            <span class="badge bg-success bg-opacity-15 text-success border border-success-subtle px-2 py-1.5 rounded-pill d-inline-flex align-items-center" title="Fulfillment closed">
+                                                <i class="fa-solid fa-circle-check me-1"></i> Closed
+                                            </span>
+                                        @endif
+
                                         <button type="button" class="btn btn-outline-primary px-3 fw-semibold view-fulfillment-details" style="min-height: 32px;" data-pr-id="{{ $row->pr?->id }}" title="View Intake Slips & Photos">
                                             <i class="fa-solid fa-receipt me-1"></i> Trail
                                         </button>
@@ -849,8 +908,239 @@ document.addEventListener('DOMContentLoaded', function () {
                 });
         });
     });
+
+    // ─── Audit Fulfillment Modal Handler ──────────────────────────────────────
+    const fulfillModalEl = document.getElementById('auditFulfillModal');
+    let fulfillModal = null;
+    if (fulfillModalEl) {
+        fulfillModal = new bootstrap.Modal(fulfillModalEl);
+    }
+
+    const fulfillForm              = document.getElementById('auditFulfillForm');
+    const fulfillItemId            = document.getElementById('fulfillModalItemId');
+    const fulfillActionMode        = document.getElementById('fulfillModalActionMode');
+    const bannerPrNo               = document.getElementById('fulfillBannerPrNo');
+    const bannerItemName           = document.getElementById('fulfillBannerItemName');
+    const bannerSku                = document.getElementById('fulfillBannerSku');
+    const bannerStore              = document.getElementById('fulfillBannerStore');
+    const bannerTarget             = document.getElementById('fulfillBannerTarget');
+    const bannerReceived           = document.getElementById('fulfillBannerReceived');
+    const bannerUnaccepted         = document.getElementById('fulfillBannerUnaccepted');
+    const bannerRemaining          = document.getElementById('fulfillBannerRemaining');
+    const unitLabels               = document.querySelectorAll('.unit-label');
+
+    const inputUnacceptedQty       = document.getElementById('inputUnacceptedQty');
+    const inputIntakeQty           = document.getElementById('inputIntakeQty');
+    const inputPartialIntakeQty    = document.getElementById('inputPartialIntakeQty');
+    const inputPartialUnacceptedQty= document.getElementById('inputPartialUnacceptedQty');
+    const selectPresetReason       = document.getElementById('selectPresetReason');
+    const inputRejectionReason     = document.getElementById('inputRejectionReason');
+    const inputPartialRejReason    = document.getElementById('inputPartialRejectionReason');
+    const fulfillStoreSelect       = document.getElementById('fulfillStoreSelect');
+    const fulfillPartialStoreSelect= document.getElementById('fulfillPartialStoreSelect');
+    const btnSubmitFulfill         = document.getElementById('btnSubmitFulfill');
+
+    const sectionNotAccepted       = document.getElementById('sectionNotAccepted');
+    const sectionAcceptInventory   = document.getElementById('sectionAcceptInventory');
+    const sectionPartialSplit      = document.getElementById('sectionPartialSplit');
+
+    let currentRemaining = 0.0;
+
+    function setFulfillMode(mode) {
+        if (!fulfillActionMode) return;
+        fulfillActionMode.value = mode;
+
+        document.querySelectorAll('.fulfill-action-card').forEach(card => {
+            const cardMode = card.getAttribute('data-mode');
+            if (cardMode === mode) {
+                card.classList.add('active');
+                card.style.borderWidth = '2px';
+                if (mode === 'not_accepted') {
+                    card.style.borderColor = '#ef4444';
+                    card.style.background = '#fff5f5';
+                } else if (mode === 'accept_inventory') {
+                    card.style.borderColor = '#10b981';
+                    card.style.background = '#f0fdf4';
+                } else {
+                    card.style.borderColor = '#0284c7';
+                    card.style.background = '#f0f9ff';
+                }
+            } else {
+                card.classList.remove('active');
+                card.style.borderWidth = '1px';
+                card.style.borderColor = '#cbd5e1';
+                card.style.background = '#ffffff';
+            }
+        });
+
+        if (sectionNotAccepted) sectionNotAccepted.classList.add('d-none');
+        if (sectionAcceptInventory) sectionAcceptInventory.classList.add('d-none');
+        if (sectionPartialSplit) sectionPartialSplit.classList.add('d-none');
+
+        if (mode === 'not_accepted') {
+            if (sectionNotAccepted) sectionNotAccepted.classList.remove('d-none');
+            if (inputUnacceptedQty) inputUnacceptedQty.value = currentRemaining.toFixed(2);
+            if (inputIntakeQty) inputIntakeQty.value = '0';
+        } else if (mode === 'accept_inventory') {
+            if (sectionAcceptInventory) sectionAcceptInventory.classList.remove('d-none');
+            if (inputIntakeQty) inputIntakeQty.value = currentRemaining.toFixed(2);
+            if (inputUnacceptedQty) inputUnacceptedQty.value = '0';
+        } else if (mode === 'partial') {
+            if (sectionPartialSplit) sectionPartialSplit.classList.remove('d-none');
+            const half = Math.floor((currentRemaining / 2) * 100) / 100;
+            const remainder = Math.round((currentRemaining - half) * 100) / 100;
+            if (inputPartialIntakeQty) inputPartialIntakeQty.value = half > 0 ? half.toFixed(2) : '0.00';
+            if (inputPartialUnacceptedQty) inputPartialUnacceptedQty.value = remainder.toFixed(2);
+        }
+    }
+
+    document.querySelectorAll('.fulfill-action-card').forEach(card => {
+        card.addEventListener('click', function () {
+            const mode = this.getAttribute('data-mode');
+            setFulfillMode(mode);
+        });
+    });
+
+    if (selectPresetReason) {
+        selectPresetReason.addEventListener('change', function () {
+            if (this.value === 'other') {
+                if (inputRejectionReason) {
+                    inputRejectionReason.value = '';
+                    inputRejectionReason.focus();
+                }
+            } else {
+                if (inputRejectionReason) inputRejectionReason.value = this.value;
+            }
+        });
+    }
+
+    // Open Fulfill modal on clicking table button
+    document.querySelectorAll('.btn-open-fulfill-modal').forEach(btn => {
+        btn.addEventListener('click', function () {
+            const itemId    = this.getAttribute('data-item-id');
+            const prNo      = this.getAttribute('data-pr-no');
+            const pName     = this.getAttribute('data-product-name');
+            const sku       = this.getAttribute('data-sku');
+            const unit      = this.getAttribute('data-unit') || 'pcs';
+            const targetQty = parseFloat(this.getAttribute('data-target-qty') || 0);
+            const recvQty   = parseFloat(this.getAttribute('data-received-qty') || 0);
+            const unaccQty  = parseFloat(this.getAttribute('data-unaccepted-qty') || 0);
+            const remQty    = parseFloat(this.getAttribute('data-remaining-qty') || 0);
+            const storeId   = this.getAttribute('data-store-id');
+            const storeName = this.getAttribute('data-store-name') || 'Main Store';
+
+            currentRemaining = remQty;
+
+            if (fulfillItemId) fulfillItemId.value = itemId;
+            if (bannerPrNo) bannerPrNo.textContent = prNo;
+            if (bannerItemName) bannerItemName.textContent = pName;
+            if (bannerSku) bannerSku.textContent = 'SKU: ' + (sku || 'N/A');
+            if (bannerStore) bannerStore.textContent = storeName;
+            if (bannerTarget) bannerTarget.textContent = targetQty.toFixed(2) + ' ' + unit;
+            if (bannerReceived) bannerReceived.textContent = recvQty.toFixed(2) + ' ' + unit;
+            if (bannerUnaccepted) bannerUnaccepted.textContent = unaccQty.toFixed(2) + ' ' + unit;
+            if (bannerRemaining) bannerRemaining.textContent = remQty.toFixed(2) + ' ' + unit;
+
+            unitLabels.forEach(el => el.textContent = unit);
+
+            if (storeId && fulfillStoreSelect) {
+                fulfillStoreSelect.value = storeId;
+            }
+            if (storeId && fulfillPartialStoreSelect) {
+                fulfillPartialStoreSelect.value = storeId;
+            }
+
+            setFulfillMode('not_accepted');
+
+            if (fulfillModal) {
+                fulfillModal.show();
+            }
+        });
+    });
+
+    // Handle Fulfill Form Submit
+    if (fulfillForm) {
+        fulfillForm.addEventListener('submit', function (e) {
+            e.preventDefault();
+
+            const mode = fulfillActionMode ? fulfillActionMode.value : 'not_accepted';
+            let intakeVal = 0.0;
+            let unacceptedVal = 0.0;
+            let rejectionReason = '';
+            let storeVal = fulfillStoreSelect ? fulfillStoreSelect.value : null;
+
+            if (mode === 'not_accepted') {
+                unacceptedVal = parseFloat(inputUnacceptedQty?.value || 0);
+                intakeVal = 0.0;
+                rejectionReason = inputRejectionReason?.value || 'Not accepted during audit fulfillment';
+                if (unacceptedVal <= 0) {
+                    alert('Please specify an unaccepted quantity greater than 0.');
+                    return;
+                }
+            } else if (mode === 'accept_inventory') {
+                intakeVal = parseFloat(inputIntakeQty?.value || 0);
+                unacceptedVal = 0.0;
+                if (intakeVal <= 0) {
+                    alert('Please specify an intake quantity greater than 0.');
+                    return;
+                }
+            } else if (mode === 'partial') {
+                intakeVal = parseFloat(inputPartialIntakeQty?.value || 0);
+                unacceptedVal = parseFloat(inputPartialUnacceptedQty?.value || 0);
+                rejectionReason = inputPartialRejReason?.value || 'Partial balance not accepted';
+                storeVal = fulfillPartialStoreSelect ? fulfillPartialStoreSelect.value : storeVal;
+                if (intakeVal <= 0 && unacceptedVal <= 0) {
+                    alert('Please specify either accepted or unaccepted quantity.');
+                    return;
+                }
+            }
+
+            const formData = new FormData(fulfillForm);
+            formData.set('action_mode', mode);
+            formData.set('intake_quantity', intakeVal);
+            formData.set('unaccepted_quantity', unacceptedVal);
+            formData.set('rejection_reason', rejectionReason);
+            if (storeVal) formData.set('store_id', storeVal);
+
+            if (btnSubmitFulfill) {
+                btnSubmitFulfill.disabled = true;
+                btnSubmitFulfill.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span> Processing...';
+            }
+
+            fetch(fulfillForm.action, {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json',
+                },
+                body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    if (fulfillModal) fulfillModal.hide();
+                    alert(data.message || 'Fulfillment processed successfully.');
+                    window.location.reload();
+                } else {
+                    alert(data.message || 'Error processing fulfillment.');
+                    if (btnSubmitFulfill) {
+                        btnSubmitFulfill.disabled = false;
+                        btnSubmitFulfill.innerHTML = '<i class="fa-solid fa-check-double me-1"></i> Confirm Fulfillment';
+                    }
+                }
+            })
+            .catch(err => {
+                alert('A network error occurred while processing fulfillment.');
+                if (btnSubmitFulfill) {
+                    btnSubmitFulfill.disabled = false;
+                    btnSubmitFulfill.innerHTML = '<i class="fa-solid fa-check-double me-1"></i> Confirm Fulfillment';
+                }
+            });
+        });
+    }
 });
 </script>
 
+@include('audit._fulfill_modal')
 @include('audit._raise_finding_modal')
 @endsection

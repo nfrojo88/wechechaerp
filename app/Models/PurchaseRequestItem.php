@@ -10,14 +10,18 @@ class PurchaseRequestItem extends Model
         'purchase_request_id', 'product_id', 'quantity', 'purchased_quantity', 'received_quantity', 'unit',
         'specifications', 'estimated_unit_cost', 'payment_method',
         'proforma_invoice_id', 'supplier_id',
+        'unaccepted_quantity', 'is_fulfillment_closed', 'fulfillment_closed_at', 'fulfillment_closed_by', 'rejection_reason',
     ];
 
     protected $casts = [
-        'quantity'            => 'decimal:3',
-        'purchased_quantity'  => 'decimal:3',
-        'received_quantity'   => 'decimal:3',
-        'estimated_unit_cost' => 'decimal:2',
-        'estimated_total'     => 'decimal:2',
+        'quantity'              => 'decimal:3',
+        'purchased_quantity'    => 'decimal:3',
+        'received_quantity'     => 'decimal:3',
+        'unaccepted_quantity'   => 'decimal:3',
+        'is_fulfillment_closed' => 'boolean',
+        'fulfillment_closed_at' => 'datetime',
+        'estimated_unit_cost'   => 'decimal:2',
+        'estimated_total'       => 'decimal:2',
     ];
 
     protected static function booted()
@@ -137,7 +141,11 @@ class PurchaseRequestItem extends Model
      */
     public function getRemainingIntakeQty(): float
     {
-        return max(0.0, $this->getTargetIntakeQty() - $this->getReceivedQty());
+        if ($this->is_fulfillment_closed) {
+            return 0.0;
+        }
+        $unaccepted = (float)($this->unaccepted_quantity ?? 0);
+        return max(0.0, $this->getTargetIntakeQty() - $this->getReceivedQty() - $unaccepted);
     }
 
     /**
@@ -145,15 +153,68 @@ class PurchaseRequestItem extends Model
      */
     public function getIntakeStatus(): string
     {
+        if ($this->is_fulfillment_closed) {
+            return 'completed';
+        }
         $target = $this->getTargetIntakeQty();
         $received = $this->getReceivedQty();
+        $unaccepted = (float)($this->unaccepted_quantity ?? 0);
 
-        if ($target > 0 && $received >= $target) {
+        if ($target > 0 && ($received + $unaccepted) >= $target) {
             return 'completed';
         }
         if ($received > 0) {
             return 'partial';
         }
         return 'pending';
+    }
+
+    /**
+     * Ensure database columns for fulfillment closure exist.
+     */
+    public static function ensureFulfillmentColumns(): void
+    {
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasTable('purchase_request_items')) {
+                $missing = [];
+                if (!\Illuminate\Support\Facades\Schema::hasColumn('purchase_request_items', 'unaccepted_quantity')) {
+                    $missing[] = 'unaccepted_quantity';
+                }
+                if (!\Illuminate\Support\Facades\Schema::hasColumn('purchase_request_items', 'is_fulfillment_closed')) {
+                    $missing[] = 'is_fulfillment_closed';
+                }
+                if (!\Illuminate\Support\Facades\Schema::hasColumn('purchase_request_items', 'fulfillment_closed_at')) {
+                    $missing[] = 'fulfillment_closed_at';
+                }
+                if (!\Illuminate\Support\Facades\Schema::hasColumn('purchase_request_items', 'fulfillment_closed_by')) {
+                    $missing[] = 'fulfillment_closed_by';
+                }
+                if (!\Illuminate\Support\Facades\Schema::hasColumn('purchase_request_items', 'rejection_reason')) {
+                    $missing[] = 'rejection_reason';
+                }
+
+                if (!empty($missing)) {
+                    \Illuminate\Support\Facades\Schema::table('purchase_request_items', function (\Illuminate\Database\Schema\Blueprint $table) use ($missing) {
+                        if (in_array('unaccepted_quantity', $missing)) {
+                            $table->decimal('unaccepted_quantity', 15, 3)->default(0)->after('received_quantity');
+                        }
+                        if (in_array('is_fulfillment_closed', $missing)) {
+                            $table->boolean('is_fulfillment_closed')->default(false)->after('unaccepted_quantity');
+                        }
+                        if (in_array('fulfillment_closed_at', $missing)) {
+                            $table->timestamp('fulfillment_closed_at')->nullable()->after('is_fulfillment_closed');
+                        }
+                        if (in_array('fulfillment_closed_by', $missing)) {
+                            $table->unsignedBigInteger('fulfillment_closed_by')->nullable()->after('fulfillment_closed_at');
+                        }
+                        if (in_array('rejection_reason', $missing)) {
+                            $table->text('rejection_reason')->nullable()->after('fulfillment_closed_by');
+                        }
+                    });
+                }
+            }
+        } catch (\Throwable $e) {
+            \Log::warning('PurchaseRequestItem: Error ensuring fulfillment columns: ' . $e->getMessage());
+        }
     }
 }

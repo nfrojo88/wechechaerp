@@ -461,12 +461,13 @@ class StoreAuditController extends Controller
     {
         $this->authorizeAuditorOrAdmin();
         AuditFinding::ensureSchema();
+        PurchaseRequestItem::ensureFulfillmentColumns();
 
-        $tab         = $request->input('tab', 'unfulfilled'); // unfulfilled, paid_not_received, all
+        $tab         = $request->input('tab', 'unfulfilled'); // unfulfilled, paid_not_received, completed, all
         $storeId     = $request->input('store_id');
         $projectId   = $request->input('project_id');
         $supplierId  = $request->input('supplier_id');
-        $status      = $request->input('status'); // fully_fulfilled, partially_fulfilled, not_received, over_received
+        $status      = $request->input('status'); // fully_fulfilled, partially_fulfilled, not_received, over_received, closed_not_accepted, partially_accepted_closed
         $search      = $request->input('search');
 
         // Query Purchase Request Items with related PR, Product, Payments, and Delivery Receipts
@@ -561,12 +562,26 @@ class StoreAuditController extends Controller
             }
             $receivedQty = max((float)$item->received_quantity, $receivedFromReceipts);
 
+            $unacceptedQty = (float)($item->unaccepted_quantity ?? 0);
+            $isFulfillmentClosed = (bool)($item->is_fulfillment_closed ?? false);
+
             // Remaining Qty
             $targetQty = $purchasedQty > 0 ? $purchasedQty : $approvedQty;
-            $remainingQty = max(0.0, $targetQty - $receivedQty);
+            $remainingQty = max(0.0, $targetQty - $receivedQty - $unacceptedQty);
+            if ($isFulfillmentClosed) {
+                $remainingQty = 0.0;
+            }
 
             // Fulfillment Status
-            if ($receivedQty >= $targetQty && $targetQty > 0) {
+            if ($isFulfillmentClosed) {
+                if ($unacceptedQty > 0 && $receivedQty == 0) {
+                    $fulfillmentStatus = 'closed_not_accepted';
+                } elseif ($unacceptedQty > 0 && $receivedQty > 0) {
+                    $fulfillmentStatus = 'partially_accepted_closed';
+                } else {
+                    $fulfillmentStatus = 'fully_fulfilled';
+                }
+            } elseif ($receivedQty >= $targetQty && $targetQty > 0) {
                 $fulfillmentStatus = 'fully_fulfilled';
             } elseif ($receivedQty > 0 && $remainingQty > 0) {
                 $fulfillmentStatus = 'partially_fulfilled';
@@ -597,7 +612,7 @@ class StoreAuditController extends Controller
             }
 
             // Critical Audit Flag: "Paid But Not Received"
-            $isPaidButNotReceived = $isPaid && ($remainingQty > 0);
+            $isPaidButNotReceived = $isPaid && ($remainingQty > 0) && !$isFulfillmentClosed;
 
             // Unit cost & Outstanding monetary value
             $unitCost = (float) ($item->estimated_unit_cost ?? 0);
@@ -615,6 +630,9 @@ class StoreAuditController extends Controller
                 'approved_qty'           => $approvedQty,
                 'purchased_qty'          => $purchasedQty,
                 'received_qty'           => $receivedQty,
+                'unaccepted_qty'         => $unacceptedQty,
+                'is_fulfillment_closed'  => $isFulfillmentClosed,
+                'rejection_reason'       => $item->rejection_reason ?? null,
                 'remaining_qty'          => $remainingQty,
                 'fulfillment_status'     => $fulfillmentStatus,
                 'is_paid'                => $isPaid,
@@ -627,18 +645,35 @@ class StoreAuditController extends Controller
         });
 
         // Compute KPIs across entire filtered set
-        $kpiTotalLines         = $processed->count();
-        $kpiUnfulfilledCount   = $processed->where('remaining_qty', '>', 0)->count();
-        $kpiUnfulfilledValue   = $processed->where('remaining_qty', '>', 0)->sum('outstanding_value');
+        $kpiTotalLines           = $processed->count();
+        $kpiUnfulfilledCount     = $processed->filter(function ($row) {
+            return $row->remaining_qty > 0 && !$row->is_fulfillment_closed;
+        })->count();
+        $kpiUnfulfilledValue     = $processed->filter(function ($row) {
+            return $row->remaining_qty > 0 && !$row->is_fulfillment_closed;
+        })->sum('outstanding_value');
         $kpiPaidNotReceivedCount = $processed->where('is_paid_but_not_received', true)->count();
         $kpiPaidNotReceivedValue = $processed->where('is_paid_but_not_received', true)->sum('outstanding_value');
-        $kpiFulfilledCount     = $processed->where('fulfillment_status', 'fully_fulfilled')->count();
+        $kpiCompletedCount       = $processed->filter(function ($row) {
+            return $row->is_fulfillment_closed
+                || in_array($row->fulfillment_status, ['fully_fulfilled', 'closed_not_accepted', 'partially_accepted_closed'])
+                || in_array($row->pr?->status, [PurchaseRequest::STATUS_INTAKE_COMPLETE, PurchaseRequest::STATUS_COMPLETED]);
+        })->count();
+        $kpiFulfilledCount       = $kpiCompletedCount;
 
         // Apply Tab Filter
         if ($tab === 'unfulfilled') {
-            $processed = $processed->where('remaining_qty', '>', 0);
+            $processed = $processed->filter(function ($row) {
+                return $row->remaining_qty > 0 && !$row->is_fulfillment_closed;
+            });
         } elseif ($tab === 'paid_not_received') {
             $processed = $processed->where('is_paid_but_not_received', true);
+        } elseif ($tab === 'completed') {
+            $processed = $processed->filter(function ($row) {
+                return $row->is_fulfillment_closed
+                    || in_array($row->fulfillment_status, ['fully_fulfilled', 'closed_not_accepted', 'partially_accepted_closed'])
+                    || in_array($row->pr?->status, [PurchaseRequest::STATUS_INTAKE_COMPLETE, PurchaseRequest::STATUS_COMPLETED]);
+            });
         }
 
         // Apply Status Filter
@@ -677,8 +712,333 @@ class StoreAuditController extends Controller
             'kpiUnfulfilledValue',
             'kpiPaidNotReceivedCount',
             'kpiPaidNotReceivedValue',
-            'kpiFulfilledCount'
+            'kpiFulfilledCount',
+            'kpiCompletedCount'
         ));
+    }
+
+    /**
+     * Audit Fulfillment: Fulfill an individual PR line item.
+     * Supports:
+     * 1) Adding accepted quantity to inventory stock.
+     * 2) Marking unaccepted quantity as NOT ACCEPTED (strictly NOT added to inventory).
+     * 3) Closing line fulfillment and optionally closing entire PR to remove from Store intake queue.
+     */
+    public function fulfillItem(Request $request)
+    {
+        PurchaseRequestItem::ensureFulfillmentColumns();
+
+        $user = Auth::user();
+        if (!$user) {
+            return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
+        }
+
+        $isAuthorized = $user->hasAnyRole([
+            'auditor', 'audit', 'internal_auditor', 'audit_team', 'Auditor',
+            'admin', 'global_admin', 'super_admin', 'general_admin',
+            'store_keeper', 'store_manager', 'procurement_manager'
+        ]) || (method_exists($user, 'isGlobalAdmin') && $user->isGlobalAdmin());
+
+        if (!$isAuthorized) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized access.'], 403);
+        }
+
+        $request->validate([
+            'item_id'             => 'required|integer|exists:purchase_request_items,id',
+            'action_mode'         => 'required|string|in:not_accepted,accept_inventory,partial',
+            'intake_quantity'     => 'nullable|numeric|min:0',
+            'unaccepted_quantity' => 'nullable|numeric|min:0',
+            'store_id'            => 'nullable|integer|exists:stores,id',
+            'rejection_reason'    => 'nullable|string|max:1000',
+            'notes'               => 'nullable|string|max:1000',
+            'mark_pr_completed'   => 'nullable|boolean',
+        ]);
+
+        $item = PurchaseRequestItem::with(['purchaseRequest.materialRequest', 'purchaseRequest.items', 'product'])->findOrFail($request->item_id);
+        $pr   = $item->purchaseRequest;
+
+        $actionMode    = $request->input('action_mode');
+        $intakeQty     = $actionMode === 'not_accepted' ? 0.0 : (float) ($request->input('intake_quantity', 0));
+        $unacceptedQty = $actionMode === 'accept_inventory' ? 0.0 : (float) ($request->input('unaccepted_quantity', 0));
+        $rejectionNote = trim($request->input('rejection_reason', '')) ?: 'Not accepted during audit fulfillment';
+        $notes         = trim($request->input('notes', ''));
+        $markPrClosed  = $request->boolean('mark_pr_completed', true);
+
+        $storeId = $request->input('store_id') ?: ($pr->store_id ?? Store::first()?->id);
+
+        DB::beginTransaction();
+        try {
+            // 1. Add accepted quantity to Store Inventory (ONLY if intakeQty > 0)
+            if ($intakeQty > 0 && $item->product_id && $storeId) {
+                $unitPrice = (float) ($item->estimated_unit_cost ?? 0);
+                $inventory = Inventory::firstOrCreate(
+                    [
+                        'store_id'   => $storeId,
+                        'product_id' => $item->product_id,
+                    ],
+                    [
+                        'quantity_on_hand'  => 0,
+                        'quantity_reserved' => 0,
+                        'unit_cost'         => $unitPrice,
+                        'min_stock'         => 0,
+                    ]
+                );
+
+                $inventory->increment('quantity_on_hand', $intakeQty);
+                $inventory->update([
+                    'last_movement_at' => now(),
+                    'unit_cost'        => $unitPrice > 0 ? $unitPrice : $inventory->unit_cost,
+                ]);
+
+                try {
+                    InventoryMovement::create([
+                        'inventory_id'   => $inventory->id,
+                        'type'           => 'in',
+                        'quantity'       => $intakeQty,
+                        'reference_type' => PurchaseRequest::class,
+                        'reference_id'   => $pr->id,
+                        'performed_by'   => $user->id,
+                        'remarks'        => "Audit Fulfillment Stock In from PR #" . ($pr->pr_no ?? $pr->id) . ($notes ? " - {$notes}" : ""),
+                    ]);
+                } catch (\Throwable $e) {
+                    \Log::warning("InventoryMovement create failed: " . $e->getMessage());
+                }
+
+                $item->received_quantity = (float)($item->received_quantity ?? 0) + $intakeQty;
+            }
+
+            // 2. Unaccepted Quantity: STRICTLY NOT ADDED TO INVENTORY!
+            if ($unacceptedQty > 0 || $actionMode === 'not_accepted') {
+                $item->unaccepted_quantity = (float)($item->unaccepted_quantity ?? 0) + $unacceptedQty;
+                $item->rejection_reason = $rejectionNote . ($notes ? " ({$notes})" : "");
+            }
+
+            // 3. Close fulfillment on this line item
+            $item->is_fulfillment_closed = true;
+            $item->fulfillment_closed_at = now();
+            $item->fulfillment_closed_by = $user->id;
+            $item->save();
+
+            // 4. Update PR status and remove from store keeper pending queue if markPrClosed or all items resolved
+            $allClosed = true;
+            if ($pr && $pr->items) {
+                foreach ($pr->items as $sibling) {
+                    if ($sibling->id === $item->id) continue;
+                    $sibTarget = (float)($sibling->purchased_quantity > 0 ? $sibling->purchased_quantity : $sibling->quantity);
+                    $sibRecv   = (float)($sibling->received_quantity ?? 0);
+                    $sibUnacc  = (float)($sibling->unaccepted_quantity ?? 0);
+                    $sibClosed = (bool)($sibling->is_fulfillment_closed ?? false);
+                    if (!$sibClosed && ($sibRecv + $sibUnacc) < $sibTarget) {
+                        $allClosed = false;
+                        break;
+                    }
+                }
+            }
+
+            if ($pr && ($markPrClosed || $allClosed)) {
+                $oldStatus = $pr->status;
+                $pr->status = PurchaseRequest::STATUS_INTAKE_COMPLETE;
+                $pr->current_owner_role = null;
+                if ($storeId && !$pr->store_id) {
+                    $pr->store_id = $storeId;
+                }
+                $pr->save();
+
+                if ($pr->materialRequest) {
+                    $pr->materialRequest->update(['status' => 'completed']);
+                }
+
+                try {
+                    \App\Models\PrWorkflowLog::create([
+                        'purchase_request_id' => $pr->id,
+                        'from_status'         => $oldStatus,
+                        'to_status'           => PurchaseRequest::STATUS_INTAKE_COMPLETE,
+                        'action'              => 'audit_fulfillment_completed',
+                        'actor_id'            => $user->id,
+                        'actor_role'          => 'auditor',
+                        'notes'               => "Audit Fulfillment completed PR #" . ($pr->pr_no ?? $pr->id) . ". Item '{$item->product?->name}' - Accepted: {$intakeQty}, Not Accepted: {$unacceptedQty}. " . ($notes ?: $rejectionNote),
+                    ]);
+                } catch (\Throwable $e) {}
+            }
+
+            DB::commit();
+
+            $msg = "Item fulfillment processed successfully.";
+            if ($intakeQty > 0) {
+                $msg .= " Added " . number_format($intakeQty, 2) . " to store inventory.";
+            }
+            if ($unacceptedQty > 0) {
+                $msg .= " Marked " . number_format($unacceptedQty, 2) . " as NOT ACCEPTED (not added to inventory).";
+            }
+            if ($pr && ($markPrClosed || $allClosed)) {
+                $msg .= " PR #" . ($pr->pr_no ?? $pr->id) . " marked Intake Complete and removed from pending store intake queue.";
+            }
+
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => $msg,
+                ]);
+            }
+
+            return redirect()->back()->with('success', $msg);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            \Log::error("StoreAuditController::fulfillItem error: " . $e->getMessage());
+
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Error fulfilling item: ' . $e->getMessage(),
+                ], 500);
+            }
+
+            return redirect()->back()->with('error', 'Error fulfilling item: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Audit Fulfillment: Fulfill/Close entire Purchase Request in one step.
+     */
+    public function fulfillPr(Request $request)
+    {
+        PurchaseRequestItem::ensureFulfillmentColumns();
+
+        $user = Auth::user();
+        if (!$user) {
+            return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
+        }
+
+        $isAuthorized = $user->hasAnyRole([
+            'auditor', 'audit', 'internal_auditor', 'audit_team', 'Auditor',
+            'admin', 'global_admin', 'super_admin', 'general_admin',
+            'store_keeper', 'store_manager', 'procurement_manager'
+        ]) || (method_exists($user, 'isGlobalAdmin') && $user->isGlobalAdmin());
+
+        if (!$isAuthorized) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized access.'], 403);
+        }
+
+        $request->validate([
+            'pr_id'            => 'required|integer|exists:purchase_requests,id',
+            'action_mode'      => 'required|string|in:not_accepted,accept_inventory',
+            'store_id'         => 'nullable|integer|exists:stores,id',
+            'rejection_reason' => 'nullable|string|max:1000',
+            'notes'            => 'nullable|string|max:1000',
+        ]);
+
+        $pr = PurchaseRequest::with(['items.product', 'materialRequest'])->findOrFail($request->pr_id);
+        $actionMode    = $request->input('action_mode');
+        $rejectionNote = trim($request->input('rejection_reason', '')) ?: 'Not accepted during audit fulfillment';
+        $notes         = trim($request->input('notes', ''));
+        $storeId       = $request->input('store_id') ?: ($pr->store_id ?? Store::first()?->id);
+
+        DB::beginTransaction();
+        try {
+            $totalAccepted = 0;
+            $totalNotAccepted = 0;
+
+            foreach ($pr->items as $item) {
+                $targetQty = (float)($item->purchased_quantity > 0 ? $item->purchased_quantity : $item->quantity);
+                $receivedQty = (float)($item->received_quantity ?? 0);
+                $unacceptedQty = (float)($item->unaccepted_quantity ?? 0);
+                $remaining = max(0.0, $targetQty - $receivedQty - $unacceptedQty);
+
+                if ($remaining > 0) {
+                    if ($actionMode === 'accept_inventory') {
+                        if ($item->product_id && $storeId) {
+                            $unitPrice = (float) ($item->estimated_unit_cost ?? 0);
+                            $inventory = Inventory::firstOrCreate(
+                                ['store_id' => $storeId, 'product_id' => $item->product_id],
+                                ['quantity_on_hand' => 0, 'quantity_reserved' => 0, 'unit_cost' => $unitPrice, 'min_stock' => 0]
+                            );
+                            $inventory->increment('quantity_on_hand', $remaining);
+                            $inventory->update(['last_movement_at' => now()]);
+
+                            try {
+                                InventoryMovement::create([
+                                    'inventory_id'   => $inventory->id,
+                                    'type'           => 'in',
+                                    'quantity'       => $remaining,
+                                    'reference_type' => PurchaseRequest::class,
+                                    'reference_id'   => $pr->id,
+                                    'performed_by'   => $user->id,
+                                    'remarks'        => "Audit Fulfillment Stock In PR #" . ($pr->pr_no ?? $pr->id) . ($notes ? " - {$notes}" : ""),
+                                ]);
+                            } catch (\Throwable $e) {}
+
+                            $item->received_quantity = $receivedQty + $remaining;
+                            $totalAccepted += $remaining;
+                        }
+                    } else {
+                        // Strictly NOT accepted - do not touch inventory!
+                        $item->unaccepted_quantity = $unacceptedQty + $remaining;
+                        $item->rejection_reason = $rejectionNote . ($notes ? " ({$notes})" : "");
+                        $totalNotAccepted += $remaining;
+                    }
+                }
+
+                $item->is_fulfillment_closed = true;
+                $item->fulfillment_closed_at = now();
+                $item->fulfillment_closed_by = $user->id;
+                $item->save();
+            }
+
+            $oldStatus = $pr->status;
+            $pr->status = PurchaseRequest::STATUS_INTAKE_COMPLETE;
+            $pr->current_owner_role = null;
+            if ($storeId && !$pr->store_id) {
+                $pr->store_id = $storeId;
+            }
+            $pr->save();
+
+            if ($pr->materialRequest) {
+                $pr->materialRequest->update(['status' => 'completed']);
+            }
+
+            try {
+                \App\Models\PrWorkflowLog::create([
+                    'purchase_request_id' => $pr->id,
+                    'from_status'         => $oldStatus,
+                    'to_status'           => PurchaseRequest::STATUS_INTAKE_COMPLETE,
+                    'action'              => 'audit_fulfillment_pr_completed',
+                    'actor_id'            => $user->id,
+                    'actor_role'          => 'auditor',
+                    'notes'               => "Audit Fulfillment closed PR #" . ($pr->pr_no ?? $pr->id) . ". Total Accepted: {$totalAccepted}, Total Not Accepted: {$totalNotAccepted}. " . ($notes ?: $rejectionNote),
+                ]);
+            } catch (\Throwable $e) {}
+
+            DB::commit();
+
+            $msg = "PR #" . ($pr->pr_no ?? $pr->id) . " fulfillment closed successfully and removed from pending store intake queue.";
+            if ($totalAccepted > 0) {
+                $msg .= " Added {$totalAccepted} items to inventory.";
+            }
+            if ($totalNotAccepted > 0) {
+                $msg .= " Marked {$totalNotAccepted} items as NOT ACCEPTED (not added to inventory).";
+            }
+
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => $msg,
+                ]);
+            }
+
+            return redirect()->back()->with('success', $msg);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            \Log::error("StoreAuditController::fulfillPr error: " . $e->getMessage());
+
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Error fulfilling PR: ' . $e->getMessage(),
+                ], 500);
+            }
+
+            return redirect()->back()->with('error', 'Error fulfilling PR: ' . $e->getMessage());
+        }
     }
 
     /**
@@ -1502,11 +1862,13 @@ class StoreAuditController extends Controller
                 'Approved Qty',
                 'Purchased Qty',
                 'Received at Store Qty',
+                'Not Accepted Qty',
                 'Remaining Qty',
                 'Fulfillment Status',
                 'Payment Status',
                 'Paid Amount (ETB)',
                 'Outstanding Value (ETB)',
+                'Rejection Reason',
                 'Audit Risk Alert',
             ]);
 
@@ -1523,11 +1885,13 @@ class StoreAuditController extends Controller
                     number_format((float)$row->approved_qty, 2, '.', ''),
                     number_format((float)$row->purchased_qty, 2, '.', ''),
                     number_format((float)$row->received_qty, 2, '.', ''),
+                    number_format((float)($row->unaccepted_qty ?? 0), 2, '.', ''),
                     number_format((float)$row->remaining_qty, 2, '.', ''),
                     strtoupper(str_replace('_', ' ', $row->fulfillment_status)),
                     $row->is_paid ? 'PAID' : 'PENDING PAYMENT',
                     number_format((float)$row->paid_amount, 2, '.', ''),
                     number_format((float)$row->outstanding_value, 2, '.', ''),
+                    $row->rejection_reason ?? '',
                     $row->is_paid_but_not_received ? 'PAID BUT NOT RECEIVED (CRITICAL RISK)' : 'OK',
                 ]);
             }

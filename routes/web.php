@@ -2300,6 +2300,8 @@ Route::middleware(['auth'])->group(function () {
         Route::get('transfers',                           [App\Http\Controllers\Audit\StoreAuditController::class, 'transferAudit'])->name('transfers');
         Route::get('fulfillment',                         [App\Http\Controllers\Audit\StoreAuditController::class, 'fulfillmentCheck'])->name('fulfillment');
         Route::get('fulfillment/{id}/details',            [App\Http\Controllers\Audit\StoreAuditController::class, 'fulfillmentDetails'])->name('fulfillment.details');
+        Route::post('fulfillment/fulfill-item',           [App\Http\Controllers\Audit\StoreAuditController::class, 'fulfillItem'])->name('fulfillment.fulfill-item');
+        Route::post('fulfillment/fulfill-pr',             [App\Http\Controllers\Audit\StoreAuditController::class, 'fulfillPr'])->name('fulfillment.fulfill-pr');
         Route::get('findings',                            [App\Http\Controllers\Audit\StoreAuditController::class, 'findingsIndex'])->name('findings.index');
         Route::post('findings',                           [App\Http\Controllers\Audit\StoreAuditController::class, 'storeFinding'])->name('findings.store');
         Route::get('findings/{id}',                       [App\Http\Controllers\Audit\StoreAuditController::class, 'showFinding'])->name('findings.show');
