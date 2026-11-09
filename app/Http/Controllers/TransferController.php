@@ -131,7 +131,9 @@ class TransferController extends Controller
             $drivers = \App\Models\Employee::where('status', 'active')->orderBy('full_name')->get();
         }
 
-        return view('transfers.show', compact('transfer', 'drivers'));
+        $products = Product::where('is_active', true)->orderBy('name')->get();
+
+        return view('transfers.show', compact('transfer', 'drivers', 'products'));
     }
 
     public function approve(Request $request, Transfer $transfer)
@@ -257,5 +259,237 @@ class TransferController extends Controller
     public function syncAllTransfersInventory(Request $request)
     {
         return app(\App\Http\Controllers\StoreManagerController::class)->syncAllTransfersInventory($request);
+    }
+
+    /**
+     * Global Admin Only: Add forgotten material to an existing transfer
+     */
+    public function adminAddItem(Request $request, Transfer $transfer)
+    {
+        $user = Auth::user();
+        $rawUserRoles = $user ? $user->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-', '_'], '', trim($r))))->toArray() : [];
+        $isGlobalAdmin = $user && (
+            (method_exists($user, 'isGlobalAdmin') && $user->isGlobalAdmin())
+            || (bool)($user->is_admin ?? false)
+            || in_array('globaladmin', $rawUserRoles)
+            || in_array('admin', $rawUserRoles)
+            || in_array('superadmin', $rawUserRoles)
+            || $user->hasAnyRole(['admin', 'global_admin', 'super_admin', 'Admin', 'Global Admin', 'Super Admin'])
+        );
+
+        if (!$isGlobalAdmin) {
+            abort(403, 'Unauthorized: Only Global Admin is authorized to add forgotten materials to an existing transfer.');
+        }
+
+        $request->validate([
+            'product_id'         => 'required|exists:products,id',
+            'quantity'           => 'required|numeric|min:0.0001',
+            'unit'               => 'nullable|string|max:50',
+            'admin_note'         => 'nullable|string|max:500',
+            'fulfillment_mode'   => 'nullable|in:auto,custom',
+            'requested_quantity' => 'nullable|numeric|min:0',
+            'sent_quantity'      => 'nullable|numeric|min:0',
+            'received_quantity'  => 'nullable|numeric|min:0',
+            'merge_if_exists'    => 'nullable',
+        ]);
+
+        $product = Product::findOrFail($request->product_id);
+        $qty = (float) $request->quantity;
+        $unit = trim((string)$request->unit);
+        if ($unit === '') {
+            $unit = $product->unit ?: 'pcs';
+        }
+
+        $mode = $request->input('fulfillment_mode', 'auto');
+        if ($mode === 'custom') {
+            $requestedQty = (float) ($request->filled('requested_quantity') ? $request->requested_quantity : $qty);
+            $sentQty      = (float) ($request->filled('sent_quantity') ? $request->sent_quantity : 0);
+            $receivedQty  = (float) ($request->filled('received_quantity') ? $request->received_quantity : 0);
+            $approvedQty  = max($requestedQty, $sentQty);
+        } else {
+            // Smart auto-alignment based on transfer status
+            $status = strtolower($transfer->status ?? 'draft');
+            switch ($status) {
+                case 'completed':
+                    $requestedQty = $qty;
+                    $approvedQty  = $qty;
+                    $sentQty      = $qty;
+                    $receivedQty  = $qty;
+                    break;
+                case 'in_transit':
+                case 'dispatched':
+                    $requestedQty = $qty;
+                    $approvedQty  = $qty;
+                    $sentQty      = $qty;
+                    $receivedQty  = 0;
+                    break;
+                case 'approved':
+                    $requestedQty = $qty;
+                    $approvedQty  = $qty;
+                    $sentQty      = 0;
+                    $receivedQty  = 0;
+                    break;
+                case 'draft':
+                case 'pending_approval':
+                default:
+                    $requestedQty = $qty;
+                    $approvedQty  = 0;
+                    $sentQty      = 0;
+                    $receivedQty  = 0;
+                    break;
+            }
+        }
+
+        DB::transaction(function () use ($transfer, $product, $requestedQty, $approvedQty, $sentQty, $receivedQty, $unit, $request, $user) {
+            $mergeIfExists = $request->boolean('merge_if_exists', true);
+            $existingItem = null;
+            if ($mergeIfExists) {
+                $existingItem = $transfer->items()->where('product_id', $product->id)->first();
+            }
+
+            if ($existingItem) {
+                $existingItem->update([
+                    'requested_quantity' => (float)$existingItem->requested_quantity + $requestedQty,
+                    'approved_quantity'  => (float)$existingItem->approved_quantity + $approvedQty,
+                    'sent_quantity'      => (float)$existingItem->sent_quantity + $sentQty,
+                    'received_quantity'  => (float)$existingItem->received_quantity + $receivedQty,
+                ]);
+            } else {
+                $transfer->items()->create([
+                    'product_id'         => $product->id,
+                    'requested_quantity' => $requestedQty,
+                    'approved_quantity'  => $approvedQty,
+                    'sent_quantity'      => $sentQty,
+                    'received_quantity'  => $receivedQty,
+                    'unit'               => $unit,
+                ]);
+            }
+
+            // Sync transfer inventory immediately
+            \App\Http\Controllers\StoreManagerController::syncTransferInventory($transfer);
+
+            // Audit Log
+            try {
+                $noteTxt = $request->filled('admin_note') ? " Note: " . $request->admin_note : "";
+                \App\Models\ActivityLog::log(
+                    'transfer_item_added_admin',
+                    "Global Admin {$user->name} added forgotten material \"{$product->name}\" ({$requestedQty} {$unit}) to Transfer #{$transfer->transfer_no} [Status: {$transfer->status}].{$noteTxt}",
+                    'Material Transfers',
+                    $transfer
+                );
+            } catch (\Throwable $e) {}
+        });
+
+        return back()->with('success', "Forgotten material \"{$product->name}\" ({$qty} {$unit}) successfully added to Transfer #{$transfer->transfer_no} by Global Admin, and store inventory synchronized.");
+    }
+
+    /**
+     * Global Admin Only: Delete forgotten/mistaken material from an existing transfer
+     */
+    public function adminDeleteItem(Request $request, Transfer $transfer, TransferItem $item)
+    {
+        $user = Auth::user();
+        $rawUserRoles = $user ? $user->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-', '_'], '', trim($r))))->toArray() : [];
+        $isGlobalAdmin = $user && (
+            (method_exists($user, 'isGlobalAdmin') && $user->isGlobalAdmin())
+            || (bool)($user->is_admin ?? false)
+            || in_array('globaladmin', $rawUserRoles)
+            || in_array('admin', $rawUserRoles)
+            || in_array('superadmin', $rawUserRoles)
+            || $user->hasAnyRole(['admin', 'global_admin', 'super_admin', 'Admin', 'Global Admin', 'Super Admin'])
+        );
+
+        if (!$isGlobalAdmin) {
+            abort(403, 'Unauthorized: Only Global Admin is authorized to remove materials from an existing transfer.');
+        }
+
+        if ($item->transfer_id != $transfer->id) {
+            return back()->with('error', 'Item does not belong to this transfer.');
+        }
+
+        $productName = $item->product->name ?? 'Material Item';
+        $itemQty = (float)($item->received_quantity ?: ($item->sent_quantity ?: $item->requested_quantity));
+        $itemUnit = $item->unit;
+
+        DB::transaction(function () use ($transfer, $item, $productName, $itemQty, $itemUnit, $user) {
+            // Reverse inventory movements specifically related to this item/product if any
+            try {
+                $inventoryService = app(\App\Services\InventoryService::class);
+                
+                // If origin store had transfer_out for this transfer & product, return it
+                $outQty = (float) \App\Models\InventoryMovement::where('reference_type', Transfer::class)
+                    ->where('reference_id', $transfer->id)
+                    ->where('type', 'transfer_out')
+                    ->whereHas('inventory', fn($q) => $q->withoutGlobalScopes()->where('store_id', $transfer->from_store_id)->where('product_id', $item->product_id))
+                    ->sum('quantity');
+
+                $retQty = (float) \App\Models\InventoryMovement::where('reference_type', Transfer::class)
+                    ->where('reference_id', $transfer->id)
+                    ->where('type', 'transfer_return')
+                    ->whereHas('inventory', fn($q) => $q->withoutGlobalScopes()->where('store_id', $transfer->from_store_id)->where('product_id', $item->product_id))
+                    ->sum('quantity');
+
+                $netOut = abs($outQty) - abs($retQty);
+                if ($netOut > 0.0001) {
+                    $inventoryService->applyMovement(
+                        storeId: $transfer->from_store_id,
+                        productId: $item->product_id,
+                        quantityDelta: +$netOut,
+                        type: 'transfer_return',
+                        referenceType: Transfer::class,
+                        referenceId: $transfer->id,
+                        remarks: "Transfer #{$transfer->transfer_no} item \"{$productName}\" removed by Global Admin — stock returned to origin store",
+                        performedBy: $user->id ?? 1
+                    );
+                }
+
+                // If destination store had transfer_in for this transfer & product, reverse it
+                $inQty = (float) \App\Models\InventoryMovement::where('reference_type', Transfer::class)
+                    ->where('reference_id', $transfer->id)
+                    ->where('type', 'transfer_in')
+                    ->whereHas('inventory', fn($q) => $q->withoutGlobalScopes()->where('store_id', $transfer->to_store_id)->where('product_id', $item->product_id))
+                    ->sum('quantity');
+
+                $revQty = (float) \App\Models\InventoryMovement::where('reference_type', Transfer::class)
+                    ->where('reference_id', $transfer->id)
+                    ->where('type', 'transfer_reversal')
+                    ->whereHas('inventory', fn($q) => $q->withoutGlobalScopes()->where('store_id', $transfer->to_store_id)->where('product_id', $item->product_id))
+                    ->sum('quantity');
+
+                $netIn = abs($inQty) - abs($revQty);
+                if ($netIn > 0.0001) {
+                    $inventoryService->applyMovement(
+                        storeId: $transfer->to_store_id,
+                        productId: $item->product_id,
+                        quantityDelta: -$netIn,
+                        type: 'transfer_reversal',
+                        referenceType: Transfer::class,
+                        referenceId: $transfer->id,
+                        remarks: "Transfer #{$transfer->transfer_no} item \"{$productName}\" removed by Global Admin — stock reversed from destination store",
+                        performedBy: $user->id ?? 1
+                    );
+                }
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('Error reversing single transfer item inventory: ' . $e->getMessage());
+            }
+
+            // Delete item
+            $item->delete();
+
+            // Re-sync overall transfer inventory
+            \App\Http\Controllers\StoreManagerController::syncTransferInventory($transfer);
+
+            // Audit Log
+            try {
+                \App\Models\ActivityLog::log(
+                    'transfer_item_removed_admin',
+                    "Global Admin {$user->name} removed material \"{$productName}\" ({$itemQty} {$itemUnit}) from Transfer #{$transfer->transfer_no} [Status: {$transfer->status}]. Store inventory movements reversed.",
+                    'Material Transfers',
+                    $transfer
+                );
+            } catch (\Throwable $e) {}
+        });
+
+        return back()->with('success', "Material \"{$productName}\" removed from Transfer #{$transfer->transfer_no} by Global Admin and store inventory reversed.");
     }
 }

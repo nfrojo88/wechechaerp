@@ -1902,6 +1902,9 @@ Route::middleware(['auth'])->group(function () {
     Route::post('transfers/{transfer}/complete', [App\Http\Controllers\TransferController::class, 'complete'])->name('transfers.complete');
     Route::post('transfers/{transfer}/sync-inventory', [App\Http\Controllers\TransferController::class, 'syncInventoryManually'])->name('transfers.sync-inventory');
     Route::post('transfers/sync-all-inventory', [App\Http\Controllers\TransferController::class, 'syncAllTransfersInventory'])->name('transfers.sync-all-inventory');
+    // Global Admin only: add forgotten material to an existing transfer
+    Route::post('transfers/{transfer}/admin-add-item', [App\Http\Controllers\TransferController::class, 'adminAddItem'])->name('transfers.admin-add-item');
+    Route::post('transfers/{transfer}/items/{item}/admin-delete', [App\Http\Controllers\TransferController::class, 'adminDeleteItem'])->name('transfers.admin-delete-item');
 
     // AI Receipt Scanner Endpoint for Purchasing Screens
     Route::post('purchases/receipt-scan', [App\Http\Controllers\PurchaseReceiptScanController::class, 'scan'])
@@ -2596,6 +2599,8 @@ Route::middleware(['auth'])->group(function () {
         Route::delete('transfers/{transfer}', [App\Http\Controllers\StoreManagerController::class, 'destroyTransfer'])->name('transfers.destroy');
         Route::post('transfers/{transfer}/delete', [App\Http\Controllers\StoreManagerController::class, 'destroyTransfer'])->name('transfers.delete');
         Route::post('transfers/{transfer}/items/{item}/delete', [App\Http\Controllers\StoreManagerController::class, 'deleteTransferItem'])->name('transfers.items.delete');
+        Route::post('transfers/{transfer}/admin-add-item', [App\Http\Controllers\StoreManagerController::class, 'adminAddTransferItem'])->name('transfers.admin-add-item');
+        Route::post('transfers/{transfer}/items/{item}/admin-delete', [App\Http\Controllers\StoreManagerController::class, 'adminDeleteTransferItem'])->name('transfers.items.admin-delete');
         
         // Material Requests from Site Engineers / Coordinator
         Route::get('material-requests', [App\Http\Controllers\StoreManagerController::class, 'materialRequests'])->name('material-requests.index');

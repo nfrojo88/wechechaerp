@@ -3549,4 +3549,20 @@ class StoreManagerController extends Controller
             return back()->with('error', 'Reconciliation failed: ' . $e->getMessage());
         }
     }
+
+    /**
+     * Global Admin Only: Add forgotten material to an existing transfer (Store Manager Route)
+     */
+    public function adminAddTransferItem(Request $request, Transfer $transfer)
+    {
+        return app(\App\Http\Controllers\TransferController::class)->adminAddItem($request, $transfer);
+    }
+
+    /**
+     * Global Admin Only: Delete forgotten/mistaken material from an existing transfer (Store Manager Route)
+     */
+    public function adminDeleteTransferItem(Request $request, Transfer $transfer, TransferItem $item)
+    {
+        return app(\App\Http\Controllers\TransferController::class)->adminDeleteItem($request, $transfer, $item);
+    }
 }

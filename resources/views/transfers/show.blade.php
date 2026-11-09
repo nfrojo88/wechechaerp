@@ -4,6 +4,14 @@
     $authUser = auth()->user();
     $rawUserRoles = $authUser ? $authUser->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray() : [];
     $isAuditorUser = in_array('auditor', $rawUserRoles) || in_array('audit', $rawUserRoles) || in_array('internal_auditor', $rawUserRoles) || in_array('audit_team', $rawUserRoles) || ($authUser && $authUser->hasAnyRole(['auditor', 'audit', 'internal_auditor', 'Auditor', 'Audit']));
+    $isGlobalAdmin = $authUser && (
+        (method_exists($authUser, 'isGlobalAdmin') && $authUser->isGlobalAdmin())
+        || (bool)($authUser->is_admin ?? false)
+        || in_array('global_admin', $rawUserRoles)
+        || in_array('admin', $rawUserRoles)
+        || in_array('super_admin', $rawUserRoles)
+        || $authUser->hasAnyRole(['admin', 'global_admin', 'super_admin', 'Admin', 'Global Admin', 'Super Admin'])
+    );
 @endphp
 
 @section('title', 'Transfer: ' . $transfer->transfer_no)
@@ -172,21 +180,62 @@
             </div>
         </div>
         <div class="col-md-7">
-            <div class="card shadow-sm">
-                <div class="card-header fw-semibold">Items</div>
+            <div class="card shadow-sm border-0 rounded-3">
+                <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="fas fa-boxes-stacked text-primary"></i>
+                        <span class="fw-bold text-dark">Transferred Materials</span>
+                        <span class="badge bg-secondary rounded-pill">{{ $transfer->items->count() }}</span>
+                    </div>
+                    @if($isGlobalAdmin)
+                        <button type="button" class="btn btn-primary btn-sm fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#adminAddMaterialModal">
+                            <i class="fas fa-shield-halved me-1 text-warning"></i>Add Forgotten Material <span class="badge bg-warning text-dark ms-1">Admin</span>
+                        </button>
+                    @endif
+                </div>
                 <div class="card-body p-0">
                     <table class="table align-middle mb-0">
-                        <thead class="table-light"><tr><th>Product</th><th>Requested</th><th>Approved</th><th>Sent</th><th>Received</th></tr></thead>
-                        <tbody>
-                            @foreach($transfer->items as $item)
+                        <thead class="table-light">
                             <tr>
-                                <td>{{ $item->product->name ?? 'Item' }}</td>
-                                <td>{{ $item->requested_quantity }} {{ $item->unit }}</td>
-                                <td>{{ $item->approved_quantity }} {{ $item->unit }}</td>
-                                <td>{{ $item->sent_quantity }} {{ $item->unit }}</td>
-                                <td>{{ $item->received_quantity }} {{ $item->unit }}</td>
+                                <th>Product</th>
+                                <th class="text-end">Requested</th>
+                                <th class="text-end">Approved</th>
+                                <th class="text-end">Sent</th>
+                                <th class="text-end">Received</th>
+                                @if($isGlobalAdmin)
+                                    <th class="text-center" style="width: 70px;">Action</th>
+                                @endif
                             </tr>
-                            @endforeach
+                        </thead>
+                        <tbody>
+                            @forelse($transfer->items as $item)
+                            <tr>
+                                <td class="fw-semibold text-dark">
+                                    {{ $item->product->name ?? 'Item' }}
+                                    @if(!empty($item->product->code))
+                                        <small class="text-muted d-block font-monospace">({{ $item->product->code }})</small>
+                                    @endif
+                                </td>
+                                <td class="text-end">{{ number_format($item->requested_quantity, 2) }} <small class="text-muted">{{ $item->unit }}</small></td>
+                                <td class="text-end">{{ number_format($item->approved_quantity, 2) }} <small class="text-muted">{{ $item->unit }}</small></td>
+                                <td class="text-end">{{ number_format($item->sent_quantity, 2) }} <small class="text-muted">{{ $item->unit }}</small></td>
+                                <td class="text-end">{{ number_format($item->received_quantity, 2) }} <small class="text-muted">{{ $item->unit }}</small></td>
+                                @if($isGlobalAdmin)
+                                <td class="text-center">
+                                    <form action="{{ route('transfers.admin-delete-item', [$transfer, $item]) }}" method="POST" onsubmit="return confirm('Global Admin Confirmation:\n\nAre you sure you want to remove \'{{ addslashes($item->product->name ?? 'this material') }}\' from Transfer #{{ $transfer->transfer_no }}?\n\nThis will reverse physical inventory movements and cannot be undone.');" class="d-inline">
+                                        @csrf
+                                        <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-1.5" title="Delete item & reverse inventory (Global Admin)">
+                                            <i class="fas fa-trash-can"></i>
+                                        </button>
+                                    </form>
+                                </td>
+                                @endif
+                            </tr>
+                            @empty
+                            <tr>
+                                <td colspan="{{ $isGlobalAdmin ? 6 : 5 }}" class="text-center py-4 text-muted">No materials recorded in this transfer.</td>
+                            </tr>
+                            @endforelse
                         </tbody>
                     </table>
                 </div>
@@ -194,4 +243,8 @@
         </div>
     </div>
 </div>
+
+@if($isGlobalAdmin)
+    @include('transfers._admin_add_item_modal')
+@endif
 @endsection

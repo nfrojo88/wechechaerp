@@ -19,6 +19,14 @@
         $isSenderStore = !$isAuditorUser && $userStoreId && ($transfer->from_store_id == $userStoreId);
         $isReceiverStore = !$isAuditorUser && $userStoreId && ($transfer->to_store_id == $userStoreId);
         $isAdmin = !$isAuditorUser && $user->hasAnyRole(['admin', 'global_admin', 'store_manager', 'general_service', 'coordinator']);
+        $isGlobalAdmin = $user && (
+            (method_exists($user, 'isGlobalAdmin') && $user->isGlobalAdmin())
+            || (bool)($user->is_admin ?? false)
+            || in_array('global_admin', $rawUserRoles)
+            || in_array('admin', $rawUserRoles)
+            || in_array('super_admin', $rawUserRoles)
+            || $user->hasAnyRole(['admin', 'global_admin', 'super_admin', 'Admin', 'Global Admin', 'Super Admin'])
+        );
 
         // Workflow step flags
         $step1Completed = true;
@@ -450,6 +458,11 @@
                 <small class="text-muted">Compare requested, sent by origin storekeeper, and received by destination storekeeper</small>
             </div>
             <div class="d-flex gap-2 flex-wrap align-items-center">
+                @if($isGlobalAdmin)
+                    <button type="button" class="btn btn-primary btn-sm fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#adminAddMaterialModal">
+                        <i class="fas fa-shield-halved me-1 text-warning"></i>Add Forgotten Material <span class="badge bg-warning text-dark ms-1">Admin</span>
+                    </button>
+                @endif
                 @if(in_array($transfer->status, ['draft', 'pending_approval', 'approved']) && $isAdmin)
                     <button type="button" class="btn btn-outline-primary btn-sm shadow-sm" data-bs-toggle="modal" data-bs-target="#adjustMaterialsModal">
                         <i class="fas fa-sliders me-1"></i>Adjust Materials &amp; Qty
@@ -557,7 +570,7 @@
                             <th class="text-end">Received Qty (Dest.)</th>
                             <th class="text-center">Unit</th>
                             <th class="text-center">Variance / Status</th>
-                            @if(in_array($transfer->status, ['draft', 'pending_approval', 'approved']) && $isAdmin)
+                            @if((in_array($transfer->status, ['draft', 'pending_approval', 'approved']) && $isAdmin) || $isGlobalAdmin)
                                 <th class="text-end pe-3">Actions</th>
                             @endif
                         </tr>
@@ -646,9 +659,10 @@
                                     </span>
                                 @endif
                             </td>
-                            @if($canAdjustItems)
+                            @if($canAdjustItems || $isGlobalAdmin)
                             <td class="text-end pe-3 text-nowrap">
                                 <div class="d-inline-flex gap-1 align-items-center">
+                                    @if($canAdjustItems)
                                     <button type="button" class="btn btn-xs btn-outline-primary btn-sm py-0 px-2 btn-move-item"
                                             data-item-id="{{ $item->id }}"
                                             data-product-name="{{ $item->product->name ?? 'Material' }}"
@@ -669,13 +683,23 @@
                                         <i class="fas fa-trash-can me-1"></i>Delete
                                     </button>
                                     @endif
+                                    @endif
+
+                                    @if($isGlobalAdmin)
+                                    <form action="{{ route('transfers.admin-delete-item', [$transfer, $item]) }}" method="POST" onsubmit="return confirm('Global Admin Confirmation:\n\nAre you sure you want to remove \'{{ addslashes($item->product->name ?? 'this material') }}\' from Transfer #{{ $transfer->transfer_no }}?\n\nThis will reverse physical inventory movements and cannot be undone.');" class="d-inline">
+                                        @csrf
+                                        <button type="submit" class="btn btn-xs btn-outline-danger btn-sm py-0 px-2" title="Global Admin: Delete item and reverse inventory movements">
+                                            <i class="fas fa-trash-can me-1"></i>Admin Remove
+                                        </button>
+                                    </form>
+                                    @endif
                                 </div>
                             </td>
                             @endif
                         </tr>
                         @empty
                         <tr>
-                            <td colspan="{{ in_array($transfer->status, ['draft', 'pending_approval', 'approved']) && $isAdmin ? 9 : 8 }}" class="text-center py-4 text-muted">No items found in this transfer record</td>
+                            <td colspan="{{ (in_array($transfer->status, ['draft', 'pending_approval', 'approved']) && $isAdmin) || $isGlobalAdmin ? 9 : 8 }}" class="text-center py-4 text-muted">No items found in this transfer record</td>
                         </tr>
                         @endforelse
                     </tbody>
@@ -1670,6 +1694,10 @@ document.addEventListener('DOMContentLoaded', function () {
 @endif
 
 @include('partials._void_slip_modal')
+
+@if($isGlobalAdmin)
+    @include('transfers._admin_add_item_modal')
+@endif
 
 @endsection
 
