@@ -43,70 +43,86 @@ class SlipSequenceController extends Controller
      */
     public function store(Request $request)
     {
-        $validated = $request->validate([
+        $this->dropFlawedUniqueIndexIfPresent();
+
+        $request->validate([
             'store_id'      => 'required|exists:stores,id',
             'slip_type'     => 'required|in:receive,send',
-            'label'         => 'required|string|max:100',
+            'label'         => 'nullable|string|max:100',
             'prefix'        => 'nullable|string|max:50',
             'book_start_no' => 'required|integer|min:1',
             'book_end_no'   => 'required|integer|gt:book_start_no',
             'notes'         => 'nullable|string',
         ]);
 
-        // Validate current_slip_no separately after numeric coercion to avoid gte/lte field-compare failures
-        $startNo  = (int) $request->book_start_no;
-        $endNo    = (int) $request->book_end_no;
+        $startNo = (int) $request->book_start_no;
+        $endNo   = (int) $request->book_end_no;
+
+        // Auto-determine label if left blank
+        $label = trim((string)$request->label);
+        if ($label === '') {
+            $label = ($request->slip_type === 'receive') ? 'Receiving (GRN)' : 'Outgoing (SIN)';
+        }
+
+        // Validate current_slip_no
         $rawCurrent = $request->input('current_slip_no');
-        if ($rawCurrent !== null && $rawCurrent !== '') {
+        if ($rawCurrent !== null && trim((string)$rawCurrent) !== '') {
             $currentSlipNo = (int) $rawCurrent;
             if ($currentSlipNo < $startNo || $currentSlipNo > $endNo) {
                 return back()->withInput()->withErrors([
-                    'current_slip_no' => "Next Available Slip must be between {$startNo} and {$endNo}.",
+                    'current_slip_no' => "Next Available Slip (#{$currentSlipNo}) must be between Start No (#{$startNo}) and End No (#{$endNo}).",
                 ]);
             }
         } else {
             $currentSlipNo = $startNo;
         }
 
-        // Check if active sequence already exists for this store + type
-        $existing = SlipSequence::where('store_id', $request->store_id)
-            ->where('slip_type', $request->slip_type)
-            ->where('status', 'active')
-            ->first();
-
-        if ($existing) {
-            if ($request->boolean('archive_previous') || $existing->status === 'full' || $existing->current_slip_no > $existing->book_end_no) {
-                try {
-                    $existing->update(['status' => 'full']);
-                } catch (\Illuminate\Database\QueryException $e) {
-                    if (str_contains($e->getMessage(), 'unique_active_per_store_type') || $e->getCode() == 23000) {
-                        $this->dropFlawedUniqueIndexIfPresent();
-                        $existing->update(['status' => 'full']);
-                    } else {
-                        throw $e;
-                    }
-                }
-            } else {
-                return back()->withInput()->withErrors([
-                    'slip_type' => "Active sequence already exists for {$existing->label} (#{$existing->book_start_no}–#{$existing->book_end_no}). Select 'Archive previous sequence' to activate this new book without deleting any history."
-                ]);
-            }
+        // Safely archive any previous active sequence books for this store & type so history is preserved
+        try {
+            SlipSequence::where('store_id', $request->store_id)
+                ->where('slip_type', $request->slip_type)
+                ->where('status', 'active')
+                ->update(['status' => 'inactive']);
+        } catch (\Throwable $e) {
+            $this->dropFlawedUniqueIndexIfPresent();
+            SlipSequence::where('store_id', $request->store_id)
+                ->where('slip_type', $request->slip_type)
+                ->where('status', 'active')
+                ->update(['status' => 'inactive']);
         }
 
-        $seq = SlipSequence::create([
-            'store_id'        => $request->store_id,
-            'slip_type'       => $request->slip_type,
-            'label'           => $request->label,
-            'prefix'          => $request->prefix,
-            'book_start_no'   => $startNo,
-            'book_end_no'     => (int) $request->book_end_no,
-            'current_slip_no' => $currentSlipNo,
-            'used_count'      => 0,
-            'status'          => 'active',
-            'notes'           => $request->notes,
-        ]);
+        // Create the new sequence book
+        try {
+            $seq = SlipSequence::create([
+                'store_id'        => $request->store_id,
+                'slip_type'       => $request->slip_type,
+                'label'           => $label,
+                'prefix'          => $request->prefix ? trim($request->prefix) : null,
+                'book_start_no'   => $startNo,
+                'book_end_no'     => $endNo,
+                'current_slip_no' => $currentSlipNo,
+                'used_count'      => 0,
+                'status'          => 'active',
+                'notes'           => $request->notes,
+            ]);
+        } catch (\Throwable $e) {
+            $this->dropFlawedUniqueIndexIfPresent();
+            $seq = SlipSequence::create([
+                'store_id'        => $request->store_id,
+                'slip_type'       => $request->slip_type,
+                'label'           => $label,
+                'prefix'          => $request->prefix ? trim($request->prefix) : null,
+                'book_start_no'   => $startNo,
+                'book_end_no'     => $endNo,
+                'current_slip_no' => $currentSlipNo,
+                'used_count'      => 0,
+                'status'          => 'active',
+                'notes'           => $request->notes,
+            ]);
+        }
 
-        return redirect()->route('store-manager.slip-sequences.edit', $seq)->with('success', "New sequence book (#{$seq->book_start_no}–#{$seq->book_end_no}) configured and activated. All past slips remain preserved in history.");
+        return redirect()->route('store-manager.slip-sequences.edit', $seq)
+            ->with('success', "New sequence book (#{$seq->book_start_no}–#{$seq->book_end_no}) configured and activated! All past slips remain preserved in history.");
     }
 
     /**
@@ -349,15 +365,11 @@ class SlipSequenceController extends Controller
     }
 
     /**
-     * Safely drop flawed unique_active_per_store_type index if still present in MySQL.
+     * Safely drop flawed composite unique indexes that prevent multiple historical sequence books in MySQL.
      */
     protected function dropFlawedUniqueIndexIfPresent(): void
     {
-        try {
-            \Illuminate\Support\Facades\DB::statement("ALTER TABLE slip_sequences DROP INDEX unique_active_per_store_type");
-        } catch (\Throwable $e) {
-            // Index already dropped or not present
-        }
+        SlipSequence::dropFlawedIndices();
     }
 
     /**

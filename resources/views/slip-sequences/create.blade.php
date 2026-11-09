@@ -10,6 +10,36 @@
         </div>
     </div>
 
+    {{-- Error and Notification Alerts --}}
+    @if ($errors->any())
+        <div class="alert alert-danger alert-dismissible fade show shadow-sm border-0 border-start border-4 border-danger mb-4" role="alert">
+            <div class="d-flex align-items-center mb-1">
+                <i class="fas fa-exclamation-triangle me-2 fs-5 text-danger"></i>
+                <strong class="fs-6">Please correct the following errors:</strong>
+            </div>
+            <ul class="mb-0 ps-4 small">
+                @foreach ($errors->all() as $error)
+                    <li>{{ $error }}</li>
+                @endforeach
+            </ul>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    @endif
+
+    @if (session('error'))
+        <div class="alert alert-danger alert-dismissible fade show shadow-sm mb-4" role="alert">
+            <i class="fas fa-times-circle me-2"></i>{{ session('error') }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    @endif
+
+    @if (session('success'))
+        <div class="alert alert-success alert-dismissible fade show shadow-sm mb-4" role="alert">
+            <i class="fas fa-check-circle me-2"></i>{{ session('success') }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    @endif
+
     <div class="row">
         <div class="col-lg-8">
             <div class="card shadow-sm">
@@ -20,35 +50,47 @@
                         <div class="row mb-3">
                             <div class="col-md-6">
                                 <label class="form-label">Store *</label>
-                                <select name="store_id" class="form-select" required>
+                                <select name="store_id" class="form-select @error('store_id') is-invalid @enderror" required>
                                     <option value="">Select Store</option>
                                     @foreach($stores as $store)
                                     <option value="{{ $store->id }}" {{ old('store_id') == $store->id ? 'selected' : '' }}>{{ $store->name }} ({{ $store->type }})</option>
                                     @endforeach
                                 </select>
+                                @error('store_id')
+                                    <div class="invalid-feedback">{{ $message }}</div>
+                                @enderror
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">Slip Type *</label>
-                                <select name="slip_type" class="form-select" required onchange="updateLabel()">
+                                <select name="slip_type" id="slip_type" class="form-select @error('slip_type') is-invalid @enderror" required onchange="updateLabel()">
                                     <option value="">Select Type</option>
                                     <option value="receive" {{ old('slip_type') === 'receive' ? 'selected' : '' }}>Receiving (GRN)</option>
                                     <option value="send" {{ old('slip_type') === 'send' ? 'selected' : '' }}>Outgoing (SIN)</option>
                                 </select>
+                                @error('slip_type')
+                                    <div class="invalid-feedback">{{ $message }}</div>
+                                @enderror
                             </div>
                         </div>
 
                         <div class="row mb-3">
                             <div class="col-md-6">
-                                <label class="form-label">Label *</label>
-                                <input type="text" name="label" id="label" class="form-control" 
-                                       placeholder="E.g., Receiving (GRN)" required value="{{ old('label') }}">
-                                <small class="text-muted">Display name for this sequence</small>
+                                <label class="form-label">Label</label>
+                                <input type="text" name="label" id="label" class="form-control @error('label') is-invalid @enderror" 
+                                       placeholder="E.g., Receiving (GRN)" value="{{ old('label') }}">
+                                <small class="text-muted">Display name for this sequence (auto-filled by Slip Type if left blank)</small>
+                                @error('label')
+                                    <div class="invalid-feedback">{{ $message }}</div>
+                                @enderror
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">Prefix (Optional)</label>
-                                <input type="text" name="prefix" class="form-control" 
+                                <input type="text" name="prefix" class="form-control @error('prefix') is-invalid @enderror" 
                                        placeholder="E.g., REC or leave blank for numeric only" maxlength="50" value="{{ old('prefix') }}">
                                 <small class="text-muted">E.g., REC, OUT - Leave blank for numeric-only slips (e.g., 01042)</small>
+                                @error('prefix')
+                                    <div class="invalid-feedback">{{ $message }}</div>
+                                @enderror
                             </div>
                         </div>
 
@@ -59,23 +101,32 @@
                         <div class="row mb-3">
                             <div class="col-md-4">
                                 <label class="form-label fw-bold">Book Start No *</label>
-                                <input type="number" name="book_start_no" id="book_start_no" class="form-control font-monospace fw-bold" 
+                                <input type="number" name="book_start_no" id="book_start_no" class="form-control font-monospace fw-bold @error('book_start_no') is-invalid @enderror" 
                                        placeholder="E.g., 2100" required min="1" value="{{ old('book_start_no') }}" oninput="syncNextAvailableSlipNo()">
                                 <small class="text-muted">First leaf number in physical pad</small>
+                                @error('book_start_no')
+                                    <div class="invalid-feedback">{{ $message }}</div>
+                                @enderror
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label fw-bold">Book End No *</label>
-                                <input type="number" name="book_end_no" id="book_end_no" class="form-control font-monospace fw-bold" 
+                                <input type="number" name="book_end_no" id="book_end_no" class="form-control font-monospace fw-bold @error('book_end_no') is-invalid @enderror" 
                                        placeholder="E.g., 2150" required min="2" value="{{ old('book_end_no') }}" oninput="updateBookCapacity()">
                                 <small class="text-muted" id="bookCapacityText">Last leaf number in physical pad</small>
+                                @error('book_end_no')
+                                    <div class="invalid-feedback">{{ $message }}</div>
+                                @enderror
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label fw-bold text-primary">
                                     <i class="fas fa-play-circle me-1"></i>Next Available Slip (Start With No)
                                 </label>
-                                <input type="number" name="current_slip_no" id="current_slip_no" class="form-control font-monospace fw-bold border-primary shadow-xs" 
+                                <input type="number" name="current_slip_no" id="current_slip_no" class="form-control font-monospace fw-bold border-primary shadow-xs @error('current_slip_no') is-invalid @enderror" 
                                        placeholder="Defaults to Start No" min="1" value="{{ old('current_slip_no') }}">
                                 <small class="text-muted">Start issuing slips from this number</small>
+                                @error('current_slip_no')
+                                    <div class="invalid-feedback">{{ $message }}</div>
+                                @enderror
                             </div>
                         </div>
 
@@ -86,30 +137,16 @@
 
                         <div class="row mb-3">
                             <div class="col-12">
-                                <div class="form-check form-switch bg-light p-3 rounded border">
-                                    <input class="form-check-input ms-0 me-2" type="checkbox" name="archive_previous" id="archivePreviousSwitch" value="1" checked>
-                                    <label class="form-check-label fw-semibold text-dark" for="archivePreviousSwitch">
-                                        Archive any existing active sequence book for this store & type
-                                    </label>
-                                    <div class="small text-muted ms-4 ps-1">
-                                        Safely preserves all existing slip history. The previous book will be marked as completed/full and never deleted.
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="row mb-3">
-                            <div class="col-12">
                                 <label class="form-label">Notes</label>
                                 <textarea name="notes" class="form-control" rows="3" 
-                                          placeholder="E.g., Book #1, Location: Warehouse A"></textarea>
+                                          placeholder="E.g., Book #1, Location: Warehouse A">{{ old('notes') }}</textarea>
                             </div>
                         </div>
 
                         <hr>
                         <div class="d-flex justify-content-end gap-2">
                             <a href="{{ route('store-manager.slip-sequences.index') }}" class="btn btn-secondary">Cancel</a>
-                            <button type="submit" class="btn btn-primary">
+                            <button type="submit" class="btn btn-primary fw-bold shadow-sm">
                                 <i class="fas fa-save me-1"></i>Save Configuration
                             </button>
                         </div>
@@ -152,44 +189,52 @@ let userEditedNextSlip = {{ old('current_slip_no') ? 'true' : 'false' }};
 
 document.addEventListener('DOMContentLoaded', function() {
     const currentInput = document.getElementById('current_slip_no');
+    const startInput = document.getElementById('book_start_no');
+
     if (currentInput) {
         currentInput.addEventListener('input', function() {
             userEditedNextSlip = (this.value.trim() !== '');
         });
     }
 
-    // On page load: if book_start_no already has a value (e.g. after validation failure)
-    // and user hasn't manually set current_slip_no, auto-sync it
-    const startInput = document.getElementById('book_start_no');
-    if (startInput && startInput.value && !userEditedNextSlip) {
-        syncNextAvailableSlipNo();
+    if (startInput) {
+        startInput.addEventListener('input', function() {
+            syncNextAvailableSlipNo();
+        });
     }
 
-    // Always run capacity calc on load
+    // On page load: sync if start_no exists and next slip is empty
+    if (startInput && startInput.value && currentInput && !currentInput.value) {
+        currentInput.value = startInput.value;
+    }
+
     updateBookCapacity();
+    updateLabel();
 });
 
 function syncNextAvailableSlipNo() {
-    const startVal = document.getElementById('book_start_no')?.value;
+    const startInput = document.getElementById('book_start_no');
     const currentInput = document.getElementById('current_slip_no');
-    if (currentInput && !userEditedNextSlip) {
+    if (!startInput || !currentInput) return;
+
+    const startVal = startInput.value.trim();
+    if (!userEditedNextSlip && startVal !== '') {
         currentInput.value = startVal;
     }
     updateBookCapacity();
 }
 
 function updateBookCapacity() {
-    const startVal = parseInt(document.getElementById('book_start_no')?.value) || 0;
-    const endVal = parseInt(document.getElementById('book_end_no')?.value) || 0;
+    const startInput = document.getElementById('book_start_no');
+    const endInput = document.getElementById('book_end_no');
     const currentInput = document.getElementById('current_slip_no');
     const capacityText = document.getElementById('bookCapacityText');
 
+    const startVal = parseInt(startInput?.value) || 0;
+    const endVal = parseInt(endInput?.value) || 0;
+
     if (startVal > 0 && currentInput) {
         currentInput.min = startVal;
-        // If current_slip_no is below start (can happen when user changes start no), reset it
-        if (!userEditedNextSlip || (parseInt(currentInput.value) || 0) < startVal) {
-            currentInput.value = startVal;
-        }
     }
     if (endVal > 0 && currentInput) {
         currentInput.max = endVal;
@@ -202,13 +247,19 @@ function updateBookCapacity() {
 }
 
 function updateLabel() {
-    const slipType = document.querySelector('select[name="slip_type"]').value;
+    const slipTypeElem = document.getElementById('slip_type') || document.querySelector('select[name="slip_type"]');
     const labelInput = document.getElementById('label');
-    
-    if (slipType === 'receive' && !labelInput.value) {
-        labelInput.value = 'Receiving (GRN)';
-    } else if (slipType === 'send' && !labelInput.value) {
-        labelInput.value = 'Outgoing (SIN)';
+    if (!slipTypeElem || !labelInput) return;
+
+    const slipType = slipTypeElem.value;
+    if (slipType === 'receive') {
+        if (!labelInput.value || labelInput.value === 'Outgoing (SIN)') {
+            labelInput.value = 'Receiving (GRN)';
+        }
+    } else if (slipType === 'send') {
+        if (!labelInput.value || labelInput.value === 'Receiving (GRN)') {
+            labelInput.value = 'Outgoing (SIN)';
+        }
     }
 }
 </script>

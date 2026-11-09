@@ -25,11 +25,28 @@ class SlipSequence extends Model
         'status' => 'string',
     ];
 
+    /**
+     * Safely drop flawed composite unique indexes that prevent multiple historical sequence books in MySQL
+     */
+    public static function dropFlawedIndices(): void
+    {
+        $indicesToDrop = [
+            'unique_active_per_store_type',
+            'slip_sequences_store_id_slip_type_status_unique',
+            'slip_sequences_store_id_slip_type_unique',
+        ];
+
+        foreach ($indicesToDrop as $idx) {
+            try {
+                \Illuminate\Support\Facades\DB::statement("ALTER TABLE slip_sequences DROP INDEX `{$idx}`");
+            } catch (\Throwable $e) {}
+        }
+    }
+
     protected static function booted()
     {
         static::saving(function (SlipSequence $seq) {
             // When marking a sequence as active, ensure any other currently active sequence for this store and slip_type is marked inactive.
-            // Skip on initial creation (no id yet) — the controller already archives the previous sequence before calling create().
             if ($seq->status === 'active' && !empty($seq->store_id) && !empty($seq->slip_type) && $seq->exists) {
                 try {
                     static::where('store_id', $seq->store_id)
@@ -39,9 +56,7 @@ class SlipSequence extends Model
                         ->update(['status' => 'inactive']);
                 } catch (\Illuminate\Database\QueryException $e) {
                     if (str_contains($e->getMessage(), 'unique_active_per_store_type') || $e->getCode() == 23000) {
-                        try {
-                            \Illuminate\Support\Facades\DB::statement("ALTER TABLE slip_sequences DROP INDEX unique_active_per_store_type");
-                        } catch (\Throwable $dropErr) {}
+                        static::dropFlawedIndices();
                         static::where('store_id', $seq->store_id)
                             ->where('slip_type', $seq->slip_type)
                             ->where('status', 'active')
@@ -96,25 +111,9 @@ class SlipSequence extends Model
         if ($fromNumber !== null) {
             $start = max($start, $fromNumber);
         } else {
-            // When current_slip_no is set within book range, consider it as candidate start
-            $configuredStart = (!empty($this->current_slip_no) && (int)$this->current_slip_no >= $start && (int)$this->current_slip_no <= $end)
-                ? (int)$this->current_slip_no
-                : $start;
-
-            if ($assignedSlips->isEmpty()) {
-                $start = $configuredStart;
-            } else {
-                $validNumbers = $assignedSlips->pluck('numeric_no')
-                    ->filter(fn($n) => $n !== null && (int)$n >= $start && (int)$n <= $end)
-                    ->map(fn($n) => (int)$n);
-
-                if ($validNumbers->isNotEmpty()) {
-                    $minUsed = $validNumbers->min();
-                    // Candidate start is min of lowest used slip and configured start (capped at book_end_no)
-                    $start = min($minUsed, $configuredStart);
-                } else {
-                    $start = $configuredStart;
-                }
+            // When current_slip_no is configured within book range, start checking directly from current_slip_no
+            if (!empty($this->current_slip_no) && (int)$this->current_slip_no >= $start && (int)$this->current_slip_no <= $end) {
+                $start = (int)$this->current_slip_no;
             }
         }
 
