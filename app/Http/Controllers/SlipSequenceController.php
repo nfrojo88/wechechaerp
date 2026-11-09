@@ -43,16 +43,30 @@ class SlipSequenceController extends Controller
      */
     public function store(Request $request)
     {
-        $request->validate([
-            'store_id'        => 'required|exists:stores,id',
-            'slip_type'       => 'required|in:receive,send',
-            'label'           => 'required|string|max:100',
-            'prefix'          => 'nullable|string|max:50',
-            'book_start_no'   => 'required|integer|min:1',
-            'book_end_no'     => 'required|integer|gt:book_start_no',
-            'current_slip_no' => 'nullable|integer|gte:book_start_no|lte:book_end_no',
-            'notes'           => 'nullable|string',
+        $validated = $request->validate([
+            'store_id'      => 'required|exists:stores,id',
+            'slip_type'     => 'required|in:receive,send',
+            'label'         => 'required|string|max:100',
+            'prefix'        => 'nullable|string|max:50',
+            'book_start_no' => 'required|integer|min:1',
+            'book_end_no'   => 'required|integer|gt:book_start_no',
+            'notes'         => 'nullable|string',
         ]);
+
+        // Validate current_slip_no separately after numeric coercion to avoid gte/lte field-compare failures
+        $startNo  = (int) $request->book_start_no;
+        $endNo    = (int) $request->book_end_no;
+        $rawCurrent = $request->input('current_slip_no');
+        if ($rawCurrent !== null && $rawCurrent !== '') {
+            $currentSlipNo = (int) $rawCurrent;
+            if ($currentSlipNo < $startNo || $currentSlipNo > $endNo) {
+                return back()->withInput()->withErrors([
+                    'current_slip_no' => "Next Available Slip must be between {$startNo} and {$endNo}.",
+                ]);
+            }
+        } else {
+            $currentSlipNo = $startNo;
+        }
 
         // Check if active sequence already exists for this store + type
         $existing = SlipSequence::where('store_id', $request->store_id)
@@ -79,9 +93,6 @@ class SlipSequenceController extends Controller
             }
         }
 
-        $startNo = (int) $request->book_start_no;
-        $currentSlipNo = $request->filled('current_slip_no') ? (int) $request->current_slip_no : $startNo;
-
         $seq = SlipSequence::create([
             'store_id'        => $request->store_id,
             'slip_type'       => $request->slip_type,
@@ -104,13 +115,27 @@ class SlipSequenceController extends Controller
     public function storeNextBook(Request $request, SlipSequence $slipSequence)
     {
         $request->validate([
-            'label'           => 'required|string|max:100',
-            'prefix'          => 'nullable|string|max:50',
-            'book_start_no'   => 'required|integer|min:1',
-            'book_end_no'     => 'required|integer|gt:book_start_no',
-            'current_slip_no' => 'nullable|integer|gte:book_start_no|lte:book_end_no',
-            'notes'           => 'nullable|string',
+            'label'         => 'required|string|max:100',
+            'prefix'        => 'nullable|string|max:50',
+            'book_start_no' => 'required|integer|min:1',
+            'book_end_no'   => 'required|integer|gt:book_start_no',
+            'notes'         => 'nullable|string',
         ]);
+
+        // Validate current_slip_no separately after numeric coercion to avoid gte/lte field-compare failures
+        $bookStartNo = (int) $request->book_start_no;
+        $bookEndNo   = (int) $request->book_end_no;
+        $rawCurrent  = $request->input('current_slip_no');
+        if ($rawCurrent !== null && $rawCurrent !== '') {
+            $currentSlipNo = (int) $rawCurrent;
+            if ($currentSlipNo < $bookStartNo || $currentSlipNo > $bookEndNo) {
+                return back()->withInput()->withErrors([
+                    'current_slip_no' => "Next Available Slip must be between {$bookStartNo} and {$bookEndNo}.",
+                ]);
+            }
+        } else {
+            $currentSlipNo = $bookStartNo;
+        }
 
         // Archive / mark previous sequence book as full
         try {
@@ -139,9 +164,6 @@ class SlipSequenceController extends Controller
                 throw $e;
             }
         }
-
-        $bookStartNo = (int) $request->book_start_no;
-        $currentSlipNo = $request->filled('current_slip_no') ? (int) $request->current_slip_no : $bookStartNo;
 
         // Create the new active sequence
         $newSequence = SlipSequence::create([

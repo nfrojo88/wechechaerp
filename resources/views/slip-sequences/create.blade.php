@@ -23,7 +23,7 @@
                                 <select name="store_id" class="form-select" required>
                                     <option value="">Select Store</option>
                                     @foreach($stores as $store)
-                                    <option value="{{ $store->id }}">{{ $store->name }} ({{ $store->type }})</option>
+                                    <option value="{{ $store->id }}" {{ old('store_id') == $store->id ? 'selected' : '' }}>{{ $store->name }} ({{ $store->type }})</option>
                                     @endforeach
                                 </select>
                             </div>
@@ -31,8 +31,8 @@
                                 <label class="form-label">Slip Type *</label>
                                 <select name="slip_type" class="form-select" required onchange="updateLabel()">
                                     <option value="">Select Type</option>
-                                    <option value="receive">Receiving (GRN)</option>
-                                    <option value="send">Outgoing (SIN)</option>
+                                    <option value="receive" {{ old('slip_type') === 'receive' ? 'selected' : '' }}>Receiving (GRN)</option>
+                                    <option value="send" {{ old('slip_type') === 'send' ? 'selected' : '' }}>Outgoing (SIN)</option>
                                 </select>
                             </div>
                         </div>
@@ -41,13 +41,13 @@
                             <div class="col-md-6">
                                 <label class="form-label">Label *</label>
                                 <input type="text" name="label" id="label" class="form-control" 
-                                       placeholder="E.g., Receiving (GRN)" required>
+                                       placeholder="E.g., Receiving (GRN)" required value="{{ old('label') }}">
                                 <small class="text-muted">Display name for this sequence</small>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">Prefix (Optional)</label>
                                 <input type="text" name="prefix" class="form-control" 
-                                       placeholder="E.g., REC or leave blank for numeric only" maxlength="50">
+                                       placeholder="E.g., REC or leave blank for numeric only" maxlength="50" value="{{ old('prefix') }}">
                                 <small class="text-muted">E.g., REC, OUT - Leave blank for numeric-only slips (e.g., 01042)</small>
                             </div>
                         </div>
@@ -147,7 +147,8 @@
 
 @push('scripts')
 <script>
-let userEditedNextSlip = false;
+// Track whether user has manually edited the "Next Available Slip No" field
+let userEditedNextSlip = {{ old('current_slip_no') ? 'true' : 'false' }};
 
 document.addEventListener('DOMContentLoaded', function() {
     const currentInput = document.getElementById('current_slip_no');
@@ -156,6 +157,16 @@ document.addEventListener('DOMContentLoaded', function() {
             userEditedNextSlip = (this.value.trim() !== '');
         });
     }
+
+    // On page load: if book_start_no already has a value (e.g. after validation failure)
+    // and user hasn't manually set current_slip_no, auto-sync it
+    const startInput = document.getElementById('book_start_no');
+    if (startInput && startInput.value && !userEditedNextSlip) {
+        syncNextAvailableSlipNo();
+    }
+
+    // Always run capacity calc on load
+    updateBookCapacity();
 });
 
 function syncNextAvailableSlipNo() {
@@ -175,6 +186,10 @@ function updateBookCapacity() {
 
     if (startVal > 0 && currentInput) {
         currentInput.min = startVal;
+        // If current_slip_no is below start (can happen when user changes start no), reset it
+        if (!userEditedNextSlip || (parseInt(currentInput.value) || 0) < startVal) {
+            currentInput.value = startVal;
+        }
     }
     if (endVal > 0 && currentInput) {
         currentInput.max = endVal;
@@ -190,9 +205,9 @@ function updateLabel() {
     const slipType = document.querySelector('select[name="slip_type"]').value;
     const labelInput = document.getElementById('label');
     
-    if (slipType === 'receive') {
+    if (slipType === 'receive' && !labelInput.value) {
         labelInput.value = 'Receiving (GRN)';
-    } else if (slipType === 'send') {
+    } else if (slipType === 'send' && !labelInput.value) {
         labelInput.value = 'Outgoing (SIN)';
     }
 }

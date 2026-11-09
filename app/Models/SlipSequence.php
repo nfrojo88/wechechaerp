@@ -28,8 +28,9 @@ class SlipSequence extends Model
     protected static function booted()
     {
         static::saving(function (SlipSequence $seq) {
-            // When marking a sequence as active, ensure any other currently active sequence for this store and slip_type is marked inactive
-            if ($seq->status === 'active' && !empty($seq->store_id) && !empty($seq->slip_type)) {
+            // When marking a sequence as active, ensure any other currently active sequence for this store and slip_type is marked inactive.
+            // Skip on initial creation (no id yet) — the controller already archives the previous sequence before calling create().
+            if ($seq->status === 'active' && !empty($seq->store_id) && !empty($seq->slip_type) && $seq->exists) {
                 try {
                     static::where('store_id', $seq->store_id)
                         ->where('slip_type', $seq->slip_type)
