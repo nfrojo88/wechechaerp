@@ -12,6 +12,7 @@ use App\Models\LetterActionLog;
 use App\Models\EmployeeLetter;
 use App\Models\EmployeeSalaryHistory;
 use App\Models\SalaryStructure;
+use App\Models\Payroll;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -813,6 +814,14 @@ class EmployeeController extends Controller
                 }
             }
 
+            // 2c. Synchronize updated salary with open draft payrolls
+            $syncedDrafts = 0;
+            try {
+                $syncedDrafts = Payroll::syncEmployeeSalaryToDrafts($employee);
+            } catch (\Throwable $pe) {
+                Log::warning('Payroll draft salary sync bypassed: ' . $pe->getMessage());
+            }
+
             // 3. Compose Specification and Create Letter in Correspondence System
             $diff = $newBasic - $oldBasic;
             $diffSign = $diff >= 0 ? '+' : '';
@@ -927,7 +936,11 @@ class EmployeeController extends Controller
 
             DB::commit();
 
-            return back()->with('success', "Employee salary for {$employee->full_name} updated to Br " . number_format($newBasic, 2) . " successfully! The official letter has been dispatched to the Secretary Inbox for reference numbering and registration.");
+            $syncNotice = $syncedDrafts > 0
+                ? " Synced new salary with {$syncedDrafts} active draft payroll " . \Illuminate\Support\Str::plural('entry', $syncedDrafts) . "."
+                : "";
+
+            return back()->with('success', "Employee salary for {$employee->full_name} updated to Br " . number_format($newBasic, 2) . " successfully!{$syncNotice} The official letter has been dispatched to the Secretary Inbox for reference numbering and registration.");
         } catch (\Throwable $e) {
             DB::rollBack();
             Log::error("Failed to update employee salary with letter: " . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
@@ -1179,7 +1192,21 @@ class EmployeeController extends Controller
                 $q->where('is_dead_file', true)->orWhere('status', 'dead_file');
             })->where('device_user_id', $devId)->update(['device_user_id' => null]);
         }
+        $salaryChanged = (
+            isset($employeeData['basic_salary']) && abs((float)($employee->basic_salary ?? 0) - (float)($employeeData['basic_salary'] ?? 0)) > 0.001 ||
+            isset($employeeData['transport_allowance']) && abs((float)($employee->transport_allowance ?? 0) - (float)($employeeData['transport_allowance'] ?? 0)) > 0.001 ||
+            isset($employeeData['house_allowance']) && abs((float)($employee->house_allowance ?? 0) - (float)($employeeData['house_allowance'] ?? 0)) > 0.001 ||
+            isset($employeeData['position_allowance']) && abs((float)($employee->position_allowance ?? 0) - (float)($employeeData['position_allowance'] ?? 0)) > 0.001
+        );
         $employee->update($employeeData);
+
+        if ($salaryChanged) {
+            try {
+                Payroll::syncEmployeeSalaryToDrafts($employee);
+            } catch (\Throwable $pe) {
+                Log::warning('Payroll draft salary sync bypassed on profile update: ' . $pe->getMessage());
+            }
+        }
 
 
         // ── Sync Fixed Asset Units ──────────────────────────────────────────

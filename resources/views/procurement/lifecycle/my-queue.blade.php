@@ -418,7 +418,7 @@
                             </td>
                             <td>
                                 <strong>{{ $cmr->project->name ?? 'General Project' }}</strong>
-                                <small class="text-muted d-block"><i class="fas fa-warehouse me-1"></i>Store: {{ $cmr->store->name ?? $cmr->destinationStore->name ?? 'N/A' }}</small>
+                                <small class="text-muted d-block"><i class="fas fa-warehouse me-1"></i>Store: {{ $cmr->store?->name ?? $cmr->destinationStore?->name ?? 'N/A' }}</small>
                             </td>
                             <td>{{ $cmr->requestedBy->name ?? $cmr->creator->name ?? 'Site Engineer' }}</td>
                             <td>
@@ -480,7 +480,7 @@
                                     <button type="button" class="btn btn-sm btn-outline-primary shadow-xs fw-semibold btn-queue-quick-materials"
                                             data-ref="{{ $cmr->reference_number }}"
                                             data-project="{{ $cmr->project->name ?? 'General Project' }}"
-                                            data-store="{{ $cmr->store->name ?? $cmr->destinationStore->name ?? 'N/A' }}"
+                                            data-store="{{ $cmr->store?->name ?? $cmr->destinationStore?->name ?? 'N/A' }}"
                                             data-url="{{ $compPr ? route('purchase-requests.show', $compPr->id) : route('material-requests.show', $cmr) }}"
                                             data-items="{{ json_encode($cmrMaterialsJson) }}"
                                             onclick="openQuickMaterialsModalFromBtn(this)"
@@ -668,7 +668,7 @@
                                 </td>
                                 <td>
                                     <strong>{{ $mr->project->name ?? 'Head Office' }}</strong>
-                                    <small class="text-muted d-block">Store: {{ $mr->store->name ?? 'N/A' }}</small>
+                                    <small class="text-muted d-block">Store: {{ $mr->store?->name ?? 'N/A' }}</small>
                                 </td>
                                 <td class="col-procurement-materials">
                                     <div class="d-flex align-items-center justify-content-between mb-1">
@@ -724,7 +724,7 @@
                                         <button type="button" class="btn btn-sm btn-outline-primary shadow-xs fw-semibold btn-queue-quick-materials"
                                                 data-ref="{{ $mr->reference_number }}"
                                                 data-project="{{ $mr->project->name ?? 'Head Office' }}"
-                                                data-store="{{ $mr->store->name ?? 'N/A' }}"
+                                                data-store="{{ $mr->store?->name ?? 'N/A' }}"
                                                 data-url="{{ route('material-requests.show', $mr) }}"
                                                 data-items="{{ json_encode($mrMaterialsJson) }}"
                                                 onclick="openQuickMaterialsModalFromBtn(this)"
@@ -865,10 +865,10 @@
                                 <td>
                                     <span class="fw-medium text-dark">{{ $pr->project->name ?? 'N/A' }}</span>
                                     @php
-                                        $destStore = $pr->store ?? $pr->materialRequest->destinationStore ?? $pr->materialRequest->store;
+                                        $destStore = $pr->store ?? $pr->materialRequest?->destinationStore ?? $pr->materialRequest?->store;
                                     @endphp
                                     @if($destStore)
-                                        <small class="text-muted d-block"><i class="fas fa-warehouse me-1"></i>Store: {{ $destStore->name }}</small>
+                                        <small class="text-muted d-block"><i class="fas fa-warehouse me-1"></i>Store: {{ $destStore->name ?? 'N/A' }}</small>
                                     @endif
                                 </td>
                                 <td class="col-procurement-materials">
@@ -951,7 +951,7 @@
                                         <button type="button" class="btn btn-sm btn-outline-primary shadow-xs fw-semibold btn-queue-quick-materials"
                                                 data-ref="{{ $pr->pr_no }}"
                                                 data-project="{{ $pr->project->name ?? 'N/A' }}"
-                                                data-store="{{ $destStore->name ?? 'Store Unassigned' }}"
+                                                data-store="{{ $destStore?->name ?? 'Store Unassigned' }}"
                                                 data-url="{{ route('purchase-requests.show', $pr->id) }}"
                                                 data-items="{{ json_encode($prMaterialsJson) }}"
                                                 onclick="openQuickMaterialsModalFromBtn(this)"
@@ -1089,7 +1089,7 @@
                                 </td>
                                 <td>
                                     <div class="fw-semibold text-dark">{{ $cPr->project->name ?? 'N/A' }}</div>
-                                    <small class="text-muted"><i class="fas fa-warehouse me-1"></i>{{ $cPr->store->name ?? 'Store Unassigned' }}</small>
+                                    <small class="text-muted"><i class="fas fa-warehouse me-1"></i>{{ $cPr->store?->name ?? $cPr->materialRequest?->destinationStore?->name ?? $cPr->materialRequest?->store?->name ?? 'Store Unassigned' }}</small>
                                 </td>
                                 @php
                                     $cPrMaterialsJson = $cPr->items->map(function($itm) {
@@ -1188,7 +1188,7 @@
                                         <button type="button" class="btn btn-sm btn-outline-primary shadow-xs fw-semibold btn-queue-quick-materials"
                                                 data-ref="{{ $cPr->pr_no }}"
                                                 data-project="{{ $cPr->project->name ?? 'N/A' }}"
-                                                data-store="{{ $cPr->store->name ?? 'Store Unassigned' }}"
+                                                data-store="{{ $cPr->store?->name ?? $cPr->materialRequest?->destinationStore?->name ?? $cPr->materialRequest?->store?->name ?? 'Store Unassigned' }}"
                                                 data-url="{{ route('purchase-requests.show', $cPr->id) }}"
                                                 data-items="{{ json_encode($cPrMaterialsJson) }}"
                                                 onclick="openQuickMaterialsModalFromBtn(this)"
@@ -1239,7 +1239,7 @@
                                 </td>
                                 <td>
                                     <div class="fw-semibold text-dark">{{ $cMr->project->name ?? 'Head Office' }}</div>
-                                    <small class="text-muted"><i class="fas fa-warehouse me-1"></i>{{ $cMr->store->name ?? 'Store' }}</small>
+                                    <small class="text-muted"><i class="fas fa-warehouse me-1"></i>{{ $cMr->store?->name ?? 'Store' }}</small>
                                 </td>
                                 @php
                                     $cMrMaterialsJson = $cMr->items->map(function($itm) {
@@ -1309,7 +1309,7 @@
                                         <button type="button" class="btn btn-sm btn-outline-primary shadow-xs fw-semibold btn-queue-quick-materials"
                                                 data-ref="{{ $cMr->reference_number }}"
                                                 data-project="{{ $cMr->project->name ?? 'Head Office' }}"
-                                                data-store="{{ $cMr->store->name ?? 'Store' }}"
+                                                data-store="{{ $cMr->store?->name ?? 'Store' }}"
                                                 data-url="{{ route('material-requests.show', $cMr) }}"
                                                 data-items="{{ json_encode($cMrMaterialsJson) }}"
                                                 onclick="openQuickMaterialsModalFromBtn(this)"
@@ -1383,7 +1383,7 @@
                                 </td>
                                 <td>
                                     <div class="fw-bold text-dark">{{ $compPr->project->name ?? 'N/A' }}</div>
-                                    <small class="text-muted"><i class="fas fa-warehouse me-1 text-success"></i>{{ $compPr->store->name ?? 'Store' }}</small>
+                                    <small class="text-muted"><i class="fas fa-warehouse me-1 text-success"></i>{{ $compPr->store?->name ?? $compPr->materialRequest?->destinationStore?->name ?? $compPr->materialRequest?->store?->name ?? 'Store' }}</small>
                                 </td>
                                 <td>
                                     <span class="small fw-semibold text-dark">{{ $compPr->requestedBy->name ?? 'N/A' }}</span>
@@ -1463,7 +1463,7 @@
                                         <button type="button" class="btn btn-sm btn-outline-primary shadow-xs fw-semibold btn-queue-quick-materials"
                                                 data-ref="{{ $compPr->pr_no }}"
                                                 data-project="{{ $compPr->project->name ?? 'N/A' }}"
-                                                data-store="{{ $compPr->store->name ?? 'Store' }}"
+                                                data-store="{{ $compPr->store?->name ?? $compPr->materialRequest?->destinationStore?->name ?? $compPr->materialRequest?->store?->name ?? 'Store' }}"
                                                 data-url="{{ route('purchase-requests.show', $compPr->id) }}"
                                                 data-items="{{ json_encode($compMaterialsJson) }}"
                                                 onclick="openQuickMaterialsModalFromBtn(this)"
@@ -1554,7 +1554,7 @@
                                 </td>
                                 <td>
                                     <strong>{{ $aPr->project->name ?? 'Head Office' }}</strong>
-                                    <small class="text-muted d-block">{{ $aPr->store->name ?? 'Store Unassigned' }}</small>
+                                    <small class="text-muted d-block">{{ $aPr->store?->name ?? $aPr->materialRequest?->destinationStore?->name ?? $aPr->materialRequest?->store?->name ?? 'Store Unassigned' }}</small>
                                 </td>
                                 <td>{{ $aPr->requestedBy->name ?? 'N/A' }}</td>
                                 @php
@@ -1626,7 +1626,7 @@
                                         <button type="button" class="btn btn-sm btn-outline-primary shadow-xs fw-semibold btn-queue-quick-materials"
                                                 data-ref="{{ $aPr->pr_no }}"
                                                 data-project="{{ $aPr->project->name ?? 'Head Office' }}"
-                                                data-store="{{ $aPr->store->name ?? 'Store Unassigned' }}"
+                                                data-store="{{ $aPr->store?->name ?? $aPr->materialRequest?->destinationStore?->name ?? $aPr->materialRequest?->store?->name ?? 'Store Unassigned' }}"
                                                 data-url="{{ route('purchase-requests.show', $aPr->id) }}"
                                                 data-items="{{ json_encode($aPrMaterialsJson) }}"
                                                 onclick="openQuickMaterialsModalFromBtn(this)"
@@ -1729,7 +1729,7 @@
                                 </td>
                                 <td>
                                     <div class="fw-semibold text-dark">{{ $dPr->project->name ?? 'Head Office / Unassigned' }}</div>
-                                    <small class="text-muted"><i class="fas fa-warehouse me-1"></i>{{ $dPr->store->name ?? 'Store Unassigned' }}</small>
+                                    <small class="text-muted"><i class="fas fa-warehouse me-1"></i>{{ $dPr->store?->name ?? $dPr->materialRequest?->destinationStore?->name ?? $dPr->materialRequest?->store?->name ?? 'Store Unassigned' }}</small>
                                 </td>
                                 <td>
                                     <div class="fw-semibold text-dark">{{ $dPr->requestedBy->name ?? 'System' }}</div>
@@ -1815,7 +1815,7 @@
                                         <button type="button" class="btn btn-sm btn-outline-primary shadow-xs fw-semibold btn-queue-quick-materials"
                                                 data-ref="{{ $dPr->pr_no }}"
                                                 data-project="{{ $dPr->project->name ?? 'Head Office / Unassigned' }}"
-                                                data-store="{{ $dPr->store->name ?? 'Store Unassigned' }}"
+                                                data-store="{{ $dPr->store?->name ?? $dPr->materialRequest?->destinationStore?->name ?? $dPr->materialRequest?->store?->name ?? 'Store Unassigned' }}"
                                                 data-url="{{ route('purchase-requests.show', $dPr->id) }}"
                                                 data-items="{{ json_encode($dPrMaterialsJson) }}"
                                                 onclick="openQuickMaterialsModalFromBtn(this)"
@@ -1876,7 +1876,7 @@
                                 </td>
                                 <td>
                                     <div class="fw-semibold text-dark">{{ $dMr->project->name ?? 'Head Office / General' }}</div>
-                                    <small class="text-muted"><i class="fas fa-warehouse me-1"></i>{{ $dMr->store->name ?? 'Store Unassigned' }}</small>
+                                    <small class="text-muted"><i class="fas fa-warehouse me-1"></i>{{ $dMr->store?->name ?? 'Store Unassigned' }}</small>
                                 </td>
                                 <td>
                                     <div class="fw-semibold text-dark">{{ $dMr->creator->name ?? $dMr->requestedBy->name ?? 'Unknown' }}</div>
@@ -1953,7 +1953,7 @@
                                         <button type="button" class="btn btn-sm btn-outline-primary shadow-xs fw-semibold btn-queue-quick-materials"
                                                 data-ref="{{ $dMr->reference_number }}"
                                                 data-project="{{ $dMr->project->name ?? 'Head Office / General' }}"
-                                                data-store="{{ $dMr->store->name ?? 'Store Unassigned' }}"
+                                                data-store="{{ $dMr->store?->name ?? 'Store Unassigned' }}"
                                                 data-url="{{ route('material-requests.show', $dMr->id) }}"
                                                 data-items="{{ json_encode($dMrMaterialsJson) }}"
                                                 onclick="openQuickMaterialsModalFromBtn(this)"

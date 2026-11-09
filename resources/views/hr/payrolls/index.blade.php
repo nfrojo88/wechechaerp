@@ -130,7 +130,7 @@
                             <h5 class="modal-title fw-bold mb-0 text-white" id="updateSalaryModalLabel">
                                 Update Employee Salary &amp; Issue Official Letter
                             </h5>
-                            <small class="text-white-50">Updates salary records and dispatches the signed letter directly to the Secretary Inbox</small>
+                            <small class="text-white-50">Updates employee salary, automatically syncs with active draft payrolls, and dispatches the signed letter to the Secretary Inbox</small>
                         </div>
                     </div>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" data-dismiss="modal" aria-label="Close"></button>

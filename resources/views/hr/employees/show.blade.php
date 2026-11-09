@@ -3039,7 +3039,7 @@ function openLetterModal(id) {
                             <h5 class="modal-title fw-bold mb-0 text-white" id="updateEmpSalaryModalLabel">
                                 Update Salary &amp; Issue Official Letter
                             </h5>
-                            <small class="text-white-50">{{ $employee->full_name }} ({{ $employee->employee_code }}) &bull; {{ $employee->department ?? 'General' }}</small>
+                            <small class="text-white-50">{{ $employee->full_name }} ({{ $employee->employee_code }}) &bull; {{ $employee->department ?? 'General' }} &bull; Syncs with draft payroll</small>
                         </div>
                     </div>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>

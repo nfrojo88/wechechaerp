@@ -111,7 +111,7 @@
                             <input type="hidden" name="end_date"   value="{{ $endDate }}">
                             <input type="hidden" name="date"       value="{{ $endDate }}">
                             <button type="submit" class="btn btn-primary btn-sm rounded-pill px-3 py-2 shadow-sm fw-semibold"
-                                    onclick="return confirm('Auto-generate payroll for all active employees for {{ $periodTitle }} (Attendance Window: {{ $attendanceDayWindow }})?')">
+                                    onclick="return confirm('Auto-generate payroll for all active employees for {{ $periodTitle }} (Attendance Window: {{ $attendanceDayWindow }})? This will generate entries and sync new salary updates for active employees.')">
                                 <i class="fa-solid fa-bolt me-1"></i>Auto-Generate Payroll
                             </button>
                         </form>
@@ -126,8 +126,9 @@
                             <input type="hidden" name="end_date"   value="{{ $endDate }}">
                             <input type="hidden" name="date"       value="{{ $endDate }}">
                             <button type="submit" class="btn btn-outline-primary btn-sm rounded-pill px-3 py-2 shadow-sm fw-semibold"
-                                    onclick="return confirm('Recalculate payroll for {{ $periodTitle }} (Attendance Window: {{ $attendanceDayWindow }})? This will refresh all attendance records and loan deductions.')">
-                                <i class="fa-solid fa-arrows-rotate me-1"></i>Recalculate / Sync
+                                    title="Sync new salary, refresh attendance absences and overtime, and update loan deductions"
+                                    onclick="return confirm('Recalculate and sync payroll for {{ $periodTitle }} (Attendance Window: {{ $attendanceDayWindow }})? This will sync new salary, refresh attendance records, and update loan deductions.')">
+                                <i class="fa-solid fa-arrows-rotate me-1"></i>Recalculate &amp; Sync Salary
                             </button>
                         </form>
                         <button class="btn btn-warning btn-sm rounded-pill px-3 py-2 shadow-sm text-dark fw-bold" data-bs-toggle="modal" data-bs-target="#submitGMModal">
@@ -144,8 +145,9 @@
                             <input type="hidden" name="end_date"   value="{{ $endDate }}">
                             <input type="hidden" name="date"       value="{{ $endDate }}">
                             <button type="submit" class="btn btn-outline-primary btn-sm rounded-pill px-3 py-2 shadow-sm fw-semibold"
-                                    onclick="return confirm('Recalculate payroll for {{ $periodTitle }} (Attendance Window: {{ $attendanceDayWindow }})?')">
-                                <i class="fa-solid fa-arrows-rotate me-1"></i>Recalculate / Sync
+                                    title="Sync new salary, refresh attendance absences and overtime, and update loan deductions"
+                                    onclick="return confirm('Recalculate and sync payroll for {{ $periodTitle }} (Attendance Window: {{ $attendanceDayWindow }})? This will sync new salary, refresh attendance records, and update deductions.')">
+                                <i class="fa-solid fa-arrows-rotate me-1"></i>Recalculate &amp; Sync Salary
                             </button>
                         </form>
                         <button class="btn btn-warning btn-sm rounded-pill px-3 py-2 shadow-sm text-dark fw-bold" data-bs-toggle="modal" data-bs-target="#submitGMModal">
@@ -254,8 +256,9 @@
                         <input type="hidden" name="end_date"   value="{{ $endDate }}">
                         <input type="hidden" name="date"       value="{{ $endDate }}">
                         <button type="submit" class="btn btn-sm btn-outline-primary rounded-pill px-3 shadow-xs"
-                                onclick="return confirm('Recalculate payroll for {{ $periodTitle }} (Attendance Window: {{ $attendanceDayWindow }})?')">
-                            <i class="fa-solid fa-arrows-rotate me-1"></i>Recalculate
+                                title="Sync new salary, refresh attendance absences and overtime, and update loan deductions"
+                                onclick="return confirm('Recalculate and sync payroll for {{ $periodTitle }} (Attendance Window: {{ $attendanceDayWindow }})? This will sync new salary, refresh attendance records and loan deductions.')">
+                            <i class="fa-solid fa-arrows-rotate me-1"></i>Recalculate &amp; Sync Salary
                         </button>
                     </form>
                 @endif

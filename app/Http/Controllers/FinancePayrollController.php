@@ -136,21 +136,85 @@ class FinancePayrollController extends Controller
         $employees = Employee::activeRoster()->get();
         $created = 0;
         $skipped = 0;
+        $salarySyncedCount = 0;
 
         $hasTransport = \Illuminate\Support\Facades\Schema::hasColumn('payrolls', 'transport_allowance');
         $hasLoanDed   = \Illuminate\Support\Facades\Schema::hasColumn('payrolls', 'loan_deduction');
 
         foreach ($employees as $emp) {
-            $exists = Payroll::where('employee_id', $emp->id)
+            $basic     = (float) ($emp->basic_salary ?? 0);
+            $transport = (float) ($emp->transport_allowance ?? 0);
+            $house     = (float) ($emp->house_allowance ?? 0);
+            $position  = (float) ($emp->position_allowance ?? 0);
+
+            $existing = Payroll::where('employee_id', $emp->id)
                              ->where('month', $month)
                              ->where('year',  $year)
-                             ->exists();
-            if ($exists) { $skipped++; continue; }
+                             ->first();
 
-            $basic     = $emp->basic_salary ?? 0;
-            $transport = $emp->transport_allowance ?? 0;
-            $house     = $emp->house_allowance ?? 0;
-            $position  = $emp->position_allowance ?? 0;
+            if ($existing) {
+                // If already approved by GM or marked paid, do not modify
+                if ($existing->gm_status === 'approved' || $existing->status === 'paid') {
+                    $skipped++;
+                    continue;
+                }
+
+                // Check if salary or allowances changed compared to current employee profile
+                $salaryChanged = (
+                    abs((float)$existing->basic_salary - $basic) > 0.001 ||
+                    abs((float)$existing->transport_allowance - $transport) > 0.001 ||
+                    abs((float)$existing->house_allowance - $house) > 0.001 ||
+                    abs((float)$existing->position_allowance - $position) > 0.001
+                );
+
+                if ($salaryChanged) {
+                    $loanDeduction = Payroll::calculateLoanDeduction($emp->id);
+                    $absenceInfo   = Payroll::calculateUnexcusedAbsences($emp->id, $month, $year, $endDate, $startDate);
+                    $absentDays    = $absenceInfo['days'];
+                    $dailyRate     = $basic > 0 ? ($basic / 30) : 0;
+                    $absenceDeduction = round($dailyRate * $absentDays, 2);
+                    $totalDeductions  = round($loanDeduction + $absenceDeduction, 2);
+
+                    $overtimePay = round((float) \App\Models\Attendance::where('employee_id', $emp->id)
+                        ->where('is_approved', true)
+                        ->whereBetween('attendance_date', [$startDate, $endDate . ' 23:59:59'])
+                        ->sum('overtime_pay'), 2);
+
+                    $pension        = round($basic * 0.07, 2);
+                    $companyPension = round($basic * 0.11, 2);
+                    $taxable        = Payroll::calculateTaxableIncome($basic, $house, $position, $transport, $overtimePay);
+                    $tax            = Payroll::calculateIncomeTax($taxable);
+
+                    $payload = [
+                        'basic_salary'      => $basic,
+                        'allowances'        => $transport + $house + $position,
+                        'overtime_pay'      => $overtimePay,
+                        'pension'           => $pension,
+                        'company_pension'   => $companyPension,
+                        'taxable_income'    => $taxable,
+                        'deductions'        => $totalDeductions,
+                        'tax'               => round($tax, 2),
+                    ];
+
+                    if ($hasLoanDed) {
+                        $payload['loan_deduction']    = $loanDeduction;
+                        $payload['absence_deduction'] = $absenceDeduction;
+                        $payload['absent_days']       = $absentDays;
+                    }
+
+                    if ($hasTransport) {
+                        $payload['transport_allowance'] = $transport;
+                        $payload['house_allowance']     = $house;
+                        $payload['position_allowance']  = $position;
+                    }
+
+                    $existing->update($payload);
+                    $salarySyncedCount++;
+                } else {
+                    $skipped++;
+                }
+                continue;
+            }
 
             // 1. Salary advance loan monthly deduction
             $loanDeduction = Payroll::calculateLoanDeduction($emp->id);
@@ -213,8 +277,21 @@ class FinancePayrollController extends Controller
 
         $periodLabel = ($periodData['full_label'] ?? "Month {$month}") . " (" . ($periodData['label_en'] ?? "EC") . ")";
         $dateNotice = " (Period: " . \Carbon\Carbon::parse($startDate)->format('M d, Y') . " – " . \Carbon\Carbon::parse($endDate)->format('M d, Y') . ")";
-        $msg = "Generated {$created} payroll entries for {$periodLabel}{$dateNotice}.";
-        if ($skipped) $msg .= " {$skipped} already existed and were skipped.";
+
+        $msgParts = [];
+        if ($created > 0) {
+            $msgParts[] = "Generated {$created} payroll entries";
+        }
+        if ($salarySyncedCount > 0) {
+            $msgParts[] = "synced new salary for {$salarySyncedCount} existing draft " . \Illuminate\Support\Str::plural('entry', $salarySyncedCount);
+        }
+        if ($skipped > 0) {
+            $msgParts[] = "{$skipped} already existed and were skipped";
+        }
+
+        $msg = !empty($msgParts)
+            ? implode(', ', $msgParts) . " for {$periodLabel}{$dateNotice}."
+            : "Payroll check completed for {$periodLabel}{$dateNotice}.";
 
         return redirect()->route('finance.payroll.index', [
             'period'     => $periodData['period_key'],
@@ -253,15 +330,16 @@ class FinancePayrollController extends Controller
         $employees = Employee::activeRoster()->get();
         $updatedCount = 0;
         $createdCount = 0;
+        $salarySyncedCount = 0;
 
         $hasTransport = \Illuminate\Support\Facades\Schema::hasColumn('payrolls', 'transport_allowance');
         $hasLoanDed   = \Illuminate\Support\Facades\Schema::hasColumn('payrolls', 'loan_deduction');
 
         foreach ($employees as $emp) {
-            $basic     = $emp->basic_salary ?? 0;
-            $transport = $emp->transport_allowance ?? 0;
-            $house     = $emp->house_allowance ?? 0;
-            $position  = $emp->position_allowance ?? 0;
+            $basic     = (float) ($emp->basic_salary ?? 0);
+            $transport = (float) ($emp->transport_allowance ?? 0);
+            $house     = (float) ($emp->house_allowance ?? 0);
+            $position  = (float) ($emp->position_allowance ?? 0);
 
             // 1. Salary advance loan monthly deduction
             $loanDeduction = Payroll::calculateLoanDeduction($emp->id);
@@ -321,6 +399,17 @@ class FinancePayrollController extends Controller
             if ($existing) {
                 // Only update if not already approved by GM or marked paid
                 if ($existing->gm_status !== 'approved' && $existing->status !== 'paid') {
+                    $salaryChanged = (
+                        abs((float)$existing->basic_salary - $basic) > 0.001 ||
+                        abs((float)$existing->transport_allowance - $transport) > 0.001 ||
+                        abs((float)$existing->house_allowance - $house) > 0.001 ||
+                        abs((float)$existing->position_allowance - $position) > 0.001
+                    );
+
+                    if ($salaryChanged) {
+                        $salarySyncedCount++;
+                    }
+
                     $existing->update($payload);
                     $updatedCount++;
                 }
@@ -334,13 +423,24 @@ class FinancePayrollController extends Controller
 
         $periodLabel = ($periodData['full_label'] ?? "Month {$month}") . " (" . ($periodData['label_en'] ?? "EC") . ")";
         $dateNotice = " (Period: " . \Carbon\Carbon::parse($startDate)->format('M d, Y') . " – " . \Carbon\Carbon::parse($endDate)->format('M d, Y') . ")";
+
+        $salaryNote = $salarySyncedCount > 0
+            ? "synced new salary for {$salarySyncedCount} " . \Illuminate\Support\Str::plural('employee', $salarySyncedCount) . ", "
+            : "synced new salary (all rates up-to-date), ";
+
+        $msg = "Recalculated & synced payroll for {$periodLabel}{$dateNotice}: {$salaryNote}{$updatedCount} entries refreshed with latest attendance and loan deductions";
+        if ($createdCount > 0) {
+            $msg .= ", {$createdCount} new entries added";
+        }
+        $msg .= ".";
+
         return redirect()->route('finance.payroll.index', [
             'period'     => $periodData['period_key'],
             'month'      => $month,
             'year'       => $year,
             'start_date' => $startDate,
             'end_date'   => $endDate,
-        ])->with('success', "Recalculated payroll for {$periodLabel}{$dateNotice}: {$updatedCount} entries refreshed with latest attendance and loan deductions, {$createdCount} new entries added.");
+        ])->with('success', $msg);
     }
 
     /**
@@ -366,7 +466,10 @@ class FinancePayrollController extends Controller
 
         $updated = Payroll::where('month', $month)
             ->where('year',  $year)
-            ->whereNotIn('gm_status', ['approved', 'rejected'])
+            ->where(function($q) {
+                $q->whereNull('gm_status')
+                  ->orWhere('gm_status', '!=', 'approved');
+            })
             ->update([
                 'gm_status'          => 'submitted',
                 'submitted_to_gm_at' => now(),

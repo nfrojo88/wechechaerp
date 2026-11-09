@@ -424,6 +424,83 @@ class Payroll extends Model
         $hourlyRate = $basic / 30 / 8;
         return round($hourlyRate * $coefficient * $hours, 2);
     }
+
+    /**
+     * Synchronize an employee's updated salary and allowances to any unapproved/draft payrolls.
+     * Recomputes pensions, tax, absence deductions, allowances, gross and net salary.
+     *
+     * @param Employee $employee
+     * @return int Number of draft payroll entries synced
+     */
+    public static function syncEmployeeSalaryToDrafts(Employee $employee): int
+    {
+        $draftPayrolls = static::where('employee_id', $employee->id)
+            ->where(function ($q) {
+                $q->whereNull('status')
+                  ->orWhere('status', 'draft')
+                  ->orWhere('status', 'pending');
+            })
+            ->where(function ($q) {
+                $q->whereNull('gm_status')
+                  ->orWhere('gm_status', '!=', 'approved');
+            })
+            ->where(function ($q) {
+                $q->whereNull('paid_at')
+                  ->where(function ($sub) {
+                      $sub->whereNull('status')->orWhere('status', '!=', 'paid');
+                  });
+            })
+            ->get();
+
+        $updatedCount = 0;
+        $hasTransport = \Illuminate\Support\Facades\Schema::hasColumn('payrolls', 'transport_allowance');
+        $hasLoanDed   = \Illuminate\Support\Facades\Schema::hasColumn('payrolls', 'loan_deduction');
+
+        $basic     = (float) ($employee->basic_salary ?? 0);
+        $transport = (float) ($employee->transport_allowance ?? 0);
+        $house     = (float) ($employee->house_allowance ?? 0);
+        $position  = (float) ($employee->position_allowance ?? 0);
+
+        foreach ($draftPayrolls as $payroll) {
+            $overtimePay    = (float) ($payroll->overtime_pay ?? 0);
+            $pension        = round($basic * 0.07, 2);
+            $companyPension = round($basic * 0.11, 2);
+            $taxable        = static::calculateTaxableIncome($basic, $house, $position, $transport, $overtimePay);
+            $tax            = round(static::calculateIncomeTax($taxable), 2);
+
+            $payroll->basic_salary    = $basic;
+            $payroll->allowances      = $transport + $house + $position;
+            $payroll->pension         = $pension;
+            $payroll->company_pension = $companyPension;
+            $payroll->taxable_income  = $taxable;
+            $payroll->tax             = $tax;
+
+            if ($hasTransport) {
+                $payroll->transport_allowance = $transport;
+                $payroll->house_allowance     = $house;
+                $payroll->position_allowance  = $position;
+            }
+
+            // Recalculate absence deduction using the new daily rate (basic / 30)
+            $absentDays = (int) ($payroll->absent_days ?? 0);
+            $dailyRate  = $basic > 0 ? ($basic / 30) : 0;
+            $absenceDeduction = round($dailyRate * $absentDays, 2);
+
+            if ($hasLoanDed) {
+                $payroll->absence_deduction = $absenceDeduction;
+                $payroll->absent_days       = $absentDays;
+                $payroll->deductions        = round(($payroll->loan_deduction ?? 0) + $absenceDeduction, 2);
+            } else {
+                $oldAbsence = (float) ($payroll->absence_deduction ?? 0);
+                $payroll->deductions = round(max(0, ($payroll->deductions ?? 0) - $oldAbsence + $absenceDeduction), 2);
+            }
+
+            $payroll->save();
+            $updatedCount++;
+        }
+
+        return $updatedCount;
+    }
 }
 
 

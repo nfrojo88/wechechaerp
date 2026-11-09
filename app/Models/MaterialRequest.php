@@ -46,6 +46,11 @@ class MaterialRequest extends Model
         return $this->belongsTo(Store::class, 'destination_store_id');
     }
 
+    public function destinationStore()
+    {
+        return $this->belongsTo(Store::class, 'destination_store_id');
+    }
+
     public function items()
     {
         return $this->hasMany(MaterialRequestItem::class);

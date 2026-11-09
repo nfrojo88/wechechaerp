@@ -259,6 +259,7 @@ class PurchaseRequest extends Model
     // ── Core Relations ─────────────────────────────────────────────────────
     public function project()        { return $this->belongsTo(Project::class); }
     public function store()          { return $this->belongsTo(Store::class); }
+    public function destinationStore(){ return $this->belongsTo(Store::class, 'store_id'); }
     public function supplier()       { return $this->belongsTo(Supplier::class, 'supplier_id'); }
     public function requestedBy()    { return $this->belongsTo(User::class, 'requested_by'); }
     public function requester()      { return $this->requestedBy(); }
