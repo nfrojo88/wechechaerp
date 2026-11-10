@@ -2737,16 +2737,47 @@ class FinanceTaxReportController extends Controller
                     });
                     // Strict Receipt Month Rule: Also pull expenses whose linked receipt date belongs to this Ethiopian month
                     if (Schema::hasTable('receipts')) {
-                        $q->orWhereExists(function ($rq) use ($startDate, $endDate) {
+                        $hasExpReceiptId = Schema::hasColumn('expense_requests', 'receipt_id');
+                        $hasReceiptExpId = Schema::hasColumn('receipts', 'expense_request_id');
+                        $hasReceiptPurchasable = Schema::hasColumn('receipts', 'purchasable_id');
+                        $hasReceiptNo = Schema::hasColumn('receipts', 'receipt_number');
+
+                        $q->orWhereExists(function ($rq) use ($startDate, $endDate, $hasExpReceiptId, $hasReceiptExpId, $hasReceiptPurchasable, $hasReceiptNo) {
                             $rq->select(DB::raw(1))
                                ->from('receipts')
-                               ->where(function ($w) {
-                                   $w->whereColumn('receipts.id', 'expense_requests.receipt_id')
-                                     ->orWhere(function ($mw) {
-                                         $mw->whereColumn('receipts.purchasable_id', 'expense_requests.id')
-                                            ->whereIn('receipts.purchasable_type', [ExpenseRequest::class, 'App\\Models\\ExpenseRequest', 'expense_request', 'expense']);
-                                     })
-                                     ->orWhereColumn('receipts.receipt_number', 'expense_requests.request_number');
+                               ->where(function ($w) use ($hasExpReceiptId, $hasReceiptExpId, $hasReceiptPurchasable, $hasReceiptNo) {
+                                   $first = true;
+                                   if ($hasReceiptPurchasable) {
+                                       $w->where(function ($mw) {
+                                           $mw->whereColumn('receipts.purchasable_id', 'expense_requests.id')
+                                              ->whereIn('receipts.purchasable_type', [ExpenseRequest::class, 'App\\Models\\ExpenseRequest', 'expense_request', 'expense']);
+                                       });
+                                       $first = false;
+                                   }
+                                   if ($hasReceiptNo) {
+                                       if ($first) {
+                                           $w->whereColumn('receipts.receipt_number', 'expense_requests.request_number');
+                                           $first = false;
+                                       } else {
+                                           $w->orWhereColumn('receipts.receipt_number', 'expense_requests.request_number');
+                                       }
+                                   }
+                                   if ($hasReceiptExpId) {
+                                       if ($first) {
+                                           $w->whereColumn('receipts.expense_request_id', 'expense_requests.id');
+                                           $first = false;
+                                       } else {
+                                           $w->orWhereColumn('receipts.expense_request_id', 'expense_requests.id');
+                                       }
+                                   }
+                                   if ($hasExpReceiptId) {
+                                       if ($first) {
+                                           $w->whereColumn('receipts.id', 'expense_requests.receipt_id');
+                                           $first = false;
+                                       } else {
+                                           $w->orWhereColumn('receipts.id', 'expense_requests.receipt_id');
+                                       }
+                                   }
                                })
                                ->whereBetween('receipts.receipt_date', [$startDate, $endDate]);
                         });
@@ -2768,7 +2799,7 @@ class FinanceTaxReportController extends Controller
         $formattedExpenses = $expenses->map(function ($item) use ($defaultPurchaserDigits, $year, $month, $startDate, $endDate) {
             // Extract linked Receipt and ExpenseHubVatDecision for TAS / e-Tax details (prioritizing the most recently updated receipt)
             $r = null;
-            if (!empty($item->receipt_id) && Schema::hasTable('receipts')) {
+            if (Schema::hasTable('receipts') && Schema::hasColumn('expense_requests', 'receipt_id') && !empty($item->receipt_id)) {
                 $r = Receipt::find($item->receipt_id);
             }
             if (!$r && Schema::hasTable('receipts')) {
