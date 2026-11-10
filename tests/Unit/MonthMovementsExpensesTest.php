@@ -5,6 +5,7 @@ namespace Tests\Unit;
 use App\Models\ExpenseRequest;
 use App\Models\PettyCashMaterialPurchase;
 use App\Models\Project;
+use App\Models\Receipt;
 use App\Models\Store;
 use App\Models\User;
 use App\Services\EthiopianDate;
@@ -188,6 +189,24 @@ class MonthMovementsExpensesTest extends TestCase
             $table->timestamp('approved_at')->nullable();
             $table->text('notes')->nullable();
             $table->string('receipt_path')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('receipts', function ($table) {
+            $table->id();
+            $table->string('receipt_number')->nullable();
+            $table->foreignId('uploaded_by')->nullable();
+            $table->foreignId('project_id')->nullable();
+            $table->foreignId('expense_request_id')->nullable();
+            $table->nullableMorphs('purchasable');
+            $table->string('vendor_name')->nullable();
+            $table->string('vendor_tin')->nullable();
+            $table->string('fs_no')->nullable();
+            $table->date('receipt_date')->nullable();
+            $table->decimal('subtotal', 15, 2)->default(0);
+            $table->decimal('vat_amount', 15, 2)->default(0);
+            $table->decimal('total_amount', 15, 2)->default(0);
+            $table->string('file_path')->nullable();
             $table->timestamps();
         });
     }
@@ -443,5 +462,67 @@ class MonthMovementsExpensesTest extends TestCase
         $this->assertNotEmpty($viewData['movementsData']['tas_purchases']);
         $this->assertEquals('0012345678', $viewData['movementsData']['tas_purchases'][0]['seller_tin']);
         $this->assertEquals('00088899', $viewData['movementsData']['tas_purchases'][0]['fs_no']);
+    }
+
+    public function test_strict_receipt_month_rule_assigns_expense_to_receipt_date_month(): void
+    {
+        // 2019 EC:
+        // Month 1 (Meskerem): 2026-09-11 to 2026-10-10
+        // Month 2 (Tikimt):   2026-10-11 to 2026-11-09
+
+        // Create an ExpenseRequest paid on Oct 25, 2026 (Month 2 / Tikimt)
+        $exp = ExpenseRequest::create([
+            'request_number'    => 'EXP-STRICT-001',
+            'user_id'           => $this->user->id,
+            'project_id'        => $this->project->id,
+            'category'          => 'Office Equipment',
+            'amount'            => 5000.00,
+            'gross_amount'      => 5750.00,
+            'vat_type'          => 'inclusive',
+            'vat_rate'          => 15,
+            'vat_amount'        => 750.00,
+            'status'            => ExpenseRequest::STATUS_PAID,
+            'paid_by'           => $this->user->id,
+            'paid_at'           => Carbon::create(2026, 10, 25, 11, 0, 0), // Month 2 Tikimt
+            'created_at'        => Carbon::create(2026, 10, 20, 9, 0, 0),
+        ]);
+
+        // Attach a Receipt dated Sept 20, 2026 (Month 1 / Meskerem)
+        Receipt::create([
+            'receipt_number'    => 'RCP-STRICT-001',
+            'expense_request_id'=> $exp->id,
+            'purchasable_type'  => ExpenseRequest::class,
+            'purchasable_id'    => $exp->id,
+            'vendor_name'       => 'Addis Equipment PLC',
+            'vendor_tin'        => '0098765432',
+            'fs_no'             => 'FS-0019283',
+            'receipt_date'      => '2026-09-20', // Month 1 Meskerem
+            'subtotal'          => 5000.00,
+            'vat_amount'        => 750.00,
+            'total_amount'      => 5750.00,
+            'file_path'         => 'receipts/test-slip.pdf',
+        ]);
+
+        $controller = new \App\Http\Controllers\Finance\FinanceTaxReportController();
+
+        // 1. Month 1 (Meskerem): The expense MUST be included because receipt_date falls in Month 1
+        $requestM1 = new Request(['ethiopian_year' => 2019, 'ethiopian_month' => 1]);
+        $responseM1 = $controller->monthMovements($requestM1);
+        $this->assertEquals(200, $responseM1->getStatusCode());
+        $dataM1 = $responseM1->getData(true);
+        $this->assertTrue($dataM1['success']);
+
+        $m1Vouchers = array_column($dataM1['expenses'], 'request_number');
+        $this->assertContains('EXP-STRICT-001', $m1Vouchers, 'Expense with receipt dated in Month 1 must strictly appear in Month 1 movements.');
+
+        // 2. Month 2 (Tikimt): The expense must NOT appear in Month 2 even though paid_at is in Month 2
+        $requestM2 = new Request(['ethiopian_year' => 2019, 'ethiopian_month' => 2]);
+        $responseM2 = $controller->monthMovements($requestM2);
+        $this->assertEquals(200, $responseM2->getStatusCode());
+        $dataM2 = $responseM2->getData(true);
+        $this->assertTrue($dataM2['success']);
+
+        $m2Vouchers = array_column($dataM2['expenses'], 'request_number');
+        $this->assertNotContains('EXP-STRICT-001', $m2Vouchers, 'Expense with receipt dated in Month 1 must NOT appear in Month 2 under strict receipt month rule.');
     }
 }

@@ -29,6 +29,9 @@
                             <span class="badge bg-light text-dark border rounded-pill px-2.5 py-0.5 small fw-semibold font-monospace">
                                 {{ $movementsData['month']['title'] ?? 'Period' }}
                             </span>
+                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill px-2.5 py-0.5 small fw-semibold" title="Strict Rule Active: Purchases &amp; invoices are strictly assigned by Receipt Date (EC / GC) month">
+                                <i class="fa-solid fa-calendar-check me-1"></i>Strict Receipt Month Active
+                            </span>
                             @if(!empty($movementsData['summary']['is_cleared']))
                                 <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2.5 py-0.5 small fw-semibold">
                                     <i class="fa-solid fa-circle-check me-1"></i>Cleared (0.00 ETB)
@@ -698,7 +701,7 @@
                         <thead class="table-light text-muted text-uppercase fw-bold" style="font-size: 0.7rem;">
                             <tr>
                                 <th class="ps-3 py-2.5">#</th>
-                                <th class="py-2.5">Date (EC / GC)</th>
+                                <th class="py-2.5">Date (EC / GC) <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill font-monospace" style="font-size:0.62rem;" title="Strict Policy: Invoices &amp; purchases strictly assigned to that receipt's Ethiopian month">Strict</span></th>
                                 <th class="py-2.5">Voucher / Ref #</th>
                                 <th class="py-2.5">Payee / Supplier</th>
                                 <th class="py-2.5">Category &amp; Project</th>
@@ -1833,7 +1836,7 @@
                         <thead class="table-light text-muted text-uppercase fw-bold" style="font-size: 0.7rem;">
                             <tr>
                                 <th class="ps-3 py-2.5">#</th>
-                                <th class="py-2.5">Date (EC / GC)</th>
+                                <th class="py-2.5">Date (EC / GC) <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill font-monospace" style="font-size:0.62rem;" title="Strict Policy: Invoices strictly assigned to that receipt's Ethiopian month">Strict</span></th>
                                 <th class="py-2.5">FS # / Receipt #</th>
                                 <th class="py-2.5">Vendor Name &amp; TIN</th>
                                 <th class="py-2.5">Project / Category</th>
@@ -2345,7 +2348,7 @@
                         <thead class="table-light text-muted text-uppercase" style="font-size: 0.72rem;">
                             <tr>
                                 <th class="ps-3" style="width: 40px;">#</th>
-                                <th style="width: 105px;">Date (EC / GC)</th>
+                                <th style="width: 105px;">Date (EC / GC) <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill font-monospace" style="font-size:0.62rem;" title="Strict Policy: Withholding strictly assigned to that receipt's Ethiopian month">Strict</span></th>
                                 <th style="width: 140px;">Voucher / Ref</th>
                                 <th>Payee / Supplier &amp; TIN</th>
                                 <th>Category &amp; Project</th>
@@ -2720,6 +2723,14 @@
                                             </label>
                                             <input type="date" class="form-control form-control-sm font-monospace" id="movement_edit_receipt_date" name="receipt_date" onchange="syncMovementDateToEc(this.value)">
                                             <div class="form-text text-muted font-monospace" style="font-size:0.68rem;">System GC Date</div>
+                                        </div>
+
+                                        {{-- Strict Receipt Month Rule Notice Container --}}
+                                        <div class="col-12 mt-1" id="movement_strict_month_rule_wrap" style="display: none;">
+                                            <div class="p-2 rounded-2 small d-flex align-items-center gap-2" id="movement_strict_month_rule_box">
+                                                <i class="fa-solid fa-calendar-check fs-6" id="movement_strict_month_rule_icon"></i>
+                                                <div id="movement_strict_month_rule_text"></div>
+                                            </div>
                                         </div>
                                     </div>
 
@@ -3602,6 +3613,9 @@
     window._pageExpenses = @json($movementsData['expenses'] ?? []);
     window._pageVerifiedNoReceipt = @json($movementsData['verified_no_receipt'] ?? []);
     window._pageWhtExpenses = @json($movementsData['wht_expenses'] ?? []);
+    window._currentSelectedEthYear = {{ (int)$selectedEthYear }};
+    window._currentSelectedEthMonth = {{ (int)$selectedEthMonth }};
+    window._currentMonthTitle = @json($movementsData['month']['title'] ?? 'Period');
 
     // Toggle TAS / e-Tax Purchases by filter: 'all', 'vat', 'tas', 'with_wht', 'with_tin', 'missing_tin'
     let _activeTasTinFilter = 'all';
@@ -4308,13 +4322,25 @@
         const dateInput = document.getElementById('movement_edit_receipt_date');
         const dateEcInput = document.getElementById('movement_edit_receipt_date_ec');
         if (dateInput) {
-            const today = new Date().toISOString().split('T')[0];
-            dateInput.value = today;
-            if (dateEcInput) {
-                const p = today.split('-');
-                dateEcInput.value = gregorianToEthiopian(parseInt(p[0], 10), parseInt(p[1], 10), parseInt(p[2], 10));
+            // STRICT RULE: Default strictly to the active Ethiopian Month & Year being audited so users never forget!
+            const curEthYear = window._currentSelectedEthYear || {{ (int)$selectedEthYear }};
+            const curEthMonth = window._currentSelectedEthMonth || {{ (int)$selectedEthMonth }};
+            const defaultEcStr = `01/${String(curEthMonth).padStart(2, '0')}/${curEthYear}`;
+            try {
+                const defaultYmd = ethiopianToGregorian(curEthYear, curEthMonth, 1);
+                dateInput.value = defaultYmd;
+                if (dateEcInput) {
+                    dateEcInput.value = defaultEcStr;
+                }
+                syncMovementDateToEc(defaultYmd);
+            } catch (e) {
+                const today = new Date().toISOString().split('T')[0];
+                dateInput.value = today;
+                syncMovementDateToEc(today);
             }
-            syncMovementDateToEc(today);
+            if (typeof validateMovementDateMonthRule === 'function') {
+                validateMovementDateMonthRule();
+            }
         }
 
         const descInput = document.getElementById('movement_edit_item_description');
@@ -4604,6 +4630,11 @@
         _setupMovementModalDocTabs(ocr.file_url, ocr.withholding_receipt_url);
         _setPageSlipPreview(ocr.file_url);
 
+        // Validate strict month rule based on active/receipt inputs
+        if (typeof validateMovementDateMonthRule === 'function') {
+            validateMovementDateMonthRule();
+        }
+
         // Show modal
         if (window.bootstrap && bootstrap.Modal) {
             bootstrap.Modal.getOrCreateInstance(modalEl).show();
@@ -4841,6 +4872,11 @@
         const slipUrl = tas.receipt_slip_url || tas.attachment_url;
         _setupMovementModalDocTabs(slipUrl, tas.withholding_receipt_url);
         _setPageSlipPreview(slipUrl);
+
+        // Validate strict month rule based on active/receipt inputs
+        if (typeof validateMovementDateMonthRule === 'function') {
+            validateMovementDateMonthRule();
+        }
 
         // Show modal
         if (window.bootstrap && bootstrap.Modal) {
@@ -5352,6 +5388,11 @@
         const slipUrl = exp.receipt_slip_url || exp.attachment_url || exp.attachment;
         _setupMovementModalDocTabs(slipUrl, exp.withholding_receipt_url);
         _setPageSlipPreview(slipUrl);
+
+        // Validate strict month rule based on active/receipt inputs
+        if (typeof validateMovementDateMonthRule === 'function') {
+            validateMovementDateMonthRule();
+        }
 
         // Show modal
         if (window.bootstrap && bootstrap.Modal) {
@@ -6818,8 +6859,10 @@
                 ecInput.value = ecFormatted;
             }
             if (preview) preview.textContent = `${ecFormatted} EC`;
+            validateMovementDateMonthRule();
         } catch (e) {
             if (preview) preview.textContent = '';
+            validateMovementDateMonthRule();
         }
     }
 
@@ -6828,6 +6871,7 @@
         const gcInput = document.getElementById('movement_edit_receipt_date');
         if (!val || !val.trim()) {
             if (preview) preview.textContent = '';
+            validateMovementDateMonthRule();
             return;
         }
 
@@ -6853,6 +6897,77 @@
                     }
                 } catch (e) {}
             }
+        }
+        validateMovementDateMonthRule();
+    }
+
+    // Strict Receipt Month Rule Validator
+    function validateMovementDateMonthRule() {
+        const wrap = document.getElementById('movement_strict_month_rule_wrap');
+        const box = document.getElementById('movement_strict_month_rule_box');
+        const icon = document.getElementById('movement_strict_month_rule_icon');
+        const text = document.getElementById('movement_strict_month_rule_text');
+        if (!wrap || !box || !icon || !text) return;
+
+        const ecInput = document.getElementById('movement_edit_receipt_date_ec');
+        const gcInput = document.getElementById('movement_edit_receipt_date');
+        const val = ecInput?.value?.trim() || '';
+
+        const curEthYear = window._currentSelectedEthYear || {{ (int)$selectedEthYear }};
+        const curEthMonth = window._currentSelectedEthMonth || {{ (int)$selectedEthMonth }};
+        const curMonthTitle = window._currentMonthTitle || "{{ $movementsData['month']['title'] ?? 'Current Month' }}";
+
+        let day = 0, month = 0, year = 0;
+
+        if (val) {
+            const clean = val.replace(/\s*EC\s*$/i, '').trim();
+            const parts = clean.split(/[\/\-\.]/);
+            if (parts.length === 3) {
+                day = parseInt(parts[0], 10);
+                month = parseInt(parts[1], 10);
+                year = parseInt(parts[2], 10);
+                if (parts[0].length === 4) {
+                    year = parseInt(parts[0], 10);
+                    month = parseInt(parts[1], 10);
+                    day = parseInt(parts[2], 10);
+                }
+            }
+        }
+
+        if ((!month || isNaN(month)) && gcInput && gcInput.value) {
+            try {
+                const parts = gcInput.value.split('-');
+                const y = parseInt(parts[0], 10);
+                const m = parseInt(parts[1], 10);
+                const d = parseInt(parts[2], 10);
+                const ecStr = gregorianToEthiopian(y, m, d);
+                const ecParts = ecStr.split('/');
+                day = parseInt(ecParts[0], 10);
+                month = parseInt(ecParts[1], 10);
+                year = parseInt(ecParts[2], 10);
+            } catch (e) {}
+        }
+
+        if (month >= 1 && month <= 13 && year > 0) {
+            const ethMonthNames = {
+                1: 'Meskerem (መስከረም)', 2: 'Tikimt (ጥቅምት)', 3: 'Hidar (ኅዳር)', 4: 'Tahsas (ታኅሣሥ)',
+                5: 'Tir (ጥር)', 6: 'Yakatit (የካቲት)', 7: 'Megabit (መጋቢት)', 8: 'Miyazya (ሚያዝያ)',
+                9: 'Ginbot (ግንቦት)', 10: 'Sene (ሰኔ)', 11: 'Hamle (ሐምሌ)', 12: 'Nehase (ነሐሴ)', 13: 'Pagume (ጳጉሜ)'
+            };
+            const targetMonthName = ethMonthNames[month] || ('Month ' + month);
+
+            wrap.style.display = 'block';
+            if (year === curEthYear && month === curEthMonth) {
+                box.className = 'p-2 rounded-2 small d-flex align-items-center gap-2 bg-success-subtle text-success border border-success-subtle font-monospace';
+                icon.className = 'fa-solid fa-circle-check fs-6 text-success';
+                text.innerHTML = `<strong>Strict Rule Active:</strong> Receipt Date matches active audit period: <strong>${curMonthTitle}</strong>.`;
+            } else {
+                box.className = 'p-2 rounded-2 small d-flex align-items-start gap-2 bg-warning-subtle text-dark border border-warning-subtle';
+                icon.className = 'fa-solid fa-triangle-exclamation fs-6 text-warning mt-0.5';
+                text.innerHTML = `<strong>Strict Receipt Month Rule:</strong> Date (EC) belongs to <strong>${targetMonthName} ${year} ዓ.ም.</strong> (different from active audit month: ${curMonthTitle}). Under the strict rule, this invoice is placed into <strong>${targetMonthName} ${year}</strong> Financial Movements.`;
+            }
+        } else {
+            wrap.style.display = 'none';
         }
     }
 
@@ -7082,21 +7197,52 @@
             if (data.success && data.item) {
                 window._hasMovementOcrEditsSaved = true;
                 const itm = data.item;
+                const differsFromMonth = Boolean(
+                    data.differs_from_active_month ||
+                    (itm.receipt_eth_month && window._currentSelectedEthMonth && (
+                        parseInt(itm.receipt_eth_month, 10) !== parseInt(window._currentSelectedEthMonth, 10) ||
+                        (itm.receipt_eth_year && parseInt(itm.receipt_eth_year, 10) !== parseInt(window._currentSelectedEthYear, 10))
+                    ))
+                );
 
                 if (alertBox) {
-                    alertBox.className = 'alert alert-success py-2 px-3 small rounded-3 mb-3 d-flex align-items-center justify-content-between gap-2';
-                    alertBox.innerHTML = `
-                        <div class="d-flex align-items-center gap-2">
-                            <i class="fa-solid fa-circle-check fs-6 text-success"></i>
-                            <div>
-                                <span class="fw-semibold">${data.message || 'Invoice successfully updated & reconciled with system.'}</span>
-                                <small class="d-block text-success-emphasis">All ledger records, e-Tax tables and fiscal numbers are synchronized.</small>
+                    if (differsFromMonth) {
+                        const targetMonth = data.receipt_eth_month || itm.receipt_eth_month;
+                        const targetYear = data.receipt_eth_year || itm.receipt_eth_year || window._currentSelectedEthYear;
+                        const targetMonthTitle = data.receipt_month_title || ('Month ' + targetMonth);
+                        alertBox.className = 'alert alert-warning py-2.5 px-3 small rounded-3 mb-3 d-flex align-items-center justify-content-between gap-2 shadow-xs';
+                        alertBox.innerHTML = `
+                            <div class="d-flex align-items-center gap-2">
+                                <i class="fa-solid fa-triangle-exclamation fs-5 text-warning flex-shrink-0"></i>
+                                <div>
+                                    <div class="fw-bold text-dark">Strict Receipt Month Rule Applied</div>
+                                    <div class="text-secondary">${data.message || `Under the strict receipt month rule, this invoice is recorded in Ethiopian Month ${targetMonth} (${targetMonthTitle} ${targetYear}).`}</div>
+                                </div>
                             </div>
-                        </div>
-                        <button type="button" class="btn btn-xs btn-outline-success rounded-pill px-2.5 py-1 fw-semibold shadow-xs" onclick="reloadMovementsView()">
-                            <i class="fa-solid fa-rotate me-1"></i>Refresh View
-                        </button>
-                    `;
+                            <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                                <a href="?ethiopian_year=${targetYear}&ethiopian_month=${targetMonth}" class="btn btn-xs btn-primary rounded-pill px-3 py-1.5 fw-semibold shadow-xs">
+                                    <i class="fa-solid fa-arrow-right me-1"></i>Open ${targetMonthTitle}
+                                </a>
+                                <button type="button" class="btn btn-xs btn-outline-secondary rounded-pill px-2.5 py-1" onclick="reloadMovementsView()">
+                                    <i class="fa-solid fa-rotate me-1"></i>Refresh View
+                                </button>
+                            </div>
+                        `;
+                    } else {
+                        alertBox.className = 'alert alert-success py-2 px-3 small rounded-3 mb-3 d-flex align-items-center justify-content-between gap-2';
+                        alertBox.innerHTML = `
+                            <div class="d-flex align-items-center gap-2">
+                                <i class="fa-solid fa-circle-check fs-6 text-success"></i>
+                                <div>
+                                    <span class="fw-semibold">${data.message || 'Invoice successfully updated & reconciled with system.'}</span>
+                                    <small class="d-block text-success-emphasis">All ledger records, e-Tax tables and fiscal numbers are synchronized.</small>
+                                </div>
+                            </div>
+                            <button type="button" class="btn btn-xs btn-outline-success rounded-pill px-2.5 py-1 fw-semibold shadow-xs" onclick="reloadMovementsView()">
+                                <i class="fa-solid fa-rotate me-1"></i>Refresh View
+                            </button>
+                        `;
+                    }
                 }
 
                 // Update cache
@@ -7136,78 +7282,88 @@
                     || (submittedId ? document.getElementById('page-ocr-row-' + submittedId) : null);
 
                 if (tr) {
-                    tr.id = 'page-ocr-row-' + itm.id;
-                    tr.setAttribute('data-id', itm.id);
-                    if (itm.receipt_id) tr.setAttribute('data-receipt-id', itm.receipt_id);
-
-                    const cellDateEc = tr.querySelector('.cell-date-ec');
-                    if (cellDateEc) cellDateEc.textContent = itm.receipt_date_ec || '—';
-
-                    const cellDateGc = tr.querySelector('.cell-date-gc');
-                    if (cellDateGc) cellDateGc.textContent = itm.receipt_date_ymd || '—';
-
-                    const cellFs = tr.querySelector('.cell-fs');
-                    if (cellFs) cellFs.textContent = itm.fs_no || '—';
-
-                    const cellInvType = tr.querySelector('.cell-inv-type');
-                    if (cellInvType && itm.invoice_type) {
-                        if (itm.invoice_type === 'M') {
-                            cellInvType.className = 'badge bg-warning text-dark border border-warning-subtle font-monospace px-1.5 py-0.5 cell-inv-type';
-                            cellInvType.textContent = 'M';
-                            cellInvType.title = 'Manual Invoice / Voucher';
-                        } else {
-                            cellInvType.className = 'badge bg-primary-subtle text-primary border border-primary-subtle font-monospace px-1.5 py-0.5 cell-inv-type';
-                            cellInvType.textContent = 'FS';
-                            cellInvType.title = 'Fiscal Register Slip (FS)';
+                    if (differsFromMonth) {
+                        tr.style.transition = 'all 0.5s ease';
+                        tr.style.opacity = '0.45';
+                        tr.style.backgroundColor = '#fff3cd';
+                        const cellDateEc = tr.querySelector('.cell-date-ec');
+                        if (cellDateEc && !cellDateEc.innerHTML.includes('Moved to Month')) {
+                            cellDateEc.innerHTML += ` <span class="badge bg-warning text-dark font-monospace" style="font-size:0.65rem;">Moved to Month ${data.receipt_eth_month || itm.receipt_eth_month}</span>`;
                         }
-                    }
+                    } else {
+                        tr.id = 'page-ocr-row-' + itm.id;
+                        tr.setAttribute('data-id', itm.id);
+                        if (itm.receipt_id) tr.setAttribute('data-receipt-id', itm.receipt_id);
 
-                    const cellMrc = tr.querySelector('.cell-mrc');
-                    if (cellMrc) {
-                        if (itm.mrc_no && itm.mrc_no !== '-') {
-                            cellMrc.textContent = 'MRC: ' + itm.mrc_no;
-                            cellMrc.style.display = '';
-                        } else {
-                            cellMrc.style.display = 'none';
+                        const cellDateEc = tr.querySelector('.cell-date-ec');
+                        if (cellDateEc) cellDateEc.textContent = itm.receipt_date_ec || '—';
+
+                        const cellDateGc = tr.querySelector('.cell-date-gc');
+                        if (cellDateGc) cellDateGc.textContent = itm.receipt_date_ymd || '—';
+
+                        const cellFs = tr.querySelector('.cell-fs');
+                        if (cellFs) cellFs.textContent = itm.fs_no || '—';
+
+                        const cellInvType = tr.querySelector('.cell-inv-type');
+                        if (cellInvType && itm.invoice_type) {
+                            if (itm.invoice_type === 'M') {
+                                cellInvType.className = 'badge bg-warning text-dark border border-warning-subtle font-monospace px-1.5 py-0.5 cell-inv-type';
+                                cellInvType.textContent = 'M';
+                                cellInvType.title = 'Manual Invoice / Voucher';
+                            } else {
+                                cellInvType.className = 'badge bg-primary-subtle text-primary border border-primary-subtle font-monospace px-1.5 py-0.5 cell-inv-type';
+                                cellInvType.textContent = 'FS';
+                                cellInvType.title = 'Fiscal Register Slip (FS)';
+                            }
                         }
-                    }
 
-                    const cellVendor = tr.querySelector('.cell-vendor');
-                    if (cellVendor) cellVendor.textContent = itm.vendor_name || '—';
-
-                    const cellTin = tr.querySelector('.cell-tin');
-                    if (cellTin) cellTin.textContent = 'TIN: ' + (itm.vendor_tin || '—');
-
-                    const cellProject = tr.querySelector('.cell-project');
-                    if (cellProject) cellProject.textContent = itm.project_name || 'General';
-
-                    const cellCategory = tr.querySelector('.cell-category');
-                    if (cellCategory) cellCategory.textContent = itm.category || '';
-
-                    const cellDesc = tr.querySelector('.cell-desc');
-                    if (cellDesc) cellDesc.textContent = itm.item_description || '—';
-
-                    const cellBase = tr.querySelector('.cell-base');
-                    if (cellBase) cellBase.textContent = 'ETB ' + parseFloat(itm.base_value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-                    const cellVat = tr.querySelector('.cell-vat');
-                    if (cellVat) {
-                        if (parseFloat(itm.vat_amount || 0) > 0) {
-                            cellVat.className = 'cell-vat text-success fw-semibold';
-                            cellVat.textContent = 'ETB ' + parseFloat(itm.vat_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                        } else {
-                            cellVat.className = 'badge bg-light text-muted border font-monospace';
-                            cellVat.textContent = '0% VAT (TAS)';
+                        const cellMrc = tr.querySelector('.cell-mrc');
+                        if (cellMrc) {
+                            if (itm.mrc_no && itm.mrc_no !== '-') {
+                                cellMrc.textContent = 'MRC: ' + itm.mrc_no;
+                                cellMrc.style.display = '';
+                            } else {
+                                cellMrc.style.display = 'none';
+                            }
                         }
+
+                        const cellVendor = tr.querySelector('.cell-vendor');
+                        if (cellVendor) cellVendor.textContent = itm.vendor_name || '—';
+
+                        const cellTin = tr.querySelector('.cell-tin');
+                        if (cellTin) cellTin.textContent = 'TIN: ' + (itm.vendor_tin || '—');
+
+                        const cellProject = tr.querySelector('.cell-project');
+                        if (cellProject) cellProject.textContent = itm.project_name || 'General';
+
+                        const cellCategory = tr.querySelector('.cell-category');
+                        if (cellCategory) cellCategory.textContent = itm.category || '';
+
+                        const cellDesc = tr.querySelector('.cell-desc');
+                        if (cellDesc) cellDesc.textContent = itm.item_description || '—';
+
+                        const cellBase = tr.querySelector('.cell-base');
+                        if (cellBase) cellBase.textContent = 'ETB ' + parseFloat(itm.base_value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+                        const cellVat = tr.querySelector('.cell-vat');
+                        if (cellVat) {
+                            if (parseFloat(itm.vat_amount || 0) > 0) {
+                                cellVat.className = 'cell-vat text-success fw-semibold';
+                                cellVat.textContent = 'ETB ' + parseFloat(itm.vat_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                            } else {
+                                cellVat.className = 'badge bg-light text-muted border font-monospace';
+                                cellVat.textContent = '0% VAT (TAS)';
+                            }
+                        }
+
+                        const cellTotal = tr.querySelector('.cell-total');
+                        if (cellTotal) cellTotal.textContent = 'ETB ' + parseFloat(itm.total_value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+                        tr.style.transition = 'background-color 0.4s ease';
+                        tr.style.backgroundColor = '#d1e7dd';
+                        setTimeout(() => { tr.style.backgroundColor = ''; }, 2000);
                     }
-
-                    const cellTotal = tr.querySelector('.cell-total');
-                    if (cellTotal) cellTotal.textContent = 'ETB ' + parseFloat(itm.total_value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-                    tr.style.transition = 'background-color 0.4s ease';
-                    tr.style.backgroundColor = '#d1e7dd';
-                    setTimeout(() => { tr.style.backgroundColor = ''; }, 2000);
-                } else {
+                } else if (!differsFromMonth) {
                     const tbody = document.querySelector('#pageOcrTable tbody');
                     if (tbody) {
                         const emptyTr = tbody.querySelector('td[colspan="10"]')?.closest('tr');
