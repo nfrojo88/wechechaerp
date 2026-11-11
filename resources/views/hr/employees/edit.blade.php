@@ -217,9 +217,11 @@
                                 Manage and change system roles for this employee. Multiple roles can be assigned simultaneously.
                             </p>
                             @php
-                                $existingUserRoles = $employee->user ? $employee->user->roles->pluck('name')->toArray() : [];
+                                $empUser = $employee->user ?? ($employee->email ? \App\Models\User::where('email', $employee->email)->first() : null);
+                                $existingUserRoles = $empUser ? $empUser->roles->pluck('name')->toArray() : [];
                                 $selectedRoles = old('roles', $existingUserRoles);
                             @endphp
+                            <input type="hidden" name="roles_submitted" value="1">
                             <div class="row g-2" style="max-height: 200px; overflow-y: auto;">
                                 @if(isset($roles) && $roles->isNotEmpty())
                                     @foreach($roles as $r)

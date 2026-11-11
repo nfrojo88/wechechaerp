@@ -18,8 +18,22 @@ class ProfileController extends Controller
         $user = Auth::user();
         $employee = $user->employee;
 
+        if (!$employee && !empty($user->email)) {
+            $employee = \App\Models\Employee::withoutGlobalScope(\App\Scopes\NotDeadFileScope::class)
+                ->where('email', $user->email)
+                ->first();
+            if ($employee && !$employee->user_id) {
+                $employee->update(['user_id' => $user->id]);
+            }
+        }
+
+        if ($employee && !empty($employee->full_name) && $user->name !== $employee->full_name) {
+            $user->update(['name' => $employee->full_name]);
+        }
+
         if ($employee) {
             $employee->load([
+                'user.roles',
                 'project',
                 'education',
                 'experience',
@@ -86,7 +100,10 @@ class ProfileController extends Controller
         $targetUserIds = array_unique($targetUserIds);
 
         // Load all assigned accounts for this user/employee
-        $allAssignedCoas = \App\Models\ChartOfAccount::whereIn('assigned_to', $targetUserIds)->get();
+        $allAssignedCoas = collect();
+        if (\Illuminate\Support\Facades\Schema::hasTable('chart_of_accounts') && \Illuminate\Support\Facades\Schema::hasColumn('chart_of_accounts', 'assigned_to')) {
+            $allAssignedCoas = \App\Models\ChartOfAccount::whereIn('assigned_to', $targetUserIds)->get();
+        }
 
         // Strictly match Petty Cash / Cash accounts
         $assignedPettyCash = $allAssignedCoas->filter(function ($coa) {
@@ -110,7 +127,7 @@ class ProfileController extends Controller
             $assignedPettyCash = $allAssignedCoas->filter(fn($c) => in_array(strtolower($c->type ?? ''), ['asset', 'expense']));
         }
 
-        $pettyCashBalance = (float) $assignedPettyCash->sum('current_balance');
+        $pettyCashBalance = (float) $assignedPettyCash->sum(fn($c) => (float)$c->ledger_balance);
 
         return view('profile.edit', compact(
             'user', 'employee',
@@ -127,14 +144,40 @@ class ProfileController extends Controller
     public function update(Request $request)
     {
         $user = Auth::user();
+        $employee = $user->employee;
+
+        if (!$employee && !empty($user->email)) {
+            $employee = \App\Models\Employee::withoutGlobalScope(\App\Scopes\NotDeadFileScope::class)
+                ->where('email', $user->email)
+                ->first();
+            if ($employee && !$employee->user_id) {
+                $employee->update(['user_id' => $user->id]);
+            }
+        }
 
         $validated = $request->validate([
-            'phone' => 'nullable|string|max:30',
+            'phone'           => 'nullable|string|max:30',
+            'email'           => 'nullable|email|max:255',
+            'profile_picture' => 'nullable|file|mimes:jpeg,png,jpg,webp|max:5120',
         ]);
 
-        if ($request->filled('phone')) {
-            if ($user->employee) {
-                $user->employee->update(['phone' => $validated['phone']]);
+        if ($request->hasFile('profile_picture') && $employee) {
+            $picPath = \App\Services\FileUploadService::upload($request->file('profile_picture'), 'employee_profile_pictures');
+            $employee->update(['profile_picture' => $picPath]);
+        }
+
+        if ($request->has('phone') && $employee) {
+            $employee->update(['phone' => $validated['phone']]);
+        }
+
+        if ($request->filled('email')) {
+            $newEmail = strtolower(trim($validated['email']));
+            $emailTaken = \App\Models\User::where('email', $newEmail)->where('id', '!=', $user->id)->exists();
+            if (!$emailTaken) {
+                $user->update(['email' => $newEmail]);
+                if ($employee) {
+                    $employee->update(['email' => $newEmail]);
+                }
             }
         }
 

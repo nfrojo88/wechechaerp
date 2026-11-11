@@ -149,6 +149,15 @@
                                         $types = ['permanent' => 'Permanent', 'contract' => 'Contract', 'daily' => 'Daily Worker'];
                                     @endphp
                                     {{ $types[$employee->employment_type] ?? ucfirst($employee->employment_type ?? 'Permanent') }}
+                                    @if($employee->isProjectBased())
+                                        <span class="badge bg-primary bg-opacity-10 text-primary border border-primary-subtle ms-1" style="font-size:0.75rem;">
+                                            <i class="fa-solid fa-diagram-project me-1"></i>Until Project Completion
+                                        </span>
+                                    @elseif($employee->contract_end_date)
+                                        <span class="badge bg-info-subtle text-info border border-info-subtle ms-1" style="font-size:0.75rem;">
+                                            Valid Upto: {{ $employee->contract_end_date->format('d M Y') }}
+                                        </span>
+                                    @endif
                                 </h6>
                             </div>
                             <div class="col-md-6">
@@ -156,8 +165,22 @@
                                 <h6 class="mb-0 fw-bold text-dark">{{ $employee->date_of_joining ? $employee->date_of_joining->format('d M Y') : 'N/A' }}</h6>
                             </div>
                             <div class="col-md-6">
+                                <small class="text-muted d-block mb-1">45-Day Test Period (Probation)</small>
+                                <h6 class="mb-0 fw-bold">
+                                    @if($employee->probation_completed)
+                                        <span class="badge bg-success"><i class="fa-solid fa-circle-check me-1"></i>Completed / Renewed</span>
+                                    @elseif($employee->is_test_period_expired)
+                                        <span class="badge bg-danger"><i class="fa-solid fa-lock me-1"></i>Expired</span>
+                                    @elseif($employee->show_probation_alert)
+                                        <span class="badge bg-warning text-dark"><i class="fa-solid fa-clock me-1"></i>Day {{ $employee->days_since_joining }} of 45 ({{ $employee->days_until_probation_end }}d left)</span>
+                                    @else
+                                        <span class="badge bg-info text-dark"><i class="fa-solid fa-shield-halved me-1"></i>Day {{ $employee->days_since_joining }} of 45 (Active)</span>
+                                    @endif
+                                </h6>
+                            </div>
+                            <div class="col-md-6">
                                 <small class="text-muted d-block mb-1">Status</small>
-                                <div class="d-flex align-items-center gap-1">
+                                <div class="d-flex align-items-center gap-1 flex-wrap">
                                     @if($employee->status === 'active')
                                         <span class="badge bg-success px-2 py-1">Active</span>
                                     @elseif($employee->status === 'suspended')
@@ -173,6 +196,12 @@
                                     @endif
                                 </div>
                             </div>
+                            @if($employee->device_user_id)
+                            <div class="col-md-6">
+                                <small class="text-muted d-block mb-1">Biometric Attendance ID</small>
+                                <h6 class="mb-0 fw-bold font-monospace text-primary"><i class="fa-solid fa-fingerprint me-1"></i>{{ $employee->device_user_id }}</h6>
+                            </div>
+                            @endif
                             @if($employee->project)
                             <div class="col-md-6">
                                 <small class="text-muted d-block mb-1">Assigned Project</small>
@@ -189,20 +218,38 @@
                     </div>
                 </div>
 
-                {{-- Contact Information Card --}}
+                {{-- Contact & Identification Information Card --}}
                 <div class="card border-0 shadow-sm rounded-4 mb-4">
-                    <div class="card-header bg-white py-3 border-0 rounded-top-4">
-                        <h5 class="mb-0 fw-bold"><i class="fa-solid fa-phone text-primary me-2"></i>Contact Information</h5>
+                    <div class="card-header bg-white py-3 border-0 rounded-top-4 d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0 fw-bold"><i class="fa-solid fa-id-card text-primary me-2"></i>Contact &amp; Identification Information</h5>
+                        <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-3 shadow-xs" data-bs-toggle="modal" data-bs-target="#editContactModal">
+                            <i class="fa-solid fa-pen-to-square me-1"></i>Edit Contact
+                        </button>
                     </div>
                     <div class="card-body p-4 pt-1">
                         <div class="row g-4">
                             <div class="col-md-6">
                                 <small class="text-muted d-block mb-1">Phone</small>
-                                <h6 class="mb-0 fw-bold text-dark">{{ $employee->phone ?? 'N/A' }}</h6>
+                                <h6 class="mb-0 fw-bold text-dark font-monospace">{{ $employee->phone ?? 'N/A' }}</h6>
                             </div>
                             <div class="col-md-6">
                                 <small class="text-muted d-block mb-1">Email</small>
                                 <h6 class="mb-0 fw-bold text-dark">{{ $employee->email ?? ($user->email ?? 'N/A') }}</h6>
+                            </div>
+                            <div class="col-md-6">
+                                <small class="text-muted d-block mb-1">TIN Number</small>
+                                <h6 class="mb-0 fw-bold font-monospace text-dark">{{ $employee->tin_number ?: 'Not Provided' }}</h6>
+                            </div>
+                            <div class="col-md-6">
+                                <small class="text-muted d-block mb-1">National ID / Fayda No.</small>
+                                <div class="d-flex align-items-center gap-2">
+                                    <h6 class="mb-0 fw-bold font-monospace text-dark">{{ $employee->national_id_number ?: 'Not Provided' }}</h6>
+                                    @if($employee->national_id_card)
+                                        <a href="{{ $employee->national_id_card_url }}" target="_blank" class="btn btn-xs btn-outline-primary py-0 px-2 rounded-pill">
+                                            <i class="fa-solid fa-eye me-1"></i>View Card
+                                        </a>
+                                    @endif
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -246,53 +293,158 @@
                     </div>
                 </div>
 
-                {{-- Guarantee Letter Status Card --}}
-                @if($employee->guarantee_letter_required)
-                <div class="card border-0 shadow-sm rounded-4 mb-4 @if($employee->is_guarantee_overdue) border-start border-4 border-danger @elseif($employee->show_guarantee_warning) border-start border-4 border-warning @endif">
+                {{-- Official Documents & Contracts Card --}}
+                @php
+                    $regUrls = $employee->registration_letter_urls ?? [];
+                    $hasOfficialDocs = !empty($regUrls) || $employee->registration_letter || $employee->asset_handover_document || $employee->national_id_card;
+                @endphp
+                @if($hasOfficialDocs)
+                <div class="card border-0 shadow-sm rounded-4 mb-4">
                     <div class="card-header bg-white py-3 border-0 rounded-top-4">
-                        <h5 class="mb-0 fw-bold"><i class="fa-solid fa-shield-halved text-secondary me-2"></i>Guarantee Letter Status</h5>
+                        <h5 class="mb-0 fw-bold"><i class="fa-solid fa-folder-open text-info me-2"></i>Official Registration &amp; Employment Documents</h5>
+                    </div>
+                    <div class="card-body p-4 pt-1">
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <div class="border rounded-3 p-3 text-center bg-light h-100">
+                                    <i class="fa-solid fa-file-contract fa-2x text-primary mb-2"></i>
+                                    <h6 class="fw-bold mb-1 small">Registration / Contract</h6>
+                                    @if(!empty($regUrls))
+                                        <div class="d-flex flex-wrap justify-content-center gap-1 mt-2">
+                                            @foreach($regUrls as $idx => $docUrl)
+                                                <a href="{{ $docUrl }}" target="_blank" class="btn btn-xs btn-primary rounded-pill">
+                                                    <i class="fa-solid fa-eye me-1"></i>Doc #{{ $idx + 1 }}
+                                                </a>
+                                            @endforeach
+                                        </div>
+                                    @elseif($employee->registration_letter)
+                                        <a href="{{ $employee->registration_letter_url }}" target="_blank" class="btn btn-xs btn-primary rounded-pill mt-2">
+                                            <i class="fa-solid fa-eye me-1"></i>View Document
+                                        </a>
+                                    @else
+                                        <span class="badge bg-secondary mt-2">Not Uploaded</span>
+                                    @endif
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="border rounded-3 p-3 text-center bg-light h-100">
+                                    <i class="fa-solid fa-id-card fa-2x text-success mb-2"></i>
+                                    <h6 class="fw-bold mb-1 small">National ID Card</h6>
+                                    @if($employee->national_id_card)
+                                        <a href="{{ $employee->national_id_card_url }}" target="_blank" class="btn btn-xs btn-success rounded-pill mt-2">
+                                            <i class="fa-solid fa-eye me-1"></i>View ID Card
+                                        </a>
+                                    @else
+                                        <span class="badge bg-secondary mt-2">Not Uploaded</span>
+                                    @endif
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="border rounded-3 p-3 text-center bg-light h-100">
+                                    <i class="fa-solid fa-file-signature fa-2x text-warning mb-2"></i>
+                                    <h6 class="fw-bold mb-1 small">Asset Handover Document</h6>
+                                    @if($employee->asset_handover_document)
+                                        <a href="{{ $employee->asset_handover_document_url }}" target="_blank" class="btn btn-xs btn-warning text-dark rounded-pill mt-2">
+                                            <i class="fa-solid fa-eye me-1"></i>View Document
+                                        </a>
+                                    @else
+                                        <span class="badge bg-secondary mt-2">Not Uploaded</span>
+                                    @endif
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                @endif
+
+                {{-- Guarantee Letter & Guarantors Status Card --}}
+                @php
+                    $hasGuarantors = !empty($employee->guarantor_name) || !empty($employee->guarantor_2_name) || !empty($employee->guarantee_letter) || !empty($employee->guarantee_letter_2);
+                @endphp
+                @if($employee->guarantee_letter_required || $hasGuarantors)
+                <div class="card border-0 shadow-sm rounded-4 mb-4 @if($employee->is_guarantee_overdue) border-start border-4 border-danger @elseif($employee->show_guarantee_warning) border-start border-4 border-warning @endif">
+                    <div class="card-header bg-white py-3 border-0 rounded-top-4 d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0 fw-bold"><i class="fa-solid fa-shield-halved text-secondary me-2"></i>Guarantee &amp; Guarantor Records</h5>
+                        @if($employee->guarantee_letter)
+                            <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-3 py-1">
+                                <i class="fa-solid fa-circle-check me-1"></i>Guarantee Active
+                            </span>
+                        @endif
                     </div>
                     <div class="card-body p-4 pt-1">
                         @if($employee->guarantee_letter)
-                            <div class="alert alert-success border-0 rounded-3 mb-3 d-flex align-items-center">
-                                <i class="fa-solid fa-check-circle fa-lg me-3 text-success"></i>
-                                <div>
-                                    <strong>Guarantee Letter Submitted & Verified</strong>
-                                    <div class="small text-muted">Submitted on: {{ $employee->guarantee_letter_submitted_at ? $employee->guarantee_letter_submitted_at->format('d M Y') : 'Verified' }}</div>
+                            <div class="alert alert-success border-0 rounded-3 mb-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                <div class="d-flex align-items-center">
+                                    <i class="fa-solid fa-check-circle fa-lg me-3 text-success"></i>
+                                    <div>
+                                        <strong>Primary Guarantee Letter Verified</strong>
+                                        <div class="small text-muted">Submitted on: {{ $employee->guarantee_letter_submitted_at ? $employee->guarantee_letter_submitted_at->format('d M Y') : 'Verified' }}</div>
+                                    </div>
                                 </div>
+                                <a href="{{ $employee->guarantee_letter_url }}" target="_blank" class="btn btn-sm btn-outline-success shadow-xs rounded-pill px-3">
+                                    <i class="fa-solid fa-file-pdf me-1"></i>View Letter 1
+                                </a>
                             </div>
-                            <a href="{{ $employee->guarantee_letter_url }}" target="_blank" class="btn btn-sm btn-outline-primary shadow-sm rounded-3 px-3">
-                                <i class="fa-solid fa-file-pdf me-1"></i>View Guarantee Document
-                            </a>
                         @elseif($employee->is_guarantee_overdue)
                             <div class="alert alert-danger border-0 rounded-3 mb-3">
                                 <i class="fa-solid fa-exclamation-circle me-2"></i>
                                 <strong>OVERDUE!</strong> Guarantee letter was due {{ abs($employee->days_until_guarantee_deadline) }} days ago. Login access has been flagged until submission.
                             </div>
-                            <p class="text-muted small mb-3">
-                                <i class="fa-solid fa-calendar me-1"></i> Joined: {{ $employee->date_of_joining ? $employee->date_of_joining->format('d M Y') : 'N/A' }} | 
-                                <i class="fa-solid fa-clock me-1"></i> Deadline was: {{ $employee->date_of_joining ? $employee->date_of_joining->addDays(30)->format('d M Y') : 'N/A' }}
-                            </p>
-                            @can('hr.manage')
-                            <form action="{{ route('employees.upload-guarantee', $employee) }}" method="POST" enctype="multipart/form-data">
-                                @csrf
-                                <div class="mb-3">
-                                    <label class="form-label fw-semibold">Upload Guarantee Letter <span class="text-danger">*</span></label>
-                                    <input type="file" name="guarantee_letter" class="form-control" required accept="application/pdf,image/jpeg,image/png,image/jpg">
-                                    <small class="text-muted">PDF or Image (Max 10MB)</small>
-                                </div>
-                                <button type="submit" class="btn btn-danger btn-sm px-3">
-                                    <i class="fa-solid fa-upload me-1"></i>Upload Document
-                                </button>
-                            </form>
-                            @else
-                            <div class="small text-muted"><i class="fa-solid fa-circle-info me-1"></i>Please submit your physical guarantee letter document to the HR department.</div>
-                            @endcan
                         @else
-                            <div class="alert alert-info border-0 rounded-3 mb-2">
+                            <div class="alert alert-info border-0 rounded-3 mb-3">
                                 <i class="fa-solid fa-info-circle me-2"></i>Guarantee letter due in <strong>{{ $employee->days_until_guarantee_deadline ?? 30 }} days</strong>.
                             </div>
                         @endif
+
+                        @if($employee->guarantee_letter_2)
+                            <div class="alert alert-light border rounded-3 mb-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                <div class="d-flex align-items-center">
+                                    <i class="fa-solid fa-file-shield fa-lg me-3 text-primary"></i>
+                                    <div>
+                                        <strong>Second Guarantee Letter on File</strong>
+                                        <div class="small text-muted">Secondary Guarantor Verification</div>
+                                    </div>
+                                </div>
+                                <a href="{{ \App\Services\FileUploadService::url($employee->guarantee_letter_2) }}" target="_blank" class="btn btn-sm btn-outline-primary shadow-xs rounded-pill px-3">
+                                    <i class="fa-solid fa-file-pdf me-1"></i>View Letter 2
+                                </a>
+                            </div>
+                        @endif
+
+                        {{-- Guarantor Details (1 and 2) --}}
+                        <div class="row g-3 mt-1">
+                            @if($employee->guarantor_name || $employee->guarantor_id_number || $employee->guarantor_phone)
+                            <div class="col-md-6">
+                                <div class="p-3 border rounded-3 bg-light">
+                                    <small class="text-muted fw-bold text-uppercase d-block mb-2" style="font-size:0.7rem;">Primary Guarantor</small>
+                                    <h6 class="fw-bold text-dark mb-1">{{ $employee->guarantor_name ?: '—' }}</h6>
+                                    <div class="small text-muted mb-1"><i class="fa-solid fa-id-card me-1 text-primary"></i>ID: <span class="font-monospace text-dark">{{ $employee->guarantor_id_number ?: '—' }}</span></div>
+                                    <div class="small text-muted mb-2"><i class="fa-solid fa-phone me-1 text-success"></i>Phone: <span class="font-monospace text-dark">{{ $employee->guarantor_phone ?: '—' }}</span></div>
+                                    @if($employee->guarantor_id_card)
+                                        <a href="{{ \App\Services\FileUploadService::url($employee->guarantor_id_card) }}" target="_blank" class="btn btn-xs btn-outline-primary rounded-pill">
+                                            <i class="fa-solid fa-eye me-1"></i>View Guarantor ID Card
+                                        </a>
+                                    @endif
+                                </div>
+                            </div>
+                            @endif
+
+                            @if($employee->guarantor_2_name || $employee->guarantor_2_id_number || $employee->guarantor_2_phone)
+                            <div class="col-md-6">
+                                <div class="p-3 border rounded-3 bg-light">
+                                    <small class="text-muted fw-bold text-uppercase d-block mb-2" style="font-size:0.7rem;">Second Guarantor</small>
+                                    <h6 class="fw-bold text-dark mb-1">{{ $employee->guarantor_2_name ?: '—' }}</h6>
+                                    <div class="small text-muted mb-1"><i class="fa-solid fa-id-card me-1 text-primary"></i>ID: <span class="font-monospace text-dark">{{ $employee->guarantor_2_id_number ?: '—' }}</span></div>
+                                    <div class="small text-muted mb-2"><i class="fa-solid fa-phone me-1 text-success"></i>Phone: <span class="font-monospace text-dark">{{ $employee->guarantor_2_phone ?: '—' }}</span></div>
+                                    @if($employee->guarantor_2_id_card)
+                                        <a href="{{ \App\Services\FileUploadService::url($employee->guarantor_2_id_card) }}" target="_blank" class="btn btn-xs btn-outline-primary rounded-pill">
+                                            <i class="fa-solid fa-eye me-1"></i>View Guarantor 2 ID Card
+                                        </a>
+                                    @endif
+                                </div>
+                            </div>
+                            @endif
+                        </div>
                     </div>
                 </div>
                 @endif
@@ -755,6 +907,19 @@
                                     @endif
                                 </div>
                             </div>
+
+                            {{-- Biometric ID --}}
+                            @if($employee->device_user_id)
+                            <div class="d-flex align-items-center justify-content-between p-2 rounded-3 bg-light bg-opacity-75">
+                                <div class="d-flex align-items-center gap-2.5">
+                                    <div class="rounded-circle bg-danger bg-opacity-10 text-danger d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;">
+                                        <i class="fa-solid fa-fingerprint small"></i>
+                                    </div>
+                                    <span class="text-muted small">Biometric ID</span>
+                                </div>
+                                <strong class="text-dark font-monospace small">{{ $employee->device_user_id }}</strong>
+                            </div>
+                            @endif
                         </div>
                     </div>
                 </div>
@@ -1151,6 +1316,56 @@
                     <button type="button" class="btn btn-sm btn-secondary px-3" data-bs-dismiss="modal">Cancel</button>
                     <button type="submit" class="btn btn-sm btn-warning fw-bold px-4 text-dark shadow-sm">
                         <i class="fa-solid fa-paper-plane me-1"></i>Submit Report
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{{-- Edit Contact Information Modal --}}
+<div class="modal fade" id="editContactModal" tabindex="-1" aria-labelledby="editContactModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4">
+            <div class="modal-header bg-primary text-white border-0 py-3 px-4 rounded-top-4">
+                <h5 class="modal-title fw-bold" id="editContactModalLabel">
+                    <i class="fa-solid fa-user-pen me-2"></i>Edit Contact Information
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="{{ route('profile.update') }}" method="POST" enctype="multipart/form-data">
+                @csrf
+                @method('PUT')
+                <div class="modal-body p-4">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold text-dark">Phone Number</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light"><i class="fa-solid fa-phone text-muted"></i></span>
+                            <input type="text" name="phone" class="form-control font-monospace" 
+                                   value="{{ old('phone', $employee ? $employee->phone : '') }}" 
+                                   placeholder="e.g. 0911223344">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold text-dark">Email Address</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light"><i class="fa-solid fa-envelope text-muted"></i></span>
+                            <input type="email" name="email" class="form-control" 
+                                   value="{{ old('email', $employee ? ($employee->email ?? $user->email) : $user->email) }}" 
+                                   placeholder="your.email@construct-pro.com">
+                        </div>
+                        <div class="form-text small">Updating email will also update your system login email.</div>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label fw-semibold text-dark">Profile Picture</label>
+                        <input type="file" name="profile_picture" class="form-control" accept="image/jpeg,image/png,image/jpg,image/webp">
+                        <div class="form-text small">Allowed formats: JPG, PNG, WEBP (Max 5MB).</div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light border-0 py-3 px-4 d-flex justify-content-end gap-2 rounded-bottom-4">
+                    <button type="button" class="btn btn-sm btn-secondary px-3 rounded-pill" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-sm btn-primary fw-semibold px-4 rounded-pill shadow-sm">
+                        <i class="fa-solid fa-save me-1"></i>Save Changes
                     </button>
                 </div>
             </form>

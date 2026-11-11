@@ -715,7 +715,18 @@ class EmployeeController extends Controller
         $this->ensureLicenseTableExists();
         $this->ensureLettersTableExists();
         $this->ensureSalaryHistoriesTableExists();
+
+        // Auto-heal missing user link if employee has email matching a user
+        if (!$employee->user_id && !empty($employee->email)) {
+            $matchedUser = \App\Models\User::where('email', $employee->email)->first();
+            if ($matchedUser) {
+                $employee->update(['user_id' => $matchedUser->id]);
+                $employee->setRelation('user', $matchedUser);
+            }
+        }
+
         $employee->load([
+            'user.roles',
             'project', 
             'payrolls' => fn($q) => $q->latest()->limit(12),
             'education',
@@ -952,7 +963,17 @@ class EmployeeController extends Controller
     {
         Gate::authorize('update', $employee);
         $this->ensureLicenseTableExists();
+
+        if (!$employee->user_id && !empty($employee->email)) {
+            $matchedUser = \App\Models\User::where('email', $employee->email)->first();
+            if ($matchedUser) {
+                $employee->update(['user_id' => $matchedUser->id]);
+                $employee->setRelation('user', $matchedUser);
+            }
+        }
+
         $employee->load([
+            'user.roles',
             'project',
             'education',
             'experience',
@@ -1098,6 +1119,8 @@ class EmployeeController extends Controller
             'experience'           => 'nullable|array',
             'licenses'             => 'nullable|array',
         ]);
+
+        $validated['probation_completed'] = $request->boolean('probation_completed');
 
         // Auto-heal missing database columns if necessary
         $this->ensureGuarantorAndRegistrationColumnsExist();
@@ -1391,16 +1414,61 @@ class EmployeeController extends Controller
             }
         }
 
-        // Sync multiple roles for employee's linked user account
-        if ($request->has('roles') || $request->has('role')) {
-            $submittedRoles = $request->input('roles') ?? ($request->has('role') ? (array)$request->input('role') : []);
-            $validRoles = array_filter((array)$submittedRoles);
-            
-            $targetUser = $employee->user;
-            if (!$targetUser && $employee->email) {
-                $targetUser = \App\Models\User::where('email', $employee->email)->first();
+        // Keep linked User account in sync with employee changes
+        $targetUser = $employee->user;
+        if (!$targetUser && $employee->user_id) {
+            $targetUser = \App\Models\User::find($employee->user_id);
+        }
+        if (!$targetUser && !empty($employee->email)) {
+            $targetUser = \App\Models\User::where('email', $employee->email)->first();
+        }
+
+        // If no user account exists yet, create one for this employee
+        if (!$targetUser) {
+            $userEmail = !empty($employee->email) ? $employee->email : strtolower($employee->employee_code) . '@construct-pro.com';
+            $targetUser = \App\Models\User::firstOrCreate(
+                ['email' => $userEmail],
+                [
+                    'name'      => $employee->full_name,
+                    'password'  => \Illuminate\Support\Facades\Hash::make('password'),
+                    'is_active' => in_array($employee->status, ['active', 'suspended']),
+                ]
+            );
+        }
+
+        if ($targetUser) {
+            $userUpdates = [];
+            // Update name to match full_name
+            if ($targetUser->name !== $employee->full_name && !empty($employee->full_name)) {
+                $userUpdates['name'] = $employee->full_name;
             }
-            if ($targetUser) {
+            // Update email if provided and not already used by another user
+            if (!empty($employee->email) && $targetUser->email !== $employee->email) {
+                $emailTaken = \App\Models\User::where('email', $employee->email)->where('id', '!=', $targetUser->id)->exists();
+                if (!$emailTaken) {
+                    $userUpdates['email'] = $employee->email;
+                }
+            }
+            // Keep active status in sync
+            if ($employee->status === 'terminated' || $employee->is_dead_file || $employee->status === 'dead_file') {
+                $userUpdates['is_active'] = false;
+            } elseif ($employee->status === 'active') {
+                $userUpdates['is_active'] = true;
+            }
+
+            if (!empty($userUpdates)) {
+                $targetUser->update($userUpdates);
+            }
+
+            // Ensure employee.user_id points to targetUser
+            if ($employee->user_id !== $targetUser->id) {
+                $employee->update(['user_id' => $targetUser->id]);
+            }
+
+            // Sync multiple roles for employee's linked user account
+            if ($request->has('roles') || $request->has('role') || $request->has('roles_submitted')) {
+                $submittedRoles = $request->input('roles') ?? ($request->has('role') ? (array)$request->input('role') : []);
+                $validRoles = array_filter((array)$submittedRoles);
                 $targetUser->syncRoles($validRoles);
             }
         }

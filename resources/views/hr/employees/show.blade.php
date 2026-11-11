@@ -90,8 +90,15 @@
         @endif
         <div>
             <h1 class="h3 mb-0">{{ $employee->full_name }}</h1>
-            <div class="d-flex align-items-center gap-2 mt-1">
+            <div class="d-flex align-items-center flex-wrap gap-2 mt-1">
                 <small class="text-muted">{{ $employee->employee_code }} • {{ $employee->role_title ?? 'Employee' }}</small>
+                @if($employee->user && $employee->user->roles->isNotEmpty())
+                    @foreach($employee->user->roles as $role)
+                        <span class="badge bg-primary bg-opacity-10 text-primary border border-primary-subtle rounded-pill px-2.5 py-0.5" style="font-size:0.75rem;">
+                            <i class="fa-solid fa-user-shield me-1"></i>{{ ucfirst(str_replace(['_', '-'], ' ', $role->name)) }}
+                        </span>
+                    @endforeach
+                @endif
                 @if($employee->is_dead_file || $employee->status === 'dead_file')
                     <span class="badge bg-danger"><i class="fa-solid fa-box-archive me-1"></i>Dead File Archive</span>
                 @elseif($employee->is_approved_by_gm)
@@ -1697,6 +1704,15 @@
                 </div>
                 <h6 class="mb-0 fw-bold">{{ $employee->full_name }}</h6>
                 <small class="text-muted">{{ $employee->role_title }}</small>
+                @if($employee->user && $employee->user->roles->isNotEmpty())
+                    <div class="d-flex flex-wrap justify-content-center gap-1 mt-1.5 mb-1">
+                        @foreach($employee->user->roles as $role)
+                            <span class="badge bg-light text-primary border border-primary-subtle rounded-pill px-2 py-0.5" style="font-size:0.68rem;">
+                                <i class="fa-solid fa-user-shield me-0.5"></i>{{ ucfirst(str_replace(['_', '-'], ' ', $role->name)) }}
+                            </span>
+                        @endforeach
+                    </div>
+                @endif
                 <div class="mt-2">
                     @if($employee->is_approved_by_gm)
                         <span class="badge bg-success"><i class="fa-solid fa-circle-check me-1"></i>GM Approved</span>
@@ -1746,6 +1762,18 @@
                         <span>{{ $employee->department }}</span>
                     </div>
                     @endif
+                    <div class="col-12 d-flex align-items-center gap-2 py-1">
+                        <i class="fa-solid fa-user-lock text-primary" style="width:20px;"></i>
+                        <span class="text-muted">Account:</span>
+                        @if($employee->user)
+                            <span class="badge {{ $employee->user->is_active ? 'bg-success-subtle text-success border border-success-subtle' : 'bg-danger-subtle text-danger border border-danger-subtle' }}" style="font-size:0.7rem;">
+                                {{ $employee->user->is_active ? 'Active' : 'Disabled' }}
+                            </span>
+                            <span class="text-muted small text-truncate" style="max-width:140px;" title="{{ $employee->user->email }}">{{ $employee->user->email }}</span>
+                        @else
+                            <span class="badge bg-secondary-subtle text-secondary" style="font-size:0.7rem;">No Login</span>
+                        @endif
+                    </div>
                 </div>
             </div>
         </div>
