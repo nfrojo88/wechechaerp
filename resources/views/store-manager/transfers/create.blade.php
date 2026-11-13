@@ -132,7 +132,15 @@
                                             <span class="text-muted" style="font-size: 0.72rem;">Only units available in the selected origin store are listed</span>
                                         </div>
                                     </div>
-                                    <span class="badge bg-primary px-2.5 py-1.5 unit-codes-count">0 Selected</span>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <button type="button" class="btn btn-sm btn-outline-primary select-all-fa-btn py-1 px-2.5 fw-semibold shadow-xs" style="font-size: 0.78rem;">
+                                            <i class="fa-solid fa-check-double me-1"></i>Select All
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary deselect-all-fa-btn py-1 px-2.5 fw-semibold shadow-xs d-none" style="font-size: 0.78rem;">
+                                            <i class="fa-solid fa-xmark me-1"></i>Deselect All
+                                        </button>
+                                        <span class="badge bg-primary px-2.5 py-1.5 unit-codes-count">0 Selected</span>
+                                    </div>
                                 </div>
                                 <div class="fa-units-list-container">
                                     {{-- Dynamically populated via AJAX --}}
@@ -204,7 +212,15 @@ $('#add-item').click(function() {
                             <span class="text-muted" style="font-size: 0.72rem;">Only units available in the selected origin store are listed</span>
                         </div>
                     </div>
-                    <span class="badge bg-primary px-2.5 py-1.5 unit-codes-count">0 Selected</span>
+                    <div class="d-flex align-items-center gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-primary select-all-fa-btn py-1 px-2.5 fw-semibold shadow-xs" style="font-size: 0.78rem;">
+                            <i class="fa-solid fa-check-double me-1"></i>Select All
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary deselect-all-fa-btn py-1 px-2.5 fw-semibold shadow-xs d-none" style="font-size: 0.78rem;">
+                            <i class="fa-solid fa-xmark me-1"></i>Deselect All
+                        </button>
+                        <span class="badge bg-primary px-2.5 py-1.5 unit-codes-count">0 Selected</span>
+                    </div>
                 </div>
                 <div class="fa-units-list-container">
                     {{-- Dynamically populated via AJAX --}}
@@ -266,11 +282,15 @@ function handleFixedAssetUnitBox($block, isFa) {
     $wrapper.removeClass('d-none');
     $qtyInput.prop('readonly', true).val('').attr('placeholder', 'Selected by unit codes');
     $countBadge.text('0 Selected');
+    $block.find('.select-all-fa-btn').removeClass('d-none');
+    $block.find('.deselect-all-fa-btn').addClass('d-none');
 
     const fromStoreId = $('#from_store_id').val();
     const productId = $block.find('.product-select').val();
 
     if (!fromStoreId) {
+        $block.find('.select-all-fa-btn').addClass('d-none');
+        $block.find('.deselect-all-fa-btn').addClass('d-none');
         $container.html(`
             <div class="alert alert-warning py-2 px-3 mb-0 small border-0">
                 <i class="fa-solid fa-circle-exclamation me-1"></i>
@@ -281,6 +301,8 @@ function handleFixedAssetUnitBox($block, isFa) {
     }
 
     if (!productId) {
+        $block.find('.select-all-fa-btn').addClass('d-none');
+        $block.find('.deselect-all-fa-btn').addClass('d-none');
         $container.empty();
         return;
     }
@@ -297,6 +319,8 @@ function handleFixedAssetUnitBox($block, isFa) {
         .then(res => res.json())
         .then(data => {
             if (!data.units || data.units.length === 0) {
+                $block.find('.select-all-fa-btn').addClass('d-none');
+                $block.find('.deselect-all-fa-btn').addClass('d-none');
                 $container.html(`
                     <div class="alert alert-danger py-2 px-3 mb-0 small border-0">
                         <i class="fa-solid fa-circle-xmark me-1"></i>
@@ -306,11 +330,14 @@ function handleFixedAssetUnitBox($block, isFa) {
                 return;
             }
 
+            $block.find('.select-all-fa-btn').removeClass('d-none');
+            $block.find('.deselect-all-fa-btn').addClass('d-none');
+
             let html = '<div class="row g-2">';
             data.units.forEach(u => {
                 html += `
                 <div class="col-md-6 col-lg-4">
-                    <label class="d-flex align-items-start p-2 rounded bg-white shadow-xs fa-unit-card gap-2 mb-0">
+                    <label class="d-flex align-items-start p-2 rounded bg-white shadow-xs fa-unit-card gap-2 mb-0" style="cursor: pointer; transition: all 0.15s ease;">
                         <input type="checkbox" class="form-check-input mt-1 fa-unit-checkbox" 
                                name="items[${rowIndex}][unit_codes][]" 
                                value="${u.unit_code}" 
@@ -334,6 +361,8 @@ function handleFixedAssetUnitBox($block, isFa) {
             $container.html(html);
         })
         .catch(err => {
+            $block.find('.select-all-fa-btn').addClass('d-none');
+            $block.find('.deselect-all-fa-btn').addClass('d-none');
             $container.html(`
                 <div class="text-danger small py-2">
                     <i class="fa-solid fa-triangle-exclamation me-1"></i>Failed to fetch units: ${err.message}
@@ -342,15 +371,53 @@ function handleFixedAssetUnitBox($block, isFa) {
         });
 }
 
+// Click "Select All" button for fixed asset units
+$(document).on('click', '.select-all-fa-btn', function() {
+    const $block = $(this).closest('.item-block');
+    const $checkboxes = $block.find('.fa-unit-checkbox');
+    $checkboxes.prop('checked', true);
+    $block.find('.fa-unit-card').addClass('selected border-primary bg-primary bg-opacity-10');
+
+    const count = $checkboxes.length;
+    $block.find('.quantity-input').val(count > 0 ? count : '');
+    $block.find('.unit-codes-count').text(`${count} Selected`);
+
+    $(this).addClass('d-none');
+    $block.find('.deselect-all-fa-btn').removeClass('d-none');
+});
+
+// Click "Deselect All" button for fixed asset units
+$(document).on('click', '.deselect-all-fa-btn', function() {
+    const $block = $(this).closest('.item-block');
+    const $checkboxes = $block.find('.fa-unit-checkbox');
+    $checkboxes.prop('checked', false);
+    $block.find('.fa-unit-card').removeClass('selected border-primary bg-primary bg-opacity-10');
+
+    $block.find('.quantity-input').val('');
+    $block.find('.unit-codes-count').text(`0 Selected`);
+
+    $(this).addClass('d-none');
+    $block.find('.select-all-fa-btn').removeClass('d-none');
+});
+
 // When unit checkbox is clicked -> update quantity input and selected counter
 $(document).on('change', '.fa-unit-checkbox', function() {
     const $block = $(this).closest('.item-block');
     const $label = $(this).closest('.fa-unit-card');
-    $label.toggleClass('selected', this.checked);
+    $label.toggleClass('selected border-primary bg-primary bg-opacity-10', this.checked);
 
+    const total = $block.find('.fa-unit-checkbox').length;
     const count = $block.find('.fa-unit-checkbox:checked').length;
     $block.find('.quantity-input').val(count > 0 ? count : '');
     $block.find('.unit-codes-count').text(`${count} Selected`);
+
+    if (total > 0 && count === total) {
+        $block.find('.select-all-fa-btn').addClass('d-none');
+        $block.find('.deselect-all-fa-btn').removeClass('d-none');
+    } else {
+        $block.find('.select-all-fa-btn').removeClass('d-none');
+        $block.find('.deselect-all-fa-btn').addClass('d-none');
+    }
 });
 
 // Form submission validation: Ensure fixed assets have at least 1 unit code checked

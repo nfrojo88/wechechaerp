@@ -185,9 +185,14 @@
                     <h6 class="m-0 font-weight-bold text-dark">
                         <i class="fa-solid fa-barcode text-primary me-2"></i>Individual Unit Codes ({{ $fixedAsset->units->count() }} Total)
                     </h6>
-                    <button type="button" class="btn btn-outline-info btn-sm fw-semibold shadow-xs" onclick="openBulkTransferForAsset()">
-                        <i class="fa-solid fa-truck-ramp-box me-1"></i> Transfer Selected Units
-                    </button>
+                    <div class="d-flex align-items-center gap-2">
+                        <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold shadow-xs" id="btn_table_select_all" onclick="toggleAllUnitsBtn()">
+                            <i class="fa-solid fa-check-double me-1"></i><span id="btn_table_select_all_text">Select All</span>
+                        </button>
+                        <button type="button" class="btn btn-outline-info btn-sm fw-semibold shadow-xs" onclick="openBulkTransferForAsset()">
+                            <i class="fa-solid fa-truck-ramp-box me-1"></i> Transfer Selected Units
+                        </button>
+                    </div>
                 </div>
                 <div class="card-body p-0">
                     <div class="table-responsive">
@@ -1136,11 +1141,46 @@ function openTransferModalSingle(btn) {
     new bootstrap.Modal(document.getElementById('transferUnitModal')).show();
 }
 
+function toggleAllUnitsBtn() {
+    const master = document.getElementById('chk_select_all_units');
+    const chks = document.querySelectorAll('.unit-select-chk:not(:disabled)');
+    const anyUnchecked = Array.from(chks).some(c => !c.checked);
+    const newState = anyUnchecked;
+
+    if (master) master.checked = newState;
+    chks.forEach(chk => {
+        chk.checked = newState;
+    });
+
+    const btnText = document.getElementById('btn_table_select_all_text');
+    if (btnText) {
+        btnText.textContent = newState ? 'Deselect All' : 'Select All';
+    }
+}
+
 function toggleSelectAllUnits(master) {
     document.querySelectorAll('.unit-select-chk:not(:disabled)').forEach(chk => {
         chk.checked = master.checked;
     });
+    const btnText = document.getElementById('btn_table_select_all_text');
+    if (btnText) {
+        btnText.textContent = master.checked ? 'Deselect All' : 'Select All';
+    }
 }
+
+document.addEventListener('change', function(e) {
+    if (e.target && e.target.classList.contains('unit-select-chk')) {
+        const chks = document.querySelectorAll('.unit-select-chk:not(:disabled)');
+        const total = chks.length;
+        const checkedCount = document.querySelectorAll('.unit-select-chk:checked').length;
+        const master = document.getElementById('chk_select_all_units');
+        if (master) master.checked = (total > 0 && checkedCount === total);
+        const btnText = document.getElementById('btn_table_select_all_text');
+        if (btnText) {
+            btnText.textContent = (total > 0 && checkedCount === total) ? 'Deselect All' : 'Select All';
+        }
+    }
+});
 
 function openBulkTransferForAsset() {
     const selected = document.querySelectorAll('.unit-select-chk:checked');

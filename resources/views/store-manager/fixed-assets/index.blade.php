@@ -1008,7 +1008,15 @@
                     <div class="mb-3">
                         <label class="form-label small fw-bold d-flex justify-content-between align-items-center">
                             <span>Available Units with Individual Codes <span class="text-danger">*</span></span>
-                            <span class="small text-muted" id="bulk_units_count">0 selected</span>
+                            <div class="d-flex align-items-center gap-2">
+                                <button type="button" class="btn btn-sm btn-outline-primary py-0 px-2 fw-semibold d-none" id="btn_bulk_select_all" onclick="toggleBulkSelectAllUnits(true)" style="font-size: 0.78rem;">
+                                    <i class="fa-solid fa-check-double me-1"></i>Select All
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 fw-semibold d-none" id="btn_bulk_deselect_all" onclick="toggleBulkSelectAllUnits(false)" style="font-size: 0.78rem;">
+                                    <i class="fa-solid fa-xmark me-1"></i>Deselect All
+                                </button>
+                                <span class="small text-muted" id="bulk_units_count">0 selected</span>
+                            </div>
                         </label>
                         <div id="bulk_units_list" class="border rounded p-3 bg-light" style="max-height: 220px; overflow-y: auto;">
                             <div class="text-muted small text-center py-4">Please select an origin store above to view available unit codes.</div>
@@ -1243,6 +1251,9 @@ function openTransferModalSingle(btn) {
 function loadAvailableUnitsForTransfer() {
     const storeId = document.getElementById('bulk_from_store_id').value;
     const container = document.getElementById('bulk_units_list');
+    document.getElementById('btn_bulk_select_all')?.classList.add('d-none');
+    document.getElementById('btn_bulk_deselect_all')?.classList.add('d-none');
+
     if (!storeId) {
         container.innerHTML = '<div class="text-muted small text-center py-4">Please select an origin store above to view available unit codes.</div>';
         return;
@@ -1256,8 +1267,13 @@ function loadAvailableUnitsForTransfer() {
         .then(data => {
             if (!data.units || data.units.length === 0) {
                 container.innerHTML = '<div class="text-muted small text-center py-4">No available in-store units found in this store.</div>';
+                document.getElementById('btn_bulk_select_all')?.classList.add('d-none');
+                document.getElementById('btn_bulk_deselect_all')?.classList.add('d-none');
                 return;
             }
+
+            document.getElementById('btn_bulk_select_all')?.classList.remove('d-none');
+            document.getElementById('btn_bulk_deselect_all')?.classList.add('d-none');
 
             let html = '<div class="row g-2">';
             data.units.forEach(u => {
@@ -1279,13 +1295,38 @@ function loadAvailableUnitsForTransfer() {
             updateBulkUnitsSelectedCount();
         })
         .catch(err => {
+            document.getElementById('btn_bulk_select_all')?.classList.add('d-none');
+            document.getElementById('btn_bulk_deselect_all')?.classList.add('d-none');
             container.innerHTML = '<div class="text-danger small text-center py-4">Failed to load units.</div>';
         });
 }
 
+function toggleBulkSelectAllUnits(selectAll) {
+    const chks = document.querySelectorAll('.bulk-unit-chk');
+    chks.forEach(chk => {
+        chk.checked = selectAll;
+    });
+    updateBulkUnitsSelectedCount();
+    if (selectAll) {
+        document.getElementById('btn_bulk_select_all')?.classList.add('d-none');
+        document.getElementById('btn_bulk_deselect_all')?.classList.remove('d-none');
+    } else {
+        document.getElementById('btn_bulk_select_all')?.classList.remove('d-none');
+        document.getElementById('btn_bulk_deselect_all')?.classList.add('d-none');
+    }
+}
+
 function updateBulkUnitsSelectedCount() {
+    const total = document.querySelectorAll('.bulk-unit-chk').length;
     const count = document.querySelectorAll('.bulk-unit-chk:checked').length;
     document.getElementById('bulk_units_count').textContent = count + ' unit(s) selected';
+    if (total > 0 && count === total) {
+        document.getElementById('btn_bulk_select_all')?.classList.add('d-none');
+        document.getElementById('btn_bulk_deselect_all')?.classList.remove('d-none');
+    } else if (total > 0) {
+        document.getElementById('btn_bulk_select_all')?.classList.remove('d-none');
+        document.getElementById('btn_bulk_deselect_all')?.classList.add('d-none');
+    }
 }
 </script>
 @endpush
