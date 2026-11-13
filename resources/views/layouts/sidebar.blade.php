@@ -29,6 +29,8 @@
     $isAdminSection = in_array('global_admin', $rawUserRoles) || in_array('admin', $rawUserRoles);
     $isPlanningManager = in_array('planning_manager', $rawUserRoles) || in_array('planning', $rawUserRoles) || in_array('technical_manager', $rawUserRoles) || ($authUser && $authUser->hasAnyRole(['planning_manager', 'Planning Manager', 'planning', 'technical_manager']));
     $isFinanceHead = in_array('finance_head', $rawUserRoles) || in_array('finance_manager', $rawUserRoles) || in_array('finance', $rawUserRoles) || ($authUser && $authUser->hasAnyRole(['finance_head', 'Finance Head', 'Finance head', 'finance_manager', 'finance']));
+    $isFinanceStaff = in_array('finance', $rawUserRoles) || in_array('finance_staff', $rawUserRoles) || in_array('cashier', $rawUserRoles) || in_array('accountant', $rawUserRoles) || ($authUser && $authUser->hasAnyRole(['finance', 'Finance', 'finance_staff', 'Finance staff', 'Finance Staff', 'cashier', 'Cashier', 'accountant', 'Accountant']));
+    $isFinanceUser = $isFinanceHead || $isFinanceStaff || ($authUser && $authUser->hasAnyRole(['Finance head', 'finance_head', 'Finance Head', 'finance', 'Finance', 'finance_staff', 'Finance staff', 'Finance Staff', 'finance_manager', 'cashier', 'Cashier', 'accountant', 'Accountant']));
     $canSendToSiteUser = $isPlanningManager || $isCoordinator || $isFinanceHead || $isHrOfficer || $isHrManager || $isGmUser || in_array('global_admin', $rawUserRoles) || in_array('admin', $rawUserRoles) || ($authUser && $authUser->hasAnyRole(['planning_manager', 'coordinator', 'Coordinator', 'finance_head', 'Finance head', 'hr', 'hr_manager', 'hr_officer', 'gm', 'general_manager', 'admin', 'global_admin']));
 
     $sbManpowerPendingBadge = 0;
@@ -884,7 +886,7 @@
         @if(!auth()->check() || (!$isSiteStaffUser && !$isGeneralServiceUser && !$isAuditorUser))
         @php
             $isGmUser = auth()->check() && (auth()->user()->hasAnyRole(['gm', 'general_manager', 'General Manager', 'GM']) || in_array('gm', $rawUserRoles) || in_array('general_manager', $rawUserRoles));
-            $isFinanceUser = auth()->check() && auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'finance', 'Finance', 'finance_manager', 'cashier', 'accountant']);
+            $isFinanceUser = $isFinanceUser || (auth()->check() && auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'finance', 'Finance', 'finance_staff', 'Finance staff', 'Finance Staff', 'finance_manager', 'cashier', 'Cashier', 'accountant', 'Accountant']));
             $dashUrl = \Illuminate\Support\Facades\Route::has('dashboard') ? route('dashboard') : url('/dashboard');
             $dashTitle = 'Dashboard';
             if ($isGmUser) {
@@ -2372,16 +2374,20 @@
         @endif
 
         {{-- Finance --}}
-        @if(auth()->check() && !$isAuditorUser && !auth()->user()->hasRole('site_engineer') && !$isContractAdmin && !$isStoreKeeper && (auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'finance', 'admin', 'global_admin']) || auth()->user()->canAny(['finance.chart_of_accounts.view', 'finance.bank.manage', 'finance.income.view', 'finance.income.*', 'finance.expenses.view', 'finance.expenses.approve', 'finance.expenses.create', 'payments.view', 'payments.create', 'payments.approve', 'payments.*', 'subcon.view', 'subcon.create', 'subcon.edit', 'subcon.approve', 'subcon.*', 'finance.ipcs.manage', 'finance.*'])))
+        @if(auth()->check() && !$isAuditorUser && !auth()->user()->hasRole('site_engineer') && !$isContractAdmin && !$isStoreKeeper && ($isFinanceUser || $isAdminSection || auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'finance', 'Finance', 'finance_staff', 'Finance staff', 'Finance Staff', 'finance_manager', 'cashier', 'Cashier', 'accountant', 'Accountant', 'admin', 'global_admin']) || auth()->user()->canAny(['finance.chart_of_accounts.view', 'finance.bank.manage', 'finance.income.view', 'finance.income.*', 'finance.expenses.view', 'finance.expenses.approve', 'finance.expenses.create', 'payments.view', 'payments.create', 'payments.approve', 'payments.*', 'subcon.view', 'subcon.create', 'subcon.edit', 'subcon.approve', 'subcon.*', 'finance.ipcs.manage', 'finance.*'])))
 
 
-        @if(auth()->check() && auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'admin', 'global_admin']))
+        @if(auth()->check() && (auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'admin', 'global_admin']) || in_array('finance_head', $rawUserRoles)))
         <li class="sidebar-nav-item">
             <a href="{{ route('coa.index') }}" class="sidebar-nav-link {{ request()->routeIs('coa.*') && !request()->routeIs('coa-transfers.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-sitemap"></i>
                 <span>Chart of Accounts</span>
             </a>
         </li>
+        @endif
+
+        {{-- COA Transfers (Visible to Finance Head, Finance Staff, and Admin) --}}
+        @if(auth()->check() && ($isFinanceUser || $isAdminSection || auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'finance', 'Finance', 'finance_staff', 'Finance staff', 'Finance Staff', 'finance_manager', 'cashier', 'Cashier', 'accountant', 'Accountant', 'admin', 'global_admin']) || auth()->user()->canAny(['finance.view', 'finance.*'])))
         <li class="sidebar-nav-item">
             <a href="{{ route('coa-transfers.index') }}" class="sidebar-nav-link {{ request()->routeIs('coa-transfers.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-money-bill-transfer text-success"></i>
@@ -2437,8 +2443,8 @@
             </a>
         </li>
         @endif
-        <!-- Company Income -->
-        @if(auth()->check() && auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'admin', 'global_admin']))
+        <!-- Company Income (Visible to Finance Head, Finance Staff, and Admin) -->
+        @if(auth()->check() && ($isFinanceUser || $isAdminSection || auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'finance', 'Finance', 'finance_staff', 'Finance staff', 'Finance Staff', 'finance_manager', 'cashier', 'Cashier', 'accountant', 'Accountant', 'admin', 'global_admin']) || auth()->user()->canAny(['finance.income.view', 'finance.income.*', 'finance.view', 'finance.*'])))
         <li class="sidebar-nav-item">
             <a href="{{ route('income.index') }}" class="sidebar-nav-link {{ request()->routeIs('income.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-arrow-trend-up"></i>
@@ -2480,7 +2486,7 @@
         </li>
 
         <!-- Office Material Requests (Finance Head / Payment Tracking) -->
-        @if(auth()->check() && auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'finance', 'Finance', 'finance_manager', 'admin', 'global_admin']))
+        @if(auth()->check() && ($isFinanceUser || $isAdminSection || auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'finance', 'Finance', 'finance_staff', 'Finance staff', 'Finance Staff', 'finance_manager', 'admin', 'global_admin'])))
         <li class="sidebar-nav-item">
             <a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.index') ? route('office-requests.index') : url('/office-requests') }}" class="sidebar-nav-link {{ request()->is('office-requests*') || request()->routeIs('office-requests.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-boxes-stacked" style="color: #7c3aed;"></i>
@@ -2504,7 +2510,7 @@
         @endif
 
         <!-- Credit Store Ledger (Credit Purchases) -->
-        @if(auth()->check() && auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'finance', 'Finance', 'admin', 'global_admin', 'gm', 'general_manager']))
+        @if(auth()->check() && ($isFinanceUser || $isAdminSection || $isGmUser || auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'finance', 'Finance', 'finance_staff', 'Finance staff', 'Finance Staff', 'admin', 'global_admin', 'gm', 'general_manager'])))
         <li class="sidebar-nav-item">
             <a href="{{ \Illuminate\Support\Facades\Route::has('finance.credit-store.index') ? route('finance.credit-store.index') : url('/finance/credit-store') }}" class="sidebar-nav-link {{ request()->is('finance/credit-store*') || request()->routeIs('finance.credit-store.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-credit-card text-info"></i>
@@ -2514,7 +2520,7 @@
         @endif
 
         <!-- VAT & Withholding Tax Deductions Ledger -->
-        @if(auth()->check() && auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'finance', 'Finance', 'finance_manager', 'admin', 'global_admin', 'gm', 'general_manager', 'auditor', 'audit']))
+        @if(auth()->check() && ($isFinanceUser || $isAdminSection || $isGmUser || $isAuditorUser || auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'finance', 'Finance', 'finance_staff', 'Finance staff', 'Finance Staff', 'finance_manager', 'admin', 'global_admin', 'gm', 'general_manager', 'auditor', 'audit'])))
         <li class="sidebar-nav-item">
             <a href="{{ route('finance.tax-deductions.index') }}" class="sidebar-nav-link {{ request()->routeIs('finance.tax-deductions.index') ? 'active' : '' }}">
                 <i class="fa-solid fa-receipt text-danger"></i>
