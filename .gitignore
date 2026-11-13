@@ -18,3 +18,9 @@ deploy-log.txt
 try.xls
 *.xls
 /img
+phpunit*.xml
+phpunit-report.xml
+wht_grep_output.txt
+SKILL.md
+/review
+

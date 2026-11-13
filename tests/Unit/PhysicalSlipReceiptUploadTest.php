@@ -451,6 +451,78 @@ class PhysicalSlipReceiptUploadTest extends TestCase
         $this->assertEquals('physical_store_slip', $vatDecision->no_vat_reason_code);
     }
 
+    public function test_procurement_store_intake_fails_and_rejects_without_slip_upload()
+    {
+        $pr = PurchaseRequest::create([
+            'pr_no'        => 'PR-2026-NOSLIP',
+            'store_id'     => $this->store->id,
+            'status'       => PurchaseRequest::STATUS_PENDING_STORE_REVIEW,
+            'requested_by' => $this->user->id,
+        ]);
+
+        $item = PurchaseRequestItem::create([
+            'purchase_request_id' => $pr->id,
+            'product_id'          => $this->product->id,
+            'quantity'            => 10,
+            'received_quantity'   => 0,
+            'unit_price'          => 100,
+            'unit'                => 'pcs',
+        ]);
+
+        $service = app(ProcurementLifecycleService::class);
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Physical receiving slip upload is strictly required');
+
+        $service->storeIntake(
+            pr: $pr,
+            storeId: $this->store->id,
+            slipNo: 'REC-0002',
+            receivedDate: '2026-11-04',
+            receivedItems: [
+                $item->id => ['quantity' => 10, 'accepted_quantity' => 10]
+            ],
+            notes: 'Attempt intake without slip receipt',
+            slipReceiptPath: null
+        );
+    }
+
+    public function test_procurement_store_intake_rejects_empty_slip_upload()
+    {
+        $pr = PurchaseRequest::create([
+            'pr_no'        => 'PR-2026-EMPTYSLIP',
+            'store_id'     => $this->store->id,
+            'status'       => PurchaseRequest::STATUS_PENDING_STORE_REVIEW,
+            'requested_by' => $this->user->id,
+        ]);
+
+        $item = PurchaseRequestItem::create([
+            'purchase_request_id' => $pr->id,
+            'product_id'          => $this->product->id,
+            'quantity'            => 5,
+            'received_quantity'   => 0,
+            'unit_price'          => 50,
+            'unit'                => 'pcs',
+        ]);
+
+        $service = app(ProcurementLifecycleService::class);
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Physical receiving slip upload is strictly required');
+
+        $service->storeIntake(
+            pr: $pr,
+            storeId: $this->store->id,
+            slipNo: 'REC-0003',
+            receivedDate: '2026-11-04',
+            receivedItems: [
+                $item->id => ['quantity' => 5, 'accepted_quantity' => 5]
+            ],
+            notes: 'Attempt intake with empty slip string',
+            slipReceiptPath: ''
+        );
+    }
+
     public function test_petty_cash_material_purchase_with_physical_store_slip()
     {
         $pc = PettyCashMaterialPurchase::create([

@@ -215,7 +215,7 @@ class UtilityExpense extends Model
         $gross = (float)($this->gross_amount > 0 ? $this->gross_amount : $this->amount);
         $vatRate = (float)($this->vat_rate ?? 15.00);
         $vatType = $this->vat_type ?? 'none';
-        $whtRate = (float)($this->withholding_rate ?: 3.00);
+        $whtRate = (float)($this->withholding_rate ?: \App\Services\Finance\WithholdingTaxRateHelper::resolveRateFromItem($this));
 
         // In Ethiopian tax regulations, WHT is calculated on the taxable base before VAT
         $taxableBase = in_array(strtolower($vatType), ['inclusive', 'vat_b'])

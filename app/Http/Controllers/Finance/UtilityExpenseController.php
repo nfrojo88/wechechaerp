@@ -367,7 +367,7 @@ class UtilityExpenseController extends Controller
         }
 
         // Calculate Withholding Tax (applied on base amount before VAT according to Ethiopian tax rules)
-        $withholdingRate = isset($validated['withholding_rate']) ? (float)$validated['withholding_rate'] : (float)($utilityExpense->withholding_rate ?? 3.00);
+        $withholdingRate = isset($validated['withholding_rate']) ? (float)$validated['withholding_rate'] : (float)($utilityExpense->withholding_rate ?? \App\Services\Finance\WithholdingTaxRateHelper::resolveRateFromItem($utilityExpense->utility_type ?? ($validated['utility_type'] ?? 'utility')));
         $withholdingAmount = 0.00;
         if ($hasWithholding) {
             if (isset($validated['withholding_amount']) && (float)$validated['withholding_amount'] > 0) {
@@ -421,11 +421,43 @@ class UtilityExpenseController extends Controller
                 'payment_receipt'            => $receiptPath,
             ]);
 
-            // Deduct balance from the funding COA
-            if ($utilityExpense->coa_id) {
-                $coa = ChartOfAccount::find($utilityExpense->coa_id);
-                if ($coa) {
-                    $coa->decrement('current_balance', $disbursedAmount);
+            // Post balanced journal entry to General Ledger: Debit Utility Expense (6400), Credit Bank/Funding
+            if ($disbursedAmount > 0 && class_exists(\App\Services\Finance\JournalEngine::class)) {
+                $fundingCoaId = $utilityExpense->coa_id ?? $bankAccount?->coa_id ?? ChartOfAccount::where('code', '1011')->value('id');
+                $expenseCoaId = ChartOfAccount::where('code', '6400')->value('id') 
+                    ?? ChartOfAccount::where('code', '2252')->value('id')
+                    ?? ChartOfAccount::where('code', '6000')->value('id');
+
+                if ($fundingCoaId && $expenseCoaId) {
+                    try {
+                        app(\App\Services\Finance\JournalEngine::class)->createEntry([
+                            'entry_date'     => $validated['payment_date'] ?? now()->toDateString(),
+                            'reference_type' => 'UtilityExpense',
+                            'reference_id'   => $utilityExpense->id,
+                            'description'    => "Utility Expense Payment #{$utilityExpense->expense_number}: {$utilityExpense->title}",
+                            'created_by'     => Auth::id() ?? 1,
+                            'project_id'     => $utilityExpense->project_id ?? null,
+                            'site_id'        => $utilityExpense->site_id ?? null,
+                            'lines'          => [
+                                [
+                                    'account_id'  => $expenseCoaId,
+                                    'side'        => 'debit',
+                                    'amount'      => (float) $disbursedAmount,
+                                    'description' => "Utility expense incurred: {$utilityExpense->title}",
+                                    'project_id'  => $utilityExpense->project_id ?? null,
+                                    'site_id'     => $utilityExpense->site_id ?? null,
+                                ],
+                                [
+                                    'account_id'  => $fundingCoaId,
+                                    'side'        => 'credit',
+                                    'amount'      => (float) $disbursedAmount,
+                                    'description' => "Cash disbursement for utility expense #{$utilityExpense->expense_number}",
+                                ],
+                            ],
+                        ], approvedBy: Auth::id() ?? 1);
+                    } catch (\Throwable $e) {
+                        Log::error("GL posting for Utility Expense #{$utilityExpense->expense_number} failed: " . $e->getMessage());
+                    }
                 }
             }
 
@@ -438,8 +470,8 @@ class UtilityExpenseController extends Controller
             }
 
             if ($bankAccount) {
-                $bankAccount->decrement('current_balance', $disbursedAmount);
-                $newBal = $bankAccount->fresh()->current_balance;
+                // Bank balance derives strictly from posted journal lines via JournalEngine
+                $newBal = (float)$bankAccount->ledger_balance - $disbursedAmount;
 
                 if (class_exists(\App\Models\BankTransaction::class) && Schema::hasTable('bank_transactions')) {
                     try {

@@ -4,15 +4,39 @@ namespace App\Http\Controllers;
 
 use App\Models\JournalEntry;
 use App\Models\ChartOfAccount;
+use App\Services\Finance\JournalEngine;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use Exception;
 
 class JournalEntryController extends Controller
 {
-    public function index()
+    protected JournalEngine $journalEngine;
+
+    public function __construct(JournalEngine $journalEngine)
     {
-        $entries = JournalEntry::with('createdBy')->latest('entry_date')->paginate(20);
+        $this->journalEngine = $journalEngine;
+    }
+
+    public function index(Request $request)
+    {
+        $query = JournalEntry::with(['createdBy', 'approvedBy', 'lines.account'])
+            ->latest('entry_date')
+            ->latest('id');
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+        if ($request->filled('search')) {
+            $s = $request->search;
+            $query->where(function($q) use ($s) {
+                $q->where('entry_no', 'like', "%{$s}%")
+                  ->orWhere('description', 'like', "%{$s}%");
+            });
+        }
+
+        $entries = $query->paginate(20);
         return view('finance.journal-entries.index', compact('entries'));
     }
 
@@ -26,57 +50,60 @@ class JournalEntryController extends Controller
     {
         $request->validate([
             'entry_date'        => 'required|date',
-            'reference'         => 'nullable|string|max:100',
-            'description'       => 'nullable|string',
+            'description'       => 'required|string|max:1000',
             'lines'             => 'required|array|min:2',
-            'lines.*.coa_id'    => 'required|exists:chart_of_accounts,id',
-            'lines.*.debit'     => 'required|numeric|min:0',
-            'lines.*.credit'    => 'required|numeric|min:0',
+            'lines.*.account_id'=> 'required|exists:chart_of_accounts,id',
+            'lines.*.side'      => 'required|in:debit,credit',
+            'lines.*.amount'    => 'required|numeric|min:0.01',
+            'lines.*.description'=> 'nullable|string|max:255',
         ]);
 
-        $totalDebit = collect($request->lines)->sum('debit');
-        $totalCredit = collect($request->lines)->sum('credit');
+        try {
+            $entry = $this->journalEngine->createEntry(
+                'manual',
+                null,
+                $request->description,
+                $request->lines,
+                Auth::id(),
+                Auth::id(), // Auto-post upon validation
+                $request->entry_date
+            );
 
-        if (round($totalDebit, 2) !== round($totalCredit, 2)) {
-            return back()->withInput()->withErrors(['lines' => 'Total Debits must equal Total Credits.']);
+            return redirect()->route('journal-entries.index')
+                ->with('success', "Journal Entry #{$entry->entry_no} posted successfully.");
+        } catch (Exception $e) {
+            return back()->withInput()->withErrors(['lines' => $e->getMessage()]);
         }
-
-        DB::transaction(function () use ($request) {
-            $je = JournalEntry::create([
-                'entry_no'    => 'JE-' . date('Ymd') . '-' . str_pad(JournalEntry::count() + 1, 4, '0', STR_PAD_LEFT),
-                'entry_date'  => $request->entry_date,
-                'reference'   => $request->reference,
-                'description' => $request->description,
-                'created_by'  => Auth::id(),
-                'status'      => 'posted',
-            ]);
-
-            foreach ($request->lines as $line) {
-                if ($line['debit'] > 0 || $line['credit'] > 0) {
-                    $je->lines()->create([
-                        'coa_id'      => $line['coa_id'],
-                        'debit'       => $line['debit'],
-                        'credit'      => $line['credit'],
-                        'description' => $line['description'] ?? null,
-                    ]);
-
-                    // Update COA balance (simplified logic: debit adds to asset/expense, subtracts from liab/eq/rev)
-                    $coa = ChartOfAccount::find($line['coa_id']);
-                    $amount = $line['debit'] - $line['credit'];
-                    if (in_array($coa->type, ['liability', 'equity', 'revenue'])) {
-                        $amount = -$amount;
-                    }
-                    $coa->increment('current_balance', $amount);
-                }
-            }
-        });
-
-        return redirect()->route('journal-entries.index')->with('success', 'Journal Entry posted.');
     }
 
     public function show(JournalEntry $journalEntry)
     {
-        $journalEntry->load(['lines.coa', 'createdBy']);
+        $journalEntry->load(['lines.account', 'createdBy', 'approvedBy']);
         return view('finance.journal-entries.show', compact('journalEntry'));
+    }
+
+    /**
+     * Reverse a posted journal entry (posted entries are immutable).
+     */
+    public function reverse(Request $request, JournalEntry $journalEntry)
+    {
+        $request->validate([
+            'reason'        => 'required|string|min:5|max:1000',
+            'reversal_date' => 'nullable|date',
+        ]);
+
+        try {
+            $reversal = $this->journalEngine->reverseEntry(
+                $journalEntry->id,
+                Auth::id(),
+                $request->reason,
+                $request->reversal_date
+            );
+
+            return redirect()->route('journal-entries.show', $reversal->id)
+                ->with('success', "Reversing Journal Entry #{$reversal->entry_no} has been posted. Original entry #{$journalEntry->entry_no} is now marked as reversed.");
+        } catch (Exception $e) {
+            return back()->with('error', $e->getMessage());
+        }
     }
 }

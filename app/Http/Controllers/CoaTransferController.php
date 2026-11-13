@@ -137,58 +137,34 @@ class CoaTransferController extends Controller
                     'status'          => 'completed',
                 ]);
 
-                // 2. Adjust COA Balances
-                // Source Account (From): normal debit accounts (asset/expense) decrease with credit
-                if (in_array($fromCoa->type, ['asset', 'expense'])) {
-                    $fromCoa->decrement('current_balance', $amount);
-                } else {
-                    $fromCoa->increment('current_balance', $amount);
-                }
+                // 2. Balances derive strictly from posted journal lines (no direct static balance mutation)
 
-                // Destination Account (To): normal debit accounts (asset/expense) increase with debit
-                if (in_array($toCoa->type, ['asset', 'expense'])) {
-                    $toCoa->increment('current_balance', $amount);
-                } else {
-                    $toCoa->decrement('current_balance', $amount);
-                }
+                // 3. Create and post Journal Entry via JournalEngine
+                $journalEngine = app(\App\Services\Finance\JournalEngine::class);
+                $lines = [
+                    [
+                        'account_id'  => $toCoa->id,
+                        'side'        => 'debit',
+                        'amount'      => $amount,
+                        'description' => "Transfer in from [{$fromCoa->code}] {$fromCoa->name} (Ref: {$transferNo})",
+                    ],
+                    [
+                        'account_id'  => $fromCoa->id,
+                        'side'        => 'credit',
+                        'amount'      => $amount,
+                        'description' => "Transfer out to [{$toCoa->code}] {$toCoa->name} (Ref: {$transferNo})",
+                    ],
+                ];
 
-                // 3. Create and post Journal Entry
-                $jeCount = JournalEntry::count() + 1;
-                $jeNo = 'JE-' . date('Ymd') . '-' . str_pad($jeCount, 4, '0', STR_PAD_LEFT);
-
-                $journalEntry = JournalEntry::create([
-                    'entry_no'       => $jeNo,
-                    'entry_date'     => $validated['transfer_date'],
-                    'reference_type' => 'coa_transfer',
-                    'reference_id'   => $transfer->id,
-                    'description'    => "COA Money Transfer: [{$fromCoa->code}] {$fromCoa->name} → [{$toCoa->code}] {$toCoa->name} | " . $validated['description'],
-                    'status'         => 'posted',
-                    'created_by'     => Auth::id(),
-                    'approved_by'    => Auth::id(),
-                    'posted_at'      => now(),
-                ]);
-
-                // Debit destination account (Funds received)
-                $journalEntry->lines()->create([
-                    'account_id'  => $toCoa->id,
-                    'coa_id'      => $toCoa->id,
-                    'side'        => 'debit',
-                    'debit'       => $amount,
-                    'credit'      => 0,
-                    'amount'      => $amount,
-                    'description' => "Transfer in from [{$fromCoa->code}] {$fromCoa->name} (Ref: {$transferNo})",
-                ]);
-
-                // Credit source account (Funds sent)
-                $journalEntry->lines()->create([
-                    'account_id'  => $fromCoa->id,
-                    'coa_id'      => $fromCoa->id,
-                    'side'        => 'credit',
-                    'debit'       => 0,
-                    'credit'      => $amount,
-                    'amount'      => $amount,
-                    'description' => "Transfer out to [{$toCoa->code}] {$toCoa->name} (Ref: {$transferNo})",
-                ]);
+                $journalEntry = $journalEngine->createEntry(
+                    'coa_transfer',
+                    $transfer->id,
+                    "COA Money Transfer: [{$fromCoa->code}] {$fromCoa->name} → [{$toCoa->code}] {$toCoa->name} | " . $validated['description'],
+                    $lines,
+                    Auth::id(),
+                    Auth::id(),
+                    $validated['transfer_date']
+                );
 
                 // 4. Link Journal Entry back to the transfer
                 $transfer->update(['journal_entry_id' => $journalEntry->id]);

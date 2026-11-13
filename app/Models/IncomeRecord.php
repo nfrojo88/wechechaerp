@@ -138,7 +138,7 @@ class IncomeRecord extends Model
             return (float)$this->withholding_amount;
         }
         $gross = (float)($this->unit_price > 0 && $this->quantity > 0 ? ($this->unit_price * $this->quantity) : $this->amount);
-        $rate = (float)($this->withholding_rate ?: 3.00);
+        $rate = (float)($this->withholding_rate ?: \App\Services\Finance\WithholdingTaxRateHelper::resolveRateFromItem($this));
         return round($gross * ($rate / 100), 2);
     }
 

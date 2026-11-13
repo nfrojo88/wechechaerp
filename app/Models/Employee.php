@@ -504,17 +504,11 @@ class Employee extends Model
 
     public function getPettyCashBalanceAttribute(): float
     {
-        if (!$this->user_id) {
-            return 0.00;
+        if (class_exists(\App\Services\Finance\FinanceMetricsService::class)) {
+            $metrics = app(\App\Services\Finance\FinanceMetricsService::class);
+            return $metrics->getCustodianPettyCashBalance((int)$this->id);
         }
-        return (float) ChartOfAccount::where('assigned_to', $this->user_id)
-            ->where(function($q) {
-                $q->where('code', '1110')
-                  ->orWhere('code', 'like', '1110%')
-                  ->orWhere('name', 'like', '%petty cash%')
-                  ->orWhere('subtype', 'cash');
-            })
-            ->sum('current_balance');
+        return 0.00;
     }
 
     /**

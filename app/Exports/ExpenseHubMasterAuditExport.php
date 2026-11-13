@@ -55,7 +55,20 @@ class ExpenseHubMasterAuditExport
 
             $whtAmount = (float)($item->withholding_amount ?? 0);
             $hasWht = !empty($item->has_withholding) || $whtAmount > 0;
-            $whtRate = $hasWht ? (float)($item->withholding_rate ?: 3.00) : 0.00;
+            $whtRate = 0.00;
+            if ($hasWht) {
+                if (!empty($item->withholding_rate) && (float)$item->withholding_rate > 0) {
+                    $whtRate = (float)$item->withholding_rate;
+                } else {
+                    try {
+                        $whtRate = \App\Services\Finance\WithholdingTaxRateHelper::resolveRateFromItem($item);
+                    } catch (\InvalidArgumentException $e) {
+                        $whtRate = ($whtAmount > 0 && (float)($item->amount ?? 0) > 0)
+                            ? round(($whtAmount / (float)$item->amount) * 100, 1)
+                            : throw $e;
+                    }
+                }
+            }
             $gross = (float)($item->amount ?? 0);
             $netDisbursed = (float)($item->net_payable_amount ?? ($gross - $whtAmount));
 

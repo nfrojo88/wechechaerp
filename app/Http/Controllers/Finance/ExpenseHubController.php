@@ -652,9 +652,10 @@ class ExpenseHubController extends Controller
             $totalAmount = $amount;
         }
 
-        // Compute Withholding Tax (Standard 3% in Ethiopia calculated on Base/Subtotal)
+        // Compute Withholding Tax (Config-driven rate via WithholdingTaxRateHelper calculated on Base/Subtotal)
         $hasWithholding = $request->boolean('has_withholding') || !empty($withholdingReceiptPath) || !empty($request->input('withholding_receipt_number'));
-        $withholdingRate = $hasWithholding ? (float)($request->input('withholding_rate') ?: 3.00) : 0.00;
+        $itemClassification = $request->input('item_type') ?: ($request->input('category') ?: ($request->input('vat_category') === 'G' || in_array($sourceType ?? null, ['procurement_payment', 'credit_store_payment', 'petty_cash_purchase']) ? 'goods' : 'services'));
+        $withholdingRate = $hasWithholding ? (float)($request->input('withholding_rate') ?: \App\Services\Finance\WithholdingTaxRateHelper::resolveRateFromItem($itemClassification)) : 0.00;
         if ($hasWithholding) {
             if ($request->filled('withholding_amount')) {
                 $withholdingAmount = (float)$request->input('withholding_amount');
@@ -886,7 +887,8 @@ class ExpenseHubController extends Controller
 
                 if ($request->has('has_withholding')) {
                     $hasWht = $request->boolean('has_withholding');
-                    $whtRate = (float)($request->input('withholding_rate') ?: 3.00);
+                    $itemClassification = $request->input('item_type') ?: ($request->input('category') ?: (($decisionData['vat_category'] ?? null) === 'G' || in_array($sourceType, ['procurement_payment', 'credit_store_payment', 'petty_cash_purchase']) ? 'goods' : 'services'));
+                    $whtRate = (float)($request->input('withholding_rate') ?: \App\Services\Finance\WithholdingTaxRateHelper::resolveRateFromItem($itemClassification));
                     $whtAmt = $hasWht ? round($baseAmount * ($whtRate / 100), 2) : 0.00;
                     $decisionData['has_withholding']    = $hasWht;
                     $decisionData['withholding_rate']   = $whtRate;
@@ -1187,7 +1189,8 @@ class ExpenseHubController extends Controller
             };
 
             $hasWht       = (bool)$decision->has_withholding;
-            $whtRate      = (float)($decision->withholding_rate ?: 3.00);
+            $itemClassification = $decision->vat_category === 'G' || in_array($sourceType, ['procurement_payment', 'credit_store_payment', 'petty_cash_purchase']) ? 'goods' : 'services';
+            $whtRate      = (float)($decision->withholding_rate ?: \App\Services\Finance\WithholdingTaxRateHelper::resolveRateFromItem($itemClassification));
             $whtAmount    = (float)($decision->withholding_amount ?: 0.00);
             $whtReceipt   = $decision->withholding_receipt ?: null;
             $whtReceiptNo = $decision->withholding_receipt_number ?: null;

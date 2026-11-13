@@ -433,19 +433,39 @@ class DeliveryReceiptController extends Controller
             'challan_no'                => 'nullable|string|max:100',
             'vehicle_no'                => 'nullable|string|max:50',
             'notes'                     => 'nullable|string',
+            'slip_receipt'              => 'required|file|mimes:pdf,jpg,jpeg,png,webp|max:10240',
             'items'                     => 'required|array|min:1',
             'items.*.product_id'        => 'required|exists:products,id',
             'items.*.po_item_id'        => 'nullable|exists:purchase_order_items,id',
             'items.*.quantity_received' => 'required|numeric|min:0.001',
             'items.*.accepted_quantity' => 'required|numeric|min:0',
             'items.*.unit'              => 'required|string|max:20',
+        ], [
+            'slip_receipt.required'     => 'Physical receiving slip upload is strictly required. Please attach a clear scan or photo of the receiving slip (Model 19 / GRN) before completing intake.',
+            'slip_receipt.file'         => 'The slip receipt must be a valid uploaded file.',
+            'slip_receipt.mimes'        => 'The slip receipt must be a document or image file of type: PDF, JPG, JPEG, PNG, or WEBP.',
+            'slip_receipt.max'          => 'The slip receipt file size cannot exceed 10MB.',
         ]);
 
-        DB::transaction(function () use ($request) {
+        if (!$request->hasFile('slip_receipt') || !$request->file('slip_receipt')->isValid()) {
+            return back()->withInput()->withErrors([
+                'slip_receipt' => 'Physical receiving slip upload is strictly required. Please upload a clear photo or scan of the receiving slip (Model 19 / GRN) to complete intake.',
+            ])->with('error', 'Slip Upload Required: Material intake cannot be accepted without uploading the physical receiving slip (Model 19 / GRN).');
+        }
+
+        $slipReceiptPath = FileUploadService::upload($request->file('slip_receipt'), 'slips');
+        if (empty($slipReceiptPath)) {
+            return back()->withInput()->withErrors([
+                'slip_receipt' => 'Failed to store the uploaded slip receipt file. Please verify the file and try again.',
+            ])->with('error', 'Upload Error: Could not save the uploaded slip receipt file. Please try again.');
+        }
+
+        DB::transaction(function () use ($request, $slipReceiptPath) {
             $no = 'DR-' . date('Ymd') . '-' . str_pad(DeliveryReceipt::count() + 1, 4, '0', STR_PAD_LEFT);
 
             $dr = DeliveryReceipt::create([
                 'dr_no'             => $no,
+                'slip_no'           => $no,
                 'purchase_order_id' => $request->purchase_order_id,
                 'received_by'       => Auth::id(),
                 'store_id'          => $request->store_id,
@@ -454,6 +474,7 @@ class DeliveryReceiptController extends Controller
                 'challan_no'        => $request->challan_no,
                 'vehicle_no'        => $request->vehicle_no,
                 'status'            => 'verified',
+                'slip_receipt_path' => $slipReceiptPath,
             ]);
 
             foreach ($request->items as $item) {

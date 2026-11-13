@@ -46,13 +46,14 @@ class ChartOfAccountController extends Controller
 
         $accounts = ChartOfAccount::with(['parent', 'manager', 'bankAccounts'])->orderBy('code')->paginate(50);
 
+        $typeTotals = (new \App\Services\Finance\TrialBalanceIntegrityService())->getTotalsByType();
         $stats = [
             'total_accounts'     => ChartOfAccount::where('is_active', true)->count(),
-            'total_assets'       => (float) ChartOfAccount::where('is_active', true)->where('type', 'asset')->sum('current_balance'),
-            'total_liabilities'  => (float) ChartOfAccount::where('is_active', true)->where('type', 'liability')->sum('current_balance'),
-            'total_equity'       => (float) ChartOfAccount::where('is_active', true)->where('type', 'equity')->sum('current_balance'),
-            'total_revenue'      => (float) ChartOfAccount::where('is_active', true)->where('type', 'revenue')->sum('current_balance'),
-            'total_expenses'     => (float) ChartOfAccount::where('is_active', true)->where('type', 'expense')->sum('current_balance'),
+            'total_assets'       => $typeTotals['asset'],
+            'total_liabilities'  => $typeTotals['liability'],
+            'total_equity'       => $typeTotals['equity'],
+            'total_revenue'      => $typeTotals['revenue'],
+            'total_expenses'     => $typeTotals['expense'],
         ];
 
         return view('finance.coa.index', compact('accounts', 'stats'));
@@ -92,13 +93,14 @@ class ChartOfAccountController extends Controller
             ?? $equityAccounts->firstWhere('code', '3152') 
             ?? $equityAccounts->first();
 
+        $totalsByType = app(\App\Services\Finance\TrialBalanceIntegrityService::class)->getTotalsByType();
         $stats = [
             'total_accounts'      => $accounts->count(),
-            'assets_balance'      => (float) $accounts->where('type', 'asset')->sum('current_balance'),
-            'liabilities_balance' => (float) $accounts->where('type', 'liability')->sum('current_balance'),
-            'equity_balance'      => (float) $accounts->where('type', 'equity')->sum('current_balance'),
-            'revenue_balance'     => (float) $accounts->where('type', 'revenue')->sum('current_balance'),
-            'expense_balance'     => (float) $accounts->where('type', 'expense')->sum('current_balance'),
+            'assets_balance'      => $totalsByType['asset'] ?? 0.0,
+            'liabilities_balance' => $totalsByType['liability'] ?? 0.0,
+            'equity_balance'      => $totalsByType['equity'] ?? 0.0,
+            'revenue_balance'     => $totalsByType['revenue'] ?? 0.0,
+            'expense_balance'     => $totalsByType['expense'] ?? 0.0,
         ];
 
         $stats['total_debit_balance']  = $stats['assets_balance'] + $stats['expense_balance'];
@@ -165,7 +167,7 @@ class ChartOfAccountController extends Controller
                     }
 
                     $amountVal = (float) $inputAmount;
-                    $oldCurrent = (float) $account->current_balance;
+                    $oldCurrent = (float) $account->ledger_balance;
                     $oldOpening = (float) $account->opening_balance;
 
                     if ($mode === 'set') {
@@ -180,18 +182,12 @@ class ChartOfAccountController extends Controller
                         $ledgerDelta = $amountVal;
                     }
 
-                    // Update Chart of Account
+                    // Update Chart of Account opening balance (current balance derives strictly from posted lines)
                     $account->opening_balance = $newOpening;
-                    $account->current_balance = $newBalance;
                     $account->save();
                     $updatedCount++;
 
-                    // Sync linked bank accounts if requested
-                    if ($syncBankAccounts && $account->bankAccounts->isNotEmpty()) {
-                        foreach ($account->bankAccounts as $bankAcc) {
-                            $bankAcc->update(['current_balance' => $newBalance]);
-                        }
-                    }
+                    // Linked bank account balances derive strictly from posted journal lines via JournalEngine
 
                     // Determine ledger line side for this account delta
                     if ($postToLedger && abs($ledgerDelta) > 0.0001) {
@@ -239,7 +235,6 @@ class ChartOfAccountController extends Controller
                                     'description' => "Opening balance offset / baseline equity reconciliation",
                                 ];
                                 $totalCreditLineAmount += abs($imbalance);
-                                $balancingEquity->increment('current_balance', abs($imbalance));
                             } else {
                                 // Credits > Debits -> Add Debit to Equity
                                 $ledgerLinesToCreate[] = [
@@ -250,27 +245,20 @@ class ChartOfAccountController extends Controller
                                     'description' => "Opening balance offset / baseline equity reconciliation",
                                 ];
                                 $totalDebitLineAmount += abs($imbalance);
-                                $balancingEquity->decrement('current_balance', abs($imbalance));
                             }
                         }
                     }
 
-                    $jeNo = 'JE-OPENING-' . date('Ymd', strtotime($effectiveDate)) . '-' . strtoupper(Str::random(4));
-                    $journalEntry = JournalEntry::create([
-                        'entry_no'       => $jeNo,
-                        'entry_date'     => $effectiveDate,
-                        'reference_type' => 'coa_initial_setup',
-                        'reference_id'   => null,
-                        'description'    => "COA One-Time Account Ledger & Initial Balance Setup" . ($refNote ? " | {$refNote}" : ""),
-                        'status'         => 'posted',
-                        'created_by'     => $user->id,
-                        'approved_by'    => $user->id,
-                        'posted_at'      => now(),
-                    ]);
-
-                    foreach ($ledgerLinesToCreate as $lineData) {
-                        $journalEntry->lines()->create($lineData);
-                    }
+                    $journalEngine = app(\App\Services\Finance\JournalEngine::class);
+                    $journalEntry = $journalEngine->createEntry(
+                        'coa_initial_setup',
+                        null,
+                        "COA One-Time Account Ledger & Initial Balance Setup" . ($refNote ? " | {$refNote}" : ""),
+                        $ledgerLinesToCreate,
+                        $user->id,
+                        $user->id,
+                        $effectiveDate
+                    );
                 }
 
                 // 3. Record Audit Log
@@ -311,15 +299,10 @@ class ChartOfAccountController extends Controller
             'type'            => 'required|in:asset,liability,equity,revenue,expense',
             'subtype'         => 'nullable|string|max:50',
             'opening_balance' => 'nullable|numeric',
-            'current_balance' => 'nullable|numeric',
             'description'     => 'nullable|string',
             'sort_order'      => 'nullable|integer',
             'assigned_to'     => 'nullable|exists:users,id',
         ]);
-
-        if (isset($data['opening_balance']) && !isset($data['current_balance'])) {
-            $data['current_balance'] = $data['opening_balance'];
-        }
 
         ChartOfAccount::create($data);
         return redirect()->route('coa.index')->with('success', 'Account created successfully.');
@@ -341,7 +324,6 @@ class ChartOfAccountController extends Controller
             'type'            => 'required|in:asset,liability,equity,revenue,expense',
             'subtype'         => 'nullable|string|max:50',
             'opening_balance' => 'nullable|numeric',
-            'current_balance' => 'nullable|numeric',
             'description'     => 'nullable|string',
             'sort_order'      => 'nullable|integer',
             'is_active'       => 'boolean',

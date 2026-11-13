@@ -1080,7 +1080,7 @@ class ProcurementLifecycleService
             'withholding_receipt_path'   => $withholdingData['withholding_receipt_path'] ?? null,
             'withholding_receipt_number' => $withholdingData['withholding_receipt_number'] ?? null,
             'has_withholding'            => !empty($withholdingData['has_withholding']),
-            'withholding_rate'           => isset($withholdingData['withholding_rate']) ? (float)$withholdingData['withholding_rate'] : 2.00,
+            'withholding_rate'           => isset($withholdingData['withholding_rate']) ? (float)$withholdingData['withholding_rate'] : \App\Services\Finance\WithholdingTaxRateHelper::resolveRateFromItem($pr->category ?? ($pr->item_type ?? 'goods')),
             'withholding_amount'         => isset($withholdingData['withholding_amount']) ? (float)$withholdingData['withholding_amount'] : 0.00,
         ];
 
@@ -1236,6 +1236,10 @@ class ProcurementLifecycleService
         $receivedDate = $receivedDate ?: now()->toDateString();
 
         $intakeResult = ['is_full' => true, 'remaining' => [], 'slip_no' => $slipNo];
+
+        if (empty($slipReceiptPath)) {
+            throw new \InvalidArgumentException('Physical receiving slip upload is strictly required. A clear photo or scan of the signed delivery slip (Model 19 / GRN) must be attached to accept intake.');
+        }
 
         DB::transaction(function () use ($pr, $storeId, &$slipNo, $receivedDate, $receivedItems, $notes, $from, &$intakeResult, $slipReceiptPath, $isPhysicalStoreOnly) {
             // 1. Strictly consume next slip via SlipSequenceService
@@ -1622,38 +1626,54 @@ class ProcurementLifecycleService
                     $taxDesc .= " [WHT: -{$taxData['withholding_amount']}]";
                 }
 
-                $entry = JournalEntry::create([
-                    'entry_no'       => $entryNo,
-                    'entry_date'     => now()->toDateString(),
-                    'reference_type' => 'procurement_payment',
-                    'reference_id'   => $pr->id,
-                    'description'    => "Procurement payment for PR #{$pr->pr_no} ({$method}){$taxDesc}",
-                    'status'         => 'posted',
-                    'created_by'     => Auth::id(),
-                    'posted_at'      => now(),
-                ]);
+                $selectedCoa = \App\Models\ChartOfAccount::find($coaAccountId);
+                if (!$selectedCoa) {
+                    throw new \Exception("Cannot create procurement journal: Selected COA ID {$coaAccountId} not found.");
+                }
 
-                // Debit the selected COA (expense side)
-                JournalEntryLine::create([
-                    'journal_entry_id' => $entry->id,
-                    'account_id'       => $coaAccountId,
-                    'side'             => 'debit',
-                    'amount'           => $amount,
-                    'description'      => "PR #{$pr->pr_no} — procurement debit{$taxDesc}",
-                ]);
+                // Determine distinct expense and payment accounts (no same-account wash entries)
+                if (in_array($selectedCoa->type, ['expense', 'cost_of_sale'])) {
+                    $debitAccountId = $selectedCoa->id;
+                    $creditAcc = \App\Models\ChartOfAccount::where('code', '1011')->first()
+                        ?? \App\Models\ChartOfAccount::where('type', 'asset')->where('subtype', 'cash_and_bank')->first()
+                        ?? \App\Models\ChartOfAccount::where('code', '2001')->first();
+                    $creditAccountId = $creditAcc?->id;
+                } else {
+                    $creditAccountId = $selectedCoa->id;
+                    $debitAcc = \App\Models\ChartOfAccount::where('code', '5100')->first()
+                        ?? \App\Models\ChartOfAccount::where('type', 'expense')->first();
+                    $debitAccountId = $debitAcc?->id;
+                }
 
-                // Credit the same COA balance (Finance Head's selection represents the funding source)
-                JournalEntryLine::create([
-                    'journal_entry_id' => $entry->id,
-                    'account_id'       => $coaAccountId,
-                    'side'             => 'credit',
-                    'amount'           => $amount,
-                    'description'      => "PR #{$pr->pr_no} — procurement credit ({$method})",
-                ]);
+                if (!$debitAccountId || !$creditAccountId || $debitAccountId === $creditAccountId) {
+                    throw new \Exception("Procurement Journal Entry requires distinct expense and payment accounts. Debit ID: {$debitAccountId}, Credit ID: {$creditAccountId}");
+                }
 
-                // Update COA current_balance with disbursed net amount
-                \App\Models\ChartOfAccount::where('id', $coaAccountId)
-                    ->decrement('current_balance', $amount);
+                $lines = [
+                    [
+                        'account_id'  => $debitAccountId,
+                        'side'        => 'debit',
+                        'amount'      => $amount,
+                        'description' => "PR #{$pr->pr_no} — procurement expense debit{$taxDesc}",
+                    ],
+                    [
+                        'account_id'  => $creditAccountId,
+                        'side'        => 'credit',
+                        'amount'      => $amount,
+                        'description' => "PR #{$pr->pr_no} — funding disbursement credit ({$method})",
+                    ],
+                ];
+
+                $journalEngine = app(\App\Services\Finance\JournalEngine::class);
+                $entry = $journalEngine->createEntry(
+                    'procurement_payment',
+                    $pr->id,
+                    "Procurement payment for PR #{$pr->pr_no} ({$method}){$taxDesc}",
+                    $lines,
+                    Auth::id() ?? 1,
+                    Auth::id() ?? 1,
+                    now()->toDateString()
+                );
 
                 // Link journal entry to payment record
                 $pr->payment?->update(['journal_entry_id' => $entry->id]);

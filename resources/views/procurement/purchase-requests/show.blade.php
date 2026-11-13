@@ -1938,7 +1938,7 @@
                             </p>
                         </div>
 
-                        <form action="{{ route('purchase-requests.store-intake', $purchaseRequest) }}" method="POST" enctype="multipart/form-data" onsubmit="const btn = this.querySelector('button[type=submit]'); if (btn) { btn.disabled = true; btn.innerHTML = '<i class=\'fas fa-spinner fa-spin me-1\'></i> Processing Intake...'; }">
+                        <form action="{{ route('purchase-requests.store-intake', $purchaseRequest) }}" method="POST" enctype="multipart/form-data" onsubmit="const fileInput = this.querySelector('input[name=\'slip_receipt\']'); if (!fileInput || !fileInput.files || fileInput.files.length === 0) { fileInput.classList.add('is-invalid'); alert('Physical slip upload is required! Please attach a photo or scan of the signed delivery slip (Model 19 / GRN) before completing intake.'); fileInput.focus(); return false; } const btn = this.querySelector('button[type=submit]'); if (btn) { btn.disabled = true; btn.innerHTML = '<i class=\'fas fa-spinner fa-spin me-1\'></i> Processing Intake...'; }">
                             @csrf
 
                             <div class="mb-2">
@@ -2148,14 +2148,33 @@
                                 </div>
                             </div>
 
-                            <div class="mb-2">
-                                <label class="form-label small fw-bold text-uppercase text-muted">
-                                    <i class="fas fa-paperclip me-1 text-primary"></i>Upload Slip Receipt / Scan / Photo
-                                </label>
-                                <input type="file" name="slip_receipt" class="form-control form-control-sm @error('slip_receipt') is-invalid @enderror" accept=".pdf,.jpg,.jpeg,.png,.webp">
-                                <small class="text-muted" style="font-size: 10px;">Supported formats: PDF, JPG, PNG, WEBP (Max 10MB)</small>
+                            <div class="mb-3 p-3 bg-white border border-2 border-danger border-opacity-75 rounded-3 shadow-xs">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <label class="form-label small fw-bold text-uppercase text-dark mb-0 d-flex align-items-center">
+                                        <i class="fas fa-file-invoice text-danger me-2"></i>Physical Receiving Slip Upload (Model 19 / GRN) <span class="text-danger ms-1">*</span>
+                                    </label>
+                                    <span class="badge bg-danger text-white py-1 px-2 fw-bold" style="font-size: 10px;">
+                                        <i class="fas fa-lock me-1"></i>STRICTLY REQUIRED
+                                    </span>
+                                </div>
+                                <div class="p-2 rounded bg-light border border-danger-subtle mb-2">
+                                    <div class="d-flex align-items-start gap-2">
+                                        <i class="fas fa-exclamation-triangle text-danger mt-1 flex-shrink-0"></i>
+                                        <div class="small text-dark">
+                                            <strong>Intake cannot be accepted without slip:</strong> The physical receiving slip (Model 19 / GRN) signed by the store keeper must be uploaded (photo or PDF scan). Without uploading this document, material intake will not be accepted.
+                                        </div>
+                                    </div>
+                                </div>
+                                <input type="file" name="slip_receipt" id="intakeSlipReceiptFile" class="form-control form-control-sm @error('slip_receipt') is-invalid @enderror" accept=".pdf,.jpg,.jpeg,.png,.webp" required onchange="const fb = document.getElementById('slipFileFeedback'); if (this.files && this.files.length > 0) { fb.innerHTML = '<i class=\'fas fa-check-circle text-success me-1\'></i>Selected slip: <strong>' + this.files[0].name + '</strong> (' + (this.files[0].size / 1024 / 1024).toFixed(2) + ' MB)'; fb.classList.remove('d-none'); this.classList.remove('is-invalid'); this.classList.add('is-valid'); } else { fb.classList.add('d-none'); }">
+                                <div id="slipFileFeedback" class="small text-success mt-1 d-none font-monospace"></div>
+                                <div class="d-flex justify-content-between align-items-center mt-1">
+                                    <small class="text-danger fw-semibold" style="font-size: 10.5px;">
+                                        <i class="fas fa-asterisk me-1" style="font-size: 8px;"></i>Mandatory document upload
+                                    </small>
+                                    <small class="text-muted" style="font-size: 10px;">Supported formats: PDF, JPG, JPEG, PNG, WEBP (Max 10MB)</small>
+                                </div>
                                 @error('slip_receipt')
-                                    <div class="invalid-feedback">{{ $message }}</div>
+                                    <div class="invalid-feedback d-block fw-bold mt-1"><i class="fas fa-times-circle me-1"></i>{{ $message }}</div>
                                 @enderror
                             </div>
 

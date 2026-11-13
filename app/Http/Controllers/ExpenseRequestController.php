@@ -1042,7 +1042,9 @@ class ExpenseRequestController extends Controller
             $vatType = $expenseRequest->vat_type ?? 'none';
             $vatRate = (float)($expenseRequest->vat_rate ?? 15.00);
             $hasWithholding = (bool)($expenseRequest->has_withholding ?? false);
-            $withholdingRate = (float)($expenseRequest->withholding_rate ?: 3.00);
+            $withholdingRate = $hasWithholding
+                ? (float)($expenseRequest->withholding_rate ?: \App\Services\Finance\WithholdingTaxRateHelper::resolveRateFromItem($expenseRequest))
+                : 0.00;
 
             $vatAmount = 0.0;
             $baseAmount = $newPayAmount;
@@ -1260,7 +1262,9 @@ class ExpenseRequestController extends Controller
             // Respect adjusted withholding rate (2%, 3%, 30%, or custom)
             $withholdingRate = isset($validated['withholding_rate']) && (float)$validated['withholding_rate'] > 0
                 ? (float)$validated['withholding_rate']
-                : (isset($expenseRequest->withholding_rate) && (float)$expenseRequest->withholding_rate > 0 ? (float)$expenseRequest->withholding_rate : 3.00);
+                : (isset($expenseRequest->withholding_rate) && (float)$expenseRequest->withholding_rate > 0 
+                    ? (float)$expenseRequest->withholding_rate 
+                    : ($hasWithholding ? \App\Services\Finance\WithholdingTaxRateHelper::resolveRateFromItem($expenseRequest) : 0.00));
 
             $vatAmount = 0.0;
             $baseAmount = $gross;
@@ -1386,8 +1390,8 @@ class ExpenseRequestController extends Controller
             if ($expenseRequest->bank_account_id) {
                 $bankAccount = BankAccount::find($expenseRequest->bank_account_id);
                 if ($bankAccount) {
-                    $bankAccount->decrement('current_balance', $disbursedAmount);
-                    $newBalance = $bankAccount->fresh()->current_balance;
+                    // Bank balance derives strictly from posted journal lines via JournalEngine
+                    $newBalance = (float)$bankAccount->ledger_balance - $disbursedAmount;
 
                     // 3. Create Bank Transaction Ledger Entry
                     $taxNote = ($vatAmount > 0 ? " [VAT: {$vatAmount}]" : '') . ($withholdingAmount > 0 ? " [WHT: -{$withholdingAmount}]" : '');
@@ -1442,9 +1446,6 @@ class ExpenseRequestController extends Controller
 
             if ($coaId && !$isPettyCash) {
                 $coa = ChartOfAccount::find($coaId);
-                if ($coa && !$isAlreadyDeducted) {
-                    $coa->decrement('current_balance', $disbursedAmount);
-                }
 
                 $coaUpdate = [
                     'chart_of_account_id' => $expenseRequest->chart_of_account_id ?: $coaId,
@@ -1733,13 +1734,7 @@ class ExpenseRequestController extends Controller
         }
 
         if ($pettyAccount) {
-            // Add funds to Petty Cash Account
             $isPettyAssetOrExpense = in_array($pettyAccount->type, ['asset', 'expense']);
-            if ($isPettyAssetOrExpense) {
-                $pettyAccount->increment('current_balance', $disbursedAmount);
-            } else {
-                $pettyAccount->decrement('current_balance', $disbursedAmount);
-            }
 
             // Resolve funding source COA
             $sourceCoa = null;
@@ -1751,52 +1746,43 @@ class ExpenseRequestController extends Controller
                 $sourceCoa = ChartOfAccount::find($expenseRequest->coa_id);
             }
 
-            // Record Journal Entry
-            $jeCount = JournalEntry::count() + 1;
-            $jeNo = 'JE-' . date('Ymd') . '-' . str_pad($jeCount, 4, '0', STR_PAD_LEFT);
+            // Enforce double-entry integrity: Source account is strictly required (no one-legged entries)
+            if (!$sourceCoa || $sourceCoa->id === $pettyAccount->id) {
+                throw new \Exception("Cannot fulfill Petty Cash Replenishment: A distinct funding source bank or cash account is required to disburse funds into [{$pettyAccount->code}] {$pettyAccount->name}.");
+            }
 
-            $journalEntry = JournalEntry::create([
-                'entry_no'       => $jeNo,
-                'entry_date'     => now(),
-                'reference_type' => 'petty_cash_replenishment',
-                'reference_id'   => $replenishment ? $replenishment->id : $expenseRequest->id,
-                'description'    => "Petty Cash Replenishment: Disbursed ETB " . number_format($disbursedAmount, 2) . " into [{$pettyAccount->code}] {$pettyAccount->name} via Expense Request #{$expenseRequest->request_number}",
-                'status'         => 'posted',
-                'created_by'     => $user->id,
-                'approved_by'    => $user->id,
-                'posted_at'      => now(),
-            ]);
+            // Record Journal Entry via JournalEngine
+            $isSourceAssetOrExpense = in_array($sourceCoa->type, ['asset', 'expense']);
+            $lines = [
+                [
+                    'account_id'  => $pettyAccount->id,
+                    'description' => "Replenishment Top-up from [{$sourceCoa->code}] {$sourceCoa->name}",
+                    'side'        => $isPettyAssetOrExpense ? 'debit' : 'credit',
+                    'amount'      => $disbursedAmount,
+                ],
+                [
+                    'account_id'  => $sourceCoa->id,
+                    'description' => "Disbursement for Petty Cash Replenishment #{$expenseRequest->request_number}",
+                    'side'        => $isSourceAssetOrExpense ? 'credit' : 'debit',
+                    'amount'      => $disbursedAmount,
+                ],
+            ];
 
-            // Debit Petty Cash (Asset increase)
-            JournalEntryLine::create([
-                'journal_entry_id' => $journalEntry->id,
-                'account_id'       => $pettyAccount->id,
-                'description'      => "Replenishment Top-up from " . ($sourceCoa ? "[{$sourceCoa->code}] {$sourceCoa->name}" : "Bank Disbursement"),
-                'side'             => $isPettyAssetOrExpense ? 'debit' : 'credit',
-                'amount'           => $disbursedAmount,
-            ]);
+            $journalEngine = app(\App\Services\Finance\JournalEngine::class);
+            $journalEntry = $journalEngine->createEntry(
+                'petty_cash_replenishment',
+                $replenishment ? $replenishment->id : $expenseRequest->id,
+                "Petty Cash Replenishment: Disbursed ETB " . number_format($disbursedAmount, 2) . " into [{$pettyAccount->code}] {$pettyAccount->name} via Expense Request #{$expenseRequest->request_number}",
+                $lines,
+                $user->id,
+                $user->id,
+                now()->toDateString()
+            );
 
             $hasExpCoaDeductedCol = \Illuminate\Support\Facades\Schema::hasColumn('expense_requests', 'coa_deducted');
             $isAlreadyDeducted = $hasExpCoaDeductedCol && (bool)$expenseRequest->coa_deducted;
 
-            // Credit Source Account if different from petty cash account
-            if ($sourceCoa && $sourceCoa->id !== $pettyAccount->id) {
-                if (!$isAlreadyDeducted) {
-                    $sourceCoa->decrement('current_balance', $disbursedAmount);
-                    if ($hasExpCoaDeductedCol) {
-                        $expenseRequest->update(['coa_deducted' => true]);
-                    }
-                }
-
-                $isSourceAssetOrExpense = in_array($sourceCoa->type, ['asset', 'expense']);
-                JournalEntryLine::create([
-                    'journal_entry_id' => $journalEntry->id,
-                    'account_id'       => $sourceCoa->id,
-                    'description'      => "Disbursement for Petty Cash Replenishment #{$expenseRequest->request_number}",
-                    'side'             => $isSourceAssetOrExpense ? 'credit' : 'debit',
-                    'amount'           => $disbursedAmount,
-                ]);
-            } else if ($hasExpCoaDeductedCol) {
+            if (!$isAlreadyDeducted && $hasExpCoaDeductedCol) {
                 $expenseRequest->update(['coa_deducted' => true]);
             }
 

@@ -408,7 +408,7 @@ class PettyCashMaterialPurchaseController extends Controller
                 'account_id'          => $acc->id,
                 'account_code'        => $acc->code,
                 'account_name'        => $acc->name,
-                'balance'             => (float) $acc->current_balance,
+                'balance'             => (float) $acc->ledger_balance,
                 'keeper_id'           => $keeper?->id,
                 'keeper_name'         => $keeper?->name ?? 'Store Keeper',
                 'keeper_phone'        => $phone,
@@ -692,10 +692,8 @@ class PettyCashMaterialPurchaseController extends Controller
 
             $purchase->delivery_receipt_id = $deliveryReceipt->id;
 
-            // 6. Petty Cash Deduction & Journal Entry
+            // 6. Journal Entry (Balance derives strictly from posted lines)
             if ($pettyCashAccount && $totalAmount > 0) {
-                // Decrement petty cash account balance
-                $pettyCashAccount->decrement('current_balance', $totalAmount);
 
                 // Find expense/inventory account (Cost of Material: 5100, or Supply Expense: 6901)
                 $expenseAccount = ChartOfAccount::where('code', '5100')->first()
@@ -703,37 +701,31 @@ class PettyCashMaterialPurchaseController extends Controller
                     ?? ChartOfAccount::where('type', 'expense')->first();
 
                 if ($expenseAccount) {
-                    $entryCount = JournalEntry::count() + 1;
-                    $entryNo = 'JE-' . date('Ymd') . '-' . str_pad($entryCount, 4, '0', STR_PAD_LEFT);
+                    $journalEngine = app(\App\Services\Finance\JournalEngine::class);
+                    $lines = [
+                        [
+                            'account_id'  => $expenseAccount->id,
+                            'description' => "Material purchase: {$validated['supplier_name']} (#{$purchaseNo})",
+                            'side'        => 'debit',
+                            'amount'      => $totalAmount,
+                        ],
+                        [
+                            'account_id'  => $pettyCashAccount->id,
+                            'description' => "Paid from Petty Cash [{$pettyCashAccount->code}] {$pettyCashAccount->name}",
+                            'side'        => 'credit',
+                            'amount'      => $totalAmount,
+                        ],
+                    ];
 
-                    $journalEntry = JournalEntry::create([
-                        'entry_no'       => $entryNo,
-                        'entry_date'     => $validated['purchase_date'],
-                        'reference_type' => 'petty_cash_material_purchase',
-                        'reference_id'   => $purchase->id,
-                        'description'    => "Petty Cash Material Purchase #{$purchaseNo} - {$validated['supplier_name']} (Rcpt: {$validated['receipt_no']})",
-                        'status'         => 'posted',
-                        'created_by'     => $user->id,
-                        'posted_at'      => now(),
-                    ]);
-
-                    // Debit: Cost of Material / Inventory Expense
-                    JournalEntryLine::create([
-                        'journal_entry_id' => $journalEntry->id,
-                        'account_id'       => $expenseAccount->id,
-                        'description'      => "Material purchase: {$validated['supplier_name']} (#{$purchaseNo})",
-                        'side'             => 'debit',
-                        'amount'           => $totalAmount,
-                    ]);
-
-                    // Credit: Petty Cash
-                    JournalEntryLine::create([
-                        'journal_entry_id' => $journalEntry->id,
-                        'account_id'       => $pettyCashAccount->id,
-                        'description'      => "Paid from Petty Cash [{$pettyCashAccount->code}] {$pettyCashAccount->name}",
-                        'side'             => 'credit',
-                        'amount'           => $totalAmount,
-                    ]);
+                    $journalEntry = $journalEngine->createEntry(
+                        'petty_cash_material_purchase',
+                        $purchase->id,
+                        "Petty Cash Material Purchase #{$purchaseNo} - {$validated['supplier_name']} (Rcpt: {$validated['receipt_no']})",
+                        $lines,
+                        $user->id,
+                        $user->id,
+                        $validated['purchase_date']
+                    );
 
                     $purchase->journal_entry_id = $journalEntry->id;
                 }
@@ -910,47 +902,39 @@ class PettyCashMaterialPurchaseController extends Controller
             $attachmentPath,
             $authUser
         ) {
-            // 1. Balance updates
-            $sourceAccount->decrement('current_balance', $amount);
-            $siteAccount->increment('current_balance', $amount);
+            // 1. Balances derive strictly from posted journal lines (no direct static balance mutation)
 
             // 2. Generate Request/Voucher Number
             $today = date('Ymd');
             $countToday = PettyCashReplenishment::whereDate('created_at', now())->count() + 1;
             $requestNo = 'REP-' . $today . '-' . str_pad($countToday, 4, '0', STR_PAD_LEFT);
 
-            // 3. Create Journal Entry
-            $jeCount = JournalEntry::count() + 1;
-            $jeNo = 'JE-REP-' . $today . '-' . str_pad($jeCount, 4, '0', STR_PAD_LEFT);
+            // 3. Create Journal Entry via JournalEngine
+            $journalEngine = app(\App\Services\Finance\JournalEngine::class);
+            $lines = [
+                [
+                    'account_id'  => $siteAccount->id,
+                    'description' => "Petty cash replacement received for {$store->name} [{$siteAccount->code}]",
+                    'side'        => 'debit',
+                    'amount'      => $amount,
+                ],
+                [
+                    'account_id'  => $sourceAccount->id,
+                    'description' => "Disbursed to {$store->name} Store Keeper {$recipient->name} [Ref: {$validated['reference_no']}]",
+                    'side'        => 'credit',
+                    'amount'      => $amount,
+                ],
+            ];
 
-            $journalEntry = JournalEntry::create([
-                'entry_no'       => $jeNo,
-                'entry_date'     => $validated['transfer_date'],
-                'reference_type' => 'petty_cash_replacement',
-                'description'    => "Replacement money to Store Keeper {$recipient->name} for {$store->name} via {$validated['payment_method']} [Ref: {$validated['reference_no']}]",
-                'status'         => 'posted',
-                'created_by'     => $authUser->id,
-                'approved_by'    => $authUser->id,
-                'posted_at'      => now(),
-            ]);
-
-            // Debit Site Petty Cash (Asset increase)
-            JournalEntryLine::create([
-                'journal_entry_id' => $journalEntry->id,
-                'account_id'       => $siteAccount->id,
-                'description'      => "Petty cash replacement received for {$store->name} [{$siteAccount->code}]",
-                'side'             => 'debit',
-                'amount'           => $amount,
-            ]);
-
-            // Credit Source Account (Bank / Cash disbursed)
-            JournalEntryLine::create([
-                'journal_entry_id' => $journalEntry->id,
-                'account_id'       => $sourceAccount->id,
-                'description'      => "Disbursed to {$store->name} Store Keeper {$recipient->name} [Ref: {$validated['reference_no']}]",
-                'side'             => 'credit',
-                'amount'           => $amount,
-            ]);
+            $journalEntry = $journalEngine->createEntry(
+                'petty_cash_replacement',
+                null,
+                "Replacement money to Store Keeper {$recipient->name} for {$store->name} via {$validated['payment_method']} [Ref: {$validated['reference_no']}]",
+                $lines,
+                $authUser->id,
+                $authUser->id,
+                $validated['transfer_date']
+            );
 
             // 4. Create Replenishment record
             $recipientPhone = $recipient->phone ?? $recipient->employee?->phone ?? $recipient->employee?->mobile_phone ?? null;
@@ -963,7 +947,7 @@ class PettyCashMaterialPurchaseController extends Controller
                 'finance_head_id'            => $authUser->id,
                 'requested_amount'           => $amount,
                 'fulfilled_amount'           => $amount,
-                'current_balance_at_request' => $siteAccount->current_balance - $amount,
+                'current_balance_at_request' => $siteAccount->ledger_balance - $amount,
                 'total_expenses_amount'      => 0,
                 'period_start_date'          => now(),
                 'period_end_date'            => now(),
@@ -1003,7 +987,7 @@ class PettyCashMaterialPurchaseController extends Controller
                 try {
                     $smsService = app(SmsEthiopiaService::class);
                     $formattedAmt = number_format($amount, 2);
-                    $newBal = number_format($siteAccount->current_balance, 2);
+                    $newBal = number_format($siteAccount->ledger_balance, 2);
                     $msg = "ConstructPro ERP: ETB {$formattedAmt} replacement petty cash has been credited for store {$store->name} via {$validated['payment_method']} (Ref: {$validated['reference_no']}). New available balance: ETB {$newBal}.";
                     $smsService->sendMessage($recipientPhone, $msg);
                 } catch (\Throwable $e) {
@@ -1018,15 +1002,15 @@ class PettyCashMaterialPurchaseController extends Controller
             return response()->json([
                 'success'           => true,
                 'message'           => "ETB " . number_format($amount, 2) . " replacement money successfully sent to Store Keeper {$recipient->name}!",
-                'new_balance'       => (float) $siteAccount->current_balance,
-                'formatted_balance' => 'ETB ' . number_format($siteAccount->current_balance, 2),
+                'new_balance'       => (float) $siteAccount->ledger_balance,
+                'formatted_balance' => 'ETB ' . number_format($siteAccount->ledger_balance, 2),
                 'account_id'        => $siteAccount->id,
                 'voucher_no'        => $replenishment->request_no,
                 'voucher_url'       => route('store-keeper.petty-cash-purchases.replacement-voucher', $replenishment->id),
             ]);
         }
 
-        return redirect()->back()->with('success', "ETB " . number_format($amount, 2) . " replacement money sent successfully to Store Keeper {$recipient->name}! Voucher: {$replenishment->request_no}. Available Petty Cash updated to ETB " . number_format($siteAccount->current_balance, 2));
+        return redirect()->back()->with('success', "ETB " . number_format($amount, 2) . " replacement money sent successfully to Store Keeper {$recipient->name}! Voucher: {$replenishment->request_no}. Available Petty Cash updated to ETB " . number_format($siteAccount->ledger_balance, 2));
     }
 
     /**
@@ -1082,7 +1066,7 @@ class PettyCashMaterialPurchaseController extends Controller
                 'chart_of_account_id'        => $siteAccount->id,
                 'requested_by'               => $authUser->id,
                 'requested_amount'           => $validated['requested_amount'],
-                'current_balance_at_request' => $siteAccount->current_balance,
+                'current_balance_at_request' => $siteAccount->ledger_balance,
                 'total_expenses_amount'      => $totalExpenses > 0 ? $totalExpenses : $validated['requested_amount'],
                 'period_start_date'          => $unreplenishedPurchases->min('purchase_date') ?? now(),
                 'period_end_date'            => $unreplenishedPurchases->max('purchase_date') ?? now(),

@@ -555,8 +555,8 @@ class OfficeSupplyRequestController extends Controller
             if ($officeRequest->bank_account_id && $finalAmount > 0) {
                 $bankAccount = BankAccount::find($officeRequest->bank_account_id);
                 if ($bankAccount) {
-                    $bankAccount->decrement('current_balance', $finalAmount);
-                    $newBalance = $bankAccount->fresh()->current_balance;
+                    // Bank balance derives strictly from posted journal lines via JournalEngine
+                    $newBalance = (float)$bankAccount->ledger_balance - $finalAmount;
 
                     BankTransaction::create([
                         'bank_account_id' => $bankAccount->id,
@@ -608,9 +608,6 @@ class OfficeSupplyRequestController extends Controller
 
             if ($coaId && $finalAmount > 0) {
                 $coa = \App\Models\ChartOfAccount::find($coaId);
-                if ($coa && !$isOffAlreadyDeducted) {
-                    $coa->decrement('current_balance', $finalAmount);
-                }
                 $offUpdate = ['coa_id' => $officeRequest->coa_id ?: $coaId];
                 if ($hasOffCoaDeductedCol) {
                     $offUpdate['coa_deducted'] = true;

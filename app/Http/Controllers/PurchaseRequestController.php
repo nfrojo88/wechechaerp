@@ -2350,9 +2350,20 @@ class PurchaseRequestController extends Controller
             'received_date'          => 'nullable|date',
             'items'                  => 'nullable|array',
             'notes'                  => 'nullable|string',
-            'slip_receipt'           => 'nullable|file|mimes:pdf,jpg,jpeg,png,webp|max:10240',
+            'slip_receipt'           => 'required|file|mimes:pdf,jpg,jpeg,png,webp|max:10240',
             'is_physical_store_only' => 'nullable|boolean',
+        ], [
+            'slip_receipt.required'  => 'Physical receiving slip upload is strictly required. Please attach a clear scan or photo of the receiving slip (Model 19 / GRN) before completing material intake.',
+            'slip_receipt.file'      => 'The slip receipt must be a valid uploaded file.',
+            'slip_receipt.mimes'     => 'The slip receipt must be a document or image file of type: PDF, JPG, JPEG, PNG, or WEBP.',
+            'slip_receipt.max'       => 'The slip receipt file size cannot exceed 10MB.',
         ]);
+
+        if (!$request->hasFile('slip_receipt') || !$request->file('slip_receipt')->isValid()) {
+            return back()->withInput()->withErrors([
+                'slip_receipt' => 'Physical receiving slip upload is strictly required. Please upload a clear photo or scan of the receiving slip (Model 19 / GRN) to complete intake.',
+            ])->with('error', 'Slip Upload Required: Material intake cannot be accepted without uploading the physical receiving slip (Model 19 / GRN).');
+        }
 
         $slipNo = trim((string)$request->input('slip_no'));
 
@@ -2366,9 +2377,11 @@ class PurchaseRequestController extends Controller
             }
         }
 
-        $slipReceiptPath = null;
-        if ($request->hasFile('slip_receipt')) {
-            $slipReceiptPath = \App\Services\FileUploadService::upload($request->file('slip_receipt'), 'slips');
+        $slipReceiptPath = \App\Services\FileUploadService::upload($request->file('slip_receipt'), 'slips');
+        if (empty($slipReceiptPath)) {
+            return back()->withInput()->withErrors([
+                'slip_receipt' => 'Failed to store the uploaded slip receipt file. Please verify the file and try again.',
+            ])->with('error', 'Upload Error: Could not save the uploaded slip receipt file. Please try again.');
         }
         $isPhysicalStoreOnly = $request->boolean('is_physical_store_only');
 
@@ -2412,7 +2425,8 @@ class PurchaseRequestController extends Controller
             return back()->withInput()->with('error', 'Database Error during store intake: ' . $e->getMessage());
         } catch (\InvalidArgumentException $e) {
             return back()->withInput()->withErrors([
-                'slip_no' => $e->getMessage(),
+                'slip_receipt' => $e->getMessage(),
+                'slip_no'      => $e->getMessage(),
             ])->with('error', $e->getMessage());
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::error("Store Intake Exception for PR #{$purchaseRequest->pr_no}: " . $e->getMessage());

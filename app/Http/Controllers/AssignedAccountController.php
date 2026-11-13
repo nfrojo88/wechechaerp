@@ -329,20 +329,6 @@ class AssignedAccountController extends Controller
         ]);
 
         DB::transaction(function () use ($request, $account, $authId) {
-            $entryCount = JournalEntry::count() + 1;
-            $entryNo = 'JE-' . date('Ymd') . '-' . str_pad($entryCount, 4, '0', STR_PAD_LEFT);
-
-            $entry = JournalEntry::create([
-                'entry_no' => $entryNo,
-                'entry_date' => now(),
-                'reference_type' => 'assigned_account_transaction',
-                'reference_id' => $account->id,
-                'description' => $request->description,
-                'status' => 'posted',
-                'created_by' => $authId,
-                'posted_at' => now(),
-            ]);
-
             $isAssetOrExpense = in_array($account->type, ['asset', 'expense']);
             
             if ($request->type === 'payment') {
@@ -355,31 +341,33 @@ class AssignedAccountController extends Controller
                 $targetAccountSide = $thisAccountSide === 'debit' ? 'credit' : 'debit';
             }
 
-            JournalEntryLine::create([
-                'journal_entry_id' => $entry->id,
-                'account_id' => $account->id,
-                'description' => $request->description,
-                'side' => $thisAccountSide,
-                'amount' => $request->amount,
-            ]);
+            $lines = [
+                [
+                    'account_id'  => $account->id,
+                    'description' => $request->description,
+                    'side'        => $thisAccountSide,
+                    'amount'      => $request->amount,
+                ],
+                [
+                    'account_id'  => $request->target_account_id,
+                    'description' => $request->description,
+                    'side'        => $targetAccountSide,
+                    'amount'      => $request->amount,
+                ],
+            ];
 
-            JournalEntryLine::create([
-                'journal_entry_id' => $entry->id,
-                'account_id' => $request->target_account_id,
-                'description' => $request->description,
-                'side' => $targetAccountSide,
-                'amount' => $request->amount,
-            ]);
+            $journalEngine = app(\App\Services\Finance\JournalEngine::class);
+            $entry = $journalEngine->createEntry(
+                'assigned_account_transaction',
+                $account->id,
+                $request->description,
+                $lines,
+                $authId,
+                $authId,
+                now()->toDateString()
+            );
 
-            // Update balances
-            $targetAccount = ChartOfAccount::find($request->target_account_id);
-            
-            $account->current_balance += ($thisAccountSide === 'debit' ? $request->amount : -$request->amount) * ($isAssetOrExpense ? 1 : -1);
-            $account->save();
-            
-            $isTargetAssetOrExpense = in_array($targetAccount->type, ['asset', 'expense']);
-            $targetAccount->current_balance += ($targetAccountSide === 'debit' ? $request->amount : -$request->amount) * ($isTargetAssetOrExpense ? 1 : -1);
-            $targetAccount->save();
+            // Balances derive strictly from posted journal lines
         });
 
         return redirect()->back()->with('success', 'Transaction completed successfully.');
@@ -444,7 +432,7 @@ class AssignedAccountController extends Controller
                 'chart_of_account_id'        => $account->id,
                 'requested_by'               => $authId,
                 'requested_amount'           => $request->requested_amount,
-                'current_balance_at_request' => $account->current_balance,
+                'current_balance_at_request' => $account->ledger_balance,
                 'total_expenses_amount'      => $totalExpenses,
                 'period_start_date'          => $cycleStartDate,
                 'period_end_date'            => now(),
@@ -516,56 +504,34 @@ class AssignedAccountController extends Controller
         $authId = auth()->id();
 
         DB::transaction(function () use ($account, $sourceCoa, $replenishment, $amount, $request, $authId) {
-            // 1. Update balances
-            // Source Account (Bank/Cash) is credited (decreased if asset)
-            $isSourceAssetOrExpense = in_array($sourceCoa->type, ['asset', 'expense']);
-            if ($isSourceAssetOrExpense) {
-                $sourceCoa->decrement('current_balance', $amount);
-            } else {
-                $sourceCoa->increment('current_balance', $amount);
-            }
+            // 1. Account balances derive strictly from posted journal lines (no direct static balance mutation)
 
-            // Petty Cash Account is debited (increased if asset)
-            $isPettyAssetOrExpense = in_array($account->type, ['asset', 'expense']);
-            if ($isPettyAssetOrExpense) {
-                $account->increment('current_balance', $amount);
-            } else {
-                $account->decrement('current_balance', $amount);
-            }
+            // 2. Create Journal Entry via JournalEngine
+            $journalEngine = app(\App\Services\Finance\JournalEngine::class);
+            $lines = [
+                [
+                    'account_id'  => $account->id,
+                    'description' => "Replenishment Top-up from [{$sourceCoa->code}] {$sourceCoa->name}",
+                    'side'        => $isPettyAssetOrExpense ? 'debit' : 'credit',
+                    'amount'      => $amount,
+                ],
+                [
+                    'account_id'  => $sourceCoa->id,
+                    'description' => "Disbursement for Petty Cash Replenishment #{$replenishment->request_no}",
+                    'side'        => $isSourceAssetOrExpense ? 'credit' : 'debit',
+                    'amount'      => $amount,
+                ],
+            ];
 
-            // 2. Create Journal Entry
-            $jeCount = JournalEntry::count() + 1;
-            $jeNo = 'JE-' . date('Ymd') . '-' . str_pad($jeCount, 4, '0', STR_PAD_LEFT);
-
-            $journalEntry = JournalEntry::create([
-                'entry_no'       => $jeNo,
-                'entry_date'     => now(),
-                'reference_type' => 'petty_cash_replenishment',
-                'reference_id'   => $replenishment->id,
-                'description'    => "Petty Cash Replenishment #{$replenishment->request_no}: [{$sourceCoa->code}] {$sourceCoa->name} → [{$account->code}] {$account->name} | " . ($request->finance_notes ?? 'Imprest Replenishment Fulfillment'),
-                'status'         => 'posted',
-                'created_by'     => $authId,
-                'approved_by'    => $authId,
-                'posted_at'      => now(),
-            ]);
-
-            // Debit Petty Cash (Asset increase)
-            JournalEntryLine::create([
-                'journal_entry_id' => $journalEntry->id,
-                'account_id'       => $account->id,
-                'description'      => "Replenishment Top-up from [{$sourceCoa->code}] {$sourceCoa->name}",
-                'side'             => $isPettyAssetOrExpense ? 'debit' : 'credit',
-                'amount'           => $amount,
-            ]);
-
-            // Credit Source Account (Asset decrease)
-            JournalEntryLine::create([
-                'journal_entry_id' => $journalEntry->id,
-                'account_id'       => $sourceCoa->id,
-                'description'      => "Disbursement for Petty Cash Replenishment #{$replenishment->request_no}",
-                'side'             => $isSourceAssetOrExpense ? 'credit' : 'debit',
-                'amount'           => $amount,
-            ]);
+            $journalEntry = $journalEngine->createEntry(
+                'petty_cash_replenishment',
+                $replenishment->id,
+                "Petty Cash Replenishment #{$replenishment->request_no}: [{$sourceCoa->code}] {$sourceCoa->name} → [{$account->code}] {$account->name} | " . ($request->finance_notes ?? 'Imprest Replenishment Fulfillment'),
+                $lines,
+                $authId,
+                $authId,
+                now()->toDateString()
+            );
 
             // 3. Mark replenishment as fulfilled
             $replenishment->update([
@@ -1138,42 +1104,49 @@ class AssignedAccountController extends Controller
                     $disbursedAmount = (float)($exp->net_amount > 0 ? $exp->net_amount : ($exp->amount ?: $pcr->requested_amount));
 
                     $isPettyAssetOrExpense = in_array($account->type, ['asset', 'expense']);
-                    if ($isPettyAssetOrExpense) {
-                        $account->increment('current_balance', $disbursedAmount);
-                    } else {
-                        $account->decrement('current_balance', $disbursedAmount);
+                    // Balance derives strictly from posted journal lines
+
+                    $sourceCoa = ($exp->chart_of_account_id ? ChartOfAccount::find($exp->chart_of_account_id) : null)
+                        ?: ($exp->bank_account_id ? \App\Models\BankAccount::find($exp->bank_account_id)?->chartOfAccount : null)
+                        ?: ChartOfAccount::where('code', '1011')->first()
+                        ?: ChartOfAccount::where('type', 'asset')->where('subtype', 'cash_and_bank')->first();
+
+                    if ($sourceCoa && $sourceCoa->id !== $account->id) {
+                        $isSourceAssetOrExpense = in_array($sourceCoa->type, ['asset', 'expense']);
+                        $lines = [
+                            [
+                                'account_id'  => $account->id,
+                                'description' => "Replenishment Top-up via Expense Request Payment #{$exp->request_number}",
+                                'side'        => $isPettyAssetOrExpense ? 'debit' : 'credit',
+                                'amount'      => $disbursedAmount,
+                            ],
+                            [
+                                'account_id'  => $sourceCoa->id,
+                                'description' => "Funding disbursement for Petty Cash Replenishment #{$pcr->request_no}",
+                                'side'        => $isSourceAssetOrExpense ? 'credit' : 'debit',
+                                'amount'      => $disbursedAmount,
+                            ],
+                        ];
+
+                        $journalEngine = app(\App\Services\Finance\JournalEngine::class);
+                        $journalEntry = $journalEngine->createEntry(
+                            'petty_cash_replenishment',
+                            $pcr->id,
+                            "Petty Cash Replenishment: Top-up [{$account->code}] {$account->name} via Paid Expense Request #{$exp->request_number}",
+                            $lines,
+                            $exp->paid_by ?? auth()->id() ?? 1,
+                            $exp->paid_by ?? auth()->id() ?? 1,
+                            $exp->paid_at ? \Carbon\Carbon::parse($exp->paid_at)->toDateString() : now()->toDateString()
+                        );
+
+                        $pcr->update([
+                            'status'                => PettyCashReplenishment::STATUS_FULFILLED,
+                            'fulfilled_amount'      => $disbursedAmount,
+                            'journal_entry_id'      => $journalEntry->id,
+                            'fulfillment_reference' => $exp->payment_reference ?? $journalEntry->entry_no,
+                            'fulfilled_at'          => $exp->paid_at ?? now(),
+                        ]);
                     }
-
-                    $jeCount = JournalEntry::count() + 1;
-                    $jeNo = 'JE-' . date('Ymd') . '-' . str_pad($jeCount, 4, '0', STR_PAD_LEFT);
-
-                    $journalEntry = JournalEntry::create([
-                        'entry_no'       => $jeNo,
-                        'entry_date'     => $exp->paid_at ?? now(),
-                        'reference_type' => 'petty_cash_replenishment',
-                        'reference_id'   => $pcr->id,
-                        'description'    => "Petty Cash Replenishment: Top-up [{$account->code}] {$account->name} via Paid Expense Request #{$exp->request_number}",
-                        'status'         => 'posted',
-                        'created_by'     => $exp->paid_by ?? auth()->id(),
-                        'approved_by'    => $exp->paid_by ?? auth()->id(),
-                        'posted_at'      => $exp->paid_at ?? now(),
-                    ]);
-
-                    JournalEntryLine::create([
-                        'journal_entry_id' => $journalEntry->id,
-                        'account_id'       => $account->id,
-                        'description'      => "Replenishment Top-up via Expense Request Payment",
-                        'side'             => $isPettyAssetOrExpense ? 'debit' : 'credit',
-                        'amount'           => $disbursedAmount,
-                    ]);
-
-                    $pcr->update([
-                        'status'                => PettyCashReplenishment::STATUS_FULFILLED,
-                        'fulfilled_amount'      => $disbursedAmount,
-                        'journal_entry_id'      => $journalEntry->id,
-                        'fulfillment_reference' => $exp->payment_reference ?? $jeNo,
-                        'fulfilled_at'          => $exp->paid_at ?? now(),
-                    ]);
                 }
             }
         } catch (\Throwable $e) {

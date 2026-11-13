@@ -507,7 +507,10 @@ class LetterController extends Controller
             $vatRate = 15.00;
             $vatAmount = 0.0;
             $hasWithholding = false;
-            $withholdingRate = 3.00;
+            $letterCategory = strtolower((string)($request->input('category', $request->input('item_type', 'services'))));
+            $isGoods = in_array($letterCategory, ['goods', 'material', 'materials', 'supply', 'supplies', 'equipment']);
+            $resolvedWhtRate = \App\Services\Finance\WithholdingTaxRateHelper::resolveRateFromItem(['item_type' => $isGoods ? 'goods' : 'services']);
+            $withholdingRate = $resolvedWhtRate;
             $withholdingAmount = 0.0;
             $netAmount = null;
 
@@ -520,7 +523,7 @@ class LetterController extends Controller
                 $vatType = $validated['vat_type'] ?? 'none';
                 $vatRate = isset($validated['vat_rate']) ? (float)$validated['vat_rate'] : 15.00;
                 $hasWithholding = $request->boolean('has_withholding');
-                $withholdingRate = 3.00;
+                $withholdingRate = isset($validated['withholding_rate']) ? (float)$validated['withholding_rate'] : $resolvedWhtRate;
 
                 $vatAmount = 0.0;
                 $baseAmount = $gross;
@@ -579,7 +582,7 @@ class LetterController extends Controller
                     $bankAcc = \App\Models\BankAccount::find($validated['bank_account_id']);
                     if ($bankAcc) {
                         $paidFromAccountName = "{$bankAcc->bank_name} ({$bankAcc->account_number})";
-                        $bankAcc->decrement('current_balance', $disbursedAmount);
+                        // Bank balance derives strictly from posted journal lines via JournalEngine
                         if (!$fundingCoa && $bankAcc->coa_id) {
                             $fundingCoa = \App\Models\ChartOfAccount::find($bankAcc->coa_id);
                         }
@@ -587,7 +590,6 @@ class LetterController extends Controller
                 }
                 if ($fundingCoa) {
                     $paidFromAccountName = $paidFromAccountName ?? "{$fundingCoa->code} - {$fundingCoa->name}";
-                    $fundingCoa->decrement('current_balance', $disbursedAmount);
                 }
 
                 // 2. Create official ExpenseRequest record (shows in "Ask Money", Paid Expense history, and VAT Report)
@@ -662,7 +664,7 @@ class LetterController extends Controller
                 'vat_rate'                  => $hasPayment ? $vatRate : 15.00,
                 'vat_amount'                => $hasPayment ? $vatAmount : 0,
                 'has_withholding'           => $hasPayment ? $hasWithholding : false,
-                'withholding_rate'          => $hasPayment ? $withholdingRate : 3.00,
+                'withholding_rate'          => $hasPayment ? $withholdingRate : $resolvedWhtRate,
                 'withholding_amount'        => $hasPayment ? $withholdingAmount : 0,
                 'withholding_receipt'       => $withholdingReceiptPath,
                 'withholding_receipt_number' => $validated['withholding_receipt_number'] ?? null,

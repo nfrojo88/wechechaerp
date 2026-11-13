@@ -17,12 +17,22 @@ class ClientIpc extends Model
         'period_to'      => 'date',
         'submission_date'=> 'date',
         'approved_at'    => 'datetime',
+        'certified_at'   => 'datetime',
+        'measurement_sheet_summary' => 'array',
         'retention_percent' => 'decimal:2',
         'gross_amount'   => 'decimal:2',
         'net_amount'     => 'decimal:2',
         'retention_amount'=> 'decimal:2',
         'cumulative_certified' => 'decimal:2',
         'previous_certified'   => 'decimal:2',
+        'gross_certified_amount' => 'decimal:2',
+        'retention_rate_percent' => 'decimal:2',
+        'advance_recovery_rate_percent' => 'decimal:2',
+        'advance_recovery_amount' => 'decimal:2',
+        'vat_rate_percent' => 'decimal:2',
+        'vat_amount' => 'decimal:2',
+        'net_certified_payable' => 'decimal:2',
+        'is_posted' => 'boolean',
     ];
 
     // ── Status constants ────────────────────────────────────────────────────────
@@ -34,6 +44,32 @@ class ClientIpc extends Model
     const STATUS_REJECTED    = 'rejected';
 
     // ── Relationships ───────────────────────────────────────────────────────────
+
+    public function contract()
+    {
+        return $this->belongsTo(ConstructionContract::class, 'contract_id');
+    }
+
+    public function period()
+    {
+        return $this->belongsTo(FinancialPeriod::class, 'financial_period_id');
+    }
+
+    public function collections()
+    {
+        return $this->hasMany(ClientIpcCollection::class, 'client_ipc_id');
+    }
+
+    public function journalEntry()
+    {
+        return $this->belongsTo(JournalEntry::class, 'journal_entry_id');
+    }
+
+    public function isCertified(): bool
+    {
+        return in_array($this->certification_status, ['certified', 'approved']) 
+            || $this->status === 'approved';
+    }
 
     public function project()
     {

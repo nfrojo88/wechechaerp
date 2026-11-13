@@ -12,10 +12,22 @@ class ChartOfAccount extends Model
     protected $fillable = [
         'code', 'name', 'parent_id', 'type', 'subtype', 'is_active',
         'is_system', 'opening_balance', 'current_balance', 'description', 'sort_order',
-        'assigned_to'
+        'assigned_to', 'normal_side', 'is_control_account', 'subledger_type'
     ];
 
     protected $casts = ['is_active' => 'boolean', 'is_system' => 'boolean'];
+
+    protected static function booted()
+    {
+        static::updating(function ($account) {
+            // Model Guard: Block any external write to current_balance unless explicitly authorized by JournalEngine
+            if ($account->isDirty('current_balance')) {
+                if (!app()->bound('gl_posting_in_progress') || !app('gl_posting_in_progress')) {
+                    throw new \RuntimeException("Direct update of chart_of_accounts.current_balance is strictly prohibited. Balances derive exclusively from posted journal lines via JournalEngine.");
+                }
+            }
+        });
+    }
 
     public function parent()    { return $this->belongsTo(ChartOfAccount::class, 'parent_id'); }
     public function children()  { return $this->hasMany(ChartOfAccount::class, 'parent_id'); }
@@ -35,6 +47,101 @@ class ChartOfAccount extends Model
     {
         return $this->hasMany(PettyCashReplenishment::class, 'chart_of_account_id');
     }
+
+    /**
+     * Compute authoritative ledger balance strictly from posted journal lines.
+     * Uses real column names: journal_entry_lines.side and journal_entry_lines.amount.
+     */
+    public function getLedgerBalanceAttribute(): float
+    {
+        $normalSide = $this->normal_side;
+        if (empty($normalSide) || !in_array($normalSide, ['debit', 'credit'])) {
+            $normalSide = in_array($this->type, ['liability', 'equity', 'revenue']) ? 'credit' : 'debit';
+        }
+
+        $res = JournalEntryLine::selectRaw("
+            COUNT(*) as line_count,
+            SUM(CASE WHEN journal_entry_lines.side = 'debit'  THEN journal_entry_lines.amount ELSE 0 END) as debits,
+            SUM(CASE WHEN journal_entry_lines.side = 'credit' THEN journal_entry_lines.amount ELSE 0 END) as credits
+        ")
+        ->join('journal_entries', 'journal_entry_lines.journal_entry_id', '=', 'journal_entries.id')
+        ->where('journal_entries.status', 'posted')
+        ->where('journal_entry_lines.account_id', $this->id)
+        ->first();
+
+        $lineCount = (int) ($res->line_count ?? 0);
+        if ($lineCount === 0 && (float)$this->current_balance != 0) {
+            return (float) $this->current_balance;
+        }
+
+        $debits  = (float) ($res->debits ?? 0.0);
+        $credits = (float) ($res->credits ?? 0.0);
+
+        return $normalSide === 'debit' ? round($debits - $credits, 2) : round($credits - $debits, 2);
+    }
+
+    /**
+     * Compute authoritative ledger balances for multiple accounts in a single grouped query.
+     * Prevents N+1 database queries across large account lists.
+     *
+     * @param iterable|array $accounts Collection or array of ChartOfAccount models or account IDs
+     * @return array [account_id => ledger_balance]
+     */
+    public static function getBatchLedgerBalances($accounts = []): array
+    {
+        $accList = collect($accounts);
+        if ($accList->isEmpty()) {
+            return [];
+        }
+
+        if (is_numeric($accList->first())) {
+            $accountModels = self::whereIn('id', $accList)->get()->keyBy('id');
+            $ids = $accList->toArray();
+        } else {
+            $accountModels = $accList->keyBy('id');
+            $ids = $accList->pluck('id')->filter()->toArray();
+        }
+
+        if (empty($ids)) {
+            return [];
+        }
+
+        $res = JournalEntryLine::selectRaw("
+            journal_entry_lines.account_id,
+            COUNT(*) as line_count,
+            SUM(CASE WHEN journal_entry_lines.side = 'debit'  THEN journal_entry_lines.amount ELSE 0 END) as debits,
+            SUM(CASE WHEN journal_entry_lines.side = 'credit' THEN journal_entry_lines.amount ELSE 0 END) as credits
+        ")
+        ->join('journal_entries', 'journal_entry_lines.journal_entry_id', '=', 'journal_entries.id')
+        ->where('journal_entries.status', 'posted')
+        ->whereIn('journal_entry_lines.account_id', $ids)
+        ->groupBy('journal_entry_lines.account_id')
+        ->get()
+        ->keyBy('account_id');
+
+        $balances = [];
+        foreach ($accountModels as $id => $acc) {
+            $line = $res->get($id);
+            $lineCount = (int) ($line->line_count ?? 0);
+            if ($lineCount === 0 && (float)$acc->current_balance != 0) {
+                $balances[$id] = (float) $acc->current_balance;
+                continue;
+            }
+
+            $normalSide = $acc->normal_side;
+            if (empty($normalSide) || !in_array($normalSide, ['debit', 'credit'])) {
+                $normalSide = in_array($acc->type, ['liability', 'equity', 'revenue']) ? 'credit' : 'debit';
+            }
+
+            $debits  = (float) ($line->debits ?? 0.0);
+            $credits = (float) ($line->credits ?? 0.0);
+            $balances[$id] = $normalSide === 'debit' ? round($debits - $credits, 2) : round($credits - $debits, 2);
+        }
+
+        return $balances;
+    }
+
+
 
     /**
      * Permanently delete a Chart of Account and cascade-clean all transfer history,
@@ -76,29 +183,7 @@ class ChartOfAccount extends Model
                             $journalEntryIds[] = $trf->journal_entry_id;
                         }
 
-                        // Revert balance on the counter-party account if requested
-                        if ($reverseCounterPartyBalances) {
-                            $amt = (float) $trf->amount;
-                            if ($trf->from_coa_id == $coaId && !empty($trf->to_coa_id) && $trf->to_coa_id != $coaId) {
-                                $other = self::find($trf->to_coa_id);
-                                if ($other) {
-                                    if (in_array($other->type, ['asset', 'expense'])) {
-                                        $other->decrement('current_balance', $amt);
-                                    } else {
-                                        $other->increment('current_balance', $amt);
-                                    }
-                                }
-                            } elseif ($trf->to_coa_id == $coaId && !empty($trf->from_coa_id) && $trf->from_coa_id != $coaId) {
-                                $other = self::find($trf->from_coa_id);
-                                if ($other) {
-                                    if (in_array($other->type, ['asset', 'expense'])) {
-                                        $other->increment('current_balance', $amt);
-                                    } else {
-                                        $other->decrement('current_balance', $amt);
-                                    }
-                                }
-                            }
-                        }
+                        // Balances derive dynamically from posted lines; no manual decrement needed
 
                         // Delete attachment if exists
                         if (!empty($trf->attachment_path) && class_exists(\App\Services\FileUploadService::class)) {

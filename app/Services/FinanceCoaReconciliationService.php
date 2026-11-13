@@ -78,7 +78,6 @@ class FinanceCoaReconciliationService
 
                             $destPettyId = $exp->chart_of_account_id ?? ($exp->petty_cash_owner_id ?? null);
                             if ($sourceCoa && $sourceCoa->id != $destPettyId) {
-                                $sourceCoa->decrement('current_balance', $disbursed);
                                 $stats['expense_requests_count']++;
                                 $stats['expense_requests_amount'] += $disbursed;
                                 $stats['accounts_updated'][$sourceCoa->id] = ($stats['accounts_updated'][$sourceCoa->id] ?? 0) + $disbursed;
@@ -120,7 +119,6 @@ class FinanceCoaReconciliationService
                         }
 
                         if ($targetCoa) {
-                            $targetCoa->decrement('current_balance', $disbursed);
                             $stats['expense_requests_count']++;
                             $stats['expense_requests_amount'] += $disbursed;
                             $stats['accounts_updated'][$targetCoa->id] = ($stats['accounts_updated'][$targetCoa->id] ?? 0) + $disbursed;
@@ -183,7 +181,6 @@ class FinanceCoaReconciliationService
                         }
 
                         if ($targetCoa) {
-                            $targetCoa->decrement('current_balance', $amt);
                             $stats['office_requests_count']++;
                             $stats['office_requests_amount'] += $amt;
                             $stats['accounts_updated'][$targetCoa->id] = ($stats['accounts_updated'][$targetCoa->id] ?? 0) + $amt;
@@ -224,7 +221,6 @@ class FinanceCoaReconciliationService
                         }
 
                         if ($sourceCoa && $sourceCoa->id != $pcr->chart_of_account_id) {
-                            $sourceCoa->decrement('current_balance', $amt);
                             $stats['replenishments_count']++;
                             $stats['replenishments_amount'] += $amt;
                             $stats['accounts_updated'][$sourceCoa->id] = ($stats['accounts_updated'][$sourceCoa->id] ?? 0) + $amt;

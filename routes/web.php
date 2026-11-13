@@ -2426,6 +2426,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('income/{income}/confirm', [App\Http\Controllers\IncomeController::class, 'confirm'])->name('income.confirm');
 
     Route::resource('journal-entries', App\Http\Controllers\JournalEntryController::class)->only(['index', 'create', 'store', 'show']);
+    Route::post('journal-entries/{journalEntry}/reverse', [App\Http\Controllers\JournalEntryController::class, 'reverse'])->name('journal-entries.reverse');
     Route::resource('budgets', App\Http\Controllers\ProjectBudgetController::class)->except(['show', 'destroy']);
     Route::resource('emergency-funds', App\Http\Controllers\EmergencyFundController::class)->only(['index', 'create', 'store', 'show']);
     Route::post('emergency-funds/{emergencyFund}/approve', [App\Http\Controllers\EmergencyFundController::class, 'approve'])->name('emergency-funds.approve');
@@ -2450,6 +2451,7 @@ Route::middleware(['auth'])->group(function () {
     // Reports Hub
     Route::get('finance/reports', [App\Http\Controllers\FinanceReportController::class, 'index'])->name('reports.index');
     Route::get('finance/reports/trial-balance', [App\Http\Controllers\FinanceReportController::class, 'trialBalance'])->name('reports.trial-balance');
+    Route::get('finance/reports/abnormal-balances', [App\Http\Controllers\FinanceReportController::class, 'abnormalBalances'])->name('reports.abnormal-balances');
     Route::get('finance/reports/income-statement', [App\Http\Controllers\FinanceReportController::class, 'incomeStatement'])->name('reports.income-statement');
     Route::get('finance/reports/balance-sheet', [App\Http\Controllers\FinanceReportController::class, 'balanceSheet'])->name('reports.balance-sheet');
     Route::get('finance/reports/cash-flow', [App\Http\Controllers\FinanceReportController::class, 'cashFlow'])->name('reports.cash-flow');

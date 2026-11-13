@@ -508,7 +508,7 @@ class ApprovalHubController extends Controller
                     }
                     $hasVat = ($vatAmount > 0) || in_array(strtolower($vatType), ['inclusive', 'exclusive', 'vat_b', 'with_vat', 'standard']);
                     $withholdingAmount = (float) ($exp->withholding_amount ?? 0);
-                    $withholdingRate = (float) ($exp->withholding_rate ?? 3.00);
+                    $withholdingRate = (float) ($exp->withholding_rate ?: \App\Services\Finance\WithholdingTaxRateHelper::resolveRateFromItem($exp));
                     $hasWithholding = (bool) ($exp->has_withholding || $withholdingAmount > 0);
                     $netAmount = (float) ($exp->paid_amount ?: ($exp->net_amount ?: $amount));
 

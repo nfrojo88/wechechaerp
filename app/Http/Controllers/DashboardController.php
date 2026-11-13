@@ -497,7 +497,7 @@ class DashboardController extends Controller
                         'type'            => 'asset',
                         'subtype'         => 'Bank Account',
                         'manager'         => $bank->assignedStaff,
-                        'current_balance' => (float)($bank->current_balance ?? 0),
+                        'current_balance' => (float)($bank->ledger_balance ?? 0),
                     ]);
                 }
             }
@@ -505,7 +505,10 @@ class DashboardController extends Controller
             return $coas;
         }, collect());
 
-        $totalCashBankBalance = (float) $cashAndBankCoas->sum('current_balance');
+        $totalCashBankBalance = $this->safe(
+            fn() => app(\App\Services\Finance\FinanceMetricsService::class)->getTotalCashAndBank(),
+            (float) $cashAndBankCoas->sum(fn($a) => (float)($a->ledger_balance ?? $a->current_balance ?? 0))
+        );
 
         // 3. Incomes & Expenses (Respecting Selected Period, YTD & All-Time History)
         $monthlyIncome = $this->safe(function() use ($startDate, $endDate, $now, $period) {
@@ -2293,13 +2296,25 @@ class DashboardController extends Controller
                 ->get();
         }, collect());
 
-        $totalCashBankBalance = (float) $cashAndBankCoas->sum('current_balance');
+        $metricsService = app(\App\Services\Finance\FinanceMetricsService::class);
+        $totalCashBankBalance = $this->safe(
+            fn() => $metricsService->getTotalCashAndBank(),
+            (float) $cashAndBankCoas->sum(fn($a) => (float)($a->ledger_balance ?? $a->current_balance ?? 0))
+        );
+        $tradePayables = $this->safe(fn() => $metricsService->getTotalTradePayables(), 0.0);
+        $tradeReceivables = $this->safe(fn() => $metricsService->getTotalTradeReceivables(), 0.0);
+        $dpoData = $this->safe(fn() => $metricsService->getDaysPayablesOutstanding(), ['dpo_days' => 0.0]);
+        $dsoData = $this->safe(fn() => $metricsService->getDaysSalesOutstanding(), ['dso_days' => 0.0]);
 
         $kpi = [
-            'total_income'    => $this->safe(fn() => (float) \App\Models\Payment::sum('amount') + (float) \Illuminate\Support\Facades\DB::table('client_ipcs')->where('status', 'paid')->sum('gross_amount'), 0),
-            'total_expense'   => $this->safe(fn() => (float) \Illuminate\Support\Facades\DB::table('expenses')->sum('amount') + (float) \App\Models\ExpenseRequest::where('status', 'paid')->sum('amount') + (float) \Illuminate\Support\Facades\DB::table('payrolls')->sum('net_salary'), 0),
-            'cash_balance'    => $totalCashBankBalance,
-            'pending_payments'=> $this->safe(fn() => \Illuminate\Support\Facades\DB::table('expenses')->where('status', 'pending')->count() + \App\Models\ExpenseRequest::whereIn('status', ['pending', 'reviewed', 'approved', 'assigned'])->count() + \Illuminate\Support\Facades\DB::table('payrolls')->where('status', 'pending')->count(), 0),
+            'total_income'      => $this->safe(fn() => (float) \App\Models\Payment::sum('amount') + (float) \Illuminate\Support\Facades\DB::table('client_ipcs')->where('status', 'paid')->sum('gross_amount'), 0),
+            'total_expense'     => $this->safe(fn() => (float) \Illuminate\Support\Facades\DB::table('expenses')->sum('amount') + (float) \App\Models\ExpenseRequest::where('status', 'paid')->sum('amount') + (float) \Illuminate\Support\Facades\DB::table('payrolls')->sum('net_salary'), 0),
+            'cash_balance'      => $totalCashBankBalance,
+            'trade_payables'    => $tradePayables,
+            'trade_receivables' => $tradeReceivables,
+            'dpo_days'          => $dpoData['dpo_days'] ?? 0.0,
+            'dso_days'          => $dsoData['dso_days'] ?? 0.0,
+            'pending_payments'  => $this->safe(fn() => \Illuminate\Support\Facades\DB::table('expenses')->where('status', 'pending')->count() + \App\Models\ExpenseRequest::whereIn('status', ['pending', 'reviewed', 'approved', 'assigned'])->count() + \Illuminate\Support\Facades\DB::table('payrolls')->where('status', 'pending')->count(), 0),
         ];
 
         // 6-Month Real Monthly Income vs Expense Data

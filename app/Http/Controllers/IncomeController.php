@@ -330,8 +330,8 @@ class IncomeController extends Controller
         $coaAccounts  = $this->getCoaAccounts();
         $bankAccounts = BankAccount::where('is_active', true)->get();
 
-        $bankTotal = (float) BankAccount::where('is_active', true)->sum('current_balance');
-        $coaTotal  = (float) $coaAccounts->sum('current_balance');
+        $bankTotal = (float) BankAccount::where('is_active', true)->get()->sum(fn($b) => (float)$b->ledger_balance);
+        $coaTotal  = (float) $coaAccounts->sum(fn($c) => (float)$c->ledger_balance);
         $totalBalance = $bankTotal > 0 ? $bankTotal : $coaTotal;
 
         $transportationTotal = IncomeRecord::where('category', 'transportation')->where('status', 'confirmed')->sum('amount');
@@ -462,7 +462,7 @@ class IncomeController extends Controller
                         'bank_name'       => $coa->name,
                         'account_type'    => 'checking',
                         'currency'        => 'ETB',
-                        'current_balance' => (float)$coa->current_balance,
+                        'current_balance' => (float)$coa->ledger_balance,
                         'coa_id'          => $coa->id,
                         'is_active'       => true,
                         'notes'           => "Auto-linked to COA [{$coa->code}] {$coa->name}",
@@ -500,7 +500,8 @@ class IncomeController extends Controller
         // Process Withholding Tax (WHT)
         $hasWithholding = $request->boolean('has_withholding') || !empty($data['withholding_receipt']) || !empty($request->input('withholding_receipt_number'));
         $data['has_withholding'] = $hasWithholding;
-        $data['withholding_rate'] = (float)($request->input('withholding_rate') ?: 3.00);
+        $itemClassification = $request->input('category') ?: ($request->input('source') ?: ($request->input('income_type') ?: 'services'));
+        $data['withholding_rate'] = (float)($request->input('withholding_rate') ?: \App\Services\Finance\WithholdingTaxRateHelper::resolveRateFromItem($itemClassification));
         $data['withholding_receipt_number'] = $request->input('withholding_receipt_number') ?: null;
 
         $gross = (float)$data['amount'];
@@ -577,13 +578,11 @@ class IncomeController extends Controller
 
         try {
             $income = DB::transaction(function () use ($data, $amountToDeposit, $coa, $bankAccount, $no) {
-                if ($coa) {
-                    $coa->increment('current_balance', $amountToDeposit);
-                }
+                // Balance derives strictly from posted journal lines
 
                 if ($bankAccount) {
-                    $bankAccount->increment('current_balance', $amountToDeposit);
-                    $newBalance = (float)$bankAccount->fresh()->current_balance;
+                    // Bank balance derives strictly from posted journal lines via JournalEngine
+                    $newBalance = (float)$bankAccount->ledger_balance + $amountToDeposit;
 
                     BankTransaction::create([
                         'bank_account_id'  => $bankAccount->id,
@@ -634,14 +633,12 @@ class IncomeController extends Controller
         if (!$income->is_deposited) {
             $amount = (float)$income->amount;
             $coa = $income->chart_of_account_id ? ChartOfAccount::find($income->chart_of_account_id) : null;
-            if ($coa) {
-                $coa->increment('current_balance', $amount);
-            }
+            // COA balance derives strictly from posted journal lines
 
             $bankAccount = $income->bank_account_id ? BankAccount::find($income->bank_account_id) : ($coa ? $coa->bankAccounts->first() : null);
             if ($bankAccount) {
-                $bankAccount->increment('current_balance', $amount);
-                $newBalance = (float)$bankAccount->fresh()->current_balance;
+                // Bank balance derives strictly from posted journal lines via JournalEngine
+                $newBalance = (float)$bankAccount->ledger_balance + $amount;
 
                 BankTransaction::create([
                     'bank_account_id'  => $bankAccount->id,
@@ -1062,21 +1059,7 @@ class IncomeController extends Controller
             DB::transaction(function () use ($record, $amount) {
                 // 1. Reverse Account Balances (if was deposited or confirmed)
                 if ($record->is_deposited || $record->status === 'confirmed') {
-                    // Revert Chart of Account balance
-                    if ($record->chart_of_account_id) {
-                        $coa = ChartOfAccount::find($record->chart_of_account_id);
-                        if ($coa) {
-                            $coa->decrement('current_balance', $amount);
-                        }
-                    }
-
-                    // Revert Bank Account balance
-                    if ($record->bank_account_id) {
-                        $bankAccount = BankAccount::find($record->bank_account_id);
-                        if ($bankAccount) {
-                            $bankAccount->decrement('current_balance', $amount);
-                        }
-                    }
+                    // Bank balance derives strictly from posted journal lines via JournalEngine
                 }
 
                 // 2. Delete Bank Transactions (Movements in bank statements)

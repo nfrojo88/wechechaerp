@@ -139,7 +139,14 @@ class User extends Authenticatable
 
     public function getPettyCashBalanceAttribute(): float
     {
-        return (float) $this->assignedPettyCashAccounts()->sum('current_balance');
+        if ($this->employee) {
+            return $this->employee->petty_cash_balance;
+        }
+        if (class_exists(\App\Services\Finance\FinanceMetricsService::class)) {
+            $metrics = app(\App\Services\Finance\FinanceMetricsService::class);
+            return $metrics->getCustodianPettyCashBalance((int)$this->id);
+        }
+        return 0.00;
     }
 
     public function isInDeadFile(): bool

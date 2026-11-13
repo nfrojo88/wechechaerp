@@ -882,7 +882,8 @@ class FinanceTaxReportController extends Controller
         $incomeWithholding = (float)$monthIncomeItems->sum(function ($inc) use ($cycle) {
             if ($cycle === 'active' && $inc->vat_settled) return 0.0;
             $gross = (float)($inc->unit_price > 0 && $inc->quantity > 0 ? ($inc->unit_price * $inc->quantity) : $inc->amount);
-            return round($gross * 0.03, 2);
+            $svcRate = (float) config('finance.tax.wht_services.standard_rate', 0.03);
+            return round($gross * $svcRate, 2);
         });
         $monthWithholding = round($totalWithholdingAmount + $incomeWithholding, 2);
         $monthNetDisbursed = $totalNetDisbursed;
@@ -1160,11 +1161,11 @@ class FinanceTaxReportController extends Controller
                     $wht = round((float)$item->withholding_amount, 2);
                 }
                 if ($wht <= 0 && $item->has_withholding) {
-                    $rate = (float)($item->withholding_rate ?: 3.00);
+                    $rate = (float)($item->withholding_rate ?: \App\Services\Finance\WithholdingTaxRateHelper::resolveRateFromItem($item));
                     $wht = round($base * ($rate / 100), 2);
                 }
 
-                $rate = (float)($item->withholding_rate ?: ($wht > 0 && $base > 0 ? round(($wht / $base) * 100, 1) : 3.00));
+                $rate = (float)($item->withholding_rate ?: ($wht > 0 && $base > 0 ? round(($wht / $base) * 100, 1) : \App\Services\Finance\WithholdingTaxRateHelper::resolveRateFromItem($item)));
                 $rRounded = round($rate, 1);
 
                 if ($rRounded == 2.0) {
@@ -1199,8 +1200,18 @@ class FinanceTaxReportController extends Controller
             foreach ($mProcExp as $item) {
                 $gross = (float)$item->amount;
                 $base = (float)($item->base_amount ?: $gross);
-                $wht = (float)($item->withholding_amount ?: ($item->has_withholding ? round($base * (($item->withholding_rate ?: 3) / 100), 2) : 0));
-                $rate = (float)($item->withholding_rate ?: ($wht > 0 && $base > 0 ? round(($wht / $base) * 100, 1) : 3.00));
+                $itemWhtRate = null;
+                if (!empty($item->withholding_rate) && (float)$item->withholding_rate > 0) {
+                    $itemWhtRate = (float)$item->withholding_rate;
+                } elseif (!empty($item->has_withholding) || (float)$item->withholding_amount > 0) {
+                    try {
+                        $itemWhtRate = \App\Services\Finance\WithholdingTaxRateHelper::resolveRateFromItem($item);
+                    } catch (\InvalidArgumentException $e) {
+                        $itemWhtRate = ($item->withholding_amount > 0 && $base > 0) ? round(($item->withholding_amount / $base) * 100, 1) : throw $e;
+                    }
+                }
+                $wht = (float)($item->withholding_amount ?: ($item->has_withholding && $itemWhtRate ? round($base * ($itemWhtRate / 100), 2) : 0));
+                $rate = (float)($itemWhtRate ?: ($wht > 0 && $base > 0 ? round(($wht / $base) * 100, 1) : 0.0));
                 $rRounded = round($rate, 1);
 
                 if ($rRounded == 2.0) {
@@ -2662,7 +2673,8 @@ class FinanceTaxReportController extends Controller
             $date = $inc->income_date ?: $inc->receipt_date;
             $gross = (float)($inc->unit_price > 0 && $inc->quantity > 0 ? ($inc->unit_price * $inc->quantity) : $inc->amount);
             $vat = round($gross * 0.15, 2);
-            $wht = round($gross * 0.03, 2);
+            $svcRate = (float) config('finance.tax.wht_services.standard_rate', 0.03);
+            $wht = round($gross * $svcRate, 2);
             $net = round($gross + $vat - $wht, 2);
 
             $accountName = '-';
@@ -2735,6 +2747,7 @@ class FinanceTaxReportController extends Controller
                                    ->whereBetween('updated_at', [$start, $end]);
                             });
                     });
+
                     // Strict Receipt Month Rule: Also pull expenses whose linked receipt date belongs to this Ethiopian month
                     if (Schema::hasTable('receipts')) {
                         $hasExpReceiptId = Schema::hasColumn('expense_requests', 'receipt_id');
@@ -2835,8 +2848,9 @@ class FinanceTaxReportController extends Controller
             $manuallyEditedAt = (int)($parsed['manually_edited_at'] ?? ($parsed['last_updated_at'] ?? 0));
 
             // Strict Receipt Month Rule:
-            // If linked receipt has a date from another Ethiopian Month, or if voucher date falls outside this month,
-            // strictly exclude it from this month's register so it is added strictly into its receipt month!
+            // If this purchase/expense has an associated fiscal receipt, that receipt's "Date (EC / GC)"
+            // strictly dictates which Ethiopian Month it is assigned to! If no receipt is attached,
+            // it falls back to the voucher disbursement/creation date.
             if (!$this->expenseStrictMatchesSelectedMonth($item, $r, $year, $month, $startDate, $endDate)) {
                 return null;
             }
@@ -2886,13 +2900,36 @@ class FinanceTaxReportController extends Controller
             if ($whtAmount <= 0 && (!empty($parsed['withholding_amount']) && (float)$parsed['withholding_amount'] > 0)) {
                 $whtAmount = round((float)$parsed['withholding_amount'], 2);
             }
-            if ($whtAmount <= 0 && ($item->has_withholding || (!empty($dec) && !empty($dec->has_withholding)) || (!empty($parsed['has_withholding'])))) {
-                $whtRate = (float)($item->withholding_rate ?: ($dec?->withholding_rate ?: (!empty($parsed['withholding_rate']) ? $parsed['withholding_rate'] : 3.00)));
+            $resolvedWhtRate = null;
+            if (!empty($item->withholding_rate) && (float)$item->withholding_rate > 0) {
+                $resolvedWhtRate = (float)$item->withholding_rate;
+            } elseif ($dec && !empty($dec->withholding_rate) && (float)$dec->withholding_rate > 0) {
+                $resolvedWhtRate = (float)$dec->withholding_rate;
+            } elseif (!empty($parsed['withholding_rate']) && (float)$parsed['withholding_rate'] > 0) {
+                $resolvedWhtRate = (float)$parsed['withholding_rate'];
+            } elseif ($item->has_withholding || (!empty($dec) && !empty($dec->has_withholding)) || (!empty($parsed['has_withholding'])) || $whtAmount > 0) {
+                try {
+                    $resolvedWhtRate = \App\Services\Finance\WithholdingTaxRateHelper::resolveRateFromItem($item);
+                } catch (\InvalidArgumentException $e) {
+                    if ($dec) {
+                        try {
+                            $resolvedWhtRate = \App\Services\Finance\WithholdingTaxRateHelper::resolveRateFromItem($dec);
+                        } catch (\InvalidArgumentException $e2) {
+                            $resolvedWhtRate = ($whtAmount > 0 && $baseAmount > 0) ? round(($whtAmount / $baseAmount) * 100, 1) : throw $e;
+                        }
+                    } else {
+                        $resolvedWhtRate = ($whtAmount > 0 && $baseAmount > 0) ? round(($whtAmount / $baseAmount) * 100, 1) : throw $e;
+                    }
+                }
+            }
+
+            if ($whtAmount <= 0 && ($item->has_withholding || (!empty($dec) && !empty($dec->has_withholding)) || (!empty($parsed['has_withholding']))) && $resolvedWhtRate !== null) {
+                $whtRate = $resolvedWhtRate;
                 $whtAmount = round($baseAmount * ($whtRate / 100), 2);
             }
 
             $hasWht = ($whtAmount > 0) || !empty($item->has_withholding) || (!empty($dec) && !empty($dec->has_withholding)) || (!empty($parsed['has_withholding']));
-            $whtRate = (float)($item->withholding_rate ?: ($dec?->withholding_rate ?: (!empty($parsed['withholding_rate']) ? $parsed['withholding_rate'] : ($whtAmount > 0 && $baseAmount > 0 ? round(($whtAmount / $baseAmount) * 100, 1) : 3.00))));
+            $whtRate = (float)($resolvedWhtRate ?: ($whtAmount > 0 && $baseAmount > 0 ? round(($whtAmount / $baseAmount) * 100, 1) : 0.0));
             if (!$hasWht && $whtAmount <= 0) {
                 $whtRate = 0.0;
                 $whtAmount = 0.0;
@@ -3114,9 +3151,9 @@ class FinanceTaxReportController extends Controller
             ];
         })->filter()->values();
 
-        // Keep $expenses collection in sync with filtered expenses so unsettled calculations and counts match
-        $allowedExpIds = $formattedExpenses->pluck('id')->filter()->all();
-        $expenses = $expenses->whereIn('id', $allowedExpIds)->values();
+        // Ensure $expenses only preserves records that strictly belong to this month
+        $matchedExpenseIds = $formattedExpenses->pluck('id')->filter()->all();
+        $expenses = $expenses->whereIn('id', $matchedExpenseIds)->values();
 
         // Include Petty Cash Material Purchases in this Ethiopian month
         if (Schema::hasTable('petty_cash_material_purchases')) {
@@ -3832,8 +3869,8 @@ class FinanceTaxReportController extends Controller
                     ->whereHas('receipt', function ($rq) use ($startDate, $endDate) {
                         $rq->where(function ($sub) use ($startDate, $endDate) {
                             $sub->whereBetween('receipt_date', [$startDate, $endDate])
-                                ->orWhere(function ($cw) use ($startDate, $endDate) {
-                                    $cw->whereNull('receipt_date')
+                                ->orWhere(function ($fb) use ($startDate, $endDate) {
+                                    $fb->whereNull('receipt_date')
                                        ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
                                 });
                         });
@@ -3853,11 +3890,13 @@ class FinanceTaxReportController extends Controller
                 $srQuery = \App\Models\Receipt::with(['project', 'uploader'])
                     ->doesntHave('items')
                     ->where(function ($rq) use ($startDate, $endDate) {
-                        $rq->whereBetween('receipt_date', [$startDate, $endDate])
-                            ->orWhere(function ($cw) use ($startDate, $endDate) {
-                                $cw->whereNull('receipt_date')
-                                   ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
-                            });
+                        $rq->where(function ($sub) use ($startDate, $endDate) {
+                            $sub->whereBetween('receipt_date', [$startDate, $endDate])
+                                ->orWhere(function ($fb) use ($startDate, $endDate) {
+                                    $fb->whereNull('receipt_date')
+                                       ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+                                });
+                        });
                     });
 
                 $standaloneReceipts = $srQuery->get();
@@ -4105,8 +4144,8 @@ class FinanceTaxReportController extends Controller
         });
 
         // Strict Receipt Month Rule: Keep strictly and ONLY OCR receipts belonging to this Ethiopian Month
-        $formattedAllOcrItems = $formattedAllOcrItems->filter(function ($item) use ($year, $month, $startDate, $endDate) {
-            return $this->receiptMatchesSelectedMonth($item, $year, $month, $startDate, $endDate, $item['receipt_id'] ?? null);
+        $formattedAllOcrItems = $formattedAllOcrItems->filter(function ($ocr) use ($year, $month, $startDate, $endDate) {
+            return $this->receiptMatchesSelectedMonth($ocr, $year, $month, $startDate, $endDate);
         })->values();
 
         $ocrTotalScannedCount = $formattedAllOcrItems->count();
@@ -4429,7 +4468,12 @@ class FinanceTaxReportController extends Controller
         })->values();
 
         $wht2Collection = $whtExpensesCollection->filter(fn($it) => round((float)($it['withholding_rate'] ?? 0), 1) == 2.0)->values();
-        $wht3Collection = $whtExpensesCollection->filter(fn($it) => in_array(round((float)($it['withholding_rate'] ?? 3), 1), [3.0, 0.0]))->values();
+        $wht3Collection = $whtExpensesCollection->filter(function ($it) {
+            $r = isset($it['withholding_rate']) && is_numeric($it['withholding_rate']) && (float)$it['withholding_rate'] > 0
+                ? (float)$it['withholding_rate']
+                : \App\Services\Finance\WithholdingTaxRateHelper::resolveRateFromItem($it);
+            return in_array(round($r, 1), [3.0, 0.0]);
+        })->values();
         $wht30Collection = $whtExpensesCollection->filter(fn($it) => round((float)($it['withholding_rate'] ?? 0), 1) == 30.0)->values();
 
         $whtSummary = [
@@ -4769,8 +4813,8 @@ class FinanceTaxReportController extends Controller
             if ($payNow && $bankAccountId && $totalPayable > 0) {
                 $bankAccount = BankAccount::find($bankAccountId);
                 if ($bankAccount) {
-                    $bankAccount->decrement('current_balance', $totalPayable);
-                    $newBalance = $bankAccount->fresh()->current_balance;
+                    // Bank balance derives strictly from posted journal lines via JournalEngine
+                    $newBalance = (float)$bankAccount->ledger_balance - $totalPayable;
 
                     $taxDesc = match($taxType) {
                         'vat' => "VAT Payment (15%) to ERCA: ETB {$totalPayable}",
@@ -4793,12 +4837,42 @@ class FinanceTaxReportController extends Controller
                 }
             }
 
-            // Deduct from Chart of Account (COA) if applicable
-            $taxCoaId = $settlement->coa_id ?? ($bankAccount?->coa_id ?? null);
-            if ($payNow && $taxCoaId && $totalPayable > 0) {
-                $taxCoa = ChartOfAccount::find($taxCoaId);
-                if ($taxCoa) {
-                    $taxCoa->decrement('current_balance', $totalPayable);
+            // Post balanced journal entry for tax remittance to General Ledger
+            if ($payNow && $totalPayable > 0 && class_exists(\App\Services\Finance\JournalEngine::class)) {
+                $fundingCoaId = $bankAccount?->coa_id ?? ChartOfAccount::where('code', '1011')->value('id');
+                $taxLiabilityCode = match($taxType) {
+                    'vat' => '2300',
+                    'withholding' => '2600',
+                    default => '2300',
+                };
+                $taxLiabilityCoaId = ChartOfAccount::where('code', $taxLiabilityCode)->value('id');
+
+                if ($fundingCoaId && $taxLiabilityCoaId) {
+                    try {
+                        app(\App\Services\Finance\JournalEngine::class)->createEntry([
+                            'entry_date'     => $validated['payment_date'] ?? now()->toDateString(),
+                            'reference_type' => 'TaxSettlement',
+                            'reference_id'   => $settlement->id,
+                            'description'    => "Tax Remittance to ERCA - {$taxLabel} Settlement #{$settlementNumber}",
+                            'created_by'     => Auth::id() ?? 1,
+                            'lines'          => [
+                                [
+                                    'account_id'  => $taxLiabilityCoaId,
+                                    'side'        => 'debit',
+                                    'amount'      => (float) $totalPayable,
+                                    'description' => "Remittance clearing {$taxLabel} liability to ERCA",
+                                ],
+                                [
+                                    'account_id'  => $fundingCoaId,
+                                    'side'        => 'credit',
+                                    'amount'      => (float) $totalPayable,
+                                    'description' => "Disbursement for {$taxLabel} remittance from funding account",
+                                ],
+                            ],
+                        ], approvedBy: Auth::id() ?? 1);
+                    } catch (\Throwable $e) {
+                        Log::error("GL posting for Tax Settlement #{$settlementNumber} failed: " . $e->getMessage());
+                    }
                 }
             }
 
@@ -4910,8 +4984,8 @@ class FinanceTaxReportController extends Controller
             if ($bankAccountId && $settlement->total_tax_paid > 0) {
                 $bankAccount = BankAccount::find($bankAccountId);
                 if ($bankAccount) {
-                    $bankAccount->decrement('current_balance', $settlement->total_tax_paid);
-                    $newBalance = $bankAccount->fresh()->current_balance;
+                    // Bank balance derives strictly from posted journal lines via JournalEngine
+                    $newBalance = (float)$bankAccount->ledger_balance - (float)$settlement->total_tax_paid;
 
                     $taxDesc = match($taxType) {
                         'vat' => "VAT Payment (15%) to ERCA: ETB {$settlement->total_tax_paid}",
@@ -4934,12 +5008,42 @@ class FinanceTaxReportController extends Controller
                 }
             }
 
-            // Deduct from Chart of Account (COA) if applicable
-            $taxCoaId = $settlement->coa_id ?? ($bankAccount?->coa_id ?? null);
-            if ($taxCoaId && $settlement->total_tax_paid > 0) {
-                $taxCoa = ChartOfAccount::find($taxCoaId);
-                if ($taxCoa) {
-                    $taxCoa->decrement('current_balance', $settlement->total_tax_paid);
+            // Post balanced journal entry for tax settlement confirmation to General Ledger
+            if ($settlement->total_tax_paid > 0 && class_exists(\App\Services\Finance\JournalEngine::class)) {
+                $fundingCoaId = $bankAccount?->coa_id ?? ChartOfAccount::where('code', '1011')->value('id');
+                $taxLiabilityCode = match($taxType) {
+                    'vat' => '2300',
+                    'withholding' => '2600',
+                    default => '2300',
+                };
+                $taxLiabilityCoaId = ChartOfAccount::where('code', $taxLiabilityCode)->value('id');
+
+                if ($fundingCoaId && $taxLiabilityCoaId) {
+                    try {
+                        app(\App\Services\Finance\JournalEngine::class)->createEntry([
+                            'entry_date'     => Carbon::parse($validated['payment_date'])->toDateString(),
+                            'reference_type' => 'TaxSettlement',
+                            'reference_id'   => $settlement->id,
+                            'description'    => "Tax Remittance to ERCA - {$taxLabel} Settlement #{$settlement->settlement_number}",
+                            'created_by'     => Auth::id() ?? 1,
+                            'lines'          => [
+                                [
+                                    'account_id'  => $taxLiabilityCoaId,
+                                    'side'        => 'debit',
+                                    'amount'      => (float) $settlement->total_tax_paid,
+                                    'description' => "Remittance clearing {$taxLabel} liability to ERCA",
+                                ],
+                                [
+                                    'account_id'  => $fundingCoaId,
+                                    'side'        => 'credit',
+                                    'amount'      => (float) $settlement->total_tax_paid,
+                                    'description' => "Disbursement for {$taxLabel} remittance from funding account",
+                                ],
+                            ],
+                        ], approvedBy: Auth::id() ?? 1);
+                    } catch (\Throwable $e) {
+                        Log::error("GL posting for confirmed Tax Settlement #{$settlement->settlement_number} failed: " . $e->getMessage());
+                    }
                 }
             }
 
@@ -5231,7 +5335,8 @@ class FinanceTaxReportController extends Controller
         $incWht = $incRecords->sum(function ($inc) {
             if ($inc->vat_settled) return 0.0;
             $gross = (float)($inc->unit_price > 0 && $inc->quantity > 0 ? ($inc->unit_price * $inc->quantity) : $inc->amount);
-            return round($gross * 0.03, 2);
+            $svcRate = (float) config('finance.tax.wht_services.standard_rate', 0.03);
+            return round($gross * $svcRate, 2);
         });
         $whtSum = round($expWht + $incWht, 2);
 
@@ -7553,7 +7658,7 @@ class FinanceTaxReportController extends Controller
                 'total_amount'      => $totalAmount,
                 'subtotal'          => $subtotal,
                 'vat_amount'        => $vatAmount,
-                'withholding_amount'=> round($subtotal * 0.03, 2),
+                'withholding_amount'=> round($subtotal * (in_array(strtolower($purchaseType ?? ''), ['goods', 'material', 'materials', 'supplies']) ? (float)config('finance.tax.wht_goods.standard_rate', 0.02) : (float)config('finance.tax.wht_services.standard_rate', 0.03)), 2),
                 'items'             => $items,
                 'is_duplicate'      => $scan['is_duplicate'] ?? false,
                 'duplicate_message' => $scan['duplicate_message'] ?? null,
@@ -7646,7 +7751,9 @@ class FinanceTaxReportController extends Controller
                 $vatAmount         = 0.00;
                 $subtotal          = QcService::parseMoney($validated['subtotal'] ?? $totalAmount);
                 $hasWithholding    = true;
-                $withholdingAmount = QcService::parseMoney($validated['withholding_amount'] ?? round($subtotal * 0.03, 2));
+                $isGoods           = in_array(strtolower($validated['purchase_type'] ?? ($validated['category'] ?? '')), ['goods', 'material', 'materials', 'supplies', 'equipment']);
+                $calcWhtRate       = $isGoods ? (float)config('finance.tax.wht_goods.standard_rate', 0.02) : (float)config('finance.tax.wht_services.standard_rate', 0.03);
+                $withholdingAmount = QcService::parseMoney($validated['withholding_amount'] ?? round($subtotal * $calcWhtRate, 2));
                 $purcNorm          = QcService::normalizePurchaseType($validated['purchase_type'] ?? null, ($validated['description'] ?? '') . ' ' . ($validated['vendor_name'] ?? ''));
                 $purcTypeCode      = $purcNorm['code'];
                 $vatCategory       = $purcNorm['vat_category'];
@@ -7661,7 +7768,9 @@ class FinanceTaxReportController extends Controller
                     $subtotal  = QcService::parseMoney($validated['subtotal'] ?? max(0, $totalAmount - $vatAmount));
                 }
                 $hasWithholding    = (bool)($validated['has_withholding'] ?? ($taxType === 'both'));
-                $withholdingAmount = QcService::parseMoney($validated['withholding_amount'] ?? ($hasWithholding ? round($subtotal * 0.03, 2) : 0));
+                $isGoods           = in_array(strtolower($validated['purchase_type'] ?? ($validated['category'] ?? '')), ['goods', 'material', 'materials', 'supplies', 'equipment']);
+                $calcWhtRate       = $isGoods ? (float)config('finance.tax.wht_goods.standard_rate', 0.02) : (float)config('finance.tax.wht_services.standard_rate', 0.03);
+                $withholdingAmount = QcService::parseMoney($validated['withholding_amount'] ?? ($hasWithholding ? round($subtotal * $calcWhtRate, 2) : 0));
                 $purcNorm          = QcService::normalizePurchaseType($validated['purchase_type'] ?? null, ($validated['description'] ?? '') . ' ' . ($validated['vendor_name'] ?? ''));
                 $purcTypeCode      = $purcNorm['code'];
                 $vatCategory       = $purcNorm['vat_category'];
@@ -7955,7 +8064,7 @@ class FinanceTaxReportController extends Controller
                 }
 
                 if ($expReq) {
-                    if (!empty($expReq->receipt_id)) {
+                    if (Schema::hasColumn('expense_requests', 'receipt_id') && !empty($expReq->receipt_id)) {
                         $receipt = \App\Models\Receipt::find($expReq->receipt_id);
                     }
                     if (!$receipt) {

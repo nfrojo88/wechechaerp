@@ -435,7 +435,12 @@ class CreditStoreController extends Controller
         $vatType = $request->input('vat_type', 'none');
         $vatRate = (float)$request->input('vat_rate', 15.00);
         $hasWithholding = $request->boolean('has_withholding');
-        $withholdingRate = (float)$request->input('withholding_rate', 3.00);
+        $withholdingRate = 0.00;
+        if ($hasWithholding) {
+            $withholdingRate = $request->filled('withholding_rate') && (float)$request->input('withholding_rate') > 0
+                ? (float)$request->input('withholding_rate')
+                : \App\Services\Finance\WithholdingTaxRateHelper::resolveRateFromItem($request->all());
+        }
         $vatIncluded = $request->boolean('vat_included', ($vatType !== 'none'));
 
         if (!$vatIncluded || $vatType === 'none') {
@@ -729,58 +734,61 @@ class CreditStoreController extends Controller
 
             if ($creditCoaId && $fundingCoaId) {
                 try {
-                    $entryNo = 'CR-PAY-' . date('Ymd') . '-' . str_pad(JournalEntry::count() + 1, 5, '0', STR_PAD_LEFT);
-                    $journal = JournalEntry::create([
-                        'entry_no'       => $entryNo,
-                        'entry_date'     => $request->payment_date,
-                        'reference_type' => 'credit_store_payment',
-                        'reference_id'   => $payment->id,
-                        'description'    => "Credit payment for PR #{$ledger->pr_no} (" . ($ledger->supplier_name ?: 'Supplier') . ")",
-                        'status'         => 'posted',
-                        'created_by'     => Auth::id(),
-                        'posted_at'      => now(),
-                    ]);
+                    $journalEngine = app(\App\Services\Finance\JournalEngine::class);
 
-                    // Debit: Cost of Material By Credit 5110 (Full settlement value)
-                    JournalEntryLine::create([
-                        'journal_entry_id' => $journal->id,
-                        'account_id'       => $creditCoaId,
-                        'side'             => 'debit',
-                        'amount'           => $settledCreditAmount,
-                        'description'      => "Credit liquidation — PR #{$ledger->pr_no}",
-                    ]);
+                    $lines = [
+                        [
+                            'account_id'  => $creditCoaId,
+                            'side'        => 'debit',
+                            'amount'      => $settledCreditAmount,
+                            'description' => "Credit liquidation — PR #{$ledger->pr_no}",
+                        ],
+                        [
+                            'account_id'  => $fundingCoaId,
+                            'side'        => 'credit',
+                            'amount'      => $disbursedAmount,
+                            'description' => "Disbursement for credit purchase PR #{$ledger->pr_no} (" . ucfirst(str_replace('_', ' ', $request->payment_method)) . ")",
+                        ],
+                    ];
 
-                    // Credit: Funding Source (Actual cash disbursed)
-                    JournalEntryLine::create([
-                        'journal_entry_id' => $journal->id,
-                        'account_id'       => $fundingCoaId,
-                        'side'             => 'credit',
-                        'amount'           => $disbursedAmount,
-                        'description'      => "Disbursement for credit purchase PR #{$ledger->pr_no} (" . ucfirst(str_replace('_', ' ', $request->payment_method)) . ")",
-                    ]);
-
-                    // If withholding tax deducted: Credit Withholding Tax account
                     if ($withholdingAmount > 0) {
-                        $whtAccount = ChartOfAccount::where('name', 'like', '%Withholding%')
-                            ->orWhere('code', '1300')
-                            ->orWhere('code', 'like', '2%')
+                        $whtAccount = ChartOfAccount::where('code', '2600')
+                            ->orWhere(function ($q) {
+                                $q->where('type', 'liability')
+                                  ->where('name', 'like', '%Withholding%');
+                            })
                             ->first();
-                        $whtAccountId = $whtAccount?->id ?: $creditCoaId;
 
-                        JournalEntryLine::create([
-                            'journal_entry_id' => $journal->id,
-                            'account_id'       => $whtAccountId,
-                            'side'             => 'credit',
-                            'amount'           => $withholdingAmount,
-                            'description'      => "Withholding tax deducted (3%) — PR #{$ledger->pr_no}",
-                        ]);
+                        if (!$whtAccount) {
+                            $whtAccount = ChartOfAccount::create([
+                                'code'            => '2600',
+                                'name'            => 'Withholding Tax Payable',
+                                'type'            => 'liability',
+                                'subtype'         => 'other_current_liability',
+                                'normal_side'     => 'credit',
+                                'is_active'       => true,
+                                'opening_balance' => 0.00,
+                                'current_balance' => 0.00,
+                            ]);
+                        }
+
+                        $lines[] = [
+                            'account_id'  => $whtAccount->id,
+                            'side'        => 'credit',
+                            'amount'      => $withholdingAmount,
+                            'description' => "Withholding tax deducted on credit liquidation — PR #{$ledger->pr_no}",
+                        ];
                     }
 
-                    // Decrement funding source balance by actual disbursed cash
-                    ChartOfAccount::where('id', $fundingCoaId)->decrement('current_balance', $disbursedAmount);
-                    if ($bankAccountId) {
-                        BankAccount::where('id', $bankAccountId)->decrement('current_balance', $disbursedAmount);
-                    }
+                    $journal = $journalEngine->createEntry(
+                        'credit_store_payment',
+                        $payment->id,
+                        "Credit payment for PR #{$ledger->pr_no} (" . ($ledger->supplier_name ?: 'Supplier') . ")",
+                        $lines,
+                        Auth::id() ?: 1,
+                        Auth::id() ?: 1,
+                        $request->payment_date ?: now()->toDateString()
+                    );
 
                     $payment->update(['journal_entry_id' => $journal->id]);
                 } catch (\Throwable $je) {
@@ -1015,41 +1023,34 @@ class CreditStoreController extends Controller
 
                 if ($creditCoaId && $fundingCoaId) {
                     try {
-                        $entryNo = 'CR-PAY-' . date('Ymd') . '-' . str_pad(JournalEntry::count() + 1, 5, '0', STR_PAD_LEFT);
-                        $journal = JournalEntry::create([
-                            'entry_no'       => $entryNo,
-                            'entry_date'     => $request->payment_date,
-                            'reference_type' => 'credit_store_payment',
-                            'reference_id'   => $payment->id,
-                            'description'    => "Batch Credit settlement for PR #{$ledger->pr_no} (" . ($ledger->supplier_name ?: 'Supplier') . ")",
-                            'status'         => 'posted',
-                            'created_by'     => Auth::id(),
-                            'posted_at'      => now(),
-                        ]);
+                        $journalEngine = app(\App\Services\Finance\JournalEngine::class);
 
-                        // Debit: Cost of Material By Credit 5110
-                        JournalEntryLine::create([
-                            'journal_entry_id' => $journal->id,
-                            'account_id'       => $creditCoaId,
-                            'side'             => 'debit',
-                            'amount'           => $amount,
-                            'description'      => "Credit liquidation — PR #{$ledger->pr_no}",
-                        ]);
+                        $lines = [
+                            [
+                                'account_id'  => $creditCoaId,
+                                'side'        => 'debit',
+                                'amount'      => $amount,
+                                'description' => "Credit liquidation — PR #{$ledger->pr_no}",
+                            ],
+                            [
+                                'account_id'  => $fundingCoaId,
+                                'side'        => 'credit',
+                                'amount'      => $amount,
+                                'description' => "Disbursement for credit purchase PR #{$ledger->pr_no} (" . ucfirst(str_replace('_', ' ', $request->payment_method)) . ")",
+                            ],
+                        ];
 
-                        // Credit: Funding Source
-                        JournalEntryLine::create([
-                            'journal_entry_id' => $journal->id,
-                            'account_id'       => $fundingCoaId,
-                            'side'             => 'credit',
-                            'amount'           => $amount,
-                            'description'      => "Disbursement for credit purchase PR #{$ledger->pr_no} (" . ucfirst(str_replace('_', ' ', $request->payment_method)) . ")",
-                        ]);
+                        $journal = $journalEngine->createEntry(
+                            'credit_store_payment',
+                            $payment->id,
+                            "Batch Credit settlement for PR #{$ledger->pr_no} (" . ($ledger->supplier_name ?: 'Supplier') . ")",
+                            $lines,
+                            Auth::id() ?: 1,
+                            Auth::id() ?: 1,
+                            $request->payment_date ?: now()->toDateString()
+                        );
 
-                        ChartOfAccount::where('id', $fundingCoaId)->decrement('current_balance', $amount);
-                        if ($bankAccountId) {
-                            BankAccount::where('id', $bankAccountId)->decrement('current_balance', $amount);
-                        }
-
+                        // Funding source balance derives strictly from posted journal lines via JournalEngine
                         $payment->update(['journal_entry_id' => $journal->id]);
                     } catch (\Throwable $je) {
                         \Illuminate\Support\Facades\Log::error("BatchCreditPaymentJournalEntry error: " . $je->getMessage());
@@ -1476,7 +1477,12 @@ class CreditStoreController extends Controller
         $vatType = $request->vat_type;
         $vatRate = (float)$request->input('vat_rate', 15.00);
         $hasWithholding = $request->boolean('has_withholding');
-        $withholdingRate = (float)$request->input('withholding_rate', 3.00);
+        $withholdingRate = 0.00;
+        if ($hasWithholding) {
+            $withholdingRate = $request->filled('withholding_rate') && (float)$request->input('withholding_rate') > 0
+                ? (float)$request->input('withholding_rate')
+                : \App\Services\Finance\WithholdingTaxRateHelper::resolveRateFromItem($request->all());
+        }
 
         $vatAmount = 0.0;
         $baseAmount = $gross;

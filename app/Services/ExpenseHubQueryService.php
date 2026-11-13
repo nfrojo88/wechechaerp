@@ -299,7 +299,7 @@ class ExpenseHubQueryService
                 'disbursement_date'    => $payment->paid_at ? $payment->paid_at->toDateString() : ($payment->created_at ? $payment->created_at->toDateString() : null),
                 'receipt_url'          => $attachment,
                 'has_withholding'            => (bool)($payment->has_withholding || (float)($payment->withholding_amount ?? 0) > 0),
-                'withholding_rate'           => (float)($payment->withholding_rate ?: 3.00),
+                'withholding_rate'           => (float)($payment->withholding_rate ?: \App\Services\Finance\WithholdingTaxRateHelper::resolveRateFromItem('goods')),
                 'withholding_amount'         => (float)($payment->withholding_amount ?? 0),
                 'withholding_receipt'        => $payment->withholding_receipt ?: null,
                 'withholding_receipt_number' => $payment->withholding_receipt_number ?: null,
@@ -392,7 +392,7 @@ class ExpenseHubQueryService
                 'disbursement_date'    => $payment->payment_date ? $payment->payment_date->toDateString() : ($payment->created_at ? $payment->created_at->toDateString() : null),
                 'receipt_url'          => $payment->receipt_path,
                 'has_withholding'            => (bool)($payment->has_withholding || (float)($payment->withholding_amount ?? 0) > 0),
-                'withholding_rate'           => (float)($payment->withholding_rate ?: 3.00),
+                'withholding_rate'           => (float)($payment->withholding_rate ?: \App\Services\Finance\WithholdingTaxRateHelper::resolveRateFromItem('goods')),
                 'withholding_amount'         => (float)($payment->withholding_amount ?? 0),
                 'withholding_receipt'        => $payment->withholding_receipt ?: null,
                 'withholding_receipt_number' => $payment->withholding_receipt_number ?: null,
@@ -503,7 +503,7 @@ class ExpenseHubQueryService
                 'disbursement_date'    => $req->paid_at ? $req->paid_at->toDateString() : ($req->created_at ? $req->created_at->toDateString() : null),
                 'receipt_url'          => $req->attachment ?: $req->withholding_receipt,
                 'has_withholding'            => (bool)($req->has_withholding || (float)($req->withholding_amount ?? 0) > 0),
-                'withholding_rate'           => (float)($req->withholding_rate ?: 3.00),
+                'withholding_rate'           => (float)($req->withholding_rate ?: \App\Services\Finance\WithholdingTaxRateHelper::resolveRateFromItem($req->category ?? 'services')),
                 'withholding_amount'         => (float)($req->withholding_amount ?? 0),
                 'withholding_receipt'        => $req->withholding_receipt ?: null,
                 'withholding_receipt_number' => $req->withholding_receipt_number ?: null,
@@ -1127,7 +1127,7 @@ class ExpenseHubQueryService
             $qty          = (float) $decision->quantity;
             $unitPrice    = (float) $decision->unit_price;
             $hasWithholding    = (bool) ($decision->has_withholding ?? ($data['has_withholding'] ?? false));
-            $withholdingRate   = (float) ($decision->withholding_rate > 0 ? $decision->withholding_rate : ($data['withholding_rate'] ?? 3.00));
+            $withholdingRate   = (float) ($decision->withholding_rate > 0 ? $decision->withholding_rate : ($data['withholding_rate'] ?? \App\Services\Finance\WithholdingTaxRateHelper::resolveRateFromItem($vatCategory === 'G' ? 'goods' : ($data['category'] ?? 'services'))));
             $withholdingAmount = (float) ($decision->withholding_amount ?? ($data['withholding_amount'] ?? 0.00));
             $withholdingReceipt = $decision->withholding_receipt ?: ($data['withholding_receipt'] ?? null);
             $withholdingReceiptNumber = $decision->withholding_receipt_number ?: ($data['withholding_receipt_number'] ?? null);
@@ -1152,7 +1152,7 @@ class ExpenseHubQueryService
             $qty          = 1.0;
             $unitPrice    = $amount;
             $hasWithholding    = (bool) ($data['has_withholding'] ?? false);
-            $withholdingRate   = (float) ($data['withholding_rate'] ?? 3.00);
+            $withholdingRate   = (float) ($data['withholding_rate'] ?? \App\Services\Finance\WithholdingTaxRateHelper::resolveRateFromItem($vatCategory === 'G' ? 'goods' : ($data['category'] ?? 'services')));
             $withholdingAmount = (float) ($data['withholding_amount'] ?? ($hasWithholding ? round($amount * ($withholdingRate / 100), 2) : 0.00));
             $withholdingReceipt = $data['withholding_receipt'] ?? null;
             $withholdingReceiptNumber = $data['withholding_receipt_number'] ?? null;

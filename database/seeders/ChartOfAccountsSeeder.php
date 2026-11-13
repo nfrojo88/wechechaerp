@@ -31,14 +31,14 @@ class ChartOfAccountsSeeder extends Seeder
     {
         // Raw data extracted from chart_of_accounts.sql
         $rows = [
-            ['code' => '1011', 'name' => 'CBE (Commercial Bank of Ethiopia)',    'category' => 'Cash and Bank',             'balance' => 1354000.00,   'nature' => 'DEBIT'],
-            ['code' => '1012', 'name' => 'Bank of Abyssinia-27',                 'category' => 'Cash and Bank',             'balance' => -2678645.00,  'nature' => 'DEBIT'],
+            ['code' => '1011', 'name' => 'CBE (Commercial Bank of Ethiopia)',    'category' => 'Cash and Bank',             'balance' => 0.00,         'nature' => 'DEBIT'],
+            ['code' => '1012', 'name' => 'Bank of Abyssinia-27',                 'category' => 'Cash and Bank',             'balance' => 0.00,         'nature' => 'DEBIT'],
             ['code' => '1013', 'name' => 'Bank of Abyssinia-59',                 'category' => 'Cash and Bank',             'balance' => 0.00,         'nature' => 'DEBIT'],
-            ['code' => '2001', 'name' => 'Accounts Payable',                     'category' => 'Liabilities',               'balance' => -1087039.34,  'nature' => 'CREDIT'],
+            ['code' => '2001', 'name' => 'Accounts Payable',                     'category' => 'Liabilities',               'balance' => 0.00,         'nature' => 'CREDIT'],
             ['code' => '2002', 'name' => 'Short-term Loans',                     'category' => 'Liabilities',               'balance' => 0.00,         'nature' => 'CREDIT'],
             ['code' => '2003', 'name' => 'Accrued Expenses',                     'category' => 'Liabilities',               'balance' => 0.00,         'nature' => 'CREDIT'],
             ['code' => '2004', 'name' => 'OLANA',                                'category' => 'Liabilities',               'balance' => 0.00,         'nature' => 'CREDIT'],
-            ['code' => '1010', 'name' => 'Petty Cash',                           'category' => 'Cash and Bank',             'balance' => -742800.00,   'nature' => 'DEBIT'],
+            ['code' => '1010', 'name' => 'Petty Cash',                           'category' => 'Cash and Bank',             'balance' => 0.00,         'nature' => 'DEBIT'],
             ['code' => '1100', 'name' => 'Saving Addis Capital',                 'category' => 'Cash and Bank',             'balance' => 0.00,         'nature' => 'DEBIT'],
             ['code' => '1330', 'name' => 'Dump Truck',                           'category' => 'Fixed Assets',              'balance' => 0.00,         'nature' => 'DEBIT'],
             ['code' => '1350', 'name' => 'Cash Register',                        'category' => 'Fixed Assets',              'balance' => 0.00,         'nature' => 'DEBIT'],
@@ -72,7 +72,7 @@ class ChartOfAccountsSeeder extends Seeder
             ['code' => '6850', 'name' => 'Depreciation Expense',                 'category' => 'Expenss',                   'balance' => 0.00,         'nature' => 'DEBIT'],
             ['code' => '6800', 'name' => 'Miscellaneous Expense',                'category' => 'Expenss',                   'balance' => 0.00,         'nature' => 'DEBIT'],
             ['code' => '6750', 'name' => 'Fuel Expense',                         'category' => 'Expenss',                   'balance' => 0.00,         'nature' => 'DEBIT'],
-            ['code' => '6720', 'name' => 'Tyre Expense',                         'category' => 'Expenss',                   'balance' => 169043.44,    'nature' => 'DEBIT'],
+            ['code' => '6720', 'name' => 'Tyre Expense',                         'category' => 'Expenss',                   'balance' => 0.00,         'nature' => 'DEBIT'],
             ['code' => '6700', 'name' => 'R/Maintenance Expense',                'category' => 'Expenss',                   'balance' => 0.00,         'nature' => 'DEBIT'],
             ['code' => '6650', 'name' => 'Insurance Expense',                    'category' => 'Expenss',                   'balance' => 0.00,         'nature' => 'DEBIT'],
             ['code' => '6651', 'name' => 'Advance & Performance Bond Expense',   'category' => 'Expenss',                   'balance' => 0.00,         'nature' => 'DEBIT'],
@@ -92,18 +92,18 @@ class ChartOfAccountsSeeder extends Seeder
             ['code' => '6230', 'name' => 'Staff Loan',                           'category' => 'Expenss',                   'balance' => 0.00,         'nature' => 'DEBIT'],
             ['code' => '6200', 'name' => 'Allowance Expense',                    'category' => 'Expenss',                   'balance' => 0.00,         'nature' => 'DEBIT'],
             ['code' => '6100', 'name' => 'Salary & Wage Expense',                'category' => 'Expenss',                   'balance' => 0.00,         'nature' => 'DEBIT'],
-            ['code' => '6000', 'name' => 'Operating Expenses',                   'category' => 'Expenss',                   'balance' => 124800.00,    'nature' => 'DEBIT'],
+            ['code' => '6000', 'name' => 'Operating Expenses',                   'category' => 'Expenss',                   'balance' => 0.00,         'nature' => 'DEBIT'],
             ['code' => '5400', 'name' => 'Machine Rent Cost',                    'category' => 'Cost of sale',              'balance' => 0.00,         'nature' => 'DEBIT'],
             ['code' => '5350', 'name' => 'Transportation Cost',                  'category' => 'Cost of sale',              'balance' => 0.00,         'nature' => 'DEBIT'],
-            ['code' => '5300', 'name' => 'Cost of Fuel',                         'category' => 'Cost of sale',              'balance' => 137984.00,    'nature' => 'DEBIT'],
+            ['code' => '5300', 'name' => 'Cost of Fuel',                         'category' => 'Cost of sale',              'balance' => 0.00,         'nature' => 'DEBIT'],
             ['code' => '5250', 'name' => 'Cylinder Gas',                         'category' => 'Cost of sale',              'balance' => 0.00,         'nature' => 'DEBIT'],
             ['code' => '5200', 'name' => 'Cost of Labor',                        'category' => 'Cost of sale',              'balance' => 0.00,         'nature' => 'DEBIT'],
             ['code' => '5150', 'name' => 'Sub Contract',                         'category' => 'Cost of sale',              'balance' => 0.00,         'nature' => 'DEBIT'],
-            ['code' => '5100', 'name' => 'Cost of Material',                     'category' => 'Cost of sale',              'balance' => 7899243.48,   'nature' => 'DEBIT'],
+            ['code' => '5100', 'name' => 'Cost of Material',                     'category' => 'Cost of sale',              'balance' => 0.00,         'nature' => 'DEBIT'],
             ['code' => '4400', 'name' => 'Other Income',                         'category' => 'Income',                    'balance' => 0.00,         'nature' => 'CREDIT'],
             ['code' => '4301', 'name' => 'Rent Income',                          'category' => 'Income',                    'balance' => 0.00,         'nature' => 'CREDIT'],
-            ['code' => '4300', 'name' => 'Gain/Loss of Fixed Asset',             'category' => 'Income',                    'balance' => 200000.00,    'nature' => 'CREDIT'],
-            ['code' => '4200', 'name' => 'Machine Rent Income',                  'category' => 'Income',                    'balance' => 2200000.00,   'nature' => 'CREDIT'],
+            ['code' => '4300', 'name' => 'Gain/Loss of Fixed Asset',             'category' => 'Income',                    'balance' => 0.00,         'nature' => 'CREDIT'],
+            ['code' => '4200', 'name' => 'Machine Rent Income',                  'category' => 'Income',                    'balance' => 0.00,         'nature' => 'CREDIT'],
             ['code' => '4100', 'name' => 'Construction Income',                  'category' => 'Income',                    'balance' => 0.00,         'nature' => 'CREDIT'],
             ['code' => '3150', 'name' => 'Legal Reserve',                        'category' => 'equity dose not closed',    'balance' => 0.00,         'nature' => 'CREDIT'],
             ['code' => '3100', 'name' => 'Registered Capital',                   'category' => 'equity dose not closed',    'balance' => 0.00,         'nature' => 'CREDIT'],
@@ -122,7 +122,30 @@ class ChartOfAccountsSeeder extends Seeder
             ['code' => '2300', 'name' => 'VAT Payable',                          'category' => 'Other current liablity',    'balance' => 0.00,         'nature' => 'CREDIT'],
             ['code' => '2260', 'name' => 'Oromia Bank Loan',                     'category' => 'Accounts Payable',          'balance' => 0.00,         'nature' => 'CREDIT'],
             ['code' => '2000', 'name' => 'Addis Bank Loan',                      'category' => 'Accounts Payable',          'balance' => 0.00,         'nature' => 'CREDIT'],
-            ['code' => '1300', 'name' => 'Withholding Tax Receivable',           'category' => 'Current Asset',             'balance' => -36000.00,    'nature' => 'DEBIT'],
+            ['code' => '1300', 'name' => 'Withholding Tax Receivable',           'category' => 'Current Asset',             'balance' => 0.00,         'nature' => 'DEBIT'],
+            ['code' => '1200', 'name' => 'Trade Accounts Receivable',           'category' => 'Receivables',               'balance' => 0.00,         'nature' => 'DEBIT'],
+            ['code' => '1210', 'name' => 'Retention Receivable from Clients',   'category' => 'Receivables',               'balance' => 0.00,         'nature' => 'DEBIT'],
+            ['code' => '1230', 'name' => 'Input VAT Receivable (15%)',          'category' => 'Current Asset',             'balance' => 0.00,         'nature' => 'DEBIT'],
+            ['code' => '1250', 'name' => 'Inventory on Hand — Stores',          'category' => 'Current Asset',             'balance' => 0.00,         'nature' => 'DEBIT'],
+            ['code' => '1260', 'name' => 'Construction Work-in-Progress (WIP)', 'category' => 'Current Asset',             'balance' => 0.00,         'nature' => 'DEBIT'],
+            ['code' => '1270', 'name' => 'Staff Operating Advances',            'category' => 'Current Asset',             'balance' => 0.00,         'nature' => 'DEBIT'],
+            ['code' => '1280', 'name' => 'Prepaid Leases & Performance Bonds',  'category' => 'Current Asset',             'balance' => 0.00,         'nature' => 'DEBIT'],
+            ['code' => '1285', 'name' => 'Supplier Mobilization Advances',      'category' => 'Current Asset',             'balance' => 0.00,         'nature' => 'DEBIT'],
+            ['code' => '1405', 'name' => 'Accumulated Depr - Sino Truck 1',     'category' => 'Fixed Assets',              'balance' => 0.00,         'nature' => 'CREDIT'],
+            ['code' => '1455', 'name' => 'Accum Depr - Sino Truck 2 & Excavator','category' => 'Fixed Assets',             'balance' => 0.00,         'nature' => 'CREDIT'],
+            ['code' => '2005', 'name' => 'Subcontractor Payables',              'category' => 'Accounts Payable',          'balance' => 0.00,         'nature' => 'CREDIT'],
+            ['code' => '2006', 'name' => 'Net Salaries Payable',                'category' => 'Other current liablity',    'balance' => 0.00,         'nature' => 'CREDIT'],
+            ['code' => '2110', 'name' => 'Client Advances (Contract Liabilities)','category' => 'Other current liablity',   'balance' => 0.00,         'nature' => 'CREDIT'],
+            ['code' => '2210', 'name' => 'Employee Income Tax (PAYE) Payable',  'category' => 'Other current liablity',    'balance' => 0.00,         'nature' => 'CREDIT'],
+            ['code' => '2220', 'name' => 'Pension Fund Contribution Payable',   'category' => 'Other current liablity',    'balance' => 0.00,         'nature' => 'CREDIT'],
+            ['code' => '2251', 'name' => 'Accrued Salaries & Wages',            'category' => 'Accounts Payable',          'balance' => 0.00,         'nature' => 'CREDIT'],
+            ['code' => '2252', 'name' => 'Accrued Utilities',                   'category' => 'Accounts Payable',          'balance' => 0.00,         'nature' => 'CREDIT'],
+            ['code' => '2253', 'name' => 'Accrued Bank Interest',               'category' => 'Accounts Payable',          'balance' => 0.00,         'nature' => 'CREDIT'],
+            ['code' => '2254', 'name' => 'Accrued Audit & Legal Fees',          'category' => 'Accounts Payable',          'balance' => 0.00,         'nature' => 'CREDIT'],
+            ['code' => '2255', 'name' => 'Accrued Subcontractor Costs',         'category' => 'Accounts Payable',          'balance' => 0.00,         'nature' => 'CREDIT'],
+            ['code' => '2270', 'name' => 'Provisions (Warranty & Defects)',     'category' => 'Other current liablity',    'balance' => 0.00,         'nature' => 'CREDIT'],
+            ['code' => '2280', 'name' => 'Contract Liability (IFRS 15 Billings in Excess)', 'category' => 'Other current liablity', 'balance' => 0.00, 'nature' => 'CREDIT'],
+            ['code' => '6651', 'name' => 'Advance & Performance Bond Expense',   'category' => 'Expenss',                   'balance' => 0.00,         'nature' => 'DEBIT'],
         ];
 
         $now = now();
@@ -130,8 +153,13 @@ class ChartOfAccountsSeeder extends Seeder
         $skipped  = 0;
 
         foreach ($rows as $row) {
-            // Skip if code already exists
-            if (DB::table('chart_of_accounts')->where('code', $row['code'])->exists()) {
+            $normalSide = strtolower($row['nature']);
+            // Skip if code already exists, but ensure normal_side is synced
+            $existing = DB::table('chart_of_accounts')->where('code', $row['code'])->first();
+            if ($existing) {
+                if ($existing->normal_side !== $normalSide) {
+                    DB::table('chart_of_accounts')->where('id', $existing->id)->update(['normal_side' => $normalSide]);
+                }
                 $skipped++;
                 continue;
             }
@@ -144,6 +172,7 @@ class ChartOfAccountsSeeder extends Seeder
                 'name'            => $row['name'],
                 'type'            => $type,
                 'subtype'         => strtolower(str_replace(' ', '_', $row['category'])),
+                'normal_side'     => $normalSide,
                 'description'     => $row['category'],
                 'opening_balance' => $balance,
                 'current_balance' => $balance,

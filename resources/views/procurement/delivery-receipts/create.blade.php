@@ -35,7 +35,7 @@
     @endphp
     
     @if($selectedPo)
-    <form action="{{ route('delivery-receipts.store') }}" method="POST">
+    <form action="{{ route('delivery-receipts.store') }}" method="POST" enctype="multipart/form-data" onsubmit="const fileInput = this.querySelector('input[name=\'slip_receipt\']'); if (!fileInput || !fileInput.files || fileInput.files.length === 0) { alert('Slip Upload Required: Physical receiving slip upload is strictly required. Material intake cannot be accepted without uploading the physical receiving slip (Model 19 / GRN).'); fileInput.focus(); return false; } const btn = this.querySelector('button[type=submit]'); if (btn) { btn.disabled = true; btn.innerHTML = '<i class=\'fas fa-spinner fa-spin me-1\'></i> Processing Intake...'; }">
         @csrf
         <input type="hidden" name="purchase_order_id" value="{{ $selectedPo->id }}">
         
@@ -72,6 +72,30 @@
                         <label>Notes</label>
                         <input type="text" name="notes" class="form-control">
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Mandatory Slip Receipt Upload Card -->
+        <div class="card shadow mb-4 border-left-danger">
+            <div class="card-header py-3 d-flex justify-content-between align-items-center bg-white">
+                <h6 class="m-0 font-weight-bold text-danger">
+                    <i class="fas fa-file-invoice me-1"></i> Physical Receiving Slip Document (Model 19 / GRN) <span class="text-danger">*</span>
+                </h6>
+                <span class="badge badge-danger text-white px-2 py-1">STRICTLY REQUIRED</span>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-warning py-2 px-3 small border-left-warning mb-3">
+                    <i class="fas fa-exclamation-triangle text-warning me-1"></i>
+                    <strong>Intake cannot be accepted without slip:</strong> You must attach a clear photo or PDF scan of the physical receiving slip (Model 19 / GRN) signed by the store keeper before completing intake. Submissions without this slip will not be accepted.
+                </div>
+                <div class="form-group mb-0">
+                    <label class="font-weight-bold text-dark small text-uppercase">Upload Slip Receipt / Scan / Photo <span class="text-danger">*</span></label>
+                    <input type="file" name="slip_receipt" class="form-control-file @error('slip_receipt') is-invalid @enderror" accept=".pdf,.jpg,.jpeg,.png,.webp" required>
+                    <small class="text-muted d-block mt-1">Supported formats: PDF, JPG, JPEG, PNG, WEBP (Max 10MB)</small>
+                    @error('slip_receipt')
+                        <div class="text-danger small font-weight-bold mt-1">{{ $message }}</div>
+                    @enderror
                 </div>
             </div>
         </div>

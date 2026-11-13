@@ -55,6 +55,16 @@
                             <th>Vehicle No:</th>
                             <td>{{ $deliveryReceipt->vehicle_no ?? '-' }}</td>
                         </tr>
+                        @if($deliveryReceipt->slip_receipt_url)
+                        <tr>
+                            <th>Physical Slip:</th>
+                            <td>
+                                <a href="{{ $deliveryReceipt->slip_receipt_url }}" target="_blank" class="btn btn-sm btn-outline-primary py-0 px-2">
+                                    <i class="fas fa-file-arrow-down me-1"></i> View Uploaded Slip
+                                </a>
+                            </td>
+                        </tr>
+                        @endif
                     </table>
                     <hr>
                     <strong>Notes:</strong>
