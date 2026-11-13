@@ -51,6 +51,9 @@
     >
         <x-slot name="actions">
             <div class="d-flex gap-2 flex-wrap align-items-center">
+                <a href="{{ route('expense-requests.index') }}" class="btn btn-outline-success btn-sm rounded-pill px-3 shadow-xs fw-semibold" style="min-height: 38px; display: inline-flex; align-items: center;">
+                    <i class="fa-solid fa-hand-holding-dollar me-1"></i> Ask Money
+                </a>
                 <a href="{{ route('finance.replenishments.index', ['tab' => 'under_audit']) }}" class="btn btn-warning text-dark btn-sm rounded-pill px-3 shadow-xs fw-bold" style="min-height: 38px; display: inline-flex; align-items: center;">
                     <i class="fa-solid fa-hand-holding-dollar me-1"></i> Petty Cash Clearance ({{ $kpi['under_audit_count'] }})
                 </a>

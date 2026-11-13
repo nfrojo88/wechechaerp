@@ -22,7 +22,7 @@
     $isHrManager = in_array('hr_manager', $rawUserRoles);
     $isCoordinator = in_array('coordinator', $rawUserRoles);
     $isStoreManager = in_array('store_manager', $rawUserRoles);
-    $isAuditorUser = in_array('auditor', $rawUserRoles) || in_array('audit', $rawUserRoles) || in_array('internal_auditor', $rawUserRoles) || in_array('audit_team', $rawUserRoles);
+    $isAuditorUser = in_array('auditor', $rawUserRoles) || in_array('audit', $rawUserRoles) || in_array('internal_auditor', $rawUserRoles) || in_array('audit_team', $rawUserRoles) || ($authUser && $authUser->hasAnyRole(['auditor', 'audit', 'internal_auditor', 'audit_team', 'Auditor', 'Audit']));
     $isGmUser = in_array('gm', $rawUserRoles) || in_array('general_manager', $rawUserRoles);
     $isSiteEngineer = in_array('site_engineer', $rawUserRoles);
     $isForeman = in_array('foreman', $rawUserRoles) || ($authUser && ($authUser->hasRole('foreman') || $authUser->hasRole('Foreman')));
@@ -1033,6 +1033,30 @@
         </li>
 
         <hr class="sidebar-section-divider">
+        <li style="padding: 0.35rem 0.9rem 0.1rem;">
+            <small style="color:#64748b; font-size:0.68rem; text-transform:uppercase; letter-spacing:0.06em; font-weight:700;">
+                Employee Services
+            </small>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('expense-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('expense-requests.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-hand-holding-dollar text-success"></i>
+                <span>Ask Money</span>
+                @php
+                    $audPendingExpenseCount = 0;
+                    try {
+                        $audExpenseQuery = \App\Models\ExpenseRequest::whereIn('status', ['submitted', 'pending', 'pending_approval']);
+                        if (auth()->check() && !auth()->user()->hasAnyRole(['admin', 'global_admin', 'hr_manager', 'hr_officer', 'gm', 'finance_head', 'coordinator', 'Coordinator'])) {
+                            $audExpenseQuery->where('user_id', auth()->id());
+                        }
+                        $audPendingExpenseCount = $audExpenseQuery->count();
+                    } catch (\Throwable $e) {}
+                @endphp
+                @if($audPendingExpenseCount > 0)
+                    <span class="badge bg-warning text-dark rounded-pill ms-auto">{{ $audPendingExpenseCount }}</span>
+                @endif
+            </a>
+        </li>
         <li class="sidebar-nav-item">
             <a href="{{ route('leave-requests.create') }}" class="sidebar-nav-link {{ request()->routeIs('leave-requests.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-calendar-plus text-info"></i>
