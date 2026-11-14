@@ -150,7 +150,7 @@
                                         <span class="badge bg-primary px-2.5 py-1.5 unit-codes-count">0 Selected</span>
                                     </div>
                                 </div>
-                                <div class="fa-units-list-container">
+                                <div class="fa-units-list-container" style="max-height: 420px; overflow-y: auto; padding: 4px;">
                                     {{-- Dynamically populated via AJAX --}}
                                 </div>
                             </div>
@@ -237,7 +237,7 @@ $('#add-item').click(function() {
                         <span class="badge bg-primary px-2.5 py-1.5 unit-codes-count">0 Selected</span>
                     </div>
                 </div>
-                <div class="fa-units-list-container">
+                <div class="fa-units-list-container" style="max-height: 420px; overflow-y: auto; padding: 4px;">
                     {{-- Dynamically populated via AJAX --}}
                 </div>
             </div>

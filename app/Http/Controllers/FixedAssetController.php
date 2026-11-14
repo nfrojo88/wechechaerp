@@ -768,8 +768,17 @@ class FixedAssetController extends Controller
             });
         }
 
-        $limit = $productId ? 250 : 500;
-        $units = $query->orderBy('unit_code')->limit($limit)->get()->map(function($u) {
+        $query->orderBy('unit_code');
+
+        if ($productId) {
+            // Return ALL available units matching inventory stock (e.g. 687, 1000, 2000+) without artificial 250 cutoff
+            $maxLimit = max(1500, (int)($invQty ?? 0) + 500);
+            $query->limit($maxLimit);
+        } else {
+            $query->limit(2500);
+        }
+
+        $units = $query->get()->map(function($u) {
             return [
                 'id'            => $u->id,
                 'unit_code'     => $u->unit_code,

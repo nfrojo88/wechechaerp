@@ -149,7 +149,7 @@ class FixedAsset extends Model
     }
 
     /**
-     * Auto-generate missing units to match the total_quantity.
+     * Auto-generate missing units to match the total_quantity (supports large inventory balances e.g. 687, 1000+).
      */
     public function generateUnitsToMatchQuantity(array $defaultAttributes = []): int
     {
@@ -161,36 +161,59 @@ class FixedAsset extends Model
             return 0;
         }
 
-        // Cap batch auto-generation per call to 50 to prevent PHP execution timeout
-        $maxToCreate = min($targetQty - $currentCount, 50);
+        // Generate all missing units up to target quantity (support up to 5,000 units per asset)
+        $needed = min($targetQty - $currentCount, 5000);
+        if ($needed <= 0) {
+            return 0;
+        }
+
+        $prefix = strtoupper(trim($this->code_prefix ?: 'AST'));
 
         // Find max sequence number used so far
         $maxSeq = (int) $this->units()->max('sequence_number');
 
+        // Pre-fetch existing codes for this prefix into a hash set for instant collision avoidance
+        $existingCodes = FixedAssetUnit::where('unit_code', 'like', "{$prefix}-%")
+            ->pluck('unit_code')
+            ->flip()
+            ->toArray();
+
+        $records = [];
+        $now = now();
+        $storeName = $defaultAttributes['current_location'] ?? ($this->store?->name ?? 'Main Store');
+        $condition = $defaultAttributes['condition'] ?? 'good';
+        $purchasePrice = $defaultAttributes['purchase_price'] ?? $this->unit_cost;
+        $userId = auth()->id();
+
+        for ($i = 0; $i < $needed; $i++) {
+            $maxSeq++;
+            $unitCode = "{$prefix}-{$maxSeq}";
+
+            while (isset($existingCodes[$unitCode])) {
+                $maxSeq++;
+                $unitCode = "{$prefix}-{$maxSeq}";
+            }
+            $existingCodes[$unitCode] = true;
+
+            $records[] = [
+                'fixed_asset_id'   => $this->id,
+                'unit_code'        => $unitCode,
+                'sequence_number'  => $maxSeq,
+                'status'           => FixedAssetUnit::STATUS_IN_STORE,
+                'condition'        => $condition,
+                'purchase_price'   => $purchasePrice,
+                'current_location' => $storeName,
+                'created_by'       => $userId,
+                'created_at'       => $now,
+                'updated_at'       => $now,
+            ];
+            $created++;
+        }
+
         FixedAssetUnit::$isSyncing = true;
         try {
-            for ($i = 0; $i < $maxToCreate; $i++) {
-                $maxSeq++;
-                $unitCode = $this->generateUnitCode($maxSeq);
-
-                // Avoid collisions if previously deleted or customized
-                while (FixedAssetUnit::where('unit_code', $unitCode)->exists()) {
-                    $maxSeq++;
-                    $unitCode = $this->generateUnitCode($maxSeq);
-                }
-
-                FixedAssetUnit::create(array_merge([
-                    'fixed_asset_id'  => $this->id,
-                    'unit_code'       => $unitCode,
-                    'sequence_number' => $maxSeq,
-                    'status'          => FixedAssetUnit::STATUS_IN_STORE,
-                    'condition'       => 'good',
-                    'purchase_price'  => $this->unit_cost,
-                    'current_location'=> $this->store?->name ?? 'Main Store',
-                    'created_by'      => auth()->id(),
-                ], $defaultAttributes));
-
-                $created++;
+            foreach (array_chunk($records, 500) as $chunk) {
+                FixedAssetUnit::insert($chunk);
             }
         } finally {
             FixedAssetUnit::$isSyncing = false;
