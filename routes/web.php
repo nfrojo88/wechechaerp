@@ -2634,6 +2634,7 @@ Route::middleware(['auth'])->group(function () {
         Route::post('fixed-assets/units/{unit}/return', [App\Http\Controllers\FixedAssetController::class, 'returnUnit'])->name('fixed-assets.units.return');
         Route::post('fixed-assets/units/{unit}/transfer', [App\Http\Controllers\FixedAssetController::class, 'transferUnit'])->name('fixed-assets.units.transfer');
         Route::post('fixed-assets/transfer-units', [App\Http\Controllers\FixedAssetController::class, 'transferUnits'])->name('fixed-assets.transfer-units');
+        Route::get('fixed-assets/compatible-transfers-ajax', [App\Http\Controllers\FixedAssetController::class, 'compatibleTransfersAjax'])->name('fixed-assets.compatible-transfers-ajax');
         Route::get('fixed-assets/available-ajax', [App\Http\Controllers\FixedAssetController::class, 'availableUnitsAjax'])->name('fixed-assets.available-ajax');
         Route::get('fixed-assets/sync-inventory', [App\Http\Controllers\FixedAssetController::class, 'syncInventoryNow'])->name('fixed-assets.sync');
 

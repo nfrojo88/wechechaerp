@@ -899,6 +899,7 @@
             <form action="{{ route('store-manager.fixed-assets.transfer-units') }}" method="POST">
                 @csrf
                 <input type="hidden" name="unit_ids[]" id="transfer_unit_id">
+                <input type="hidden" id="transfer_origin_store_id" value="">
                 <div class="modal-header bg-info text-white py-3">
                     <div class="d-flex align-items-center gap-2">
                         <i class="fa-solid fa-truck-ramp-box fs-5"></i>
@@ -930,6 +931,42 @@
                                     <option value="{{ $st->id }}">{{ $st->name }} ({{ $st->type ?? 'Store' }})</option>
                                 @endforeach
                             </select>
+                        </div>
+                    </div>
+
+                    {{-- Meet / Merge with Inventory Transfer Option --}}
+                    <div class="mb-3 p-2.5 rounded border bg-light-subtle">
+                        <div class="d-flex justify-content-between align-items-center mb-1.5 flex-wrap gap-1">
+                            <span class="small fw-bold text-dark"><i class="fa-solid fa-code-merge text-primary me-1"></i>Inventory Transfer Integration</span>
+                            <span class="badge bg-secondary-subtle text-secondary small fw-normal compat-badge">Select destination to see active transfers</span>
+                        </div>
+
+                        <div class="d-flex gap-3 my-2">
+                            <div class="form-check form-check-inline mb-0">
+                                <input class="form-check-input transfer-mode-radio" type="radio" name="transfer_mode" id="mode_new_single" value="new" checked onchange="handleTransferModeChange(this)">
+                                <label class="form-check-label small fw-semibold" for="mode_new_single">
+                                    Create New Transfer
+                                </label>
+                            </div>
+                            <div class="form-check form-check-inline mb-0">
+                                <input class="form-check-input transfer-mode-radio" type="radio" name="transfer_mode" id="mode_merge_single" value="merge" onchange="handleTransferModeChange(this)">
+                                <label class="form-check-label small fw-semibold text-primary" for="mode_merge_single">
+                                    <i class="fa-solid fa-link me-1"></i>Meet / Merge with Inventory No
+                                </label>
+                            </div>
+                        </div>
+
+                        {{-- Merge into existing inventory transfer selector --}}
+                        <div class="merge-transfer-selector d-none mt-2 pt-2 border-top">
+                            <label class="form-label small fw-bold text-dark mb-1">
+                                Choose Active Inventory Transfer (TR-XXXX) <span class="text-danger">*</span>
+                            </label>
+                            <select name="target_transfer_id" class="form-select form-select-sm target-transfer-select mb-2" onchange="handleTargetTransferSelected(this)">
+                                <option value="">-- Select Active Transfer --</option>
+                            </select>
+                            <div class="small text-muted">
+                                <i class="fa-solid fa-circle-info text-info me-1"></i>This asset unit will meet and merge directly into the chosen inventory transfer number.
+                            </div>
                         </div>
                     </div>
 
@@ -987,7 +1024,7 @@
                     <div class="row g-3 mb-3">
                         <div class="col-md-6">
                             <label class="form-label small fw-bold">Select Origin Store <span class="text-danger">*</span></label>
-                            <select id="bulk_from_store_id" class="form-select form-select-sm" onchange="loadAvailableUnitsForTransfer()">
+                            <select id="bulk_from_store_id" class="form-select form-select-sm" onchange="loadAvailableUnitsForTransfer(); loadCompatibleTransfersForBulk();">
                                 <option value="">Choose Origin Store...</option>
                                 @foreach($stores as $st)
                                     <option value="{{ $st->id }}">{{ $st->name }}</option>
@@ -996,12 +1033,48 @@
                         </div>
                         <div class="col-md-6">
                             <label class="form-label small fw-bold">Destination Store / Site <span class="text-danger">*</span></label>
-                            <select name="to_store_id" class="form-select form-select-sm" required>
+                            <select name="to_store_id" id="bulk_to_store_id" class="form-select form-select-sm" required onchange="loadCompatibleTransfersForBulk()">
                                 <option value="">Choose Destination Store...</option>
                                 @foreach($stores as $st)
                                     <option value="{{ $st->id }}">{{ $st->name }} ({{ $st->type ?? 'Store' }})</option>
                                 @endforeach
                             </select>
+                        </div>
+                    </div>
+
+                    {{-- Meet / Merge with Inventory Transfer Option --}}
+                    <div class="mb-3 p-2.5 rounded border bg-light-subtle">
+                        <div class="d-flex justify-content-between align-items-center mb-1.5 flex-wrap gap-1">
+                            <span class="small fw-bold text-dark"><i class="fa-solid fa-code-merge text-primary me-1"></i>Inventory Transfer Integration</span>
+                            <span class="badge bg-secondary-subtle text-secondary small fw-normal compat-badge">Select stores to see active transfers</span>
+                        </div>
+
+                        <div class="d-flex gap-3 my-2">
+                            <div class="form-check form-check-inline mb-0">
+                                <input class="form-check-input transfer-mode-radio" type="radio" name="transfer_mode" id="mode_new_bulk" value="new" checked onchange="handleTransferModeChange(this)">
+                                <label class="form-check-label small fw-semibold" for="mode_new_bulk">
+                                    Create New Transfer
+                                </label>
+                            </div>
+                            <div class="form-check form-check-inline mb-0">
+                                <input class="form-check-input transfer-mode-radio" type="radio" name="transfer_mode" id="mode_merge_bulk" value="merge" onchange="handleTransferModeChange(this)">
+                                <label class="form-check-label small fw-semibold text-primary" for="mode_merge_bulk">
+                                    <i class="fa-solid fa-link me-1"></i>Meet / Merge with Inventory No
+                                </label>
+                            </div>
+                        </div>
+
+                        {{-- Merge into existing inventory transfer selector --}}
+                        <div class="merge-transfer-selector d-none mt-2 pt-2 border-top">
+                            <label class="form-label small fw-bold text-dark mb-1">
+                                Choose Active Inventory Transfer (TR-XXXX) <span class="text-danger">*</span>
+                            </label>
+                            <select name="target_transfer_id" class="form-select form-select-sm target-transfer-select mb-2" onchange="handleTargetTransferSelected(this)">
+                                <option value="">-- Select Active Transfer --</option>
+                            </select>
+                            <div class="small text-muted">
+                                <i class="fa-solid fa-circle-info text-info me-1"></i>Selected asset units will meet and merge directly into this inventory transfer number.
+                            </div>
                         </div>
                     </div>
 
@@ -1240,6 +1313,7 @@ function openTransferModalSingle(btn) {
     const specs = btn.getAttribute('data-specs');
 
     document.getElementById('transfer_unit_id').value = unitId;
+    document.getElementById('transfer_origin_store_id').value = storeId || '';
     document.getElementById('transfer_unit_code_badge').textContent = unitCode;
     document.getElementById('transfer_asset_name_label').textContent = assetName;
     document.getElementById('transfer_specs_label').textContent = specs || '';
@@ -1251,6 +1325,18 @@ function openTransferModalSingle(btn) {
         opt.disabled = (opt.value && opt.value == storeId);
     });
     toSelect.value = '';
+
+    // Reset transfer mode to new
+    const singleModal = document.getElementById('transferUnitModal');
+    const newRadio = singleModal.querySelector('input[value="new"]');
+    if (newRadio) { newRadio.checked = true; handleTransferModeChange(newRadio); }
+    const badge = singleModal.querySelector('.compat-badge');
+    if (badge) {
+        badge.className = 'badge bg-secondary-subtle text-secondary small fw-normal compat-badge';
+        badge.textContent = 'Select destination to see active transfers';
+    }
+    const select = singleModal.querySelector('.target-transfer-select');
+    if (select) select.innerHTML = '<option value="">-- Select Active Transfer --</option>';
 
     new bootstrap.Modal(document.getElementById('transferUnitModal')).show();
 }
@@ -1395,6 +1481,106 @@ function updateBulkUnitsSelectedCount() {
         document.getElementById('btn_bulk_deselect_all')?.classList.add('d-none');
     }
 }
+
+// ─── Inventory Transfer Integration / Meet with Transfer No ─────────────
+const COMPAT_TRANSFERS_URL = "{{ route('store-manager.fixed-assets.compatible-transfers-ajax') }}";
+
+function fetchCompatibleTransfers(fromStoreId, toStoreId, modalEl) {
+    if (!modalEl) return;
+    const badge = modalEl.querySelector('.compat-badge');
+    const select = modalEl.querySelector('.target-transfer-select');
+
+    if (!fromStoreId || !toStoreId || fromStoreId == toStoreId) {
+        if (badge) {
+            badge.className = 'badge bg-secondary-subtle text-secondary small fw-normal compat-badge';
+            badge.textContent = 'Select destination to see active transfers';
+        }
+        if (select) {
+            select.innerHTML = '<option value="">-- Select Active Transfer --</option>';
+        }
+        return;
+    }
+
+    if (badge) {
+        badge.className = 'badge bg-info-subtle text-info small fw-normal compat-badge';
+        badge.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i>Checking active transfers...';
+    }
+
+    fetch(`${COMPAT_TRANSFERS_URL}?from_store_id=${fromStoreId}&to_store_id=${toStoreId}`)
+        .then(res => res.json())
+        .then(data => {
+            const list = data.transfers || [];
+            if (select) {
+                select.innerHTML = '<option value="">-- Choose Active Inventory Transfer --</option>';
+                list.forEach(t => {
+                    const slipText = t.physical_slip ? ` [Slip: ${t.physical_slip}]` : '';
+                    select.innerHTML += `<option value="${t.id}" data-transfer-no="${t.transfer_no}" data-slip="${t.physical_slip || ''}">#${t.transfer_no}${slipText} | ${t.date} | ${t.items_summary} (${t.status})</option>`;
+                });
+            }
+
+            if (badge) {
+                if (list.length > 0) {
+                    badge.className = 'badge bg-success text-white small fw-bold compat-badge';
+                    badge.innerHTML = `<i class="fa-solid fa-check-double me-1"></i>${list.length} Active Transfer(s) Available to Merge`;
+                } else {
+                    badge.className = 'badge bg-secondary-subtle text-secondary small fw-normal compat-badge';
+                    badge.textContent = '0 active transfers found (will create new)';
+                }
+            }
+        })
+        .catch(err => {
+            if (badge) {
+                badge.className = 'badge bg-danger-subtle text-danger small compat-badge';
+                badge.textContent = 'Could not load active transfers';
+            }
+        });
+}
+
+function handleTransferModeChange(radio) {
+    const modalEl = radio.closest('.modal');
+    if (!modalEl) return;
+    const mergeSection = modalEl.querySelector('.merge-transfer-selector');
+    const waybillInput = modalEl.querySelector('input[name="waybill_no"]');
+    const select = modalEl.querySelector('.target-transfer-select');
+
+    if (radio.value === 'merge') {
+        if (mergeSection) mergeSection.classList.remove('d-none');
+        if (select && select.value) {
+            const opt = select.options[select.selectedIndex];
+            if (waybillInput && opt && opt.dataset.transferNo) {
+                waybillInput.value = opt.dataset.transferNo;
+            }
+        }
+    } else {
+        if (mergeSection) mergeSection.classList.add('d-none');
+        if (select) select.value = '';
+        if (waybillInput) waybillInput.value = '';
+    }
+}
+
+function handleTargetTransferSelected(select) {
+    const modalEl = select.closest('.modal');
+    if (!modalEl) return;
+    const waybillInput = modalEl.querySelector('input[name="waybill_no"]');
+    const opt = select.options[select.selectedIndex];
+    if (opt && opt.value && opt.dataset.transferNo) {
+        if (waybillInput) waybillInput.value = opt.dataset.transferNo;
+    }
+}
+
+function loadCompatibleTransfersForBulk() {
+    const fromStoreId = document.getElementById('bulk_from_store_id')?.value;
+    const toStoreId = document.getElementById('bulk_to_store_id')?.value;
+    fetchCompatibleTransfers(fromStoreId, toStoreId, document.getElementById('bulkTransferModal'));
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('transfer_to_store_id')?.addEventListener('change', function() {
+        const fromStoreId = document.getElementById('transfer_origin_store_id')?.value;
+        const toStoreId = this.value;
+        fetchCompatibleTransfers(fromStoreId, toStoreId, document.getElementById('transferUnitModal'));
+    });
+});
 </script>
 @endpush
 

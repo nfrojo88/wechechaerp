@@ -706,20 +706,60 @@ class FixedAssetController extends Controller
     }
 
     /**
+     * API: Get active compatible transfers between origin and destination store for merging.
+     */
+    public function compatibleTransfersAjax(Request $request)
+    {
+        $fromStoreId = (int)$request->input('from_store_id');
+        $toStoreId = (int)$request->input('to_store_id');
+
+        if (!$fromStoreId || !$toStoreId || $fromStoreId === $toStoreId) {
+            return response()->json(['transfers' => []]);
+        }
+
+        $transfers = Transfer::with(['items.product', 'requestedBy', 'fromStore', 'toStore'])
+            ->where('from_store_id', $fromStoreId)
+            ->where('to_store_id', $toStoreId)
+            ->whereIn('status', ['draft', 'pending_approval', 'approved', 'in_transit'])
+            ->latest()
+            ->limit(25)
+            ->get()
+            ->map(function($t) {
+                $itemsCount = $t->items->count();
+                $totalQty = (float)$t->items->sum('requested_quantity');
+                $slip = $t->outgoing_slip_no ?: $t->physical_slip_no;
+                return [
+                    'id'            => $t->id,
+                    'transfer_no'   => $t->transfer_no,
+                    'physical_slip' => $slip,
+                    'status'        => ucfirst(str_replace('_', ' ', $t->status)),
+                    'date'          => $t->required_date ? \Carbon\Carbon::parse($t->required_date)->format('M d, Y') : $t->created_at->format('M d, Y'),
+                    'items_summary' => "{$itemsCount} item(s) (" . round($totalQty, 2) . " total)",
+                    'driver'        => $t->vehicle_plate_no ? "Vehicle: {$t->vehicle_plate_no}" : '',
+                    'reason'        => \Illuminate\Support\Str::limit($t->reason, 45),
+                ];
+            });
+
+        return response()->json(['transfers' => $transfers]);
+    }
+
+    /**
      * Transfer one or more Fixed Asset Units to another Store / Construction Site.
      * Transferred by Individual Unit Code(s).
      */
     public function transferUnits(Request $request)
     {
         $validated = $request->validate([
-            'unit_ids'         => 'required|array|min:1',
-            'unit_ids.*'       => 'required|exists:fixed_asset_units,id',
-            'to_store_id'      => 'required|exists:stores,id',
-            'transfer_reason'  => 'nullable|string|max:500',
-            'waybill_no'       => 'nullable|string|max:100',
-            'driver_name'      => 'nullable|string|max:150',
-            'vehicle_plate'    => 'nullable|string|max:50',
-            'create_slip'      => 'nullable|boolean',
+            'unit_ids'           => 'required|array|min:1',
+            'unit_ids.*'         => 'required|exists:fixed_asset_units,id',
+            'to_store_id'        => 'required|exists:stores,id',
+            'transfer_mode'      => 'nullable|in:new,merge',
+            'target_transfer_id' => 'nullable|exists:transfers,id',
+            'transfer_reason'    => 'nullable|string|max:500',
+            'waybill_no'         => 'nullable|string|max:100',
+            'driver_name'        => 'nullable|string|max:150',
+            'vehicle_plate'      => 'nullable|string|max:50',
+            'create_slip'        => 'nullable|boolean',
         ]);
 
         $toStore = Store::findOrFail($validated['to_store_id']);
@@ -743,12 +783,38 @@ class FixedAssetController extends Controller
             return back()->withErrors(['error' => 'Destination store cannot be the same as the origin store.']);
         }
 
+        // Resolve Target Transfer if merge mode is selected or if waybill_no matches an existing transfer
+        $targetTransfer = null;
+        if (!empty($validated['target_transfer_id'])) {
+            $targetTransfer = Transfer::find($validated['target_transfer_id']);
+        } elseif (!empty($validated['waybill_no'])) {
+            $searchNo = trim($validated['waybill_no']);
+            $targetTransfer = Transfer::where('from_store_id', $fromStoreId)
+                ->where('to_store_id', $toStore->id)
+                ->whereNotIn('status', ['cancelled', 'rejected'])
+                ->where(function($q) use ($searchNo) {
+                    $q->where('transfer_no', $searchNo)
+                      ->orWhere('physical_slip_no', $searchNo)
+                      ->orWhere('outgoing_slip_no', $searchNo);
+                })
+                ->first();
+        }
+
+        if ($targetTransfer) {
+            if ((int)$targetTransfer->from_store_id !== (int)$fromStoreId || (int)$targetTransfer->to_store_id !== (int)$toStore->id) {
+                return back()->withErrors(['error' => "Target Transfer #{$targetTransfer->transfer_no} route does not match origin and destination store."]);
+            }
+            if (in_array($targetTransfer->status, ['cancelled', 'rejected'])) {
+                return back()->withErrors(['error' => "Target Transfer #{$targetTransfer->transfer_no} is {$targetTransfer->status} and cannot be merged."]);
+            }
+        }
+
         FixedAssetAssignment::ensureSchema();
 
         $transferredCount = 0;
         $transferredCodes = [];
 
-        DB::transaction(function() use ($units, $toStore, $validated, &$transferredCount, &$transferredCodes) {
+        DB::transaction(function() use ($units, $toStore, $validated, $targetTransfer, $fromStoreId, &$transferredCount, &$transferredCodes) {
             // Group units by their parent asset
             $groupedByAsset = $units->groupBy('fixed_asset_id');
 
@@ -817,15 +883,78 @@ class FixedAssetController extends Controller
                 $destAsset->syncWithCatalogAndInventory();
             }
 
-            // Optional: Create an official Transfer waybill record if requested or if waybill number provided
-            if (!empty($validated['waybill_no']) || !empty($validated['create_slip'])) {
+            // Merge into existing Inventory Transfer OR create new Transfer record
+            if ($targetTransfer) {
+                // Add items to existing transfer
+                foreach ($groupedByAsset as $originAssetId => $assetUnits) {
+                    $originAsset = $assetUnits->first()->parentAsset;
+                    $prod = Product::where('name', $originAsset->name)->first();
+                    if ($prod) {
+                        $count = $assetUnits->count();
+                        $unitCodes = $assetUnits->pluck('unit_code')->toArray();
+                        $existingItem = $targetTransfer->items()->where('product_id', $prod->id)->first();
+
+                        if ($existingItem) {
+                            $currentCodes = !empty($existingItem->unit_codes)
+                                ? (is_array($existingItem->unit_codes) ? $existingItem->unit_codes : (json_decode($existingItem->unit_codes, true) ?: explode(',', $existingItem->unit_codes)))
+                                : [];
+                            $mergedCodes = array_values(array_unique(array_merge($currentCodes, $unitCodes)));
+
+                            $itemUpdate = [
+                                'requested_quantity' => (float)$existingItem->requested_quantity + $count,
+                                'approved_quantity'  => (float)$existingItem->approved_quantity + $count,
+                                'unit_codes'         => $mergedCodes,
+                            ];
+                            if (in_array($targetTransfer->status, ['in_transit', 'dispatched', 'completed'])) {
+                                $itemUpdate['sent_quantity'] = (float)$existingItem->sent_quantity + $count;
+                            }
+                            if ($targetTransfer->status === 'completed') {
+                                $itemUpdate['received_quantity'] = (float)$existingItem->received_quantity + $count;
+                            }
+                            $existingItem->update($itemUpdate);
+                        } else {
+                            $sentQty = in_array($targetTransfer->status, ['in_transit', 'dispatched', 'completed']) ? $count : 0;
+                            $recQty = ($targetTransfer->status === 'completed') ? $count : 0;
+                            $targetTransfer->items()->create([
+                                'product_id'         => $prod->id,
+                                'requested_quantity' => $count,
+                                'approved_quantity'  => $count,
+                                'sent_quantity'      => $sentQty,
+                                'received_quantity'  => $recQty,
+                                'unit'               => 'pcs',
+                                'unit_codes'         => $unitCodes,
+                            ]);
+                        }
+                    }
+                }
+
+                $mergeNote = "[Fixed Asset Units: " . implode(', ', $transferredCodes) . " merged by " . (auth()->user()->name ?? 'Store Manager') . " on " . now()->format('Y-m-d H:i') . "]";
+                $newDispatchNotes = trim(($targetTransfer->dispatch_notes ? $targetTransfer->dispatch_notes . "\n" : '') . $mergeNote);
+                $updateData = ['dispatch_notes' => $newDispatchNotes];
+                if (!empty($validated['vehicle_plate']) && empty($targetTransfer->vehicle_plate_no)) {
+                    $updateData['vehicle_plate_no'] = $validated['vehicle_plate'];
+                }
+                $targetTransfer->update($updateData);
+
+                // Sync inventory for this target transfer immediately
+                \App\Http\Controllers\StoreManagerController::syncTransferInventory($targetTransfer);
+
+                try {
+                    \App\Models\ActivityLog::log(
+                        'fixed_asset_merged_transfer',
+                        "Merged {$transferredCount} Fixed Asset unit(s) [" . implode(', ', $transferredCodes) . "] into Inventory Transfer #{$targetTransfer->transfer_no}",
+                        'Transfers',
+                        $targetTransfer
+                    );
+                } catch (\Throwable $e) {}
+            } elseif (!empty($validated['waybill_no']) || !empty($validated['create_slip'])) {
                 $transferNo = Transfer::generateUniqueNo();
                 $transfer = Transfer::create([
                     'transfer_no'        => $transferNo,
                     'physical_slip_no'   => $validated['waybill_no'] ?? $transferNo,
                     'outgoing_slip_no'   => $validated['waybill_no'] ?? $transferNo,
                     'receiving_slip_no'  => $validated['waybill_no'] ?? $transferNo,
-                    'from_store_id'      => $units->first()->parentAsset?->store_id,
+                    'from_store_id'      => $fromStoreId,
                     'to_store_id'        => $toStore->id,
                     'requested_by'       => auth()->id(),
                     'approved_by'        => auth()->id(),
@@ -841,7 +970,7 @@ class FixedAssetController extends Controller
                     'dispatch_notes'     => 'Transferred units: ' . implode(', ', $transferredCodes),
                 ]);
 
-                // Create transfer items
+                // Create transfer items WITH unit_codes
                 foreach ($groupedByAsset as $originAssetId => $assetUnits) {
                     $originAsset = $assetUnits->first()->parentAsset;
                     $prod = Product::where('name', $originAsset->name)->first();
@@ -853,6 +982,7 @@ class FixedAssetController extends Controller
                             'sent_quantity'      => $assetUnits->count(),
                             'received_quantity'  => $assetUnits->count(),
                             'unit'               => 'pcs',
+                            'unit_codes'         => $assetUnits->pluck('unit_code')->toArray(),
                         ]);
                     }
                 }
@@ -862,6 +992,9 @@ class FixedAssetController extends Controller
         });
 
         $codesStr = implode(', ', $transferredCodes);
+        if ($targetTransfer) {
+            return back()->with('success', "{$transferredCount} Fixed Asset unit(s) ({$codesStr}) successfully transferred and merged into Inventory Transfer #{$targetTransfer->transfer_no}!");
+        }
         return back()->with('success', "{$transferredCount} Fixed Asset unit(s) successfully transferred by individual code to {$toStore->name}! (Unit codes: {$codesStr})");
     }
 
