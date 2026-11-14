@@ -52,7 +52,7 @@
                         <select name="from_store_id" id="from_store_id" class="form-select form-select-sm" required>
                             <option value="">Select Source Store</option>
                             @foreach($stores as $store)
-                            <option value="{{ $store->id }}" {{ old('from_store_id') == $store->id ? 'selected' : '' }}>
+                            <option value="{{ $store->id }}" {{ old('from_store_id', request('store_id', request('from_store_id'))) == $store->id ? 'selected' : '' }}>
                                 {{ $store->name }} ({{ $store->type ?? 'Store' }})
                             </option>
                             @endforeach
@@ -100,7 +100,8 @@
                                     @foreach($products as $product)
                                     <option value="{{ $product->id }}" 
                                             data-unit="{{ $product->unit }}" 
-                                            data-is-fa="{{ !empty($product->is_fixed_asset) ? '1' : '0' }}">
+                                            data-is-fa="{{ !empty($product->is_fixed_asset) ? '1' : '0' }}"
+                                            {{ old('items.0.product_id', request('product_id')) == $product->id ? 'selected' : '' }}>
                                         {{ $product->name }} ({{ $product->code ?? $product->sku ?? 'PRD' }}) {{ !empty($product->is_fixed_asset) ? '★ [Fixed Asset]' : '' }}
                                     </option>
                                     @endforeach
@@ -344,9 +345,9 @@ function handleFixedAssetUnitBox($block, isFa) {
                 $block.find('.deselect-all-fa-btn').addClass('d-none');
                 $qtyGroup.addClass('d-none');
                 $container.html(`
-                    <div class="alert alert-danger py-2 px-3 mb-0 small border-0">
-                        <i class="fa-solid fa-circle-xmark me-1"></i>
-                        No available in-store unit codes found for this asset in the selected origin store. Check whether units are assigned or at another site.
+                    <div class="alert alert-info py-2 px-3 mb-0 small border-0">
+                        <i class="fa-solid fa-circle-info me-1"></i>
+                        No specific individual tag codes found for this asset in the selected store. You can enter the transfer quantity directly in the Quantity box above to transfer from store inventory.
                     </div>
                 `);
                 return;
@@ -522,7 +523,7 @@ $(document).on('change', '.fa-unit-checkbox', function() {
     }
 });
 
-// Form submission validation: Ensure fixed assets have at least 1 unit code checked
+// Form submission validation: Ensure valid quantity or unit codes
 $('#transferForm').on('submit', function(e) {
     let isValid = true;
     let errorMsg = '';
@@ -530,15 +531,28 @@ $('#transferForm').on('submit', function(e) {
     $('.item-block').each(function() {
         const $block = $(this);
         const isFa = $block.find('.product-select option:selected').data('is-fa') == '1';
-        if (isFa) {
-            const count = $block.find('.fa-unit-checkbox:checked').length;
-            if (count === 0) {
-                const prodName = $block.find('.product-select option:selected').text().trim();
+        const prodName = $block.find('.product-select option:selected').text().trim();
+        const totalCheckboxes = $block.find('.fa-unit-checkbox').length;
+        const count = $block.find('.fa-unit-checkbox:checked').length;
+        const qtyVal = parseFloat($block.find('.quantity-input').val()) || 0;
+
+        if (isFa && totalCheckboxes > 0 && count === 0) {
+            if (qtyVal > 0) {
+                // Automatically select first qtyVal checkboxes for convenience
+                const toCheck = Math.min(Math.floor(qtyVal), totalCheckboxes);
+                $block.find('.fa-unit-checkbox').slice(0, toCheck).prop('checked', true);
+                $block.find('.unit-codes-count').text(`${toCheck} Selected`);
+            } else {
                 isValid = false;
-                errorMsg = `Please select at least one individual unit code for: "${prodName}".`;
+                errorMsg = `Please select at least one unit code or enter quantity for: "${prodName}".`;
                 $block.find('.fa-units-wrapper')[0].scrollIntoView({ behavior: 'smooth' });
                 return false;
             }
+        } else if (qtyVal <= 0 && count === 0) {
+            isValid = false;
+            errorMsg = `Please enter a valid transfer quantity for: "${prodName}".`;
+            $block.find('.quantity-input').focus();
+            return false;
         }
     });
 
@@ -546,6 +560,13 @@ $('#transferForm').on('submit', function(e) {
         e.preventDefault();
         alert(errorMsg);
         return false;
+    }
+});
+
+// Auto-trigger product change on load if pre-selected via query string
+$(document).ready(function() {
+    if ($('.item-block[data-row-index="0"] .product-select').val()) {
+        $('.item-block[data-row-index="0"] .product-select').trigger('change');
     }
 });
 </script>

@@ -657,12 +657,76 @@ class FixedAssetController extends Controller
     }
 
     /**
-     * API: Get list of available In Store Fixed Asset units for HR dropdown.
+     * API: Get list of available In Store Fixed Asset units for HR dropdown & Transfer Unit selection.
      */
     public function availableUnitsAjax(Request $request)
     {
         $search = $request->input('q');
-        $query = FixedAssetUnit::with('parentAsset')
+        $storeId = $request->input('store_id');
+        $productId = $request->input('product_id');
+
+        // 1. Ensure inventory assets and coded units are synchronized on-the-fly
+        try {
+            if ($productId) {
+                FixedAsset::syncFromInventory((int)$productId);
+            } elseif ($storeId) {
+                FixedAsset::syncFromInventory(null, $search);
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning("availableUnitsAjax auto-sync error: " . $e->getMessage());
+        }
+
+        $prod = $productId ? Product::find($productId) : null;
+        $store = $storeId ? Store::find($storeId) : null;
+        $storeName = $store?->name;
+
+        // 2. If a specific product & store are queried, auto-generate units if inventory has stock
+        if ($prod && $storeId) {
+            $invQty = (int) round(Inventory::where('product_id', $prod->id)->where('store_id', $storeId)->value('quantity_on_hand') ?? 0);
+            if ($invQty > 0) {
+                $fa = FixedAsset::where('store_id', $storeId)
+                    ->where(function($q) use ($prod) {
+                        $q->whereRaw('LOWER(TRIM(name)) = ?', [strtolower(trim($prod->name))])
+                          ->orWhere('description', 'like', "%(Product ID: {$prod->id})%")
+                          ->orWhere('description', 'like', "%SKU: " . ($prod->sku ?? '') . "%");
+                    })->first();
+
+                if (!$fa) {
+                    $orphan = FixedAsset::where(function($q) use ($prod) {
+                        $q->whereRaw('LOWER(TRIM(name)) = ?', [strtolower(trim($prod->name))])
+                          ->orWhere('description', 'like', "%(Product ID: {$prod->id})%");
+                    })->first();
+
+                    $cat = FixedAsset::resolveCategory($prod->category ?? '', $prod->name);
+                    $prefix = FixedAsset::generateCleanPrefix($prod->name, $prod->sku);
+
+                    $fa = FixedAsset::create([
+                        'name'           => $prod->name,
+                        'category'       => $orphan?->category ?? $cat,
+                        'code_prefix'    => $orphan?->code_prefix ?? $prefix,
+                        'total_quantity' => $invQty,
+                        'unit_cost'      => $prod->unit_price ?? 0,
+                        'store_id'       => $storeId,
+                        'created_by'     => auth()->id(),
+                    ]);
+                }
+
+                if ($fa) {
+                    $availUnitsCount = $fa->units()->where('status', FixedAssetUnit::STATUS_IN_STORE)->count();
+                    if ($availUnitsCount < $invQty) {
+                        $fa->total_quantity = max((int)$fa->total_quantity, $invQty);
+                        $fa->saveQuietly();
+                        $fa->generateUnitsToMatchQuantity([
+                            'purchase_price'   => $prod->unit_price ?? 0,
+                            'current_location' => $storeName ?: ('Store #' . $storeId),
+                            'condition'        => $prod->equipment_condition ?: 'good',
+                        ]);
+                    }
+                }
+            }
+        }
+
+        $query = FixedAssetUnit::with(['parentAsset.store'])
             ->where('status', FixedAssetUnit::STATUS_IN_STORE);
 
         if ($search) {
@@ -676,17 +740,36 @@ class FixedAssetController extends Controller
             });
         }
 
-        if ($request->filled('store_id')) {
-            $query->whereHas('parentAsset', fn($pq) => $pq->where('store_id', $request->store_id));
-        }
-        if ($request->filled('product_id')) {
-            $prod = Product::find($request->product_id);
-            if ($prod) {
-                $query->whereHas('parentAsset', fn($pq) => $pq->where('name', $prod->name));
-            }
+        if ($storeId) {
+            $query->where(function($q) use ($storeId, $storeName) {
+                $q->whereHas('parentAsset', fn($pq) => $pq->where('store_id', $storeId));
+                if ($storeName) {
+                    $q->orWhere('current_location', $storeName);
+                }
+                $q->orWhere(function($sub) {
+                    $sub->whereNull('current_location')
+                        ->whereHas('parentAsset', fn($pq) => $pq->whereNull('store_id'));
+                });
+            });
         }
 
-        $units = $query->orderBy('unit_code')->limit(50)->get()->map(function($u) {
+        if ($prod) {
+            $prodNameLower = strtolower(trim($prod->name));
+            $prodSku = strtoupper(trim($prod->sku ?? ''));
+            $cleanPrefix = str_replace(['FA-', 'AST-'], '', $prodSku);
+
+            $query->whereHas('parentAsset', function($pq) use ($prod, $prodNameLower, $cleanPrefix) {
+                $pq->whereRaw('LOWER(TRIM(name)) = ?', [$prodNameLower])
+                   ->orWhere('description', 'like', "%(Product ID: {$prod->id})%")
+                   ->orWhere('description', 'like', "%SKU: " . ($prod->sku ?? '') . "%");
+                if (!empty($cleanPrefix)) {
+                    $pq->orWhere('code_prefix', $cleanPrefix);
+                }
+            });
+        }
+
+        $limit = $productId ? 250 : 500;
+        $units = $query->orderBy('unit_code')->limit($limit)->get()->map(function($u) {
             return [
                 'id'            => $u->id,
                 'unit_code'     => $u->unit_code,
@@ -778,7 +861,7 @@ class FixedAssetController extends Controller
 
         // Verify that destination store is different from origin store
         $firstUnit = $units->first();
-        $fromStoreId = $firstUnit->parentAsset?->store_id;
+        $fromStoreId = $firstUnit->parentAsset?->store_id ?? $request->input('from_store_id') ?? Store::where('name', $firstUnit->current_location)->value('id') ?? 1;
         if ((int)$fromStoreId === (int)$toStore->id) {
             return back()->withErrors(['error' => 'Destination store cannot be the same as the origin store.']);
         }
@@ -888,7 +971,16 @@ class FixedAssetController extends Controller
                 // Add items to existing transfer
                 foreach ($groupedByAsset as $originAssetId => $assetUnits) {
                     $originAsset = $assetUnits->first()->parentAsset;
-                    $prod = Product::where('name', $originAsset->name)->first();
+                    $prod = Product::where('name', $originAsset->name)
+                        ->orWhere('sku', 'FA-' . strtoupper(trim($originAsset->code_prefix)))
+                        ->orWhere('sku', 'AST-' . strtoupper(trim($originAsset->code_prefix)))
+                        ->orWhereRaw('LOWER(TRIM(name)) = ?', [strtolower(trim($originAsset->name))])
+                        ->first();
+
+                    if (!$prod) {
+                        $prod = $originAsset->syncWithCatalogAndInventory();
+                    }
+
                     if ($prod) {
                         $count = $assetUnits->count();
                         $unitCodes = $assetUnits->pluck('unit_code')->toArray();
@@ -947,7 +1039,8 @@ class FixedAssetController extends Controller
                         $targetTransfer
                     );
                 } catch (\Throwable $e) {}
-            } elseif (!empty($validated['waybill_no']) || !empty($validated['create_slip'])) {
+            } else {
+                // Create dedicated Transfer record and sync inventory
                 $transferNo = Transfer::generateUniqueNo();
                 $transfer = Transfer::create([
                     'transfer_no'        => $transferNo,
@@ -973,7 +1066,16 @@ class FixedAssetController extends Controller
                 // Create transfer items WITH unit_codes
                 foreach ($groupedByAsset as $originAssetId => $assetUnits) {
                     $originAsset = $assetUnits->first()->parentAsset;
-                    $prod = Product::where('name', $originAsset->name)->first();
+                    $prod = Product::where('name', $originAsset->name)
+                        ->orWhere('sku', 'FA-' . strtoupper(trim($originAsset->code_prefix)))
+                        ->orWhere('sku', 'AST-' . strtoupper(trim($originAsset->code_prefix)))
+                        ->orWhereRaw('LOWER(TRIM(name)) = ?', [strtolower(trim($originAsset->name))])
+                        ->first();
+
+                    if (!$prod) {
+                        $prod = $originAsset->syncWithCatalogAndInventory();
+                    }
+
                     if ($prod) {
                         $transfer->items()->create([
                             'product_id'         => $prod->id,
@@ -990,6 +1092,10 @@ class FixedAssetController extends Controller
                 \App\Http\Controllers\StoreManagerController::syncTransferInventory($transfer);
             }
         });
+
+        try {
+            FixedAsset::syncFromInventory();
+        } catch (\Throwable $e) {}
 
         $codesStr = implode(', ', $transferredCodes);
         if ($targetTransfer) {

@@ -913,7 +913,7 @@
 
             <div class="modal-footer bg-white border-top d-flex justify-content-between px-4">
                 <div class="d-flex gap-2">
-                    <a href="{{ route('transfers.create') }}" class="btn btn-outline-primary btn-sm fw-semibold">
+                    <a href="{{ route('transfers.create') }}" class="btn btn-outline-primary btn-sm fw-semibold" id="gdBtnTransfer">
                         <i class="fas fa-truck-ramp-box me-1"></i>Create Transfer
                     </a>
                     <a href="{{ route('purchase-requests.create') }}" class="btn btn-outline-success btn-sm fw-semibold">
@@ -1153,7 +1153,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 setText('sdUnit1', u); setText('sdUnit2', u); setText('sdUnit3', u);
                 setBadge('sdStatus', d.status, d.statusBg);
                 var btnT = document.getElementById('sdBtnTransfer');
-                if (btnT) btnT.href = "{{ route('transfers.create') }}?store_id=" + (d.storeId || '');
+                if (btnT) btnT.href = "{{ route('transfers.create') }}?store_id=" + (d.storeId || '') + "&product_id=" + (d.productId || '');
 
                 // Reset tab to overview
                 var firstTabBtn = document.getElementById('sd-tab-overview-btn');
@@ -1229,6 +1229,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (currentGroupedProductId) {
                     loadProductHistory(currentGroupedProductId, null, 'gd');
                 }
+
+                // Update Transfer button with pre-selected product
+                var gdBtnT = document.getElementById('gdBtnTransfer');
+                if (gdBtnT) gdBtnT.href = "{{ route('transfers.create') }}?product_id=" + (d.productId || '');
 
                 gdModal.show();
             });

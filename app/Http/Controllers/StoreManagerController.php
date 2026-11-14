@@ -713,6 +713,53 @@ class StoreManagerController extends Controller
                 if (!empty($unitCodes)) {
                     $prod = Product::find($item['product_id']);
                     $faNotes[] = ($prod->name ?? 'Equipment') . ' Units: [' . implode(', ', $unitCodes) . ']';
+
+                    // Move individual FixedAssetUnit records to destination store
+                    try {
+                        $toStore = Store::find($request->to_store_id);
+                        $units = \App\Models\FixedAssetUnit::whereIn('unit_code', $unitCodes)->get();
+                        if ($units->isNotEmpty() && $toStore) {
+                            $firstUnit = $units->first();
+                            $originFa = $firstUnit->parentAsset;
+                            $assetName = $originFa?->name ?? ($prod->name ?? 'Equipment');
+                            $assetCat = $originFa?->category ?? \App\Models\FixedAsset::resolveCategory($prod?->category ?? '', $assetName);
+
+                            $destFa = \App\Models\FixedAsset::firstOrCreate(
+                                ['store_id' => $toStore->id, 'name' => $assetName],
+                                [
+                                    'category'       => $assetCat,
+                                    'code_prefix'    => $originFa?->code_prefix ?? \App\Models\FixedAsset::generateCleanPrefix($assetName, $prod?->sku),
+                                    'total_quantity' => 0,
+                                    'unit_cost'      => $prod?->unit_price ?? 0,
+                                    'created_by'     => Auth::id(),
+                                ]
+                            );
+
+                            foreach ($units as $u) {
+                                if ($u->parentAsset) {
+                                    $u->parentAsset->decrement('total_quantity', 1);
+                                }
+                                $destFa->increment('total_quantity', 1);
+                                $u->update([
+                                    'fixed_asset_id'   => $destFa->id,
+                                    'current_location' => $toStore->name,
+                                    'status'           => \App\Models\FixedAssetUnit::STATUS_IN_STORE,
+                                ]);
+
+                                \App\Models\FixedAssetAssignment::createSafely([
+                                    'fixed_asset_unit_id'    => $u->id,
+                                    'employee_id'            => null,
+                                    'action'                 => 'transferred',
+                                    'assigned_date'          => now(),
+                                    'condition_on_assignment'=> $u->condition ?: 'good',
+                                    'assigned_by'            => Auth::id(),
+                                    'notes'                  => "Transferred via Transfer #{$transfer->transfer_no} to {$toStore->name}",
+                                ]);
+                            }
+                        }
+                    } catch (\Throwable $e) {
+                        \Illuminate\Support\Facades\Log::warning("storeTransfer fixed asset unit move error: " . $e->getMessage());
+                    }
                 }
             }
 
@@ -724,6 +771,10 @@ class StoreManagerController extends Controller
 
             // Immediately deduct from origin store and add to destination store inventory
             self::syncTransferInventory($transfer);
+
+            try {
+                \App\Models\FixedAsset::syncFromInventory();
+            } catch (\Throwable $e) {}
         });
 
         return redirect()->route('store-manager.transfers.index')->with('success', 'Transfer created. Materials deducted from origin store and added to destination store inventory.');
