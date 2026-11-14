@@ -185,7 +185,19 @@
                     <h6 class="m-0 font-weight-bold text-dark">
                         <i class="fa-solid fa-barcode text-primary me-2"></i>Individual Unit Codes ({{ $fixedAsset->units->count() }} Total)
                     </h6>
-                    <div class="d-flex align-items-center gap-2">
+                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                        @php
+                            $availableCount = $fixedAsset->units->where('status', 'in_store')->count();
+                        @endphp
+                        @if($availableCount > 0)
+                        <div class="input-group input-group-sm" style="width: 165px;">
+                            <span class="input-group-text bg-white small px-2 text-muted fw-semibold" style="font-size: 0.75rem;">Qty</span>
+                            <input type="number" class="form-control form-control-sm text-center" id="asset_show_qty_input" placeholder="e.g. 5" min="1" max="{{ $availableCount }}" step="1">
+                            <button type="button" class="btn btn-outline-primary fw-semibold px-2" onclick="selectUnitsByQuantity()" title="Select this number of units" style="font-size: 0.75rem;">
+                                Select
+                            </button>
+                        </div>
+                        @endif
                         <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold shadow-xs" id="btn_table_select_all" onclick="toggleAllUnitsBtn()">
                             <i class="fa-solid fa-check-double me-1"></i><span id="btn_table_select_all_text">Select All</span>
                         </button>
@@ -1141,6 +1153,53 @@ function openTransferModalSingle(btn) {
     new bootstrap.Modal(document.getElementById('transferUnitModal')).show();
 }
 
+function selectUnitsByQuantity() {
+    const qtyInput = document.getElementById('asset_show_qty_input');
+    const chks = document.querySelectorAll('.unit-select-chk:not(:disabled)');
+    const total = chks.length;
+    if (total === 0) return;
+
+    let targetQty = parseInt(qtyInput ? qtyInput.value : 0, 10);
+    if (isNaN(targetQty) || targetQty <= 0) {
+        chks.forEach(chk => { chk.checked = false; });
+        const master = document.getElementById('chk_select_all_units');
+        if (master) master.checked = false;
+        const btnText = document.getElementById('btn_table_select_all_text');
+        if (btnText) btnText.textContent = 'Select All';
+        if (qtyInput) qtyInput.value = '';
+        return;
+    }
+
+    if (targetQty > total) {
+        targetQty = total;
+        if (qtyInput) qtyInput.value = total;
+    }
+
+    chks.forEach((chk, index) => {
+        chk.checked = (index < targetQty);
+    });
+
+    const master = document.getElementById('chk_select_all_units');
+    if (master) master.checked = (targetQty === total);
+    const btnText = document.getElementById('btn_table_select_all_text');
+    if (btnText) {
+        btnText.textContent = (targetQty === total) ? 'Deselect All' : 'Select All';
+    }
+}
+
+// Support Enter key on show qty input
+document.addEventListener('DOMContentLoaded', function() {
+    const showQtyInput = document.getElementById('asset_show_qty_input');
+    if (showQtyInput) {
+        showQtyInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                selectUnitsByQuantity();
+            }
+        });
+    }
+});
+
 function toggleAllUnitsBtn() {
     const master = document.getElementById('chk_select_all_units');
     const chks = document.querySelectorAll('.unit-select-chk:not(:disabled)');
@@ -1152,6 +1211,11 @@ function toggleAllUnitsBtn() {
         chk.checked = newState;
     });
 
+    const qtyInput = document.getElementById('asset_show_qty_input');
+    if (qtyInput) {
+        qtyInput.value = newState ? chks.length : '';
+    }
+
     const btnText = document.getElementById('btn_table_select_all_text');
     if (btnText) {
         btnText.textContent = newState ? 'Deselect All' : 'Select All';
@@ -1159,9 +1223,14 @@ function toggleAllUnitsBtn() {
 }
 
 function toggleSelectAllUnits(master) {
-    document.querySelectorAll('.unit-select-chk:not(:disabled)').forEach(chk => {
+    const chks = document.querySelectorAll('.unit-select-chk:not(:disabled)');
+    chks.forEach(chk => {
         chk.checked = master.checked;
     });
+    const qtyInput = document.getElementById('asset_show_qty_input');
+    if (qtyInput) {
+        qtyInput.value = master.checked ? chks.length : '';
+    }
     const btnText = document.getElementById('btn_table_select_all_text');
     if (btnText) {
         btnText.textContent = master.checked ? 'Deselect All' : 'Select All';
@@ -1175,6 +1244,10 @@ document.addEventListener('change', function(e) {
         const checkedCount = document.querySelectorAll('.unit-select-chk:checked').length;
         const master = document.getElementById('chk_select_all_units');
         if (master) master.checked = (total > 0 && checkedCount === total);
+        const qtyInput = document.getElementById('asset_show_qty_input');
+        if (qtyInput && document.activeElement !== qtyInput) {
+            qtyInput.value = checkedCount > 0 ? checkedCount : '';
+        }
         const btnText = document.getElementById('btn_table_select_all_text');
         if (btnText) {
             btnText.textContent = (total > 0 && checkedCount === total) ? 'Deselect All' : 'Select All';

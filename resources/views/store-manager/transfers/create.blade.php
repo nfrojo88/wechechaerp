@@ -132,7 +132,14 @@
                                             <span class="text-muted" style="font-size: 0.72rem;">Only units available in the selected origin store are listed</span>
                                         </div>
                                     </div>
-                                    <div class="d-flex align-items-center gap-2">
+                                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                                        <div class="input-group input-group-sm fa-qty-select-group d-none" style="width: 170px;">
+                                            <span class="input-group-text bg-white small px-2 text-muted fw-semibold" style="font-size: 0.75rem;">Qty</span>
+                                            <input type="number" class="form-control form-control-sm text-center fa-quick-qty-input" placeholder="e.g. 5" min="1" step="1">
+                                            <button type="button" class="btn btn-outline-primary fa-apply-qty-btn fw-semibold px-2" title="Select this quantity of units" style="font-size: 0.75rem;">
+                                                Select
+                                            </button>
+                                        </div>
                                         <button type="button" class="btn btn-sm btn-outline-primary select-all-fa-btn py-1 px-2.5 fw-semibold shadow-xs" style="font-size: 0.78rem;">
                                             <i class="fa-solid fa-check-double me-1"></i>Select All
                                         </button>
@@ -212,7 +219,14 @@ $('#add-item').click(function() {
                             <span class="text-muted" style="font-size: 0.72rem;">Only units available in the selected origin store are listed</span>
                         </div>
                     </div>
-                    <div class="d-flex align-items-center gap-2">
+                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                        <div class="input-group input-group-sm fa-qty-select-group d-none" style="width: 170px;">
+                            <span class="input-group-text bg-white small px-2 text-muted fw-semibold" style="font-size: 0.75rem;">Qty</span>
+                            <input type="number" class="form-control form-control-sm text-center fa-quick-qty-input" placeholder="e.g. 5" min="1" step="1">
+                            <button type="button" class="btn btn-outline-primary fa-apply-qty-btn fw-semibold px-2" title="Select this quantity of units" style="font-size: 0.75rem;">
+                                Select
+                            </button>
+                        </div>
                         <button type="button" class="btn btn-sm btn-outline-primary select-all-fa-btn py-1 px-2.5 fw-semibold shadow-xs" style="font-size: 0.78rem;">
                             <i class="fa-solid fa-check-double me-1"></i>Select All
                         </button>
@@ -270,18 +284,23 @@ function handleFixedAssetUnitBox($block, isFa) {
     const $container = $block.find('.fa-units-list-container');
     const $qtyInput = $block.find('.quantity-input');
     const $countBadge = $block.find('.unit-codes-count');
+    const $qtyGroup = $block.find('.fa-qty-select-group');
+    const $quickQtyInput = $block.find('.fa-quick-qty-input');
     const rowIndex = $block.data('row-index');
 
     if (!isFa) {
         $wrapper.addClass('d-none');
         $container.empty();
-        $qtyInput.prop('readonly', false).attr('placeholder', 'Quantity');
+        $qtyGroup.addClass('d-none');
+        $qtyInput.prop('readonly', false).removeAttr('max').attr('placeholder', 'Quantity').attr('step', '0.001').attr('min', '0.001');
         return;
     }
 
     $wrapper.removeClass('d-none');
-    $qtyInput.prop('readonly', true).val('').attr('placeholder', 'Selected by unit codes');
+    $qtyInput.prop('readonly', false).val('').removeAttr('max').attr('placeholder', 'Enter qty or check codes').attr('step', '1').attr('min', '1');
     $countBadge.text('0 Selected');
+    $quickQtyInput.val('');
+    $qtyGroup.addClass('d-none');
     $block.find('.select-all-fa-btn').removeClass('d-none');
     $block.find('.deselect-all-fa-btn').addClass('d-none');
 
@@ -291,6 +310,7 @@ function handleFixedAssetUnitBox($block, isFa) {
     if (!fromStoreId) {
         $block.find('.select-all-fa-btn').addClass('d-none');
         $block.find('.deselect-all-fa-btn').addClass('d-none');
+        $qtyGroup.addClass('d-none');
         $container.html(`
             <div class="alert alert-warning py-2 px-3 mb-0 small border-0">
                 <i class="fa-solid fa-circle-exclamation me-1"></i>
@@ -303,6 +323,7 @@ function handleFixedAssetUnitBox($block, isFa) {
     if (!productId) {
         $block.find('.select-all-fa-btn').addClass('d-none');
         $block.find('.deselect-all-fa-btn').addClass('d-none');
+        $qtyGroup.addClass('d-none');
         $container.empty();
         return;
     }
@@ -321,6 +342,7 @@ function handleFixedAssetUnitBox($block, isFa) {
             if (!data.units || data.units.length === 0) {
                 $block.find('.select-all-fa-btn').addClass('d-none');
                 $block.find('.deselect-all-fa-btn').addClass('d-none');
+                $qtyGroup.addClass('d-none');
                 $container.html(`
                     <div class="alert alert-danger py-2 px-3 mb-0 small border-0">
                         <i class="fa-solid fa-circle-xmark me-1"></i>
@@ -330,6 +352,10 @@ function handleFixedAssetUnitBox($block, isFa) {
                 return;
             }
 
+            const totalAvail = data.units.length;
+            $qtyGroup.removeClass('d-none');
+            $quickQtyInput.attr('max', totalAvail).attr('placeholder', `Max ${totalAvail}`);
+            $qtyInput.attr('max', totalAvail).attr('title', `Up to ${totalAvail} units available in this store`);
             $block.find('.select-all-fa-btn').removeClass('d-none');
             $block.find('.deselect-all-fa-btn').addClass('d-none');
 
@@ -363,12 +389,58 @@ function handleFixedAssetUnitBox($block, isFa) {
         .catch(err => {
             $block.find('.select-all-fa-btn').addClass('d-none');
             $block.find('.deselect-all-fa-btn').addClass('d-none');
+            $qtyGroup.addClass('d-none');
             $container.html(`
                 <div class="text-danger small py-2">
                     <i class="fa-solid fa-triangle-exclamation me-1"></i>Failed to fetch units: ${err.message}
                 </div>
             `);
         });
+}
+
+// Helper to select N units by quantity within an item block
+function applyUnitQuantityToBlock($block, qty, updateMainQty = true) {
+    const $checkboxes = $block.find('.fa-unit-checkbox');
+    const total = $checkboxes.length;
+    if (total === 0) return;
+
+    let targetQty = parseInt(qty, 10);
+    if (isNaN(targetQty) || targetQty <= 0) {
+        $checkboxes.prop('checked', false);
+        $block.find('.fa-unit-card').removeClass('selected border-primary bg-primary bg-opacity-10');
+        if (updateMainQty) {
+            $block.find('.quantity-input').val('');
+        }
+        $block.find('.fa-quick-qty-input').val('');
+        $block.find('.unit-codes-count').text('0 Selected');
+        $block.find('.select-all-fa-btn').removeClass('d-none');
+        $block.find('.deselect-all-fa-btn').addClass('d-none');
+        return;
+    }
+
+    if (targetQty > total) {
+        targetQty = total;
+    }
+
+    $checkboxes.each(function(index) {
+        const shouldCheck = (index < targetQty);
+        $(this).prop('checked', shouldCheck);
+        $(this).closest('.fa-unit-card').toggleClass('selected border-primary bg-primary bg-opacity-10', shouldCheck);
+    });
+
+    if (updateMainQty) {
+        $block.find('.quantity-input').val(targetQty);
+    }
+    $block.find('.fa-quick-qty-input').val(targetQty);
+    $block.find('.unit-codes-count').text(`${targetQty} Selected`);
+
+    if (targetQty === total) {
+        $block.find('.select-all-fa-btn').addClass('d-none');
+        $block.find('.deselect-all-fa-btn').removeClass('d-none');
+    } else {
+        $block.find('.select-all-fa-btn').removeClass('d-none');
+        $block.find('.deselect-all-fa-btn').addClass('d-none');
+    }
 }
 
 // Click "Select All" button for fixed asset units
@@ -380,6 +452,7 @@ $(document).on('click', '.select-all-fa-btn', function() {
 
     const count = $checkboxes.length;
     $block.find('.quantity-input').val(count > 0 ? count : '');
+    $block.find('.fa-quick-qty-input').val(count > 0 ? count : '');
     $block.find('.unit-codes-count').text(`${count} Selected`);
 
     $(this).addClass('d-none');
@@ -394,10 +467,38 @@ $(document).on('click', '.deselect-all-fa-btn', function() {
     $block.find('.fa-unit-card').removeClass('selected border-primary bg-primary bg-opacity-10');
 
     $block.find('.quantity-input').val('');
+    $block.find('.fa-quick-qty-input').val('');
     $block.find('.unit-codes-count').text(`0 Selected`);
 
     $(this).addClass('d-none');
     $block.find('.select-all-fa-btn').removeClass('d-none');
+});
+
+// Click "Select" button next to Qty input in FA toolbar
+$(document).on('click', '.fa-apply-qty-btn', function() {
+    const $block = $(this).closest('.item-block');
+    const qty = $block.find('.fa-quick-qty-input').val();
+    applyUnitQuantityToBlock($block, qty, true);
+});
+
+// Press Enter in quick qty input
+$(document).on('keydown', '.fa-quick-qty-input', function(e) {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        const $block = $(this).closest('.item-block');
+        const qty = $(this).val();
+        applyUnitQuantityToBlock($block, qty, true);
+    }
+});
+
+// Typing in main Quantity input for a fixed asset row
+$(document).on('input change', '.quantity-input', function() {
+    const $block = $(this).closest('.item-block');
+    const isFa = $block.find('.product-select option:selected').data('is-fa') == '1';
+    if (!isFa) return;
+
+    const val = $(this).val();
+    applyUnitQuantityToBlock($block, val, false);
 });
 
 // When unit checkbox is clicked -> update quantity input and selected counter
@@ -409,6 +510,7 @@ $(document).on('change', '.fa-unit-checkbox', function() {
     const total = $block.find('.fa-unit-checkbox').length;
     const count = $block.find('.fa-unit-checkbox:checked').length;
     $block.find('.quantity-input').val(count > 0 ? count : '');
+    $block.find('.fa-quick-qty-input').val(count > 0 ? count : '');
     $block.find('.unit-codes-count').text(`${count} Selected`);
 
     if (total > 0 && count === total) {

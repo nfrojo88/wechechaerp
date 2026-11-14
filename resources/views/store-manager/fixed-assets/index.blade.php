@@ -1006,9 +1006,16 @@
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label small fw-bold d-flex justify-content-between align-items-center">
+                        <label class="form-label small fw-bold d-flex justify-content-between align-items-center flex-wrap gap-2">
                             <span>Available Units with Individual Codes <span class="text-danger">*</span></span>
-                            <div class="d-flex align-items-center gap-2">
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <div class="input-group input-group-sm d-none" id="bulk_qty_select_group" style="width: 165px;">
+                                    <span class="input-group-text bg-white small px-2 text-muted fw-semibold" style="font-size: 0.75rem;">Qty</span>
+                                    <input type="number" class="form-control form-control-sm text-center" id="bulk_quick_qty_input" placeholder="e.g. 5" min="1" step="1">
+                                    <button type="button" class="btn btn-outline-primary fw-semibold px-2" id="btn_bulk_apply_qty" onclick="applyBulkUnitsQuantity()" title="Select this number of units" style="font-size: 0.75rem;">
+                                        Select
+                                    </button>
+                                </div>
                                 <button type="button" class="btn btn-sm btn-outline-primary py-0 px-2 fw-semibold d-none" id="btn_bulk_select_all" onclick="toggleBulkSelectAllUnits(true)" style="font-size: 0.78rem;">
                                     <i class="fa-solid fa-check-double me-1"></i>Select All
                                 </button>
@@ -1255,6 +1262,9 @@ function loadAvailableUnitsForTransfer() {
     document.getElementById('btn_bulk_deselect_all')?.classList.add('d-none');
 
     if (!storeId) {
+        document.getElementById('btn_bulk_select_all')?.classList.add('d-none');
+        document.getElementById('btn_bulk_deselect_all')?.classList.add('d-none');
+        document.getElementById('bulk_qty_select_group')?.classList.add('d-none');
         container.innerHTML = '<div class="text-muted small text-center py-4">Please select an origin store above to view available unit codes.</div>';
         return;
     }
@@ -1269,7 +1279,18 @@ function loadAvailableUnitsForTransfer() {
                 container.innerHTML = '<div class="text-muted small text-center py-4">No available in-store units found in this store.</div>';
                 document.getElementById('btn_bulk_select_all')?.classList.add('d-none');
                 document.getElementById('btn_bulk_deselect_all')?.classList.add('d-none');
+                document.getElementById('bulk_qty_select_group')?.classList.add('d-none');
                 return;
+            }
+
+            const totalUnits = data.units.length;
+            const bulkQtyGroup = document.getElementById('bulk_qty_select_group');
+            const bulkQtyInput = document.getElementById('bulk_quick_qty_input');
+            if (bulkQtyGroup) bulkQtyGroup.classList.remove('d-none');
+            if (bulkQtyInput) {
+                bulkQtyInput.value = '';
+                bulkQtyInput.max = totalUnits;
+                bulkQtyInput.placeholder = `Max ${totalUnits}`;
             }
 
             document.getElementById('btn_bulk_select_all')?.classList.remove('d-none');
@@ -1297,15 +1318,57 @@ function loadAvailableUnitsForTransfer() {
         .catch(err => {
             document.getElementById('btn_bulk_select_all')?.classList.add('d-none');
             document.getElementById('btn_bulk_deselect_all')?.classList.add('d-none');
+            document.getElementById('bulk_qty_select_group')?.classList.add('d-none');
             container.innerHTML = '<div class="text-danger small text-center py-4">Failed to load units.</div>';
         });
 }
+
+function applyBulkUnitsQuantity() {
+    const qtyInput = document.getElementById('bulk_quick_qty_input');
+    const chks = document.querySelectorAll('.bulk-unit-chk');
+    const total = chks.length;
+    if (total === 0) return;
+
+    let targetQty = parseInt(qtyInput ? qtyInput.value : 0, 10);
+    if (isNaN(targetQty) || targetQty <= 0) {
+        toggleBulkSelectAllUnits(false);
+        return;
+    }
+
+    if (targetQty > total) {
+        targetQty = total;
+        if (qtyInput) qtyInput.value = total;
+    }
+
+    chks.forEach((chk, index) => {
+        chk.checked = (index < targetQty);
+    });
+
+    updateBulkUnitsSelectedCount();
+}
+
+// Support pressing enter in bulk quick qty input
+document.addEventListener('DOMContentLoaded', function() {
+    const bulkInput = document.getElementById('bulk_quick_qty_input');
+    if (bulkInput) {
+        bulkInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                applyBulkUnitsQuantity();
+            }
+        });
+    }
+});
 
 function toggleBulkSelectAllUnits(selectAll) {
     const chks = document.querySelectorAll('.bulk-unit-chk');
     chks.forEach(chk => {
         chk.checked = selectAll;
     });
+    const qtyInput = document.getElementById('bulk_quick_qty_input');
+    if (qtyInput) {
+        qtyInput.value = selectAll ? chks.length : '';
+    }
     updateBulkUnitsSelectedCount();
     if (selectAll) {
         document.getElementById('btn_bulk_select_all')?.classList.add('d-none');
@@ -1320,6 +1383,10 @@ function updateBulkUnitsSelectedCount() {
     const total = document.querySelectorAll('.bulk-unit-chk').length;
     const count = document.querySelectorAll('.bulk-unit-chk:checked').length;
     document.getElementById('bulk_units_count').textContent = count + ' unit(s) selected';
+    const qtyInput = document.getElementById('bulk_quick_qty_input');
+    if (qtyInput && document.activeElement !== qtyInput) {
+        qtyInput.value = count > 0 ? count : '';
+    }
     if (total > 0 && count === total) {
         document.getElementById('btn_bulk_select_all')?.classList.add('d-none');
         document.getElementById('btn_bulk_deselect_all')?.classList.remove('d-none');
