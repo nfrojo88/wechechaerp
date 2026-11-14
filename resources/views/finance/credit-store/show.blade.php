@@ -45,6 +45,9 @@
         </div>
 
         <div class="d-flex gap-2 flex-wrap">
+            <button type="button" class="btn btn-info btn-sm text-white shadow-sm fw-bold" data-bs-toggle="modal" data-bs-target="#syncCreditValueModal" title="Update Credit Purchase Money / Adjust Liability">
+                <i class="fa-solid fa-coins me-1"></i> Update Money (ETB {{ number_format($ledger->credit_amount, 2) }})
+            </button>
             @if($ledger->remaining_amount > 0)
                 <a href="#disbursePaymentSection" class="btn btn-success btn-sm shadow-sm fw-bold">
                     <i class="fa-solid fa-receipt me-1"></i> Disburse Payment &amp; OCR
@@ -129,7 +132,12 @@
                             <span class="badge bg-primary-subtle text-primary border border-primary font-monospace">PR #{{ $ledger->purchaseRequest->pr_no }}</span>
                         @endif
                     </div>
-                    <span class="badge bg-light text-muted border">COA: {{ optional($ledger->coaAccount)->code ?? '5110' }} - {{ optional($ledger->coaAccount)->name ?? 'Cost Of Material By Credit' }}</span>
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="badge bg-light text-muted border">COA: {{ optional($ledger->coaAccount)->code ?? '5110' }} - {{ optional($ledger->coaAccount)->name ?? 'Cost Of Material By Credit' }}</span>
+                        <button type="button" class="btn btn-xs btn-outline-primary py-1 px-2.5 rounded-pill fw-semibold shadow-2xs" data-bs-toggle="modal" data-bs-target="#syncCreditValueModal" title="Update Credit Purchase Money">
+                            <i class="fa-solid fa-coins me-1"></i> Update Money
+                        </button>
+                    </div>
                 </div>
                 <div class="table-responsive">
                     <table class="table table-hover align-middle mb-0" style="font-size: 0.875rem;">

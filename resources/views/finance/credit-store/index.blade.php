@@ -226,6 +226,7 @@
                         <th>PR Number</th>
                         <th>Project</th>
                         <th>Supplier / Sourcing</th>
+                        <th>Materials</th>
                         <th>Authorized Date</th>
                         <th class="text-end">Credit Amount</th>
                         <th class="text-end">Paid Amount</th>
@@ -239,8 +240,42 @@
                         @php
                             $isPayable = (float)$ledger->remaining_amount > 0.001;
                             $hasReceipt = $ledger->payments->whereNotNull('receipt_path')->first();
+                            $prItems = $ledger->purchaseRequest?->items ?? collect();
+                            $prItemsCount = $prItems->count();
+                            $calculatedItemsTotal = 0.0;
+                            foreach ($prItems as $it) {
+                                $uPrice = (float)($it->estimated_unit_cost ?? $it->estimated_unit_price ?? $it->unit_price ?? 0);
+                                $calculatedItemsTotal += (float)($it->estimated_total > 0 ? $it->estimated_total : ((float)$it->quantity * $uPrice));
+                            }
+                            $calculatedItemsWithVat = round($calculatedItemsTotal * 1.15, 2);
+                            $itemsJson = $prItems->map(function($it) {
+                                $uPrice = (float)($it->estimated_unit_cost ?? $it->estimated_unit_price ?? $it->unit_price ?? 0);
+                                $lTotal = (float)($it->estimated_total > 0 ? $it->estimated_total : ((float)$it->quantity * $uPrice));
+                                return [
+                                    'id'         => $it->id,
+                                    'name'       => optional($it->product)->name ?? ($it->item_name ?? 'Material Item'),
+                                    'code'       => optional($it->product)->item_code ?? (optional($it->product)->sku ?? ''),
+                                    'quantity'   => (float)$it->quantity,
+                                    'unit'       => $it->unit ?? (optional($it->product)->unit ?? 'pcs'),
+                                    'unit_cost'  => $uPrice,
+                                    'line_total' => $lTotal,
+                                ];
+                            })->values();
                         @endphp
-                        <tr class="{{ $isPayable ? 'table-row-selectable' : 'table-light' }}">
+                        <tr class="{{ $isPayable ? 'table-row-selectable' : 'table-light' }}"
+                            id="ledger-row-{{ $ledger->id }}"
+                            data-id="{{ $ledger->id }}"
+                            data-pr="{{ $ledger->pr_no ?? ($ledger->purchaseRequest->pr_no ?? 'PR-'.$ledger->id) }}"
+                            data-project="{{ $ledger->project->name ?? '—' }}"
+                            data-supplier="{{ $ledger->supplier_name ?: 'Credit Supplier' }}"
+                            data-credit="{{ (float)$ledger->credit_amount }}"
+                            data-paid="{{ (float)$ledger->paid_amount }}"
+                            data-calc-sum="{{ (float)$calculatedItemsTotal }}"
+                            data-calc-vat="{{ (float)$calculatedItemsWithVat }}"
+                            data-gm-amount="{{ (float)($ledger->purchaseRequest->direct_buy_amount ?? 0) }}"
+                            data-sync-url="{{ route('finance.credit-store.sync-amount', $ledger) }}"
+                            data-coa="{{ optional($ledger->coaAccount)->code ?? '5110' }} - {{ optional($ledger->coaAccount)->name ?? 'Cost Of Material By Credit' }}"
+                            data-items='@json($itemsJson)'>
                             <td class="ps-3">
                                 @if($isPayable)
                                     <input type="checkbox" class="form-check-input credit-checkbox"
@@ -276,6 +311,21 @@
                                     COA: {{ $ledger->coaAccount->code ?? '5110' }} - {{ $ledger->coaAccount->name ?? 'Cost Of Material By Credit' }}
                                 </div>
                             </td>
+                            <td>
+                                @if($prItemsCount > 0)
+                                    <button type="button" class="btn btn-xs btn-outline-primary py-0.5 px-2 rounded-pill fw-semibold shadow-2xs d-inline-flex align-items-center gap-1"
+                                        onclick="openMaterialMoneyModal({{ $ledger->id }}, 'materials')"
+                                        title="Click to view material list">
+                                        <i class="fa-solid fa-boxes-stacked text-primary"></i>
+                                        <span>{{ $prItemsCount }} Material{{ $prItemsCount > 1 ? 's' : '' }}</span>
+                                    </button>
+                                    <div class="text-muted small text-truncate mt-1" style="max-width: 200px; font-size: 0.74rem;" title="{{ $prItems->map(fn($i) => (optional($i->product)->name ?? $i->item_name) . ' (' . number_format($i->quantity, 2) . ' ' . ($i->unit ?? optional($i->product)->unit) . ')')->implode(', ') }}">
+                                        {{ $prItems->map(fn($i) => (optional($i->product)->name ?? $i->item_name))->take(2)->implode(', ') }}{{ $prItemsCount > 2 ? '...' : '' }}
+                                    </div>
+                                @else
+                                    <span class="text-muted small fst-italic">Direct Amount</span>
+                                @endif
+                            </td>
                             <td class="text-muted">
                                 {{ $ledger->authorized_at ? $ledger->authorized_at->format('M d, Y') : ($ledger->created_at ? $ledger->created_at->format('M d, Y') : '—') }}
                                 <div class="small text-muted" style="font-size: 0.75rem;">
@@ -283,10 +333,18 @@
                                 </div>
                             </td>
                             <td class="text-end fw-bold text-dark">
-                                {{ number_format($ledger->credit_amount, 2) }} <span class="small text-muted">ETB</span>
-                                @if($ledger->purchaseRequest && (float)$ledger->purchaseRequest->direct_buy_amount > 0 && abs((float)$ledger->credit_amount - (float)$ledger->purchaseRequest->direct_buy_amount) > 0.01)
-                                    <div class="small text-muted font-monospace" style="font-size: 0.72rem;" title="GM Approved PR Total Value">
-                                        GM: {{ number_format($ledger->purchaseRequest->direct_buy_amount, 2) }}
+                                <div class="d-flex align-items-center justify-content-end gap-1">
+                                    <span>{{ number_format($ledger->credit_amount, 2) }}</span>
+                                    <button type="button" class="btn btn-link btn-sm p-0 text-primary border-0 shadow-none"
+                                        onclick="openMaterialMoneyModal({{ $ledger->id }}, 'money')"
+                                        title="Update Credit Money / Purchase Amount">
+                                        <i class="fa-solid fa-pen-to-square"></i>
+                                    </button>
+                                </div>
+                                <div class="small text-muted font-monospace" style="font-size: 0.72rem;">ETB</div>
+                                @if($calculatedItemsTotal > 0 && abs($calculatedItemsTotal - (float)$ledger->credit_amount) > 0.01)
+                                    <div class="badge bg-warning-subtle text-warning border border-warning font-monospace" style="font-size: 0.68rem;" title="Items line sum: {{ number_format($calculatedItemsTotal, 2) }} ETB">
+                                        Items: {{ number_format($calculatedItemsTotal, 2) }}
                                     </div>
                                 @endif
                             </td>
@@ -318,6 +376,11 @@
                             </td>
                             <td class="text-end pe-3">
                                 <div class="btn-group btn-group-sm">
+                                    <button type="button" class="btn btn-info btn-sm text-white fw-bold shadow-sm"
+                                        onclick="openMaterialMoneyModal({{ $ledger->id }}, 'both')"
+                                        title="View Material List & Update Purchase Money">
+                                        <i class="fa-solid fa-coins me-1"></i> Update Money
+                                    </button>
                                     @if($hasReceipt)
                                         <a href="{{ asset($hasReceipt->receipt_path) }}" target="_blank" class="btn btn-outline-success btn-sm shadow-sm" title="View Uploaded Receipt Proof">
                                             <i class="fas fa-paperclip"></i> Receipt
@@ -341,7 +404,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="10" class="text-center py-5 text-muted">
+                            <td colspan="11" class="text-center py-5 text-muted">
                                 <div class="mb-3">
                                     <i class="fa-solid fa-credit-card fa-3x text-secondary opacity-25"></i>
                                 </div>
@@ -359,6 +422,223 @@
                 {{ $ledgers->links() }}
             </div>
         @endif
+    </div>
+</div>
+
+<!-- =============================================================== -->
+<!-- MATERIAL ITEMS & CREDIT MONEY SYNC MODAL                        -->
+<!-- =============================================================== -->
+<div class="modal fade" id="materialMoneyModal" tabindex="-1" aria-labelledby="materialMoneyModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable" style="max-height: 94vh;">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden d-flex flex-column" style="max-height: 92vh;">
+            <form action="" method="POST" id="materialMoneyForm" class="d-flex flex-column h-100 overflow-hidden m-0">
+                @csrf
+                <!-- Header -->
+                <div class="modal-header py-3 px-4 flex-shrink-0 text-white" style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="rounded-circle p-2 d-flex align-items-center justify-content-center shadow-sm" style="width: 44px; height: 44px; background: rgba(59, 130, 246, 0.2);">
+                            <i class="fa-solid fa-boxes-stacked text-white fs-5"></i>
+                        </div>
+                        <div>
+                            <div class="d-flex align-items-center gap-2">
+                                <h5 class="modal-title fw-bold mb-0 text-white" id="materialMoneyModalLabel">PR Materials &amp; Credit Value</h5>
+                                <span class="badge bg-primary text-white rounded-pill px-2.5 py-1 font-monospace" id="mmPrBadge">PR #</span>
+                            </div>
+                            <small class="text-white-50" id="mmSubTitle">Project: — &bull; Supplier: —</small>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+
+                <!-- Navigation Tabs -->
+                <div class="bg-light border-bottom px-4 pt-2 flex-shrink-0">
+                    <ul class="nav nav-tabs border-0" id="mmTabList" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active fw-bold px-3 py-2" id="tab-materials-btn" data-bs-toggle="tab" data-bs-target="#tab-materials-pane" type="button" role="tab" aria-controls="tab-materials-pane" aria-selected="true">
+                                <i class="fa-solid fa-boxes-stacked me-1.5 text-primary"></i> 1. Material Items List (<span id="mmItemCountBadge">0</span>)
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link fw-bold px-3 py-2" id="tab-money-btn" data-bs-toggle="tab" data-bs-target="#tab-money-pane" type="button" role="tab" aria-controls="tab-money-pane" aria-selected="false">
+                                <i class="fa-solid fa-coins me-1.5 text-success"></i> 2. Update Money / Credit Value
+                            </button>
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- Scrollable Body -->
+                <div class="modal-body p-4 flex-grow-1 overflow-auto">
+                    <div class="tab-content" id="mmTabContent">
+                        <!-- TAB 1: MATERIAL ITEMS -->
+                        <div class="tab-pane fade show active" id="tab-materials-pane" role="tabpanel" aria-labelledby="tab-materials-btn">
+                            
+                            <!-- Financial Summary Cards -->
+                            <div class="row g-2 mb-3">
+                                <div class="col-md-4">
+                                    <div class="p-2.5 rounded-3 bg-light border text-center">
+                                        <div class="text-muted small text-uppercase fw-semibold" style="font-size:0.7rem;">Items Base Sum</div>
+                                        <div class="fs-6 fw-bold text-primary font-monospace" id="mmHeaderBaseSum">0.00 ETB</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="p-2.5 rounded-3 bg-light border text-center">
+                                        <div class="text-muted small text-uppercase fw-semibold" style="font-size:0.7rem;">Items Sum + 15% VAT</div>
+                                        <div class="fs-6 fw-bold text-success font-monospace" id="mmHeaderVatSum">0.00 ETB</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="p-2.5 rounded-3 bg-light border text-center">
+                                        <div class="text-muted small text-uppercase fw-semibold" style="font-size:0.7rem;">Current Ledger Money</div>
+                                        <div class="fs-6 fw-bold text-dark font-monospace" id="mmHeaderCurrentCredit">0.00 ETB</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                                <div class="small text-muted">
+                                    <i class="fa-solid fa-circle-info text-primary me-1"></i>
+                                    Adjust quantity or unit cost below if the supplier invoice differs. Totals recalculate in real-time.
+                                </div>
+                                <span class="badge bg-light text-dark border px-2 py-1" id="mmItemsSummaryBadge">0 items</span>
+                            </div>
+
+                            <!-- Materials Table -->
+                            <div class="table-responsive border rounded-3 shadow-2xs mb-3">
+                                <table class="table table-sm table-hover align-middle mb-0" style="font-size: 0.85rem;">
+                                    <thead class="bg-light text-muted small text-uppercase">
+                                        <tr>
+                                            <th class="ps-3" style="width: 40px;">#</th>
+                                            <th>Item / Material</th>
+                                            <th style="width: 140px;">Quantity</th>
+                                            <th style="width: 80px;">Unit</th>
+                                            <th style="width: 170px;">Unit Cost (ETB)</th>
+                                            <th class="text-end pe-3" style="width: 170px;">Line Total (ETB)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="mmItemsTableBody">
+                                        <!-- Dynamically generated rows -->
+                                    </tbody>
+                                    <tfoot class="bg-light border-top fw-bold">
+                                        <tr>
+                                            <td colspan="4" class="text-end ps-3 text-uppercase small text-muted">Calculated Items Subtotal:</td>
+                                            <td colspan="2" class="text-end pe-3 font-monospace text-primary fs-6" id="mmTableFootSubtotal">0.00 ETB</td>
+                                        </tr>
+                                        <tr>
+                                            <td colspan="4" class="text-end ps-3 text-uppercase small text-muted">+ 15% VAT Value:</td>
+                                            <td colspan="2" class="text-end pe-3 font-monospace text-secondary small" id="mmTableFootVat">+0.00 ETB</td>
+                                        </tr>
+                                        <tr class="table-success bg-opacity-25">
+                                            <td colspan="4" class="text-end ps-3 text-uppercase small text-dark">Total Payable with VAT (15%):</td>
+                                            <td colspan="2" class="text-end pe-3 font-monospace text-success fs-6 fw-bold" id="mmTableFootTotalVat">0.00 ETB</td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+
+                            <div class="d-flex justify-content-end">
+                                <button type="button" class="btn btn-sm btn-outline-primary fw-semibold" onclick="switchToMoneyTab('items_sum')">
+                                    Continue to Update Money &rarr;
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- TAB 2: UPDATE MONEY -->
+                        <div class="tab-pane fade" id="tab-money-pane" role="tabpanel" aria-labelledby="tab-money-btn">
+                            <div class="alert alert-light border shadow-sm rounded-3 mb-3 p-3">
+                                <div class="d-flex align-items-center gap-2 mb-1">
+                                    <i class="fa-solid fa-scale-balanced text-primary fs-5"></i>
+                                    <strong class="text-dark">Select How to Update Credit Money</strong>
+                                </div>
+                                <div class="small text-muted">
+                                    Select the target amount you wish to set as the total credit liability for this store record. This will update the credit purchase amount, the remaining liability, and status.
+                                </div>
+                            </div>
+
+                            <div class="list-group mb-3 shadow-2xs">
+                                <!-- Option 1: Items Calculated Sum -->
+                                <label class="list-group-item list-group-item-action d-flex align-items-center gap-3 p-3 cursor-pointer">
+                                    <input class="form-check-input flex-shrink-0 mt-0" type="radio" name="sync_mode" value="items_sum" id="mmSyncModeItemsSum" checked onchange="toggleMmCustomAmount(false)">
+                                    <div class="w-100">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <strong class="text-dark small">Procured Items Calculated Sum</strong>
+                                            <span class="badge bg-primary font-monospace fs-6" id="mmRadioBaseSumBadge">0.00 ETB</span>
+                                        </div>
+                                        <div class="text-muted small" style="font-size:0.75rem;">Calculated directly from the quantities and unit prices of items listed in Tab 1.</div>
+                                    </div>
+                                </label>
+
+                                <!-- Option 2: Items Calculated Sum + 15% VAT -->
+                                <label class="list-group-item list-group-item-action d-flex align-items-center gap-3 p-3 cursor-pointer">
+                                    <input class="form-check-input flex-shrink-0 mt-0" type="radio" name="sync_mode" value="items_sum_with_vat" id="mmSyncModeItemsVat" onchange="toggleMmCustomAmount(false)">
+                                    <div class="w-100">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <strong class="text-dark small">Items Sum + 15% VAT (Exclusive Mode)</strong>
+                                            <span class="badge bg-success font-monospace fs-6" id="mmRadioVatSumBadge">0.00 ETB</span>
+                                        </div>
+                                        <div class="text-muted small" style="font-size:0.75rem;">Adds 15% Ethiopian VAT to the base items total. Recommended if vendor invoiced VAT on top.</div>
+                                    </div>
+                                </label>
+
+                                <!-- Option 3: GM Approved PR Direct Buy Amount (if available) -->
+                                <label class="list-group-item list-group-item-action d-flex align-items-center gap-3 p-3 cursor-pointer" id="mmGmOptionWrapper">
+                                    <input class="form-check-input flex-shrink-0 mt-0" type="radio" name="sync_mode" value="pr_direct" id="mmSyncModeGm" onchange="toggleMmCustomAmount(false)">
+                                    <div class="w-100">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <strong class="text-dark small">GM Approved Request Total</strong>
+                                            <span class="badge bg-secondary font-monospace" id="mmRadioGmBadge">0.00 ETB</span>
+                                        </div>
+                                        <div class="text-muted small" style="font-size:0.75rem;">Keep or revert to the initial lump-sum amount entered during GM direct-buy approval.</div>
+                                    </div>
+                                </label>
+
+                                <!-- Option 4: Custom Amount Entry -->
+                                <label class="list-group-item list-group-item-action d-flex align-items-center gap-3 p-3 cursor-pointer">
+                                    <input class="form-check-input flex-shrink-0 mt-0" type="radio" name="sync_mode" value="custom" id="mmSyncModeCustom" onchange="toggleMmCustomAmount(true)">
+                                    <div class="w-100">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <strong class="text-dark small">Custom Purchase / Invoice Value</strong>
+                                            <span class="badge bg-dark font-monospace">Manual Entry</span>
+                                        </div>
+                                        <div class="text-muted small" style="font-size:0.75rem;">Specify an exact agreed amount if the vendor's physical invoice has discounts or charges.</div>
+                                    </div>
+                                </label>
+                            </div>
+
+                            <!-- Custom Amount Input Group -->
+                            <div id="mmCustomAmountWrapper" class="card border rounded-3 p-3 mb-3 bg-light d-none">
+                                <label class="form-label small fw-bold text-uppercase text-dark mb-1">Enter Custom Purchase Amount (ETB) <span class="text-danger">*</span></label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-white fw-bold text-dark">ETB</span>
+                                    <input type="number" step="0.01" min="0.01" name="custom_amount" id="mmCustomAmountInput" class="form-control fw-bold" placeholder="e.g. 1582.50">
+                                </div>
+                                <div class="form-text small text-muted">This exact amount will be recorded as the credit ledger purchase total.</div>
+                            </div>
+
+                            <!-- Synchronize PR checkbox -->
+                            <div class="form-check form-switch p-2 bg-light rounded-3 border">
+                                <input class="form-check-input ms-0 me-2" type="checkbox" name="sync_pr" value="1" id="mmSyncPrToggle" checked>
+                                <label class="form-check-label small text-dark fw-semibold" for="mmSyncPrToggle">
+                                    Also update Purchase Request total value (<span class="text-primary font-monospace">direct_buy_amount</span>) to stay synchronized.
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Footer -->
+                <div class="modal-footer bg-light border-top py-3 px-4 d-flex align-items-center justify-content-between flex-shrink-0">
+                    <button type="button" class="btn btn-outline-secondary btn-sm px-3 fw-semibold" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-1"></i> Close
+                    </button>
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="text-muted small me-2 d-none d-sm-inline" id="mmFooterSummaryHint"></span>
+                        <button type="submit" class="btn btn-primary fw-bold shadow-sm px-4 py-2" id="mmSubmitBtn">
+                            <i class="fa-solid fa-floppy-disk me-1"></i> Save &amp; Update Money
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
     </div>
 </div>
 
@@ -616,6 +896,265 @@
 </div>
 
 <script>
+    // ===============================================================
+    // MATERIAL LIST & CREDIT VALUE / MONEY SYNC MODAL
+    // ===============================================================
+    let currentMmRowData = null;
+
+    function openMaterialMoneyModal(ledgerId, targetTab = 'both') {
+        const row = document.getElementById('ledger-row-' + ledgerId);
+        if (!row) {
+            console.error('Ledger row not found for ID: ' + ledgerId);
+            return;
+        }
+
+        const id = row.dataset.id;
+        const pr = row.dataset.pr;
+        const project = row.dataset.project;
+        const supplier = row.dataset.supplier;
+        const credit = parseFloat(row.dataset.credit) || 0;
+        const paid = parseFloat(row.dataset.paid) || 0;
+        const calcSum = parseFloat(row.dataset.calcSum) || 0;
+        const calcVat = parseFloat(row.dataset.calcVat) || 0;
+        const gmAmount = parseFloat(row.dataset.gmAmount) || 0;
+        const syncUrl = row.dataset.syncUrl;
+        const coa = row.dataset.coa;
+        let items = [];
+
+        try {
+            items = JSON.parse(row.dataset.items || '[]');
+        } catch (e) {
+            console.error('Failed to parse items JSON', e);
+            items = [];
+        }
+
+        currentMmRowData = {
+            id, pr, project, supplier, credit, paid, calcSum, calcVat, gmAmount, syncUrl, coa, items
+        };
+
+        // Populate Form Action & Header
+        const form = document.getElementById('materialMoneyForm');
+        if (form) {
+            form.action = syncUrl;
+        }
+
+        document.getElementById('mmPrBadge').textContent = 'PR #' + pr;
+        document.getElementById('mmSubTitle').innerHTML = `Project: <strong>${escapeHtml(project)}</strong> &bull; Supplier: <strong>${escapeHtml(supplier)}</strong>`;
+        document.getElementById('mmHeaderCurrentCredit').textContent = credit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ETB';
+
+        // GM Option in Tab 2
+        const gmWrapper = document.getElementById('mmGmOptionWrapper');
+        const gmRadioBadge = document.getElementById('mmRadioGmBadge');
+        if (gmAmount > 0) {
+            gmWrapper.classList.remove('d-none');
+            gmRadioBadge.textContent = gmAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ETB';
+        } else {
+            gmWrapper.classList.add('d-none');
+        }
+
+        // Render Table & Recalculate
+        renderMmItemsTable(items);
+        recalcMmTotals();
+
+        // Switch to appropriate tab
+        if (targetTab === 'money' || (targetTab === 'both' && items.length === 0)) {
+            const moneyTabBtn = document.getElementById('tab-money-btn');
+            if (moneyTabBtn) {
+                bootstrap.Tab.getOrCreateInstance(moneyTabBtn).show();
+            }
+        } else {
+            const materialsTabBtn = document.getElementById('tab-materials-btn');
+            if (materialsTabBtn) {
+                bootstrap.Tab.getOrCreateInstance(materialsTabBtn).show();
+            }
+        }
+
+        // Reset radio to items_sum (or custom if no items)
+        if (items.length > 0) {
+            const radioSum = document.getElementById('mmSyncModeItemsSum');
+            if (radioSum) {
+                radioSum.checked = true;
+                toggleMmCustomAmount(false);
+            }
+        } else {
+            const radioCustom = document.getElementById('mmSyncModeCustom');
+            if (radioCustom) {
+                radioCustom.checked = true;
+                toggleMmCustomAmount(true);
+                const customInput = document.getElementById('mmCustomAmountInput');
+                if (customInput) customInput.value = credit > 0 ? credit.toFixed(2) : '';
+            }
+        }
+
+        const modalEl = document.getElementById('materialMoneyModal');
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        modal.show();
+    }
+
+    function renderMmItemsTable(items) {
+        const tbody = document.getElementById('mmItemsTableBody');
+        tbody.innerHTML = '';
+
+        const countBadge = document.getElementById('mmItemCountBadge');
+        const summaryBadge = document.getElementById('mmItemsSummaryBadge');
+
+        countBadge.textContent = items.length;
+        summaryBadge.textContent = `${items.length} Material Item${items.length === 1 ? '' : 's'}`;
+
+        if (!items || items.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="6" class="text-center py-4 text-muted">
+                        <i class="fa-solid fa-box-open fa-2x mb-2 text-secondary opacity-50 d-block"></i>
+                        <p class="small mb-1 fw-bold text-dark">No Procured Material Items Found</p>
+                        <span class="small text-muted">This PR was approved without specific item line records or as a lump-sum. You can update the purchase money directly on the <strong>Update Money</strong> tab.</span>
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+
+        items.forEach((item, index) => {
+            const tr = document.createElement('tr');
+            tr.className = 'align-middle';
+            tr.innerHTML = `
+                <td class="ps-3 text-muted small">${index + 1}</td>
+                <td>
+                    <div class="fw-bold text-dark">${escapeHtml(item.name || 'Material Item')}</div>
+                    ${item.code ? `<div class="font-monospace text-muted small" style="font-size:0.75rem;">${escapeHtml(item.code)}</div>` : ''}
+                </td>
+                <td>
+                    <div class="input-group input-group-sm" style="max-width: 130px;">
+                        <input type="number" step="0.001" min="0" 
+                            name="items[${item.id}][quantity]" 
+                            class="form-control form-control-sm font-monospace text-end mm-item-qty" 
+                            value="${item.quantity}" 
+                            data-item-id="${item.id}" 
+                            oninput="recalcMmTotals()">
+                    </div>
+                </td>
+                <td class="small text-muted fw-semibold">${escapeHtml(item.unit || 'pcs')}</td>
+                <td>
+                    <div class="input-group input-group-sm" style="max-width: 160px;">
+                        <span class="input-group-text py-0 px-1 text-muted" style="font-size:0.72rem;">ETB</span>
+                        <input type="number" step="0.01" min="0" 
+                            name="items[${item.id}][unit_cost]" 
+                            class="form-control form-control-sm font-monospace text-end mm-item-cost" 
+                            value="${(parseFloat(item.unit_cost) || 0).toFixed(2)}" 
+                            data-item-id="${item.id}" 
+                            oninput="recalcMmTotals()">
+                    </div>
+                </td>
+                <td class="text-end pe-3">
+                    <span class="fw-bold font-monospace text-dark mm-item-total" id="mm-total-${item.id}">
+                        ${(parseFloat(item.line_total) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                    <span class="small text-muted">ETB</span>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    function recalcMmTotals() {
+        let subtotal = 0.0;
+        const qtyInputs = document.querySelectorAll('.mm-item-qty');
+
+        qtyInputs.forEach(qtyInput => {
+            const itemId = qtyInput.dataset.itemId;
+            const costInput = document.querySelector(`.mm-item-cost[data-item-id="${itemId}"]`);
+            const totalEl = document.getElementById(`mm-total-${itemId}`);
+
+            const qty = parseFloat(qtyInput.value) || 0;
+            const cost = parseFloat(costInput ? costInput.value : 0) || 0;
+            const lineTotal = Math.round(qty * cost * 100) / 100;
+
+            if (totalEl) {
+                totalEl.textContent = lineTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            }
+            subtotal += lineTotal;
+        });
+
+        subtotal = Math.round(subtotal * 100) / 100;
+        const vatTotal = Math.round(subtotal * 1.15 * 100) / 100;
+        const vatOnly = Math.round((vatTotal - subtotal) * 100) / 100;
+
+        const subtotalFormatted = subtotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ETB';
+        const vatTotalFormatted = vatTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ETB';
+        const vatOnlyFormatted = '+' + vatOnly.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ETB';
+
+        const tfSubtotal = document.getElementById('mmTableFootSubtotal');
+        const tfVat = document.getElementById('mmTableFootVat');
+        const tfTotalVat = document.getElementById('mmTableFootTotalVat');
+
+        if (tfSubtotal) tfSubtotal.textContent = subtotalFormatted;
+        if (tfVat) tfVat.textContent = vatOnlyFormatted;
+        if (tfTotalVat) tfTotalVat.textContent = vatTotalFormatted;
+
+        const hBase = document.getElementById('mmHeaderBaseSum');
+        const hVat = document.getElementById('mmHeaderVatSum');
+        if (hBase) hBase.textContent = subtotalFormatted;
+        if (hVat) hVat.textContent = vatTotalFormatted;
+
+        const rBase = document.getElementById('mmRadioBaseSumBadge');
+        const rVat = document.getElementById('mmRadioVatSumBadge');
+        if (rBase) rBase.textContent = subtotalFormatted;
+        if (rVat) rVat.textContent = vatTotalFormatted;
+
+        const fSummary = document.getElementById('mmFooterSummaryHint');
+        if (fSummary) {
+            fSummary.innerHTML = `Items Subtotal: <strong class="text-primary font-monospace">${subtotalFormatted}</strong> | With 15% VAT: <strong class="text-success font-monospace">${vatTotalFormatted}</strong>`;
+        }
+    }
+
+    function switchToMoneyTab(targetSyncMode = null) {
+        const moneyTabBtn = document.getElementById('tab-money-btn');
+        if (moneyTabBtn) {
+            bootstrap.Tab.getOrCreateInstance(moneyTabBtn).show();
+        }
+
+        if (targetSyncMode === 'items_sum') {
+            const r = document.getElementById('mmSyncModeItemsSum');
+            if (r) { r.checked = true; toggleMmCustomAmount(false); }
+        } else if (targetSyncMode === 'items_sum_with_vat') {
+            const r = document.getElementById('mmSyncModeItemsVat');
+            if (r) { r.checked = true; toggleMmCustomAmount(false); }
+        } else if (targetSyncMode === 'custom') {
+            const r = document.getElementById('mmSyncModeCustom');
+            if (r) { r.checked = true; toggleMmCustomAmount(true); }
+        }
+    }
+
+    function toggleMmCustomAmount(show) {
+        const wrapper = document.getElementById('mmCustomAmountWrapper');
+        const input = document.getElementById('mmCustomAmountInput');
+        if (!wrapper || !input) return;
+
+        if (show) {
+            wrapper.classList.remove('d-none');
+            input.setAttribute('required', 'required');
+            if (!input.value && currentMmRowData) {
+                input.value = currentMmRowData.credit > 0 ? currentMmRowData.credit.toFixed(2) : '';
+            }
+            input.focus();
+        } else {
+            wrapper.classList.add('d-none');
+            input.removeAttribute('required');
+        }
+    }
+
+    function escapeHtml(text) {
+        if (!text) return '';
+        const map = {
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#039;'
+        };
+        return text.toString().replace(/[&<>"']/g, function(m) { return map[m]; });
+    }
+
     // State of selected credits
     let selectedCredits = new Map();
 
@@ -949,23 +1488,46 @@
 <style>
     /* Unlocked Smooth Modal & Table Scrollbars */
     #batchPaymentModal .modal-body::-webkit-scrollbar,
-    #batchPaymentModal .table-responsive::-webkit-scrollbar {
+    #batchPaymentModal .table-responsive::-webkit-scrollbar,
+    #materialMoneyModal .modal-body::-webkit-scrollbar,
+    #materialMoneyModal .table-responsive::-webkit-scrollbar {
         width: 7px;
         height: 7px;
     }
     #batchPaymentModal .modal-body::-webkit-scrollbar-track,
-    #batchPaymentModal .table-responsive::-webkit-scrollbar-track {
+    #batchPaymentModal .table-responsive::-webkit-scrollbar-track,
+    #materialMoneyModal .modal-body::-webkit-scrollbar-track,
+    #materialMoneyModal .table-responsive::-webkit-scrollbar-track {
         background: #f1f5f9;
         border-radius: 4px;
     }
     #batchPaymentModal .modal-body::-webkit-scrollbar-thumb,
-    #batchPaymentModal .table-responsive::-webkit-scrollbar-thumb {
+    #batchPaymentModal .table-responsive::-webkit-scrollbar-thumb,
+    #materialMoneyModal .modal-body::-webkit-scrollbar-thumb,
+    #materialMoneyModal .table-responsive::-webkit-scrollbar-thumb {
         background: #94a3b8;
         border-radius: 4px;
     }
     #batchPaymentModal .modal-body::-webkit-scrollbar-thumb:hover,
-    #batchPaymentModal .table-responsive::-webkit-scrollbar-thumb:hover {
+    #batchPaymentModal .table-responsive::-webkit-scrollbar-thumb:hover,
+    #materialMoneyModal .modal-body::-webkit-scrollbar-thumb:hover,
+    #materialMoneyModal .table-responsive::-webkit-scrollbar-thumb:hover {
         background: #64748b;
+    }
+
+    #mmTabList .nav-link.active {
+        color: #2563eb !important;
+        border-bottom: 3px solid #2563eb !important;
+        background-color: transparent !important;
+    }
+    #mmTabList .nav-link {
+        border: none;
+        border-bottom: 3px solid transparent;
+        color: #64748b;
+        transition: all 0.2s ease;
+    }
+    #mmTabList .nav-link:hover {
+        color: #1e293b;
     }
 </style>
 @endsection

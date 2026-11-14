@@ -25,7 +25,7 @@ class CreditStoreController extends Controller
 {
     public function index(Request $request)
     {
-        $query = CreditStoreLedger::with(['purchaseRequest', 'project', 'coaAccount', 'authorizedByUser', 'payments'])
+        $query = CreditStoreLedger::with(['purchaseRequest.items.product', 'project', 'coaAccount', 'authorizedByUser', 'payments'])
             ->latest();
 
         if ($request->filled('status')) {
@@ -196,12 +196,29 @@ class CreditStoreController extends Controller
         $ledger = $creditStore;
         $pr = $ledger->purchaseRequest;
 
+        // If user updated item-level unit prices or quantities in the materials modal:
+        if ($pr && $request->has('items') && is_array($request->items)) {
+            foreach ($request->items as $itemId => $itemData) {
+                $prItem = \App\Models\PurchaseRequestItem::where('purchase_request_id', $pr->id)->find($itemId);
+                if ($prItem) {
+                    $uCost = isset($itemData['unit_cost']) ? (float)$itemData['unit_cost'] : (float)($prItem->estimated_unit_cost ?? $prItem->estimated_unit_price ?? $prItem->unit_price ?? 0);
+                    $qty = isset($itemData['quantity']) ? (float)$itemData['quantity'] : (float)$prItem->quantity;
+                    $prItem->update([
+                        'estimated_unit_cost' => $uCost,
+                        'quantity'           => $qty,
+                    ]);
+                }
+            }
+            $pr->load('items');
+        }
+
         $calculatedItemsTotal = 0.0;
         if ($pr && $pr->items->count() > 0) {
             foreach ($pr->items as $item) {
                 $uPrice = (float)($item->estimated_unit_cost ?? $item->estimated_unit_price ?? $item->unit_price ?? 0);
-                $calculatedItemsTotal += (float)($item->estimated_total > 0 ? $item->estimated_total : ((float)$item->quantity * $uPrice));
+                $calculatedItemsTotal += round((float)$item->quantity * $uPrice, 2);
             }
+            $calculatedItemsTotal = round($calculatedItemsTotal, 2);
         }
 
         $syncMode = $request->input('sync_mode', 'items_sum');
