@@ -683,101 +683,71 @@ class StoreManagerController extends Controller
             'items.*.product_id'  => 'required|exists:products,id',
             'items.*.quantity'    => 'required|numeric|min:0.001',
             'items.*.unit'        => 'nullable|string|max:20',
-            'items.*.unit_codes'  => 'nullable|array',
+            'items.*.unit_codes'  => 'nullable',
         ]);
 
-        DB::transaction(function () use ($request) {
-            $no = Transfer::generateUniqueNo();
+        try {
+            DB::transaction(function () use ($request) {
+                $no = Transfer::generateUniqueNo();
 
-            $transfer = Transfer::create([
-                'transfer_no'   => $no,
-                'from_store_id' => $request->from_store_id,
-                'to_store_id'   => $request->to_store_id,
-                'requested_by'  => Auth::id(),
-                'required_date' => $request->required_date,
-                'reason'        => $request->reason,
-                'status'        => 'draft',
-            ]);
-
-            $faNotes = [];
-            foreach ($request->items as $item) {
-                $unitCodes = !empty($item['unit_codes']) ? array_values(array_filter((array)$item['unit_codes'])) : null;
-
-                $transfer->items()->create([
-                    'product_id'         => $item['product_id'],
-                    'requested_quantity' => $item['quantity'],
-                    'unit'               => $item['unit'] ?? 'pcs',
-                    'unit_codes'         => $unitCodes,
+                $transfer = Transfer::create([
+                    'transfer_no'   => $no,
+                    'from_store_id' => $request->from_store_id,
+                    'to_store_id'   => $request->to_store_id,
+                    'requested_by'  => Auth::id(),
+                    'required_date' => $request->required_date,
+                    'reason'        => $request->reason,
+                    'status'        => 'draft',
                 ]);
 
-                if (!empty($unitCodes)) {
-                    $prod = Product::find($item['product_id']);
-                    $faNotes[] = ($prod->name ?? 'Equipment') . ' Units: [' . implode(', ', $unitCodes) . ']';
-
-                    // Move individual FixedAssetUnit records to destination store
-                    try {
-                        $toStore = Store::find($request->to_store_id);
-                        $units = \App\Models\FixedAssetUnit::whereIn('unit_code', $unitCodes)->get();
-                        if ($units->isNotEmpty() && $toStore) {
-                            $firstUnit = $units->first();
-                            $originFa = $firstUnit->parentAsset;
-                            $assetName = $originFa?->name ?? ($prod->name ?? 'Equipment');
-                            $assetCat = $originFa?->category ?? \App\Models\FixedAsset::resolveCategory($prod?->category ?? '', $assetName);
-
-                            $destFa = \App\Models\FixedAsset::firstOrCreate(
-                                ['store_id' => $toStore->id, 'name' => $assetName],
-                                [
-                                    'category'       => $assetCat,
-                                    'code_prefix'    => $originFa?->code_prefix ?? \App\Models\FixedAsset::generateCleanPrefix($assetName, $prod?->sku),
-                                    'total_quantity' => 0,
-                                    'unit_cost'      => $prod?->unit_price ?? 0,
-                                    'created_by'     => Auth::id(),
-                                ]
-                            );
-
-                            foreach ($units as $u) {
-                                if ($u->parentAsset) {
-                                    $u->parentAsset->decrement('total_quantity', 1);
-                                }
-                                $destFa->increment('total_quantity', 1);
-                                $u->update([
-                                    'fixed_asset_id'   => $destFa->id,
-                                    'current_location' => $toStore->name,
-                                    'status'           => \App\Models\FixedAssetUnit::STATUS_IN_STORE,
-                                ]);
-
-                                \App\Models\FixedAssetAssignment::createSafely([
-                                    'fixed_asset_unit_id'    => $u->id,
-                                    'employee_id'            => null,
-                                    'action'                 => 'transferred',
-                                    'assigned_date'          => now(),
-                                    'condition_on_assignment'=> $u->condition ?: 'good',
-                                    'assigned_by'            => Auth::id(),
-                                    'notes'                  => "Transferred via Transfer #{$transfer->transfer_no} to {$toStore->name}",
-                                ]);
-                            }
+                \App\Models\TransferItem::$skipInventorySync = true;
+                $faNotes = [];
+                try {
+                    foreach ($request->items as $item) {
+                        $rawCodes = $item['unit_codes'] ?? null;
+                        if (is_string($rawCodes)) {
+                            $decoded = json_decode($rawCodes, true);
+                            $unitCodes = is_array($decoded) ? $decoded : array_map('trim', explode(',', $rawCodes));
+                        } elseif (is_array($rawCodes)) {
+                            $unitCodes = $rawCodes;
+                        } else {
+                            $unitCodes = null;
                         }
-                    } catch (\Throwable $e) {
-                        \Illuminate\Support\Facades\Log::warning("storeTransfer fixed asset unit move error: " . $e->getMessage());
+                        $unitCodes = !empty($unitCodes) ? array_values(array_filter(array_map('trim', (array)$unitCodes))) : null;
+
+                        $transfer->items()->create([
+                            'product_id'         => $item['product_id'],
+                            'requested_quantity' => $item['quantity'],
+                            'unit'               => $item['unit'] ?? 'pcs',
+                            'unit_codes'         => $unitCodes,
+                        ]);
+
+                        if (!empty($unitCodes)) {
+                            $prod = Product::find($item['product_id']);
+                            $codeCount = count($unitCodes);
+                            $sampleCodes = implode(', ', array_slice($unitCodes, 0, 8));
+                            $faNotes[] = ($prod->name ?? 'Equipment') . ": {$codeCount} units [" . $sampleCodes . ($codeCount > 8 ? " ...+" . ($codeCount - 8) . " more" : "") . "]";
+                        }
                     }
+                } finally {
+                    \App\Models\TransferItem::$skipInventorySync = false;
                 }
-            }
 
-            if (!empty($faNotes)) {
-                $transfer->update([
-                    'dispatch_notes' => implode(' | ', $faNotes),
-                ]);
-            }
+                if (!empty($faNotes)) {
+                    $transfer->update([
+                        'dispatch_notes' => implode(' | ', $faNotes),
+                    ]);
+                }
 
-            // Immediately deduct from origin store and add to destination store inventory
-            self::syncTransferInventory($transfer);
+                // Immediately deduct from origin store and add to destination store inventory
+                self::syncTransferInventory($transfer);
+            });
 
-            try {
-                \App\Models\FixedAsset::syncFromInventory();
-            } catch (\Throwable $e) {}
-        });
-
-        return redirect()->route('store-manager.transfers.index')->with('success', 'Transfer created. Materials deducted from origin store and added to destination store inventory.');
+            return redirect()->route('store-manager.transfers.index')->with('success', 'Transfer created. Materials deducted from origin store and added to destination store inventory.');
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error("storeTransfer failed: " . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
+            return back()->withInput()->with('error', 'Failed to create transfer: ' . $e->getMessage())->withErrors(['error' => $e->getMessage()]);
+        }
     }
 
     /**
@@ -1635,78 +1605,115 @@ class StoreManagerController extends Controller
                             ]);
                         }
 
-                        if (!empty($codes)) {
-                            $units = \App\Models\FixedAssetUnit::with(['parentAsset'])->whereIn('unit_code', $codes)->get();
-                            foreach ($units as $unit) {
-                                if ($unit->fixed_asset_id != $destAsset->id) {
-                                    $originAsset = $unit->parentAsset;
-                                    $historyNote = "[" . now()->format('Y-m-d H:i') . "] Transferred via Transfer #{$transfer->transfer_no} from {$fromStoreName} to {$toStoreName}";
-                                    $unit->update([
+                        \App\Models\FixedAssetUnit::$isSyncing = true;
+                        try {
+                            if (!empty($codes)) {
+                                $units = \App\Models\FixedAssetUnit::with(['parentAsset'])->whereIn('unit_code', $codes)->get();
+                                $movableUnits = $units->filter(fn($u) => $u->fixed_asset_id != $destAsset->id);
+
+                                if ($movableUnits->isNotEmpty()) {
+                                    $movableIds = $movableUnits->pluck('id')->toArray();
+                                    $now = now();
+                                    $historyNote = "[" . $now->format('Y-m-d H:i') . "] Transferred via Transfer #{$transfer->transfer_no} from {$fromStoreName} to {$toStoreName}";
+
+                                    \App\Models\FixedAssetUnit::whereIn('id', $movableIds)->update([
                                         'fixed_asset_id'   => $destAsset->id,
                                         'current_location' => $toStoreName,
                                         'status'           => \App\Models\FixedAssetUnit::STATUS_IN_STORE,
-                                        'notes'            => $unit->notes ? $unit->notes . "\n" . $historyNote : $historyNote,
                                     ]);
 
-                                    \App\Models\FixedAssetAssignment::createSafely([
-                                        'fixed_asset_unit_id'    => $unit->id,
-                                        'employee_id'            => null,
-                                        'action'                 => 'transferred',
-                                        'assigned_date'          => now(),
-                                        'condition_on_assignment'=> $unit->condition ?: 'good',
-                                        'assigned_by'            => $transfer->received_by ?? $transfer->requested_by ?? 1,
-                                        'notes'                  => $historyNote,
-                                    ]);
+                                    $destAsset->increment('total_quantity', $movableUnits->count());
 
-                                    if ($originAsset && $originAsset->total_quantity > 0) {
-                                        $originAsset->decrement('total_quantity', 1);
+                                    // Decrement parent asset total_quantity
+                                    $originAssets = $movableUnits->groupBy('fixed_asset_id');
+                                    foreach ($originAssets as $originId => $groupedUnits) {
+                                        $originAsset = $groupedUnits->first()?->parentAsset;
+                                        if ($originAsset && $originAsset->total_quantity > 0) {
+                                            $originAsset->decrement('total_quantity', min($originAsset->total_quantity, $groupedUnits->count()));
+                                        }
+                                    }
+
+                                    $assignments = [];
+                                    $assignedBy = $transfer->received_by ?? $transfer->requested_by ?? Auth::id() ?? 1;
+                                    foreach ($movableUnits as $unit) {
+                                        $assignments[] = [
+                                            'fixed_asset_unit_id'     => $unit->id,
+                                            'employee_id'             => null,
+                                            'action'                  => 'transferred',
+                                            'assigned_date'           => $now,
+                                            'condition_on_assignment' => $unit->condition ?: 'good',
+                                            'assigned_by'             => $assignedBy,
+                                            'notes'                   => $historyNote,
+                                            'created_at'              => $now,
+                                            'updated_at'              => $now,
+                                        ];
+                                    }
+                                    foreach (array_chunk($assignments, 500) as $chunk) {
+                                        \App\Models\FixedAssetAssignment::insert($chunk);
                                     }
                                 }
-                            }
-                        } else {
-                            $originAsset = \App\Models\FixedAsset::where('store_id', $transfer->from_store_id)
-                                ->where(function($q) use ($prod) {
-                                    $q->whereRaw('LOWER(TRIM(name)) = ?', [strtolower(trim($prod->name))])
-                                      ->orWhere('description', 'like', "%(Product ID: {$prod->id})%")
-                                      ->orWhere('description', 'like', "%SKU: " . ($prod->sku ?? '') . "%");
-                                })->first();
+                            } else {
+                                $originAsset = \App\Models\FixedAsset::where('store_id', $transfer->from_store_id)
+                                    ->where(function($q) use ($prod) {
+                                        $q->whereRaw('LOWER(TRIM(name)) = ?', [strtolower(trim($prod->name))])
+                                          ->orWhere('description', 'like', "%(Product ID: {$prod->id})%")
+                                          ->orWhere('description', 'like', "%SKU: " . ($prod->sku ?? '') . "%");
+                                    })->first();
 
-                            if ($originAsset && $qtyToTransfer > 0) {
-                                $unitsToMove = $originAsset->units()
-                                    ->where('status', \App\Models\FixedAssetUnit::STATUS_IN_STORE)
-                                    ->take($qtyToTransfer)
-                                    ->get();
+                                if ($originAsset && $qtyToTransfer > 0) {
+                                    $movableUnits = $originAsset->units()
+                                        ->where('status', \App\Models\FixedAssetUnit::STATUS_IN_STORE)
+                                        ->take($qtyToTransfer)
+                                        ->get();
 
-                                foreach ($unitsToMove as $unit) {
-                                    if ($unit->fixed_asset_id != $destAsset->id) {
-                                        $historyNote = "[" . now()->format('Y-m-d H:i') . "] Transferred via Transfer #{$transfer->transfer_no} from {$fromStoreName} to {$toStoreName}";
-                                        $unit->update([
+                                    if ($movableUnits->isNotEmpty()) {
+                                        $movableIds = $movableUnits->pluck('id')->toArray();
+                                        $now = now();
+                                        $historyNote = "[" . $now->format('Y-m-d H:i') . "] Transferred via Transfer #{$transfer->transfer_no} from {$fromStoreName} to {$toStoreName}";
+
+                                        \App\Models\FixedAssetUnit::whereIn('id', $movableIds)->update([
                                             'fixed_asset_id'   => $destAsset->id,
                                             'current_location' => $toStoreName,
                                             'status'           => \App\Models\FixedAssetUnit::STATUS_IN_STORE,
-                                            'notes'            => $unit->notes ? $unit->notes . "\n" . $historyNote : $historyNote,
                                         ]);
 
-                                        \App\Models\FixedAssetAssignment::createSafely([
-                                            'fixed_asset_unit_id'    => $unit->id,
-                                            'employee_id'            => null,
-                                            'action'                 => 'transferred',
-                                            'assigned_date'          => now(),
-                                            'condition_on_assignment'=> $unit->condition ?: 'good',
-                                            'assigned_by'            => $transfer->received_by ?? $transfer->requested_by ?? 1,
-                                            'notes'                  => $historyNote,
-                                        ]);
+                                        $destAsset->increment('total_quantity', $movableUnits->count());
 
                                         if ($originAsset->total_quantity > 0) {
-                                            $originAsset->decrement('total_quantity', 1);
+                                            $originAsset->decrement('total_quantity', min($originAsset->total_quantity, $movableUnits->count()));
+                                        }
+
+                                        $assignments = [];
+                                        $assignedBy = $transfer->received_by ?? $transfer->requested_by ?? Auth::id() ?? 1;
+                                        foreach ($movableUnits as $unit) {
+                                            $assignments[] = [
+                                                'fixed_asset_unit_id'     => $unit->id,
+                                                'employee_id'             => null,
+                                                'action'                  => 'transferred',
+                                                'assigned_date'           => $now,
+                                                'condition_on_assignment' => $unit->condition ?: 'good',
+                                                'assigned_by'             => $assignedBy,
+                                                'notes'                   => $historyNote,
+                                                'created_at'              => $now,
+                                                'updated_at'              => $now,
+                                            ];
+                                        }
+                                        foreach (array_chunk($assignments, 500) as $chunk) {
+                                            \App\Models\FixedAssetAssignment::insert($chunk);
                                         }
                                     }
                                 }
                             }
+                        } finally {
+                            \App\Models\FixedAssetUnit::$isSyncing = false;
                         }
 
                         // Synchronize inventory stock and generate any needed unit cards for the destination store
-                        \App\Models\FixedAsset::syncFromInventory($prod->id);
+                        try {
+                            \App\Models\FixedAsset::syncFromInventory($prod->id);
+                        } catch (\Throwable $e) {
+                            \Illuminate\Support\Facades\Log::warning("FixedAsset::syncFromInventory error for prod {$prod->id}: " . $e->getMessage());
+                        }
                     }
                 }
             }

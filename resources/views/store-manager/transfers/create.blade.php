@@ -554,6 +554,18 @@ $('#transferForm').on('submit', function(e) {
             $block.find('.quantity-input').focus();
             return false;
         }
+
+        // OPTIMIZATION: Serialize checked unit codes into a single input to stay well within PHP max_input_vars limit
+        const checkedCodes = [];
+        $block.find('.fa-unit-checkbox:checked').each(function() {
+            checkedCodes.push($(this).val());
+        });
+
+        $block.find('.fa-serialized-codes').remove();
+        if (checkedCodes.length > 0) {
+            $block.find('.fa-unit-checkbox').removeAttr('name');
+            $block.append(`<input type="hidden" class="fa-serialized-codes" name="items[${$block.data('row-index') || 0}][unit_codes]" value='${JSON.stringify(checkedCodes)}'>`);
+        }
     });
 
     if (!isValid) {
@@ -561,6 +573,9 @@ $('#transferForm').on('submit', function(e) {
         alert(errorMsg);
         return false;
     }
+
+    const $btn = $('#submitTransferBtn');
+    $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-1"></i>Processing Transfer...');
 });
 
 // Auto-trigger product change on load if pre-selected via query string

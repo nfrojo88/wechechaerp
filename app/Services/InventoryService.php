@@ -100,7 +100,7 @@ class InventoryService
                 'balance_after'  => $balanceAfter,
                 'reference_type' => $referenceType,
                 'reference_id'   => $referenceId,
-                'performed_by'   => $performedBy ?? auth()->id() ?? 1,
+                'performed_by'   => $performedBy ?? auth()->id() ?? \App\Models\User::value('id') ?? 1,
                 'remarks'        => $remarks,
             ]);
 
@@ -130,8 +130,11 @@ class InventoryService
         ?int $performedBy = null
     ): void {
         try {
-            // Skip direct internal FA actions that manage their own units explicitly
-            if (in_array($type, ['fa_register', 'fa_disposed', 'fa_damaged', 'fa_assign', 'fa_return'])) {
+            // Skip direct internal FA actions and inter-store transfers that manage their own units explicitly
+            if (in_array($type, [
+                'fa_register', 'fa_disposed', 'fa_damaged', 'fa_assign', 'fa_return',
+                'transfer_out', 'transfer_in', 'transfer_return', 'transfer_reversal'
+            ])) {
                 $fixedAsset = FixedAsset::where('store_id', $inventory->store_id)
                     ->where(function ($q) use ($inventory) {
                         $product = $inventory->product ?? Product::find($inventory->product_id);

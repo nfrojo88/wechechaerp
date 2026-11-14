@@ -71,7 +71,7 @@ class TransferController extends Controller
             'items'               => 'required|array|min:1',
             'items.*.product_id'  => 'required|exists:products,id',
             'items.*.quantity'    => 'required|numeric|min:0.001',
-            'items.*.unit'        => 'required|string|max:20',
+            'items.*.unit'        => 'nullable|string|max:20',
         ]);
 
         try {
@@ -88,12 +88,17 @@ class TransferController extends Controller
                     'status'       => 'draft',
                 ]);
 
-                foreach ($request->items as $item) {
-                    $transfer->items()->create([
-                        'product_id'          => $item['product_id'],
-                        'requested_quantity'  => $item['quantity'],
-                        'unit'                => $item['unit'],
-                    ]);
+                \App\Models\TransferItem::$skipInventorySync = true;
+                try {
+                    foreach ($request->items as $item) {
+                        $transfer->items()->create([
+                            'product_id'          => $item['product_id'],
+                            'requested_quantity'  => $item['quantity'],
+                            'unit'                => $item['unit'] ?? 'pcs',
+                        ]);
+                    }
+                } finally {
+                    \App\Models\TransferItem::$skipInventorySync = false;
                 }
 
                 // Immediately deduct from origin store and add to destination store inventory

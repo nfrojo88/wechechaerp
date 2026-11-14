@@ -16,9 +16,14 @@ class TransferItem extends Model
         'unit_codes' => 'array',
     ];
 
+    public static bool $skipInventorySync = false;
+
     protected static function booted()
     {
         static::saved(function (TransferItem $item) {
+            if (static::$skipInventorySync) {
+                return;
+            }
             try {
                 $transfer = $item->relationLoaded('transfer') ? $item->transfer : Transfer::find($item->transfer_id);
                 if ($transfer && !in_array($transfer->status, ['rejected', 'cancelled'])) {
@@ -28,6 +33,9 @@ class TransferItem extends Model
         });
 
         static::deleted(function (TransferItem $item) {
+            if (static::$skipInventorySync) {
+                return;
+            }
             try {
                 $transfer = $item->relationLoaded('transfer') ? $item->transfer : Transfer::find($item->transfer_id);
                 if ($transfer && !in_array($transfer->status, ['rejected', 'cancelled'])) {
