@@ -453,7 +453,7 @@
                                     <div class="fw-semibold text-dark"><span class="badge bg-secondary me-1">{{ $req->category }}</span> {{ $req->other_reason }}</div>
                                 </div>
                                 <div class="col-12 mt-2">
-                                    <span class="text-muted small">{{ ($req->subcon_agreement_id || $req->category === 'Contract Work') ? 'Scope of Work & Description:' : 'Description:' }}</span>
+                                    <span class="text-muted small">{{ ($req->subcon_agreement_id || $req->category === 'Contract Work') ? ('Scope of Work & Description' . ($req->subconAgreement ? ' (' . $req->subconAgreement->subcontractor_display_name . ')' : '') . ':') : 'Description:' }}</span>
                                     <div class="text-dark small bg-white p-2 rounded border">{{ $req->description }}</div>
                                 </div>
                             </div>
@@ -588,7 +588,7 @@
                                     <div class="fs-4 fw-bold text-success font-monospace">ETB {{ number_format($req->amount, 2) }}</div>
                                 </div>
                                 <div class="col-12">
-                                    <span class="text-muted small">{{ ($req->subcon_agreement_id || $req->category === 'Contract Work') ? 'Scope of Work & Description:' : 'Description:' }}</span>
+                                    <span class="text-muted small">{{ ($req->subcon_agreement_id || $req->category === 'Contract Work') ? ('Scope of Work & Description' . ($req->subconAgreement ? ' (' . $req->subconAgreement->subcontractor_display_name . ')' : '') . ':') : 'Description:' }}</span>
                                     <div class="fw-normal text-dark">{{ $req->description }}</div>
                                 </div>
                             </div>
@@ -1477,7 +1477,7 @@
                     </div>
 
                     <div class="mb-3">
-                        <label class="fw-bold">{{ ($req->subcon_agreement_id || $req->category === 'Contract Work') ? 'Scope of Work & Description:' : 'Description:' }}</label>
+                        <label class="fw-bold">{{ ($req->subcon_agreement_id || $req->category === 'Contract Work') ? ('Scope of Work & Description' . ($req->subconAgreement ? ' (' . $req->subconAgreement->subcontractor_display_name . ')' : '') . ':') : 'Description:' }}</label>
                         <div class="p-3 bg-light rounded border">{{ $req->description }}</div>
                     </div>
 
@@ -2828,16 +2828,28 @@ function onSubconAgreementChanged(selectEl) {
         return;
     }
 
-    // Always update label to "Scope of Work & Description *" when subcontract is selected
+    const subName = summary.subcontractor_name || '';
+
+    // Update label to "Scope of Work & Description (Subcontractor Name) *" when subcontract is selected
     if (descLabel) {
-        descLabel.innerHTML = '<i class="fa-solid fa-list-check text-purple me-1" style="color: #6f42c1;"></i>Scope of Work &amp; Description <span class="text-danger">*</span>';
+        if (subName) {
+            descLabel.innerHTML = `<i class="fa-solid fa-list-check text-purple me-1" style="color: #6f42c1;"></i>Scope of Work &amp; Description (<span class="text-primary fw-bold">${escapeHtml(subName)}</span>) <span class="text-danger">*</span>`;
+        } else {
+            descLabel.innerHTML = '<i class="fa-solid fa-list-check text-purple me-1" style="color: #6f42c1;"></i>Scope of Work &amp; Description <span class="text-danger">*</span>';
+        }
     }
     if (descInput) {
-        descInput.placeholder = "Describe the specific scope of work, milestone, or task details being claimed under this subcontract agreement...";
+        if (subName) {
+            descInput.placeholder = `Describe the specific scope of work, milestone, or task details for ${subName}...`;
+        } else {
+            descInput.placeholder = "Describe the specific scope of work, milestone, or task details being claimed under this subcontract agreement...";
+        }
     }
     if (summary.work_description) {
         if (scopeHint) scopeHint.style.display = 'block';
-        if (scopeText) scopeText.innerText = summary.work_description;
+        if (scopeText) {
+            scopeText.innerHTML = (subName ? `<strong class="text-dark">${escapeHtml(subName)}</strong>: ` : '') + escapeHtml(summary.work_description);
+        }
     } else {
         if (scopeHint) scopeHint.style.display = 'none';
     }

@@ -594,7 +594,7 @@
                     </div>
 
                     <div class="mb-4">
-                        <label class="form-label small text-muted text-uppercase fw-bold">{{ ($item->raw_model && ($item->raw_model->subcon_agreement_id || $item->category === 'Contract Work')) ? 'Scope of Work & Description' : 'Description & Purpose' }}</label>
+                        <label class="form-label small text-muted text-uppercase fw-bold">{{ ($item->raw_model && ($item->raw_model->subcon_agreement_id || $item->category === 'Contract Work')) ? ('Scope of Work & Description' . ($item->raw_model->subconAgreement ? ' (' . $item->raw_model->subconAgreement->subcontractor_display_name . ')' : '')) : 'Description & Purpose' }}</label>
                         <div class="p-3 border rounded-3 bg-light text-dark">
                             {{ $item->description }}
                         </div>
