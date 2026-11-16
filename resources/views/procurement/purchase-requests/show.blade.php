@@ -169,7 +169,7 @@
                 $canActOnCurrentStage = in_array('planning_manager', $rawUserRoles);
                 break;
 
-            case \App\Models\PurchaseRequest::STATUS_PENDING_HR_APPROVAL:
+            case \App\Models\PurchaseRequest::STATUS_PENDING_COORDINATOR_APPROVAL:
                 $canActOnCurrentStage = $isGlobalAdmin || in_array('coordinator', $rawUserRoles) || in_array('project_coordinator', $rawUserRoles) || in_array('site_coordinator', $rawUserRoles) || in_array('hr_manager', $rawUserRoles) || in_array('hr', $rawUserRoles);
                 break;
 
@@ -371,7 +371,7 @@
                         @endif
 
                     <!-- STAGE: Coordinator Review & Dispatch -->
-                    @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_HR_APPROVAL)
+                    @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_COORDINATOR_APPROVAL)
                         <div class="mb-3">
                             <h6 class="fw-bold text-dark mb-1">
                                 <i class="fas fa-user-tie text-primary me-1"></i> Project Coordinator Review & Dispatch

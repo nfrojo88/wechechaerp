@@ -800,7 +800,7 @@
                                     if ($isGlobalAdmin) {
                                         $canActOnThisPr = true;
                                     } elseif ($pr->is_office_request) {
-                                        if ($pr->status === 'pending_hr_approval' && ($isHrUser || $isCoordinatorUser)) $canActOnThisPr = true;
+                                        if ($pr->status === 'pending_coordinator_approval' && ($isHrUser || $isCoordinatorUser)) $canActOnThisPr = true;
                                         elseif (in_array($pr->status, ['approved', 'pending_store_review']) && $isStoreManagerUser) $canActOnThisPr = true;
                                         elseif ($pr->status === 'pending_finance' && $isFinanceHeadUser) $canActOnThisPr = true;
                                     } else {
@@ -841,15 +841,15 @@
                                         elseif (in_array($owner, ['finance_head', 'finance', 'finance_manager']) && $isFinanceHeadUser) $canActOnThisPr = true;
                                         elseif (in_array($owner, ['general_service', 'general_services']) && $isGeneralServiceUser) $canActOnThisPr = true;
                                         elseif ((in_array($owner, ['planning', 'planning_manager', 'planner']) || $pr->status === \App\Models\PurchaseRequest::STATUS_PENDING_PLANNING) && $isPlanningManagerUser) $canActOnThisPr = true;
-                                        elseif ((in_array($owner, ['coordinator', 'project_coordinator', 'site_coordinator']) || $pr->status === \App\Models\PurchaseRequest::STATUS_PENDING_HR_APPROVAL) && ($isCoordinatorUser || $isGlobalAdmin || $isAdmin)) $canActOnThisPr = true;
+                                        elseif ((in_array($owner, ['coordinator', 'project_coordinator', 'site_coordinator']) || $pr->status === \App\Models\PurchaseRequest::STATUS_PENDING_COORDINATOR_APPROVAL) && ($isCoordinatorUser || $isGlobalAdmin || $isAdmin)) $canActOnThisPr = true;
                                         elseif ($pr->status === 'draft' && ($authUser && $pr->requested_by === $authUser->id || $isCoordinatorUser || $isGlobalAdmin)) $canActOnThisPr = true;
                                     }
                                 }
                                 $isPrPlanningActionable = ($pr->status === \App\Models\PurchaseRequest::STATUS_PENDING_PLANNING || in_array($pr->current_owner_role, ['planning', 'planning_manager'])) && $isPlanningManagerUser;
                                 $isPrPlanningPending = ($pr->status === \App\Models\PurchaseRequest::STATUS_PENDING_PLANNING || in_array($pr->current_owner_role, ['planning', 'planning_manager']));
-                                $isPrCoordinatorActionable = ($pr->status === \App\Models\PurchaseRequest::STATUS_PENDING_HR_APPROVAL || in_array($pr->current_owner_role, ['coordinator', 'project_coordinator', 'site_coordinator']) || ($pr->status === 'draft' && ($isCoordinatorUser || $isGlobalAdmin))) && ($isCoordinatorUser || $isGlobalAdmin || $isAdmin);
+                                $isPrCoordinatorActionable = ($pr->status === \App\Models\PurchaseRequest::STATUS_PENDING_COORDINATOR_APPROVAL || in_array($pr->current_owner_role, ['coordinator', 'project_coordinator', 'site_coordinator']) || ($pr->status === 'draft' && ($isCoordinatorUser || $isGlobalAdmin))) && ($isCoordinatorUser || $isGlobalAdmin || $isAdmin);
                             @endphp
-                            <tr class="{{ $pr->is_office_request && $pr->status === 'pending_hr_approval' ? 'table-warning bg-opacity-25' : '' }}">
+                            <tr class="{{ $pr->is_office_request && $pr->status === 'pending_coordinator_approval' ? 'table-warning bg-opacity-25' : '' }}">
                                 <td>
                                     <a href="{{ route('purchase-requests.show', $pr->id) }}" class="fw-bold text-decoration-none">
                                         {{ $pr->pr_no }}

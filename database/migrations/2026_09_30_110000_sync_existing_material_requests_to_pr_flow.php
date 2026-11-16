@@ -48,7 +48,7 @@ return new class extends Migration
                 $initialStatus = 'pending_planning_approval';
                 $initialOwner = 'planning';
             } elseif ($mr->status === 'planning_approved') {
-                $initialStatus = 'pending_hr_approval';
+                $initialStatus = 'pending_coordinator_approval';
                 $initialOwner = 'coordinator';
             } elseif (in_array($mr->status, ['needs_purchase', 'sent_to_pr'])) {
                 $initialStatus = 'pending_marketing_review';

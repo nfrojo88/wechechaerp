@@ -1869,7 +1869,7 @@
                             ->where('is_office_request', false)
                             ->where(function($q) {
                                 $q->whereIn('current_owner_role', ['coordinator', 'project_coordinator', 'site_coordinator'])
-                                  ->orWhere('status', \App\Models\PurchaseRequest::STATUS_PENDING_HR_APPROVAL);
+                                  ->orWhere('status', \App\Models\PurchaseRequest::STATUS_PENDING_COORDINATOR_APPROVAL);
                             })
                             ->where(function($q) use ($emMrIds) {
                                 $q->whereNull('material_request_id')

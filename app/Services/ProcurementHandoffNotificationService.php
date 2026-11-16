@@ -494,21 +494,24 @@ class ProcurementHandoffNotificationService
                 }
             }
 
-            // User #1 fallback
+            // System user fallback
             if (empty($recipients)) {
-                $super = User::with('employee')->find(1);
-                if ($super) {
-                    $phone = $this->resolveUserPhone($super);
-                    if ($phone) {
-                        $recipients[] = [
-                            'user_id'     => $super->id,
-                            'employee_id' => $super->employee?->id,
-                            'role'        => 'global_admin',
-                            'phone'       => $phone,
-                            'name'        => $super->name,
-                        ];
+                try {
+                    $systemUser = \App\Services\ProcurementActor::resolve();
+                    $super = User::with('employee')->find($systemUser->id);
+                    if ($super) {
+                        $phone = $this->resolveUserPhone($super);
+                        if ($phone) {
+                            $recipients[] = [
+                                'user_id'     => $super->id,
+                                'employee_id' => $super->employee?->id,
+                                'role'        => 'global_admin',
+                                'phone'       => $phone,
+                                'name'        => $super->name,
+                            ];
+                        }
                     }
-                }
+                } catch (\Throwable $e) {}
             }
         } catch (\Throwable $e) {}
 

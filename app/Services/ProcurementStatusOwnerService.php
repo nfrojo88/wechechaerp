@@ -196,8 +196,8 @@ class ProcurementStatusOwnerService
             13 => [
                 'row'               => 13,
                 'model_type'        => 'purchase_request',
-                'status_key'        => PurchaseRequest::STATUS_PENDING_HR_APPROVAL,
-                'map_key'           => 'pr:pending_hr_approval',
+                'status_key'        => PurchaseRequest::STATUS_PENDING_COORDINATOR_APPROVAL,
+                'map_key'           => 'pr:pending_coordinator_approval',
                 'event'             => 'Planning approves',
                 'who_acts'          => 'Planning Manager',
                 'owner_role'        => 'coordinator',

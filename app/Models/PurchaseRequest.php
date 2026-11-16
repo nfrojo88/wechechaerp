@@ -12,7 +12,7 @@ class PurchaseRequest extends Model
     // ── Status State Machine Constants ─────────────────────────────────────
     const STATUS_DRAFT                      = 'draft';
     const STATUS_PENDING_PLANNING           = 'pending_planning_approval';
-    const STATUS_PENDING_HR_APPROVAL        = 'pending_hr_approval';
+    const STATUS_PENDING_COORDINATOR_APPROVAL = 'pending_coordinator_approval';
     const STATUS_APPROVED                   = 'approved';
     const STATUS_PENDING_STORE_REVIEW       = 'pending_store_review';
     const STATUS_TRANSFERRED                = 'transferred';
@@ -36,7 +36,7 @@ class PurchaseRequest extends Model
         return [
             self::STATUS_DRAFT,
             self::STATUS_PENDING_PLANNING,
-            self::STATUS_PENDING_HR_APPROVAL,
+            self::STATUS_PENDING_COORDINATOR_APPROVAL,
             self::STATUS_APPROVED,
             self::STATUS_PENDING_STORE_REVIEW,
             self::STATUS_TRANSFERRED,
@@ -62,7 +62,7 @@ class PurchaseRequest extends Model
         return [
             self::STATUS_DRAFT                      => 'Draft',
             self::STATUS_PENDING_PLANNING           => 'Pending Planning Approval',
-            self::STATUS_PENDING_HR_APPROVAL        => 'Pending Coordinator Review',
+            self::STATUS_PENDING_COORDINATOR_APPROVAL => 'Pending Coordinator Review',
             self::STATUS_APPROVED                   => 'Approved',
             self::STATUS_PENDING_STORE_REVIEW       => 'Pending Store Review',
             self::STATUS_TRANSFERRED                => 'Transferred',
@@ -112,7 +112,7 @@ class PurchaseRequest extends Model
         return match ($status) {
             self::STATUS_DRAFT                      => 'secondary',
             self::STATUS_PENDING_PLANNING           => 'warning',
-            self::STATUS_PENDING_HR_APPROVAL        => 'warning',
+            self::STATUS_PENDING_COORDINATOR_APPROVAL => 'warning',
             self::STATUS_APPROVED                   => 'success',
             self::STATUS_PENDING_STORE_REVIEW       => 'info',
             self::STATUS_TRANSFERRED                => 'primary',
@@ -138,7 +138,7 @@ class PurchaseRequest extends Model
     {
         return match ($status) {
             self::STATUS_PENDING_PLANNING           => 'planning',
-            self::STATUS_PENDING_HR_APPROVAL        => 'coordinator',
+            self::STATUS_PENDING_COORDINATOR_APPROVAL => 'coordinator',
             self::STATUS_PENDING_STORE_REVIEW       => 'store_manager',
             self::STATUS_PENDING_PROC_MANAGER       => 'purchase_manager',
             self::STATUS_PENDING_PROC_TEAM          => 'purchase',

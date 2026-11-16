@@ -187,7 +187,7 @@ class ProjectAssociatedCostTest extends TestCase
             'draft',
             'pending_planning',
             'pending_planning_approval',
-            'pending_hr_approval',
+            'pending_coordinator_approval',
             'pending_store_review',
             'pending_procurement_manager',
             'pending_procurement_team',

@@ -64,7 +64,7 @@ class PlanningManagerController extends Controller
                 foreach ($materialRequest->purchaseRequests as $pr) {
                     $targetRole = $lifecycle->resolveOwnerRole('coordinator', $pr);
                     $pr->update([
-                        'status'             => \App\Models\PurchaseRequest::STATUS_PENDING_HR_APPROVAL,
+                        'status'             => \App\Models\PurchaseRequest::STATUS_PENDING_COORDINATOR_APPROVAL,
                         'current_owner_role' => $targetRole,
                         'approved_by'        => Auth::id(),
                         'approved_at'        => now(),
@@ -74,7 +74,7 @@ class PlanningManagerController extends Controller
                         \App\Models\PrWorkflowLog::create([
                             'purchase_request_id' => $pr->id,
                             'from_stage'          => \App\Models\PurchaseRequest::STATUS_PENDING_PLANNING,
-                            'to_stage'            => \App\Models\PurchaseRequest::STATUS_PENDING_HR_APPROVAL,
+                            'to_stage'            => \App\Models\PurchaseRequest::STATUS_PENDING_COORDINATOR_APPROVAL,
                             'action'              => 'planning_approve_to_coordinator',
                             'actor_role'          => 'planning',
                             'actor_id'            => Auth::id(),

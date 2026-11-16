@@ -25,6 +25,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 class PurchaseRequestController extends Controller
 {
@@ -51,7 +52,7 @@ class PurchaseRequestController extends Controller
         })->first();
 
         if (!$project) {
-            $creatorId = Auth::id() ?: (\App\Models\User::first()?->id ?: 1);
+            $creatorId = \App\Services\ProcurementActor::id();
             $hoCode = 'HO-001';
             $seq = 1;
             while (Project::where('code', $hoCode)->exists()) {
@@ -311,18 +312,23 @@ class PurchaseRequestController extends Controller
             $mr = $purchaseRequest->materialRequest;
             if ($mr->planning_approval_status === 'approved' || in_array($mr->status, ['planning_approved', 'sent_to_store_manager', 'sent_to_pr', 'needs_purchase', 'approved'])) {
                 $targetRole = $this->lifecycle->resolveOwnerRole('coordinator', $purchaseRequest);
-                $purchaseRequest->update([
-                    'status'             => PurchaseRequest::STATUS_PENDING_HR_APPROVAL,
+                $prSyncData = [
+                    'status'             => PurchaseRequest::STATUS_PENDING_COORDINATOR_APPROVAL,
                     'current_owner_role' => $targetRole,
-                    'approved_by'        => $mr->planning_approved_by ?: Auth::id(),
-                    'approved_at'        => $mr->planning_approved_at ?: now(),
-                ]);
+                ];
+                if (Schema::hasColumn('purchase_requests', 'approved_by')) {
+                    $prSyncData['approved_by'] = $mr->planning_approved_by ?: Auth::id();
+                }
+                if (Schema::hasColumn('purchase_requests', 'approved_at')) {
+                    $prSyncData['approved_at'] = $mr->planning_approved_at ?: now();
+                }
+                $purchaseRequest->update($prSyncData);
 
                 try {
                     PrWorkflowLog::create([
                         'purchase_request_id' => $purchaseRequest->id,
                         'from_stage'          => PurchaseRequest::STATUS_PENDING_PLANNING,
-                        'to_stage'            => PurchaseRequest::STATUS_PENDING_HR_APPROVAL,
+                        'to_stage'            => PurchaseRequest::STATUS_PENDING_COORDINATOR_APPROVAL,
                         'action'              => 'planning_approve_to_coordinator',
                         'actor_role'          => 'system',
                         'actor_id'            => Auth::id(),
@@ -2448,12 +2454,17 @@ class PurchaseRequestController extends Controller
         $this->authorizeStageRole($purchaseRequest, ['planning_manager', 'planning']);
 
         $targetRole = $this->lifecycle->resolveOwnerRole('coordinator', $purchaseRequest);
-        $purchaseRequest->update([
-            'status'             => PurchaseRequest::STATUS_PENDING_HR_APPROVAL,
+        $prUpdates = [
+            'status'             => PurchaseRequest::STATUS_PENDING_COORDINATOR_APPROVAL,
             'current_owner_role' => $targetRole,
-            'approved_by'        => Auth::id(),
-            'approved_at'        => now(),
-        ]);
+        ];
+        if (Schema::hasColumn('purchase_requests', 'approved_by')) {
+            $prUpdates['approved_by'] = Auth::id();
+        }
+        if (Schema::hasColumn('purchase_requests', 'approved_at')) {
+            $prUpdates['approved_at'] = now();
+        }
+        $purchaseRequest->update($prUpdates);
 
         if ($purchaseRequest->materialRequest) {
             $purchaseRequest->materialRequest->update([
@@ -2468,7 +2479,7 @@ class PurchaseRequestController extends Controller
             PrWorkflowLog::create([
                 'purchase_request_id' => $purchaseRequest->id,
                 'from_stage'          => PurchaseRequest::STATUS_PENDING_PLANNING,
-                'to_stage'            => PurchaseRequest::STATUS_PENDING_HR_APPROVAL,
+                'to_stage'            => PurchaseRequest::STATUS_PENDING_COORDINATOR_APPROVAL,
                 'action'              => 'planning_approve_to_coordinator',
                 'actor_role'          => 'planning',
                 'actor_id'            => Auth::id(),
@@ -2549,7 +2560,7 @@ class PurchaseRequestController extends Controller
         try {
             PrWorkflowLog::create([
                 'purchase_request_id' => $purchaseRequest->id,
-                'from_stage'          => PurchaseRequest::STATUS_PENDING_HR_APPROVAL,
+                'from_stage'          => PurchaseRequest::STATUS_PENDING_COORDINATOR_APPROVAL,
                 'to_stage'            => PurchaseRequest::STATUS_PENDING_STORE_REVIEW,
                 'action'              => 'coordinator_dispatch_to_store',
                 'actor_role'          => 'coordinator',
@@ -2592,7 +2603,7 @@ class PurchaseRequestController extends Controller
         try {
             PrWorkflowLog::create([
                 'purchase_request_id' => $purchaseRequest->id,
-                'from_stage'          => PurchaseRequest::STATUS_PENDING_HR_APPROVAL,
+                'from_stage'          => PurchaseRequest::STATUS_PENDING_COORDINATOR_APPROVAL,
                 'to_stage'            => PurchaseRequest::STATUS_REJECTED,
                 'action'              => 'coordinator_reject',
                 'actor_role'          => 'coordinator',
@@ -2612,7 +2623,7 @@ class PurchaseRequestController extends Controller
             return $this->planningApprove(request(), $purchaseRequest);
         }
 
-        if ($purchaseRequest->status === PurchaseRequest::STATUS_PENDING_HR_APPROVAL) {
+        if ($purchaseRequest->status === PurchaseRequest::STATUS_PENDING_COORDINATOR_APPROVAL) {
             return $this->coordinatorApprove(request(), $purchaseRequest);
         }
 
@@ -2630,7 +2641,7 @@ class PurchaseRequestController extends Controller
             return $this->planningReject($request, $purchaseRequest);
         }
 
-        if ($purchaseRequest->status === PurchaseRequest::STATUS_PENDING_HR_APPROVAL) {
+        if ($purchaseRequest->status === PurchaseRequest::STATUS_PENDING_COORDINATOR_APPROVAL) {
             return $this->coordinatorReject($request, $purchaseRequest);
         }
 

@@ -340,7 +340,7 @@ class MaterialRequestController extends Controller
                 if (in_array($pr->status, [PurchaseRequest::STATUS_PENDING_PLANNING, 'pending_planning', PurchaseRequest::STATUS_DRAFT])) {
                     $targetRole = $lifecycle->resolveOwnerRole('coordinator', $pr);
                     $pr->update([
-                        'status'             => PurchaseRequest::STATUS_PENDING_HR_APPROVAL,
+                        'status'             => PurchaseRequest::STATUS_PENDING_COORDINATOR_APPROVAL,
                         'current_owner_role' => $targetRole,
                         'approved_by'        => auth()->id(),
                         'approved_at'        => now(),
@@ -350,7 +350,7 @@ class MaterialRequestController extends Controller
                         PrWorkflowLog::create([
                             'purchase_request_id' => $pr->id,
                             'from_stage'          => PurchaseRequest::STATUS_PENDING_PLANNING,
-                            'to_stage'            => PurchaseRequest::STATUS_PENDING_HR_APPROVAL,
+                            'to_stage'            => PurchaseRequest::STATUS_PENDING_COORDINATOR_APPROVAL,
                             'action'              => 'planning_approve_to_coordinator',
                             'actor_role'          => 'planning',
                             'actor_id'            => auth()->id(),
@@ -723,7 +723,7 @@ class MaterialRequestController extends Controller
 
                     $targetRole = $lifecycle->resolveOwnerRole('coordinator', $companionPr);
                     $companionPr->update([
-                        'status'             => PurchaseRequest::STATUS_PENDING_HR_APPROVAL,
+                        'status'             => PurchaseRequest::STATUS_PENDING_COORDINATOR_APPROVAL,
                         'current_owner_role' => $targetRole,
                         'approved_by'        => $user->id,
                         'approved_at'        => now(),
@@ -733,7 +733,7 @@ class MaterialRequestController extends Controller
                         PrWorkflowLog::create([
                             'purchase_request_id' => $companionPr->id,
                             'from_stage'          => PurchaseRequest::STATUS_PENDING_PLANNING,
-                            'to_stage'            => PurchaseRequest::STATUS_PENDING_HR_APPROVAL,
+                            'to_stage'            => PurchaseRequest::STATUS_PENDING_COORDINATOR_APPROVAL,
                             'action'              => 'planning_approve_split_to_coordinator',
                             'actor_role'          => 'planning',
                             'actor_id'            => $user->id,
@@ -806,7 +806,7 @@ class MaterialRequestController extends Controller
                 $materialRequest->load('purchaseRequests');
             }
             foreach ($materialRequest->purchaseRequests as $pr) {
-                if (in_array($pr->status, [PurchaseRequest::STATUS_PENDING_HR_APPROVAL, PurchaseRequest::STATUS_DRAFT, PurchaseRequest::STATUS_PENDING_PLANNING])) {
+                if (in_array($pr->status, [PurchaseRequest::STATUS_PENDING_COORDINATOR_APPROVAL, PurchaseRequest::STATUS_DRAFT, PurchaseRequest::STATUS_PENDING_PLANNING])) {
                     $targetRole = $lifecycle->resolveOwnerRole('store_manager', $pr);
                     $pr->update([
                         'status'             => PurchaseRequest::STATUS_PENDING_STORE_REVIEW,
@@ -816,7 +816,7 @@ class MaterialRequestController extends Controller
                     try {
                         PrWorkflowLog::create([
                             'purchase_request_id' => $pr->id,
-                            'from_stage'          => PurchaseRequest::STATUS_PENDING_HR_APPROVAL,
+                            'from_stage'          => PurchaseRequest::STATUS_PENDING_COORDINATOR_APPROVAL,
                             'to_stage'            => PurchaseRequest::STATUS_PENDING_STORE_REVIEW,
                             'action'              => 'coordinator_dispatch_to_store',
                             'actor_role'          => 'coordinator',
@@ -899,7 +899,7 @@ class MaterialRequestController extends Controller
             $materialRequest->loadMissing('purchaseRequests');
             foreach ($materialRequest->purchaseRequests as $pr) {
                 if (in_array($pr->status, [
-                    PurchaseRequest::STATUS_PENDING_HR_APPROVAL,
+                    PurchaseRequest::STATUS_PENDING_COORDINATOR_APPROVAL,
                     PurchaseRequest::STATUS_DRAFT,
                     PurchaseRequest::STATUS_PENDING_PLANNING
                 ])) {

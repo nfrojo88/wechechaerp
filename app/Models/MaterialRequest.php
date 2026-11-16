@@ -149,7 +149,7 @@ class MaterialRequest extends Model
                 $initialOwner = 'purchase_manager';
             } elseif ($this->status === 'planning_approved' || $this->planning_approval_status === 'approved') {
                 // Planning approved -> wait strictly for Coordinator review & dispatch
-                $initialStatus = PurchaseRequest::STATUS_PENDING_HR_APPROVAL;
+                $initialStatus = PurchaseRequest::STATUS_PENDING_COORDINATOR_APPROVAL;
                 $initialOwner = 'coordinator';
             } else {
                 // New or unapproved request -> must start with Planning review
@@ -157,7 +157,7 @@ class MaterialRequest extends Model
                 $initialOwner = 'planning';
             }
 
-            $creatorId = $this->created_by ?: ($actorId ?: (\Illuminate\Support\Facades\Auth::id() ?: 1));
+            $creatorId = $this->created_by ?: ($actorId ?: \App\Services\ProcurementActor::id());
 
             $pr = PurchaseRequest::create([
                 'pr_no'               => $prNo,

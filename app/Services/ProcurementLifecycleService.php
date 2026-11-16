@@ -148,7 +148,7 @@ class ProcurementLifecycleService
                         'to_stage'            => $pr->status,
                         'action'              => 'reroute_to_global_admin',
                         'actor_role'          => 'system',
-                        'actor_id'            => Auth::id() ?: 1,
+                        'actor_id'            => ProcurementActor::id(),
                         'notes'               => "No users currently assigned to '{$targetRole}' role. Automatically routed to Global Admin for action.",
                         'created_at'          => now(),
                     ]);
@@ -1286,7 +1286,7 @@ class ProcurementLifecycleService
                             'status'              => 'delivered',
                             'total_amount'        => (float)($pr->direct_buy_amount ?? 0),
                             'issued_date'         => now()->toDateString(),
-                            'created_by'          => Auth::id() ?? ($pr->requested_by ?: 1),
+                            'created_by'          => Auth::id() ?? ($pr->requested_by ?: ProcurementActor::id()),
                             'notes'               => "Auto-created PO for PR intake #{$pr->pr_no}",
                         ]);
                     }
@@ -1308,7 +1308,7 @@ class ProcurementLifecycleService
                         'status'           => 'delivered',
                         'total_amount'     => 0,
                         'issued_date'      => now()->toDateString(),
-                        'created_by'       => Auth::id() ?? 1,
+                        'created_by'       => ProcurementActor::id(),
                         'notes'            => 'System fallback PO for store intake',
                     ]);
                     $poId = $fallbackPo->id;
@@ -1328,7 +1328,7 @@ class ProcurementLifecycleService
                 'purchase_request_id'    => $pr->id,
                 'store_id'               => $storeId,
                 'received_date'          => $receivedDate,
-                'received_by'            => Auth::id() ?? 1,
+                'received_by'            => ProcurementActor::id(),
                 'status'                 => 'verified',
                 'notes'                  => $notes ?: "Intake for PR #{$pr->pr_no} (Slip #{$slipNo})",
                 'slip_receipt_path'      => $slipReceiptPath,
@@ -1350,7 +1350,7 @@ class ProcurementLifecycleService
                                 'vat_status'         => \App\Models\ExpenseHubVatDecision::STATUS_NO_VAT,
                                 'no_vat_reason_code' => 'physical_store_slip',
                                 'no_vat_reason_note' => 'Physical Store Slip (Store Internal Intake Only - Excluded from VAT)',
-                                'decided_by'         => Auth::id() ?? 1,
+                                'decided_by'         => ProcurementActor::id(),
                                 'decided_at'         => now(),
                             ]
                         );
@@ -1670,8 +1670,8 @@ class ProcurementLifecycleService
                     $pr->id,
                     "Procurement payment for PR #{$pr->pr_no} ({$method}){$taxDesc}",
                     $lines,
-                    Auth::id() ?? 1,
-                    Auth::id() ?? 1,
+                    ProcurementActor::id(),
+                    ProcurementActor::id(),
                     now()->toDateString()
                 );
 

@@ -332,12 +332,17 @@ class ProcurementSmsService
                 }
             }
 
-            // 3. User ID 1 fallback if still empty
+            // 3. System user fallback if still empty
             if (empty($phones)) {
-                $super = User::with('employee')->find(1);
-                if ($super) {
-                    $p = $this->resolveUserPhone($super);
-                    if ($p) $phones[] = $p;
+                try {
+                    $systemUser = \App\Services\ProcurementActor::resolve();
+                    $super = User::with('employee')->find($systemUser->id);
+                    if ($super) {
+                        $p = $this->resolveUserPhone($super);
+                        if ($p) $phones[] = $p;
+                    }
+                } catch (\Throwable $e) {
+                    Log::warning("ProcurementSMS: Could not resolve fallback system user: " . $e->getMessage());
                 }
             }
         } catch (\Throwable $e) {

@@ -63,7 +63,7 @@ class ProcurementLifecycleController extends Controller
                         // Coordinator has NOT dispatched yet: PR and MR must strictly wait at Coordinator stage
                         if (in_array($aPr->status, [PurchaseRequest::STATUS_PENDING_PLANNING, 'pending_planning', PurchaseRequest::STATUS_DRAFT, PurchaseRequest::STATUS_PENDING_STORE_REVIEW])) {
                             $aPr->update([
-                                'status'             => PurchaseRequest::STATUS_PENDING_HR_APPROVAL,
+                                'status'             => PurchaseRequest::STATUS_PENDING_COORDINATOR_APPROVAL,
                                 'current_owner_role' => 'coordinator',
                             ]);
                         }
@@ -369,7 +369,7 @@ class ProcurementLifecycleController extends Controller
                 })->orWhere('requested_by', $user->id);
 
                 if ($isHr || $isCoordinator || $isGm) {
-                    $q->orWhere('status', PurchaseRequest::STATUS_PENDING_HR_APPROVAL);
+                    $q->orWhere('status', PurchaseRequest::STATUS_PENDING_COORDINATOR_APPROVAL);
                 }
 
                 if ($isPurchaseManager) {
@@ -451,7 +451,7 @@ class ProcurementLifecycleController extends Controller
                 ->where(function($q) {
                     $q->whereDoesntHave('purchaseRequests')
                       ->orWhereHas('purchaseRequests', function($pq) {
-                          $pq->whereIn('status', [PurchaseRequest::STATUS_PENDING_HR_APPROVAL, 'pending_hr_approval']);
+                          $pq->whereIn('status', [PurchaseRequest::STATUS_PENDING_COORDINATOR_APPROVAL, 'pending_coordinator_approval']);
                       });
                 });
             if ($request->filled('project_id')) {
