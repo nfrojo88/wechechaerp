@@ -242,7 +242,7 @@
                         <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25">
                             {{ $subconAgreement->expenseRequests->count() }} Requests
                         </span>
-                        <a href="{{ route('expense-requests.index') }}" class="btn btn-sm btn-outline-primary py-0 px-2" style="font-size: 0.75rem;">
+                        <a href="{{ route('expense-requests.index', ['open_create' => 1, 'category' => 'Contract Work', 'project_id' => $subconAgreement->project_id, 'subcon_agreement_id' => $subconAgreement->id]) }}" class="btn btn-sm btn-outline-primary py-0 px-2" style="font-size: 0.75rem;">
                             <i class="fa-solid fa-plus me-1"></i>Ask Money
                         </a>
                     </div>

@@ -549,6 +549,13 @@ class ExpenseRequestController extends Controller
             }
         }
 
+        // STRICT ENFORCEMENT: Contract Work requests must first select a project / site
+        if ($category === 'Contract Work') {
+            if (!$targetProjectId) {
+                return back()->with('error', "Strict Policy: You must select a Project / Site for contract work requests. (እባክዎ ለኮንትራት ስራ ወጪ የስራ ፕሮጀክት / ሳይት ይምረጡ።)")->withInput();
+            }
+        }
+
         // STRICT ENFORCEMENT: Requesters CANNOT assign money to themselves
         if ($targetEmployeeId) {
             $targetEmp = \App\Models\Employee::find($targetEmployeeId);
@@ -646,6 +653,11 @@ class ExpenseRequestController extends Controller
         if ($category === 'Contract Work' && $targetSubconAgreementId) {
             $subcon = \App\Models\SubconAgreement::with(['project', 'supplier'])->find($targetSubconAgreementId);
             if ($subcon) {
+                // Ensure the selected subcontract agreement belongs to the selected project site
+                if ($targetProjectId && $subcon->project_id && (int)$subcon->project_id !== (int)$targetProjectId) {
+                    return back()->with('error', "Strict Policy: The selected subcontract agreement ({$subcon->agreement_no}) does not belong to the selected project site. (የተመረጠው ንዑስ ኮንትራት ከተመረጠው ሳይት ጋር አይዛመድም።)")->withInput();
+                }
+
                 // Automatically align with agreement project if not explicitly specified
                 if (!$targetProjectId && $subcon->project_id) {
                     $targetProjectId = $subcon->project_id;

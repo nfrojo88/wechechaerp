@@ -1996,13 +1996,14 @@
                         <div class="col-md-6">
                             <label class="form-label fw-bold">Category <span class="text-danger">*</span></label>
                             <select name="category" id="categorySelect" class="form-select fw-semibold" onchange="toggleCategoryOptions()" required>
-                                <option value="Service">🤝 Service (አገልግሎት)</option>
-                                <option value="Transport">🚚 Transport (ትራንስፖርት)</option>
-                                <option value="Loading & Unloading">📦 Loading &amp; Unloading (መጫን እና ማውረድ)</option>
-                                <option value="Contract Work">📝 Contract Work (የኮንትራት ስራ)</option>
-                                <option value="Office Material">📁 Office Material (የቢሮ እቃ)</option>
-                                <option value="Maintenance">🔧 Maintenance &amp; Repairs (ጥገና)</option>
-                                <option value="Other">✨ Other (ሌሎች)</option>
+                                <option value="" disabled {{ old('category', request('category')) ? '' : 'selected' }}>-- Select Expense Category (የወጪ አይነት ይምረጡ) --</option>
+                                <option value="Service" {{ old('category', request('category')) === 'Service' ? 'selected' : '' }}>🤝 Service (አገልግሎት)</option>
+                                <option value="Transport" {{ old('category', request('category')) === 'Transport' ? 'selected' : '' }}>🚚 Transport (ትራንስፖርት)</option>
+                                <option value="Loading & Unloading" {{ in_array(old('category', request('category')), ['Loading & Unloading', 'Loading / Unloading', 'Loading Unloading']) ? 'selected' : '' }}>📦 Loading &amp; Unloading (መጫን እና ማውረድ)</option>
+                                <option value="Contract Work" {{ old('category', request('category')) === 'Contract Work' ? 'selected' : '' }}>📝 Contract Work (የኮንትራት ስራ)</option>
+                                <option value="Office Material" {{ old('category', request('category')) === 'Office Material' ? 'selected' : '' }}>📁 Office Material (የቢሮ እቃ)</option>
+                                <option value="Maintenance" {{ old('category', request('category')) === 'Maintenance' ? 'selected' : '' }}>🔧 Maintenance &amp; Repairs (ጥገና)</option>
+                                <option value="Other" {{ old('category', request('category')) === 'Other' ? 'selected' : '' }}>✨ Other (ሌሎች)</option>
                             </select>
                         </div>
 
@@ -2017,7 +2018,7 @@
                             </small>
                         </div>
 
-                        {{-- Project Selection (Mandatory for Loading & Unloading, Optional for other expenses) --}}
+                        {{-- Project Selection (Mandatory Step 1 for Contract Work & Loading/Unloading, Optional for other expenses) --}}
                         <div class="col-12" id="projectSelectGroup">
                             <div class="p-3 bg-light rounded-3 border border-1 shadow-sm" id="projectContainer">
                                 <div class="d-flex justify-content-between align-items-center mb-1">
@@ -2029,10 +2030,10 @@
                                         Optional / እንደ አስፈላጊነቱ
                                     </span>
                                 </div>
-                                <select name="project_id" id="projectSelect" class="form-select fw-semibold mt-1">
+                                <select name="project_id" id="projectSelect" class="form-select fw-semibold mt-1" onchange="onProjectChanged(this)">
                                     <option value="">-- Select Project / Site (ፕሮጀክት ይምረጡ) --</option>
                                     @foreach($projects ?? [] as $proj)
-                                        <option value="{{ $proj->id }}">
+                                        <option value="{{ $proj->id }}" {{ (string)old('project_id', request('project_id')) === (string)$proj->id ? 'selected' : '' }}>
                                             🏗️ {{ $proj->name }} @if(!empty($proj->code))({{ $proj->code }})@endif @if(!empty($proj->location)) — {{ $proj->location }}@endif
                                         </option>
                                     @endforeach
@@ -2051,13 +2052,13 @@
                                         <i class="fa-solid fa-file-signature text-purple me-1" style="color: #6f42c1;"></i>Link Subcontract Agreement (የንዑስ ኮንትራት ስምምነት ያገናኙ)
                                         <span class="text-danger" id="subconRequiredAsterisk" style="display: none;">*</span>
                                     </label>
-                                    <span class="badge text-white px-2.5 py-1 fw-bold" style="background-color: #6f42c1;">
-                                        <i class="fa-solid fa-scale-balanced me-1"></i>Contract Work &amp; Budget Cross-Check
+                                    <span class="badge text-white px-2.5 py-1 fw-bold" id="subconBadge" style="background-color: #6f42c1;">
+                                        <i class="fa-solid fa-scale-balanced me-1"></i>Step 2: Subcontract Under Selected Site
                                     </span>
                                 </div>
 
                                 <select name="subcon_agreement_id" id="subconAgreementSelect" class="form-select form-select-lg fw-semibold mt-1" style="border-color: #6f42c1;" onchange="onSubconAgreementChanged(this)">
-                                    <option value="" selected>-- Select Subcontract Agreement (ስምምነት ይምረጡ) --</option>
+                                    <option value="" selected disabled>-- First select a Project / Site above to view subcontracts (መጀመሪያ ፕሮጀክት ይምረጡ) --</option>
                                     @foreach($subconAgreements ?? [] as $sa)
                                         @php
                                             $saSummary = $sa->getCrossCheckSummary();
@@ -2070,6 +2071,25 @@
                                         </option>
                                     @endforeach
                                 </select>
+
+                                {{-- Prompt when no project site is selected yet --}}
+                                <div id="subconProjectPrompt" class="alert alert-light border border-2 border-dashed py-2.5 px-3 small mt-2 d-flex align-items-center gap-2 text-secondary rounded-3" style="border-color: #6f42c1 !important; display: none;">
+                                    <i class="fa-solid fa-arrow-up fs-5 text-purple" style="color: #6f42c1;"></i>
+                                    <div>
+                                        <strong style="color: #6f42c1;">Step 1 Required:</strong>
+                                        <div class="text-dark small">Please select a <strong>Project / Site</strong> above first. The subcontract agreements registered under that site will automatically load here.</div>
+                                    </div>
+                                </div>
+
+                                {{-- Alert when the chosen site has no registered subcontracts --}}
+                                <div id="subconNoAgreementsAlert" class="alert alert-warning py-2.5 px-3 small mt-2 d-flex align-items-center gap-2 rounded-3 shadow-xs" style="display: none;">
+                                    <i class="fa-solid fa-triangle-exclamation fs-5 text-warning flex-shrink-0"></i>
+                                    <div>
+                                        <strong class="text-dark d-block">No Subcontracts Found for <span id="subconNoAgreementsSiteName">this site</span>:</strong>
+                                        <span class="text-secondary small">There are currently no active or approved subcontract agreements registered under this project site.</span>
+                                    </div>
+                                </div>
+
                                 <small class="text-muted d-block mt-1">
                                     <i class="fa-solid fa-circle-info me-1"></i>Linking this subcontract agreement tracks cumulative payments and cross-checks this request against remaining contract ceiling.
                                 </small>
@@ -2396,6 +2416,124 @@
 
 
 <script>
+// Master list of subcontract agreements loaded from server
+const allSubconAgreements = [
+    @foreach($subconAgreements ?? [] as $sa)
+        @php
+            $saSummary = $sa->getCrossCheckSummary();
+        @endphp
+        {
+            id: "{{ $sa->id }}",
+            project_id: "{{ (string)($sa->project_id ?? '') }}",
+            agreement_no: {!! json_encode($sa->agreement_no) !!},
+            subcontractor_name: {!! json_encode($sa->subcontractor_display_name) !!},
+            project_name: {!! json_encode($saSummary['project_name']) !!},
+            work_description: {!! json_encode($sa->work_description ?? $sa->scope_of_work ?? '') !!},
+            contract_value: {{ (float)($saSummary['contract_value'] ?? 0) }},
+            remaining_balance: {{ (float)($saSummary['remaining_balance'] ?? 0) }},
+            summary: {!! json_encode($saSummary) !!}
+        },
+    @endforeach
+];
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function filterSubconAgreementsByProject(selectedProjectId, preselectedId = null) {
+    const select = document.getElementById('subconAgreementSelect');
+    const prompt = document.getElementById('subconProjectPrompt');
+    const noAlert = document.getElementById('subconNoAgreementsAlert');
+    const crossCheckCard = document.getElementById('subconCrossCheckCard');
+    const scopeHint = document.getElementById('subconScopeHint');
+
+    if (!select) return;
+
+    if (!selectedProjectId) {
+        select.innerHTML = '<option value="" selected disabled>-- First select a Project / Site above to view subcontracts (መጀመሪያ ፕሮጀክት ይምረጡ) --</option>';
+        select.disabled = true;
+        if (prompt) prompt.style.display = 'flex';
+        if (noAlert) noAlert.style.display = 'none';
+        if (crossCheckCard) crossCheckCard.style.display = 'none';
+        if (scopeHint) scopeHint.style.display = 'none';
+        return;
+    }
+
+    const filtered = allSubconAgreements.filter(sa => String(sa.project_id) === String(selectedProjectId));
+
+    if (prompt) prompt.style.display = 'none';
+
+    if (filtered.length === 0) {
+        select.innerHTML = '<option value="" selected disabled>-- No Subcontract Agreements found under this site (በዚህ ሳይት ስር ንዑስ ኮንትራት የለም) --</option>';
+        select.disabled = false;
+        if (noAlert) {
+            noAlert.style.display = 'flex';
+            const projSelect = document.getElementById('projectSelect');
+            const projName = (projSelect && projSelect.selectedOptions && projSelect.selectedOptions[0])
+                ? projSelect.selectedOptions[0].text.replace(/^[🏗️\s]+/, '').split('—')[0].trim()
+                : 'this site';
+            const siteSpan = document.getElementById('subconNoAgreementsSiteName');
+            if (siteSpan) siteSpan.innerText = projName;
+        }
+        if (crossCheckCard) crossCheckCard.style.display = 'none';
+        if (scopeHint) scopeHint.style.display = 'none';
+        return;
+    }
+
+    if (noAlert) noAlert.style.display = 'none';
+    select.disabled = false;
+
+    const projSelect = document.getElementById('projectSelect');
+    const projName = (projSelect && projSelect.selectedOptions && projSelect.selectedOptions[0])
+        ? projSelect.selectedOptions[0].text.replace(/^[🏗️\s]+/, '').split('—')[0].trim()
+        : 'Selected Site';
+
+    let html = `<option value="" ${!preselectedId ? 'selected' : ''}>-- Select Subcontract Agreement under ${escapeHtml(projName)} (${filtered.length} available) --</option>`;
+
+    filtered.forEach(sa => {
+        const isSel = preselectedId && String(preselectedId) === String(sa.id);
+        const sumJson = JSON.stringify(sa.summary).replace(/"/g, '&quot;');
+        const fmtCeiling = Number(sa.contract_value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const fmtAvail = Number(sa.remaining_balance || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        html += `<option value="${sa.id}" data-summary="${sumJson}" data-project-id="${sa.project_id}" data-agreement-no="${escapeHtml(sa.agreement_no)}" ${isSel ? 'selected' : ''}>
+            📜 ${escapeHtml(sa.agreement_no)} — ${escapeHtml(sa.subcontractor_name)} | Ceiling: ETB ${fmtCeiling} | Avail: ETB ${fmtAvail}
+        </option>`;
+    });
+
+    select.innerHTML = html;
+
+    if (preselectedId && filtered.some(sa => String(sa.id) === String(preselectedId))) {
+        select.value = preselectedId;
+        onSubconAgreementChanged(select);
+    } else {
+        if (crossCheckCard) crossCheckCard.style.display = 'none';
+        if (scopeHint) scopeHint.style.display = 'none';
+    }
+}
+
+function onProjectChanged(selectEl) {
+    const categorySelect = document.getElementById('categorySelect');
+    const category = categorySelect ? categorySelect.value : '';
+    const projectId = selectEl ? selectEl.value : '';
+
+    if (category === 'Contract Work') {
+        const subconSelect = document.getElementById('subconAgreementSelect');
+        if (subconSelect) subconSelect.value = '';
+        const crossCard = document.getElementById('subconCrossCheckCard');
+        if (crossCard) crossCard.style.display = 'none';
+        const scopeHint = document.getElementById('subconScopeHint');
+        if (scopeHint) scopeHint.style.display = 'none';
+
+        filterSubconAgreementsByProject(projectId);
+    }
+}
+
 function toggleCategoryOptions() {
     const category = document.getElementById('categorySelect').value;
     const group = document.getElementById('otherReasonGroup');
@@ -2418,22 +2556,48 @@ function toggleCategoryOptions() {
 
     if (category === 'Contract Work') {
         if (subconGroup) subconGroup.style.display = 'block';
+
+        // Step 1: Project Selection is Mandatory for Contract Work
+        if (projectContainer) {
+            projectContainer.className = 'p-3 bg-purple-subtle bg-opacity-10 rounded-3 border border-2 shadow-sm';
+            projectContainer.style.borderColor = '#6f42c1';
+        }
+        if (projectAsterisk) projectAsterisk.style.display = 'inline';
+        if (projectSelect) projectSelect.required = true;
+        if (projectBadge) {
+            projectBadge.className = 'badge text-white px-2.5 py-1 fw-bold';
+            projectBadge.style.backgroundColor = '#6f42c1';
+            projectBadge.innerHTML = '<i class="fa-solid fa-circle-1 me-1"></i>Step 1: Select Project / Site (ደረጃ 1፡ ፕሮጀክት ይምረጡ) *';
+        }
+        if (projectHelpText) {
+            projectHelpText.innerHTML = '<i class="fa-solid fa-circle-info text-purple me-1" style="color: #6f42c1;"></i><strong>Step 1:</strong> Select the Project / Site first. Only subcontract agreements registered under that site will be displayed below.';
+        }
+
+        // Step 2: Subcontract Description setup
         if (descLabel) {
             descLabel.innerHTML = '<i class="fa-solid fa-list-check text-purple me-1" style="color: #6f42c1;"></i>Scope of Work &amp; Description <span class="text-danger">*</span>';
         }
         if (descInput) {
             descInput.placeholder = "Describe the specific scope of work, milestone, or task details being claimed under this subcontract agreement...";
         }
-        if (subconSelect && subconSelect.value) {
-            onSubconAgreementChanged(subconSelect);
-        }
+
+        const currentProjId = projectSelect ? projectSelect.value : '';
+        const currentSubconId = subconSelect ? subconSelect.value : '{{ old("subcon_agreement_id") }}';
+        filterSubconAgreementsByProject(currentProjId, currentSubconId);
+
     } else {
         if (subconGroup) subconGroup.style.display = 'none';
         if (subconSelect) {
             subconSelect.value = '';
+            subconSelect.disabled = false;
         }
         const subconCard = document.getElementById('subconCrossCheckCard');
         if (subconCard) subconCard.style.display = 'none';
+        const prompt = document.getElementById('subconProjectPrompt');
+        if (prompt) prompt.style.display = 'none';
+        const noAlert = document.getElementById('subconNoAgreementsAlert');
+        if (noAlert) noAlert.style.display = 'none';
+
         if (descLabel) {
             descLabel.innerHTML = 'Description / Details <span class="text-danger">*</span>';
         }
@@ -2443,6 +2607,39 @@ function toggleCategoryOptions() {
         if (scopeHint) {
             scopeHint.style.display = 'none';
         }
+
+        // Dynamic Project Selection Configuration for other categories
+        if (category === 'Loading & Unloading') {
+            if (projectContainer) {
+                projectContainer.className = 'p-3 bg-warning-subtle rounded-3 border border-warning border-2 shadow-sm';
+                projectContainer.style.borderColor = '';
+            }
+            if (projectAsterisk) projectAsterisk.style.display = 'inline';
+            if (projectSelect) projectSelect.required = true;
+            if (projectBadge) {
+                projectBadge.className = 'badge bg-warning text-dark px-2 py-1 fw-bold';
+                projectBadge.style.backgroundColor = '';
+                projectBadge.innerHTML = '<i class="fa-solid fa-triangle-exclamation me-1"></i>Required for Loading &amp; Unloading (ለመጫን/ማውረድ ግዴታ)';
+            }
+            if (projectHelpText) {
+                projectHelpText.innerHTML = '<i class="fa-solid fa-check-circle text-warning me-1"></i><strong>Mandatory:</strong> Please select the construction project / site destination for this loading &amp; unloading expense.';
+            }
+        } else {
+            if (projectContainer) {
+                projectContainer.className = 'p-3 bg-light rounded-3 border border-1 shadow-sm';
+                projectContainer.style.borderColor = '';
+            }
+            if (projectAsterisk) projectAsterisk.style.display = 'none';
+            if (projectSelect) projectSelect.required = false;
+            if (projectBadge) {
+                projectBadge.className = 'badge bg-secondary-subtle text-secondary px-2 py-1';
+                projectBadge.style.backgroundColor = '';
+                projectBadge.innerHTML = 'Optional / እንደ አስፈላጊነቱ';
+            }
+            if (projectHelpText) {
+                projectHelpText.innerHTML = '<i class="fa-solid fa-circle-info me-1"></i>Select the destination project site for this expense request.';
+            }
+        }
     }
 
     if (category === 'Other') {
@@ -2451,35 +2648,6 @@ function toggleCategoryOptions() {
     } else {
         if (group) group.style.display = 'none';
         if (input) input.required = false;
-    }
-
-    // Dynamic Project Selection Configuration
-    if (category === 'Loading & Unloading') {
-        if (projectContainer) {
-            projectContainer.className = 'p-3 bg-warning-subtle rounded-3 border border-warning border-2 shadow-sm';
-        }
-        if (projectAsterisk) projectAsterisk.style.display = 'inline';
-        if (projectSelect) projectSelect.required = true;
-        if (projectBadge) {
-            projectBadge.className = 'badge bg-warning text-dark px-2 py-1 fw-bold';
-            projectBadge.innerHTML = '<i class="fa-solid fa-triangle-exclamation me-1"></i>Required for Loading &amp; Unloading (ለመጫን/ማውረድ ግዴታ)';
-        }
-        if (projectHelpText) {
-            projectHelpText.innerHTML = '<i class="fa-solid fa-check-circle text-warning me-1"></i><strong>Mandatory:</strong> Please select the construction project / site destination for this loading &amp; unloading expense.';
-        }
-    } else {
-        if (projectContainer) {
-            projectContainer.className = 'p-3 bg-light rounded-3 border border-1 shadow-sm';
-        }
-        if (projectAsterisk) projectAsterisk.style.display = 'none';
-        if (projectSelect) projectSelect.required = false;
-        if (projectBadge) {
-            projectBadge.className = 'badge bg-secondary-subtle text-secondary px-2 py-1';
-            projectBadge.innerHTML = 'Optional / እንደ አስፈላጊነቱ';
-        }
-        if (projectHelpText) {
-            projectHelpText.innerHTML = '<i class="fa-solid fa-circle-info me-1"></i>Select the destination project site for this expense request.';
-        }
     }
 
     const isUtility = category === 'Utility Expense' || category === 'Utility';
@@ -3295,6 +3463,20 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
             });
         });
+
+        // Auto-initialize Ask Money category and project filtering on page load
+        const catSelect = document.getElementById('categorySelect');
+        if (catSelect && catSelect.value) {
+            toggleCategoryOptions();
+        }
+
+        @if(request('open_create') || session('open_create') || $errors->any())
+            const createModalEl = document.getElementById('createRequestModal');
+            if (createModalEl && window.bootstrap && window.bootstrap.Modal) {
+                const modalInstance = new bootstrap.Modal(createModalEl);
+                modalInstance.show();
+            }
+        @endif
     });
 </script>
 
