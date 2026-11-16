@@ -453,7 +453,7 @@
                                     <div class="fw-semibold text-dark"><span class="badge bg-secondary me-1">{{ $req->category }}</span> {{ $req->other_reason }}</div>
                                 </div>
                                 <div class="col-12 mt-2">
-                                    <span class="text-muted small">Description:</span>
+                                    <span class="text-muted small">{{ ($req->subcon_agreement_id || $req->category === 'Contract Work') ? 'Scope of Work & Description:' : 'Description:' }}</span>
                                     <div class="text-dark small bg-white p-2 rounded border">{{ $req->description }}</div>
                                 </div>
                             </div>
@@ -588,7 +588,7 @@
                                     <div class="fs-4 fw-bold text-success font-monospace">ETB {{ number_format($req->amount, 2) }}</div>
                                 </div>
                                 <div class="col-12">
-                                    <span class="text-muted small">Description:</span>
+                                    <span class="text-muted small">{{ ($req->subcon_agreement_id || $req->category === 'Contract Work') ? 'Scope of Work & Description:' : 'Description:' }}</span>
                                     <div class="fw-normal text-dark">{{ $req->description }}</div>
                                 </div>
                             </div>
@@ -1477,7 +1477,7 @@
                     </div>
 
                     <div class="mb-3">
-                        <label class="fw-bold">Description:</label>
+                        <label class="fw-bold">{{ ($req->subcon_agreement_id || $req->category === 'Contract Work') ? 'Scope of Work & Description:' : 'Description:' }}</label>
                         <div class="p-3 bg-light rounded border">{{ $req->description }}</div>
                     </div>
 
@@ -2363,9 +2363,12 @@
                             <input type="text" name="other_reason" id="otherReasonInput" class="form-control" placeholder="e.g., Client meeting lunch, Site emergency repair...">
                         </div>
 
-                        <div class="col-12">
-                            <label class="form-label fw-bold">Description / Details <span class="text-danger">*</span></label>
-                            <textarea name="description" class="form-control" rows="3" placeholder="Provide full details of why money is required..." required></textarea>
+                        <div class="col-12" id="createDescriptionContainer">
+                            <label class="form-label fw-bold" id="createDescriptionLabel">Description / Details <span class="text-danger">*</span></label>
+                            <textarea name="description" id="createDescriptionInput" class="form-control" rows="3" placeholder="Provide full details of why money is required..." required></textarea>
+                            <small class="text-muted d-block mt-1" id="subconScopeHint" style="display: none;">
+                                <i class="fa-solid fa-file-contract text-primary me-1"></i><strong class="text-dark">Subcontract Agreement Scope:</strong> <span id="subconScopeText" class="text-secondary fst-italic"></span>
+                            </small>
                         </div>
 
                         <div class="col-12">
@@ -2409,9 +2412,18 @@ function toggleCategoryOptions() {
 
     const subconGroup = document.getElementById('subconAgreementGroup');
     const subconSelect = document.getElementById('subconAgreementSelect');
+    const descLabel = document.getElementById('createDescriptionLabel');
+    const descInput = document.getElementById('createDescriptionInput');
+    const scopeHint = document.getElementById('subconScopeHint');
 
     if (category === 'Contract Work') {
         if (subconGroup) subconGroup.style.display = 'block';
+        if (descLabel) {
+            descLabel.innerHTML = '<i class="fa-solid fa-list-check text-purple me-1" style="color: #6f42c1;"></i>Scope of Work &amp; Description <span class="text-danger">*</span>';
+        }
+        if (descInput) {
+            descInput.placeholder = "Describe the specific scope of work, milestone, or task details being claimed under this subcontract agreement...";
+        }
         if (subconSelect && subconSelect.value) {
             onSubconAgreementChanged(subconSelect);
         }
@@ -2422,6 +2434,15 @@ function toggleCategoryOptions() {
         }
         const subconCard = document.getElementById('subconCrossCheckCard');
         if (subconCard) subconCard.style.display = 'none';
+        if (descLabel) {
+            descLabel.innerHTML = 'Description / Details <span class="text-danger">*</span>';
+        }
+        if (descInput) {
+            descInput.placeholder = "Provide full details of why money is required...";
+        }
+        if (scopeHint) {
+            scopeHint.style.display = 'none';
+        }
     }
 
     if (category === 'Other') {
@@ -2609,11 +2630,23 @@ function recalculateCreateTaxes() {
 function onSubconAgreementChanged(selectEl) {
     const card = document.getElementById('subconCrossCheckCard');
     const select = selectEl || document.getElementById('subconAgreementSelect');
+    const descLabel = document.getElementById('createDescriptionLabel');
+    const descInput = document.getElementById('createDescriptionInput');
+    const scopeHint = document.getElementById('subconScopeHint');
+    const scopeText = document.getElementById('subconScopeText');
+
     if (!select) return;
 
     const opt = select.selectedOptions ? select.selectedOptions[0] : null;
     if (!opt || !opt.value) {
         if (card) card.style.display = 'none';
+        if (scopeHint) scopeHint.style.display = 'none';
+        const catVal = document.getElementById('categorySelect') ? document.getElementById('categorySelect').value : '';
+        if (catVal === 'Contract Work') {
+            if (descLabel) descLabel.innerHTML = '<i class="fa-solid fa-list-check text-purple me-1" style="color: #6f42c1;"></i>Scope of Work &amp; Description <span class="text-danger">*</span>';
+        } else {
+            if (descLabel) descLabel.innerHTML = 'Description / Details <span class="text-danger">*</span>';
+        }
         return;
     }
 
@@ -2625,6 +2658,20 @@ function onSubconAgreementChanged(selectEl) {
         summary = JSON.parse(rawSummary);
     } catch(e) {
         return;
+    }
+
+    // Always update label to "Scope of Work & Description *" when subcontract is selected
+    if (descLabel) {
+        descLabel.innerHTML = '<i class="fa-solid fa-list-check text-purple me-1" style="color: #6f42c1;"></i>Scope of Work &amp; Description <span class="text-danger">*</span>';
+    }
+    if (descInput) {
+        descInput.placeholder = "Describe the specific scope of work, milestone, or task details being claimed under this subcontract agreement...";
+    }
+    if (summary.work_description) {
+        if (scopeHint) scopeHint.style.display = 'block';
+        if (scopeText) scopeText.innerText = summary.work_description;
+    } else {
+        if (scopeHint) scopeHint.style.display = 'none';
     }
 
     // Auto-populate Project Site if not already chosen
