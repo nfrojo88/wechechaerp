@@ -22,6 +22,7 @@ class ExpenseRequest extends Model
         'petty_cash_owner_id',
         'credit_store_ledger_id',
         'letter_id',
+        'subcon_agreement_id',
         'project_id',
         'category',
         'other_reason',
@@ -258,6 +259,14 @@ class ExpenseRequest extends Model
     public function creditStoreLedger()
     {
         return $this->belongsTo(\App\Models\CreditStoreLedger::class, 'credit_store_ledger_id');
+    }
+
+    /**
+     * Linked Subcontract Agreement (for Contract Work category).
+     */
+    public function subconAgreement()
+    {
+        return $this->belongsTo(\App\Models\SubconAgreement::class, 'subcon_agreement_id');
     }
 
     /**

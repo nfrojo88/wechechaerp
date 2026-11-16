@@ -55,6 +55,8 @@ class ApprovalHubController extends Controller
             'maintenanceRequest.reportedBy',
             'pettyCashOwner.employee',
             'receipt',
+            'subconAgreement.project',
+            'subconAgreement.supplier',
         ])
         ->where(function ($q) {
             $q->where(function ($sub) {

@@ -292,7 +292,10 @@ class SubconAgreementController extends Controller
             'items',
             'takeoffItems.section',
             'takeoffSheet.items',
-            'ipcs'
+            'ipcs',
+            'expenseRequests.user',
+            'expenseRequests.employee',
+            'expenseRequests.paidBy'
         ]);
 
         return view('procurement.subcon-agreements.show', compact('subconAgreement'));
@@ -416,5 +419,16 @@ class SubconAgreementController extends Controller
         ]);
 
         return back()->with('success', 'Subcontractor agreement activated successfully.');
+    }
+
+    /**
+     * Return live financial cross-check breakdown for an agreement
+     */
+    public function financialCrossCheck(SubconAgreement $subconAgreement)
+    {
+        return response()->json([
+            'success' => true,
+            'data'    => $subconAgreement->getCrossCheckSummary(),
+        ]);
     }
 }

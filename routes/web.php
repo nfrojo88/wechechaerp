@@ -2034,6 +2034,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('subcon-agreements/{subconAgreement}/approve', [App\Http\Controllers\SubconAgreementController::class, 'approve'])->name('subcon-agreements.approve');
     Route::post('subcon-agreements/{subconAgreement}/reject', [App\Http\Controllers\SubconAgreementController::class, 'reject'])->name('subcon-agreements.reject');
     Route::post('subcon-agreements/{subconAgreement}/activate', [App\Http\Controllers\SubconAgreementController::class, 'activate'])->name('subcon-agreements.activate');
+    Route::get('subcon-agreements/{subconAgreement}/financial-cross-check', [App\Http\Controllers\SubconAgreementController::class, 'financialCrossCheck'])->name('subcon-agreements.financial-cross-check');
     Route::get('subcon-agreements/{subconAgreement}/takeoff-items', [App\Http\Controllers\SubconAgreementController::class, 'getTakeoffItems'])->name('subcon-agreements.getTakeoffItems');
     Route::get('hr/subcon-agreements', [App\Http\Controllers\SubconAgreementController::class, 'index'])->name('hr.subcon-agreements.index');
     Route::get('hr/subcon-agreements/create', [App\Http\Controllers\SubconAgreementController::class, 'create'])->name('hr.subcon-agreements.create');

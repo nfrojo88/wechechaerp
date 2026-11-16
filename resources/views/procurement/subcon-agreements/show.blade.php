@@ -231,6 +231,87 @@
                     @endif
                 </div>
             </div>
+
+            <!-- Direct Expense Requests & Cash Disbursements (Ask Money - የኮንትራት ስራ ክፍያዎች) -->
+            <div class="card shadow-sm border-0 rounded-3 mb-4">
+                <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <h6 class="fw-bold mb-0 text-dark">
+                        <i class="fa-solid fa-hand-holding-dollar text-primary me-2"></i>Direct Expense Requests / Ask Money (የኮንትራት ስራ ክፍያዎች)
+                    </h6>
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25">
+                            {{ $subconAgreement->expenseRequests->count() }} Requests
+                        </span>
+                        <a href="{{ route('expense-requests.index') }}" class="btn btn-sm btn-outline-primary py-0 px-2" style="font-size: 0.75rem;">
+                            <i class="fa-solid fa-plus me-1"></i>Ask Money
+                        </a>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    @if($subconAgreement->expenseRequests->isNotEmpty())
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Request #</th>
+                                    <th>Date</th>
+                                    <th>Requester</th>
+                                    <th>Description</th>
+                                    <th class="text-end">Requested</th>
+                                    <th class="text-end">Paid Amount</th>
+                                    <th class="text-center">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach($subconAgreement->expenseRequests as $expReq)
+                                <tr>
+                                    <td>
+                                        <a href="{{ route('expense-requests.index') }}" class="fw-bold text-decoration-none">
+                                            {{ $expReq->request_number }}
+                                        </a>
+                                    </td>
+                                    <td class="small text-muted">{{ optional($expReq->expense_date)->format('d M Y') ?? optional($expReq->created_at)->format('d M Y') }}</td>
+                                    <td class="small">{{ $expReq->requester_name }}</td>
+                                    <td class="small text-truncate" style="max-width: 180px;" title="{{ $expReq->description }}">
+                                        {{ Str::limit($expReq->description, 35) }}
+                                    </td>
+                                    <td class="text-end fw-semibold">{{ number_format($expReq->gross_amount, 2) }} ETB</td>
+                                    <td class="text-end fw-bold {{ $expReq->status === 'Paid' ? 'text-success' : 'text-muted' }}">
+                                        {{ $expReq->disbursed_amount > 0 ? number_format($expReq->disbursed_amount, 2) . ' ETB' : ($expReq->status === 'Paid' ? number_format($expReq->gross_amount, 2) . ' ETB' : '—') }}
+                                    </td>
+                                    <td class="text-center">
+                                        @php
+                                            $stClass = match($expReq->status) {
+                                                'Paid' => 'bg-success',
+                                                'Approved', 'Payment Processed' => 'bg-primary',
+                                                'Rejected' => 'bg-danger',
+                                                default => 'bg-warning text-dark'
+                                            };
+                                        @endphp
+                                        <span class="badge {{ $stClass }}">{{ $expReq->status }}</span>
+                                    </td>
+                                </tr>
+                                @endforeach
+                            </tbody>
+                            <tfoot class="table-light">
+                                <tr>
+                                    <th colspan="4" class="text-end">Direct Expense Disbursements Total:</th>
+                                    <th class="text-end text-muted">{{ number_format($subconAgreement->expenseRequests->sum('gross_amount'), 2) }} ETB</th>
+                                    <th class="text-end text-success fw-bold">{{ number_format($subconAgreement->total_paid_expenses, 2) }} ETB</th>
+                                    <th></th>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                    @else
+                    <div class="text-center py-4 text-muted">
+                        <i class="fa-solid fa-receipt fa-2x mb-2 text-secondary opacity-50"></i>
+                        <p class="small mb-1">No direct expense requests linked to this subcontract agreement yet.</p>
+                        <p class="small text-muted mb-0">When requesting money under <strong>Contract Work</strong>, select this agreement to cross-check and track disbursements directly.</p>
+                    </div>
+                    @endif
+                </div>
+            </div>
         </div>
 
         <!-- Right Column: Document Preview & Financial Metrics -->
@@ -353,30 +434,65 @@
                         </div>
                     </div>
 
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <span class="text-muted">Retention Rate:</span>
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="text-muted small">Retention Rate:</span>
                         <span class="badge bg-secondary">{{ $subconAgreement->retention_percent ?? 10 }}%</span>
                     </div>
 
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <span class="text-muted">Retention Guarantee Amount:</span>
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="text-muted small">Retention Guarantee Amount:</span>
                         <strong class="text-warning">{{ number_format($subconAgreement->retention_amount > 0 ? $subconAgreement->retention_amount : ($subconAgreement->effective_total_amount * (($subconAgreement->retention_percent ?? 10)/100)), 2) }} ETB</strong>
                     </div>
 
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <span class="text-muted">Paid to Date:</span>
-                        <strong class="text-info">{{ number_format($subconAgreement->paid_to_date ?? 0, 2) }} ETB</strong>
+                    <div class="border-top pt-3 mt-3">
+                        <h6 class="fw-bold text-dark small text-uppercase mb-2 text-muted">Disbursements &amp; Cross-Check</h6>
+
+                        <div class="d-flex justify-content-between align-items-center mb-1.5 small">
+                            <span class="text-muted">Paid via IPCs:</span>
+                            <strong class="text-dark">{{ number_format($subconAgreement->total_approved_ipc_amount, 2) }} ETB</strong>
+                        </div>
+
+                        <div class="d-flex justify-content-between align-items-center mb-1.5 small">
+                            <span class="text-muted">Paid via Ask Money (Direct):</span>
+                            <strong class="text-success">{{ number_format($subconAgreement->total_paid_expenses, 2) }} ETB</strong>
+                        </div>
+
+                        <div class="d-flex justify-content-between align-items-center mb-2 pt-1 border-top small">
+                            <span class="fw-bold text-dark">Total Disbursed:</span>
+                            <strong class="text-info fw-bold">{{ number_format($subconAgreement->total_disbursed_amount, 2) }} ETB</strong>
+                        </div>
+
+                        @if($subconAgreement->total_pending_expenses > 0)
+                        <div class="d-flex justify-content-between align-items-center mb-2 small bg-warning bg-opacity-10 p-2 rounded">
+                            <span class="text-warning-emphasis">Pending Requests in Review:</span>
+                            <strong class="text-warning-emphasis">{{ number_format($subconAgreement->total_pending_expenses, 2) }} ETB</strong>
+                        </div>
+                        @endif
+
+                        <div class="mb-2">
+                            <div class="d-flex justify-content-between text-muted" style="font-size: 0.75rem;">
+                                <span>Budget Consumption</span>
+                                <span>{{ $subconAgreement->percent_consumed }}%</span>
+                            </div>
+                            <div class="progress" style="height: 6px;">
+                                @php
+                                    $pColor = $subconAgreement->percent_consumed > 100 ? 'bg-danger' : ($subconAgreement->percent_consumed > 80 ? 'bg-warning' : 'bg-success');
+                                @endphp
+                                <div class="progress-bar {{ $pColor }}" role="progressbar" style="width: {{ min(100, $subconAgreement->percent_consumed) }}%"></div>
+                            </div>
+                        </div>
                     </div>
 
                     <hr class="my-3">
 
-                    @php
-                        $retAmt = $subconAgreement->retention_amount > 0 ? $subconAgreement->retention_amount : ($subconAgreement->effective_total_amount * (($subconAgreement->retention_percent ?? 10)/100));
-                        $netRemaining = $subconAgreement->effective_total_amount - ($subconAgreement->paid_to_date ?? 0);
-                    @endphp
                     <div class="d-flex justify-content-between align-items-center">
-                        <span class="fw-bold text-dark">Net Payable Balance:</span>
-                        <strong class="fs-5 text-success">{{ number_format($netRemaining, 2) }} ETB</strong>
+                        <div>
+                            <span class="fw-bold text-dark d-block">Remaining Balance:</span>
+                            <small class="text-muted">Uncommitted Agreement Value</small>
+                        </div>
+                        <strong class="fs-5 {{ $subconAgreement->remaining_contract_balance <= 0 ? 'text-danger' : 'text-success' }}">
+                            {{ number_format($subconAgreement->remaining_contract_balance, 2) }} ETB
+                        </strong>
                     </div>
                 </div>
             </div>

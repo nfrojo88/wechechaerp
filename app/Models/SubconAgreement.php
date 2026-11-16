@@ -57,6 +57,100 @@ class SubconAgreement extends Model
     {
         return $this->hasMany(IpcRecord::class, 'agreement_id');
     }
+
+    public function expenseRequests()
+    {
+        return $this->hasMany(ExpenseRequest::class, 'subcon_agreement_id');
+    }
+
+    // Financial Tracking & Cross-Check Accessors
+    public function getTotalPaidExpensesAttribute(): float
+    {
+        return (float) $this->expenseRequests()
+            ->where('status', ExpenseRequest::STATUS_PAID)
+            ->sum('amount');
+    }
+
+    public function getTotalPendingExpensesAttribute(): float
+    {
+        return (float) $this->expenseRequests()
+            ->whereNotIn('status', [ExpenseRequest::STATUS_PAID, ExpenseRequest::STATUS_REJECTED])
+            ->sum('amount');
+    }
+
+    public function getTotalApprovedIpcAmountAttribute(): float
+    {
+        return (float) $this->ipcs()
+            ->where('status', 'approved')
+            ->sum('net_payable');
+    }
+
+    public function getTotalDisbursedAmountAttribute(): float
+    {
+        $directPaid = (float)($this->attributes['paid_to_date'] ?? 0);
+        return max($directPaid, round($this->total_paid_expenses + $this->total_approved_ipc_amount, 2));
+    }
+
+    public function getTotalCommittedAmountAttribute(): float
+    {
+        return round($this->total_disbursed_amount + $this->total_pending_expenses, 2);
+    }
+
+    public function getRemainingContractBalanceAttribute(): float
+    {
+        $contractVal = $this->effective_total_amount;
+        if ($contractVal <= 0) {
+            return 0.0;
+        }
+        return max(0.0, round($contractVal - $this->total_committed_amount, 2));
+    }
+
+    public function getPercentConsumedAttribute(): float
+    {
+        $contractVal = $this->effective_total_amount;
+        if ($contractVal <= 0) {
+            return 0.0;
+        }
+        return min(100.0, round(($this->total_committed_amount / $contractVal) * 100, 1));
+    }
+
+    public function getCrossCheckSummary($currentAmount = 0.0): array
+    {
+        $contractVal = (float)$this->effective_total_amount;
+        $paid = (float)$this->total_disbursed_amount;
+        $pending = (float)$this->total_pending_expenses;
+        $committed = (float)$this->total_committed_amount;
+        $remaining = (float)$this->remaining_contract_balance;
+        $percent = (float)$this->percent_consumed;
+
+        $currentAmount = (float)$currentAmount;
+        $balanceAfter = round($remaining - $currentAmount, 2);
+        $isOverBudget = ($currentAmount > $remaining && $contractVal > 0);
+        $overageAmount = $isOverBudget ? round($currentAmount - $remaining, 2) : 0.0;
+
+        return [
+            'id'                            => $this->id,
+            'agreement_no'                  => $this->agreement_no,
+            'subcontractor_name'            => $this->subcontractor_display_name,
+            'project_id'                    => $this->project_id,
+            'project_name'                  => $this->project->project_name ?? $this->project->name ?? 'General / Head Office',
+            'work_description'              => $this->work_description ?? $this->scope_of_work ?? 'Contract Work',
+            'contract_value'                => $contractVal,
+            'effective_total_amount'        => $contractVal,
+            'paid_amount'                   => $paid,
+            'total_disbursed_to_date'       => $paid,
+            'pending_amount'                => $pending,
+            'committed_amount'              => $committed,
+            'remaining_balance'             => $remaining,
+            'available_balance_before'      => $remaining,
+            'percent_consumed'              => $percent,
+            'is_exceeded'                   => ($committed > $contractVal && $contractVal > 0),
+            'over_budget_amount'            => max(0.0, round($committed - $contractVal, 2)),
+            'balance_after_current_request' => $balanceAfter,
+            'is_over_budget'                => $isOverBudget,
+            'overage_amount'                => $overageAmount,
+        ];
+    }
     
     // Takeoff Integration
     public function takeoffItems() 

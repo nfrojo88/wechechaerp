@@ -235,6 +235,13 @@
                                         <i class="fa-solid fa-helmet-safety text-warning me-1"></i>{{ $req->project->name }}
                                     </div>
                                 @endif
+                                @if($req->subconAgreement)
+                                    <div class="mt-1">
+                                        <a href="{{ route('subcon-agreements.show', $req->subconAgreement) }}" class="badge text-white text-decoration-none shadow-xs" style="background-color: #6f42c1; font-size: 0.72rem;" title="Linked Subcontract Agreement: {{ $req->subconAgreement->agreement_no }} — {{ $req->subconAgreement->subcontractor_display_name }} (Ceiling: ETB {{ number_format($req->subconAgreement->effective_total_amount, 2) }})">
+                                            <i class="fa-solid fa-file-signature me-1"></i>{{ $req->subconAgreement->agreement_no }} &bull; {{ Str::limit($req->subconAgreement->subcontractor_display_name, 16) }}
+                                        </a>
+                                    </div>
+                                @endif
                                 @if($req->category === 'Other' && $req->other_reason)
                                     <div class="small text-muted text-truncate" style="max-width: 150px;" title="{{ $req->other_reason }}">
                                         Reason: {{ $req->other_reason }}
@@ -1419,6 +1426,51 @@
                         </div>
                     @endif
 
+                    @if($req->subconAgreement)
+                        @php
+                            $dSummary = $req->subconAgreement->getCrossCheckSummary();
+                        @endphp
+                        <div class="card border rounded-3 mb-3 shadow-xs" style="border-color: #6f42c1 !important;">
+                            <div class="card-header py-2 px-3 d-flex justify-content-between align-items-center" style="background-color: rgba(111, 66, 193, 0.08);">
+                                <span class="small fw-bold text-uppercase" style="color: #6f42c1;">
+                                    <i class="fa-solid fa-file-signature me-1"></i>Linked Subcontract Agreement (የንዑስ ኮንትራት ስምምነት መረጃ)
+                                </span>
+                                <a href="{{ route('subcon-agreements.show', $req->subconAgreement) }}" class="btn btn-xs btn-outline-primary py-0 px-2 fw-semibold" style="font-size: 11px;" target="_blank">
+                                    <i class="fa-solid fa-arrow-up-right-from-square me-1"></i>View Agreement #{{ $req->subconAgreement->agreement_no }}
+                                </a>
+                            </div>
+                            <div class="card-body p-3 bg-white">
+                                <div class="row g-2 text-center mb-2">
+                                    <div class="col-sm-3 col-6 border-end">
+                                        <small class="text-muted text-uppercase fw-semibold d-block" style="font-size:0.72rem;">Subcontractor</small>
+                                        <strong class="text-dark d-block text-truncate" title="{{ $req->subconAgreement->subcontractor_display_name }}">{{ $req->subconAgreement->subcontractor_display_name }}</strong>
+                                        <small class="text-muted" style="font-size:0.70rem;">{{ $req->subconAgreement->agreement_no }}</small>
+                                    </div>
+                                    <div class="col-sm-3 col-6 border-end">
+                                        <small class="text-muted text-uppercase fw-semibold d-block" style="font-size:0.72rem;">Total Contract Ceiling</small>
+                                        <strong class="text-dark fs-6">ETB {{ number_format($dSummary['contract_value'], 2) }}</strong>
+                                    </div>
+                                    <div class="col-sm-3 col-6 border-end">
+                                        <small class="text-muted text-uppercase fw-semibold d-block" style="font-size:0.72rem;">Total Disbursed (Paid)</small>
+                                        <strong class="text-info fs-6">ETB {{ number_format($dSummary['paid_amount'], 2) }}</strong>
+                                    </div>
+                                    <div class="col-sm-3 col-6">
+                                        <small class="text-muted text-uppercase fw-semibold d-block" style="font-size:0.72rem;">Remaining Balance</small>
+                                        <strong class="fs-6 {{ $dSummary['remaining_balance'] < $req->amount ? 'text-danger' : 'text-success' }}">ETB {{ number_format($dSummary['remaining_balance'], 2) }}</strong>
+                                    </div>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center small text-muted pt-2 border-top">
+                                    <span>Scope: <strong>{{ $dSummary['work_description'] }}</strong> &bull; Site: <strong>{{ $dSummary['project_name'] }}</strong></span>
+                                    @if($dSummary['remaining_balance'] < $req->amount && $dSummary['contract_value'] > 0)
+                                        <span class="badge bg-danger text-white"><i class="fa-solid fa-triangle-exclamation me-1"></i>Over Contract Ceiling</span>
+                                    @else
+                                        <span class="badge bg-success text-white"><i class="fa-solid fa-circle-check me-1"></i>Within Contract Ceiling</span>
+                                    @endif
+                                </div>
+                            </div>
+                        </div>
+                    @endif
+
                     <div class="mb-3">
                         <label class="fw-bold">Category & Reason:</label>
                         <div><span class="badge bg-secondary">{{ $req->category }}</span> {{ $req->other_reason }}</div>
@@ -1958,7 +2010,7 @@
                             <label class="form-label fw-bold">Invoice / Base Amount (ETB) <span class="text-danger" id="createAmountRequiredAsterisk">*</span></label>
                             <div class="input-group">
                                 <span class="input-group-text fw-bold bg-light">ETB</span>
-                                <input type="number" step="0.01" min="0.01" name="gross_amount" id="createGrossAmount" class="form-control fw-bold fs-5 text-dark" placeholder="0.00" oninput="recalculateCreateTaxes()" required>
+                                <input type="number" step="0.01" min="0.01" name="gross_amount" id="createGrossAmount" class="form-control fw-bold fs-5 text-dark" placeholder="0.00" oninput="recalculateCreateTaxes(); updateSubconCrossCheck();" required>
                             </div>
                             <small id="utilityAmountHelp" class="text-muted d-block mt-1" style="display:none; font-size: 0.78rem;">
                                 <i class="fa-solid fa-bolt text-warning me-1"></i>Pay amount can be entered now or left as 0 to be specified by the Finance Head.
@@ -1988,6 +2040,92 @@
                                 <small class="text-muted d-block mt-1" id="projectHelpText">
                                     <i class="fa-solid fa-circle-info me-1"></i>Select the destination project site for this expense request.
                                 </small>
+                            </div>
+                        </div>
+
+                        {{-- Subcontract Agreement Linking & Cross-Check for Contract Work (የንዑስ ኮንትራት ስምምነት ማገናኛ እና ክትትል) --}}
+                        <div class="col-12" id="subconAgreementGroup" style="display: none;">
+                            <div class="p-3 bg-purple-subtle bg-opacity-10 rounded-3 border border-2 shadow-sm" id="subconAgreementContainer" style="border-color: #6f42c1 !important; background-color: #fbf9ff;">
+                                <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                                    <label class="form-label fw-bold text-dark mb-0 fs-6">
+                                        <i class="fa-solid fa-file-signature text-purple me-1" style="color: #6f42c1;"></i>Link Subcontract Agreement (የንዑስ ኮንትራት ስምምነት ያገናኙ)
+                                        <span class="text-danger" id="subconRequiredAsterisk" style="display: none;">*</span>
+                                    </label>
+                                    <span class="badge text-white px-2.5 py-1 fw-bold" style="background-color: #6f42c1;">
+                                        <i class="fa-solid fa-scale-balanced me-1"></i>Contract Work &amp; Budget Cross-Check
+                                    </span>
+                                </div>
+
+                                <select name="subcon_agreement_id" id="subconAgreementSelect" class="form-select form-select-lg fw-semibold mt-1" style="border-color: #6f42c1;" onchange="onSubconAgreementChanged(this)">
+                                    <option value="" selected>-- Select Subcontract Agreement (ስምምነት ይምረጡ) --</option>
+                                    @foreach($subconAgreements ?? [] as $sa)
+                                        @php
+                                            $saSummary = $sa->getCrossCheckSummary();
+                                        @endphp
+                                        <option value="{{ $sa->id }}"
+                                                data-summary='@json($saSummary)'
+                                                data-project-id="{{ $sa->project_id }}"
+                                                data-agreement-no="{{ $sa->agreement_no }}">
+                                            📜 {{ $sa->agreement_no }} — {{ $sa->subcontractor_display_name }} ({{ $saSummary['project_name'] }}) | Ceiling: ETB {{ number_format($saSummary['contract_value'], 2) }} | Avail: ETB {{ number_format($saSummary['remaining_balance'], 2) }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                                <small class="text-muted d-block mt-1">
+                                    <i class="fa-solid fa-circle-info me-1"></i>Linking this subcontract agreement tracks cumulative payments and cross-checks this request against remaining contract ceiling.
+                                </small>
+
+                                {{-- Live Subcontract Cross-Check & Financial Balance Card --}}
+                                <div id="subconCrossCheckCard" class="mt-3 p-3 bg-white rounded-3 border shadow-sm" style="display: none;">
+                                    <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom flex-wrap gap-2">
+                                        <div>
+                                            <span class="badge text-white px-2 py-1 font-monospace" id="subconCardNo" style="background-color: #6f42c1;">SUB-AGR</span>
+                                            <strong class="text-dark ms-1 fs-6" id="subconCardName">Subcontractor</strong>
+                                            <span class="text-muted small ms-1" id="subconCardProject">(Project)</span>
+                                        </div>
+                                        <span class="badge bg-light text-dark border px-2 py-1" id="subconCardDesc">Scope</span>
+                                    </div>
+
+                                    <div class="row g-2 text-center my-2">
+                                        <div class="col-sm-3 col-6">
+                                            <div class="p-2 rounded bg-light border">
+                                                <small class="text-muted d-block fw-semibold" style="font-size: 0.72rem;">1. Total Contract Ceiling</small>
+                                                <strong class="text-dark fs-6" id="subconValContract">ETB 0.00</strong>
+                                            </div>
+                                        </div>
+                                        <div class="col-sm-3 col-6">
+                                            <div class="p-2 rounded bg-light border">
+                                                <small class="text-muted d-block fw-semibold" style="font-size: 0.72rem;">2. Previously Disbursed</small>
+                                                <strong class="text-info fs-6" id="subconValPaid">ETB 0.00</strong>
+                                            </div>
+                                        </div>
+                                        <div class="col-sm-3 col-6">
+                                            <div class="p-2 rounded bg-light border">
+                                                <small class="text-muted d-block fw-semibold" style="font-size: 0.72rem;">3. This Request</small>
+                                                <strong class="text-primary fs-6" id="subconValThis">ETB 0.00</strong>
+                                            </div>
+                                        </div>
+                                        <div class="col-sm-3 col-6">
+                                            <div class="p-2 rounded bg-light border">
+                                                <small class="text-muted d-block fw-semibold" style="font-size: 0.72rem;">4. Balance After Request</small>
+                                                <strong class="text-success fs-6" id="subconValRemaining">ETB 0.00</strong>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {{-- Budget Progress Bar --}}
+                                    <div class="mt-2 mb-1">
+                                        <div class="d-flex justify-content-between small text-muted mb-1" style="font-size: 0.75rem;">
+                                            <span>Contract Consumption / የበጀት አጠቃቀም</span>
+                                            <span id="subconProgressText">0% Consumed</span>
+                                        </div>
+                                        <div class="progress" style="height: 8px;">
+                                            <div class="progress-bar bg-primary" id="subconProgressBar" role="progressbar" style="width: 0%;"></div>
+                                        </div>
+                                    </div>
+
+                                    {{-- Dynamic Live Cross-Check Validation Alert --}}
+                                    <div id="subconBudgetAlert" class="mt-2" style="display: none;"></div>
+                                </div>
                             </div>
                         </div>
 
@@ -2269,6 +2407,23 @@ function toggleCategoryOptions() {
     const projectBadge = document.getElementById('projectCategoryBadge');
     const projectHelpText = document.getElementById('projectHelpText');
 
+    const subconGroup = document.getElementById('subconAgreementGroup');
+    const subconSelect = document.getElementById('subconAgreementSelect');
+
+    if (category === 'Contract Work') {
+        if (subconGroup) subconGroup.style.display = 'block';
+        if (subconSelect && subconSelect.value) {
+            onSubconAgreementChanged(subconSelect);
+        }
+    } else {
+        if (subconGroup) subconGroup.style.display = 'none';
+        if (subconSelect) {
+            subconSelect.value = '';
+        }
+        const subconCard = document.getElementById('subconCrossCheckCard');
+        if (subconCard) subconCard.style.display = 'none';
+    }
+
     if (category === 'Other') {
         if (group) group.style.display = 'block';
         if (input) input.required = true;
@@ -2445,6 +2600,136 @@ function recalculateCreateTaxes() {
         } else {
             createWhtSection.style.display = 'none';
             if (createWhtInput) createWhtInput.required = false;
+        }
+    }
+
+    updateSubconCrossCheck();
+}
+
+function onSubconAgreementChanged(selectEl) {
+    const card = document.getElementById('subconCrossCheckCard');
+    const select = selectEl || document.getElementById('subconAgreementSelect');
+    if (!select) return;
+
+    const opt = select.selectedOptions ? select.selectedOptions[0] : null;
+    if (!opt || !opt.value) {
+        if (card) card.style.display = 'none';
+        return;
+    }
+
+    const rawSummary = opt.getAttribute('data-summary');
+    if (!rawSummary) return;
+
+    let summary = {};
+    try {
+        summary = JSON.parse(rawSummary);
+    } catch(e) {
+        return;
+    }
+
+    // Auto-populate Project Site if not already chosen
+    const projSelect = document.getElementById('projectSelect');
+    if (projSelect && summary.project_id && (!projSelect.value || projSelect.value === '')) {
+        projSelect.value = summary.project_id;
+    }
+
+    if (card) card.style.display = 'block';
+
+    const cardNo = document.getElementById('subconCardNo');
+    const cardName = document.getElementById('subconCardName');
+    const cardProj = document.getElementById('subconCardProject');
+    const cardDesc = document.getElementById('subconCardDesc');
+    const valContract = document.getElementById('subconValContract');
+    const valPaid = document.getElementById('subconValPaid');
+
+    if (cardNo) cardNo.innerText = summary.agreement_no || 'SUB-AGR';
+    if (cardName) cardName.innerText = summary.subcontractor_name || 'Subcontractor';
+    if (cardProj) cardProj.innerText = '(' + (summary.project_name || 'General Project') + ')';
+    if (cardDesc) cardDesc.innerText = summary.work_description || 'Contract Scope';
+
+    const fmt = num => 'ETB ' + Number(num || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    if (valContract) valContract.innerText = fmt(summary.contract_value);
+    if (valPaid) valPaid.innerText = fmt(summary.paid_amount);
+
+    updateSubconCrossCheck();
+}
+
+function updateSubconCrossCheck() {
+    const select = document.getElementById('subconAgreementSelect');
+    if (!select || !select.value) return;
+
+    const opt = select.selectedOptions ? select.selectedOptions[0] : null;
+    if (!opt) return;
+
+    let summary = {};
+    try {
+        summary = JSON.parse(opt.getAttribute('data-summary') || '{}');
+    } catch(e) {
+        return;
+    }
+
+    const grossInput = document.getElementById('createGrossAmount');
+    const currentRequest = parseFloat(grossInput ? grossInput.value : 0) || 0;
+
+    const contractVal = parseFloat(summary.contract_value || 0);
+    const paidAmount = parseFloat(summary.paid_amount || 0);
+    const pendingAmount = parseFloat(summary.pending_amount || 0);
+
+    const existingCommitted = paidAmount + pendingAmount;
+    const newTotalCommitted = existingCommitted + currentRequest;
+    const remainingAfter = Math.max(0, contractVal - newTotalCommitted);
+    const isExceeded = (contractVal > 0 && newTotalCommitted > contractVal);
+    const overAmount = Math.max(0, newTotalCommitted - contractVal);
+
+    const percent = contractVal > 0 ? Math.min(100, Math.round((newTotalCommitted / contractVal) * 100)) : 0;
+
+    const thisEl = document.getElementById('subconValThis');
+    const remEl = document.getElementById('subconValRemaining');
+    const progText = document.getElementById('subconProgressText');
+    const progBar = document.getElementById('subconProgressBar');
+    const alertBox = document.getElementById('subconBudgetAlert');
+
+    const fmt = num => 'ETB ' + Number(num || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    if (thisEl) thisEl.innerText = fmt(currentRequest);
+    if (remEl) {
+        remEl.innerText = fmt(remainingAfter);
+        remEl.className = isExceeded ? 'text-danger fs-6 fw-bold' : 'text-success fs-6 fw-bold';
+    }
+
+    if (progText) {
+        progText.innerText = percent + '% of Contract Ceiling Consumed' + (isExceeded ? ' (OVER CEILING)' : '');
+        progText.className = isExceeded ? 'text-danger fw-bold' : 'text-muted';
+    }
+    if (progBar) {
+        progBar.style.width = percent + '%';
+        progBar.className = 'progress-bar ' + (isExceeded ? 'bg-danger' : (percent > 85 ? 'bg-warning' : 'bg-primary'));
+    }
+
+    if (alertBox) {
+        if (isExceeded) {
+            alertBox.style.display = 'block';
+            alertBox.className = 'alert alert-danger d-flex align-items-center gap-2 mb-0 py-2 small border-danger shadow-xs';
+            alertBox.innerHTML = `
+                <i class="fa-solid fa-triangle-exclamation fs-5 text-danger flex-shrink-0"></i>
+                <div>
+                    <strong class="d-block text-danger">⚠️ Contract Ceiling Exceeded by ${fmt(overAmount)}!</strong>
+                    <span>Total requested &amp; paid (${fmt(newTotalCommitted)}) exceeds Contract Ceiling (${fmt(contractVal)}). This will be flagged for HR, GM &amp; Finance verification.</span>
+                </div>
+            `;
+        } else if (contractVal > 0) {
+            alertBox.style.display = 'block';
+            alertBox.className = 'alert alert-success d-flex align-items-center gap-2 mb-0 py-2 small border-success shadow-xs';
+            alertBox.innerHTML = `
+                <i class="fa-solid fa-circle-check fs-5 text-success flex-shrink-0"></i>
+                <div>
+                    <strong class="d-block text-success">✅ Within Subcontract Ceiling</strong>
+                    <span>Remaining available contract balance after this request: <strong>${fmt(remainingAfter)}</strong></span>
+                </div>
+            `;
+        } else {
+            alertBox.style.display = 'none';
         }
     }
 }

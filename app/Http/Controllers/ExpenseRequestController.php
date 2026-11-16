@@ -157,6 +157,9 @@ class ExpenseRequestController extends Controller
                     if (!\Illuminate\Support\Facades\Schema::hasColumn('expense_requests', 'sent_back_by_id')) {
                         $table->unsignedBigInteger('sent_back_by_id')->nullable();
                     }
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('expense_requests', 'subcon_agreement_id')) {
+                        $table->unsignedBigInteger('subcon_agreement_id')->nullable()->index();
+                    }
                 });
             }
 
@@ -268,6 +271,8 @@ class ExpenseRequestController extends Controller
             'purchaseRequest.supplier',
             'purchaseRequest.proformaInvoices.supplier',
             'purchaseRequest.gmDecisions',
+            'subconAgreement.project',
+            'subconAgreement.supplier',
             'receipt',
         ])
         ->where($baseUserScope)
@@ -370,6 +375,12 @@ class ExpenseRequestController extends Controller
             $projects = \App\Models\Project::orderBy('name')->get();
         }
 
+        // Subcontract agreements for Contract Work linking & cross-checking
+        $subconAgreements = \App\Models\SubconAgreement::with(['project', 'supplier', 'items', 'expenseRequests', 'ipcs'])
+            ->whereIn('status', ['approved', 'active', 'draft', 'completed'])
+            ->orderByDesc('id')
+            ->get();
+
         return view('expense-requests.index', compact(
             'requests',
             'counters',
@@ -380,7 +391,8 @@ class ExpenseRequestController extends Controller
             'coaBankAccounts',
             'employees',
             'stores',
-            'projects'
+            'projects',
+            'subconAgreements'
         ));
     }
 
@@ -402,6 +414,8 @@ class ExpenseRequestController extends Controller
             'user',
             'employee',
             'project',
+            'subconAgreement.project',
+            'subconAgreement.supplier',
             'hrReviewer',
             'gmApprover',
             'financeHead',
@@ -475,6 +489,7 @@ class ExpenseRequestController extends Controller
         $validated = $request->validate([
             'employee_id' => 'nullable|exists:employees,id',
             'project_id' => 'nullable|exists:projects,id',
+            'subcon_agreement_id' => 'nullable|exists:subcon_agreements,id',
             'category' => 'required|string|in:Service,Transport,Office Material,Loading & Unloading,Loading / Unloading,Loading Unloading,Contract Work,Maintenance,Utility Expense,Utility,Other',
             'other_reason' => 'required_if:category,Other|nullable|string|max:255',
             'service_type' => 'nullable|string|max:100',
@@ -624,6 +639,29 @@ class ExpenseRequestController extends Controller
 
         $finalAmount = $netAmount > 0 ? $netAmount : $rawAmount;
 
+        // Subcontract Agreement Linking & Cross-Check for Contract Work
+        $targetSubconAgreementId = $request->filled('subcon_agreement_id') ? (int)$request->input('subcon_agreement_id') : null;
+        $budgetWarningNotice = null;
+
+        if ($category === 'Contract Work' && $targetSubconAgreementId) {
+            $subcon = \App\Models\SubconAgreement::with(['project', 'supplier'])->find($targetSubconAgreementId);
+            if ($subcon) {
+                // Automatically align with agreement project if not explicitly specified
+                if (!$targetProjectId && $subcon->project_id) {
+                    $targetProjectId = $subcon->project_id;
+                }
+
+                $crossCheck = $subcon->getCrossCheckSummary();
+                $remBalance = (float)$crossCheck['remaining_balance'];
+                $contractVal = (float)$crossCheck['contract_value'];
+
+                if ($contractVal > 0 && $finalAmount > $remBalance) {
+                    $overAmount = round($finalAmount - $remBalance, 2);
+                    $budgetWarningNotice = " [⚠️ Contract Work Cross-Check: Request ETB " . number_format($finalAmount, 2) . " exceeds remaining agreement balance ETB " . number_format($remBalance, 2) . " by ETB " . number_format($overAmount, 2) . " under Agreement #{$subcon->agreement_no}]";
+                }
+            }
+        }
+
         // Workflow Determination:
         // If an employee is selected AND that employee is different from the current submitter:
         // The request MUST FIRST go to the selected employee for confirmation/approval!
@@ -648,6 +686,7 @@ class ExpenseRequestController extends Controller
             'user_id' => $user->id,
             'employee_id' => $targetEmployeeId,
             'project_id' => $targetProjectId,
+            'subcon_agreement_id' => $targetSubconAgreementId,
             'maintenance_request_id' => $request->input('maintenance_request_id'),
             'category' => $category,
             'service_type' => $validated['service_type'] ?? null,
@@ -667,7 +706,7 @@ class ExpenseRequestController extends Controller
             'bank_name' => $bankName,
             'account_number' => $accountNumber,
             'account_name' => $accountName,
-            'description' => $validated['description'],
+            'description' => $validated['description'] . ($budgetWarningNotice ? "\n" . $budgetWarningNotice : ''),
             'attachment' => $attachmentUrl,
             'status' => $initialStatus,
         ]);
@@ -679,6 +718,10 @@ class ExpenseRequestController extends Controller
         $successMsg = $needsEmployeeApproval
             ? "Expense Request #{$expenseRequest->request_number}{$amountNotice} submitted! Sent to the assigned employee for confirmation before HR/Coordinator review."
             : "Expense Request #{$expenseRequest->request_number}{$amountNotice} submitted successfully and sent to HR / Coordinator for review!";
+
+        if ($budgetWarningNotice) {
+            $successMsg .= " Notice: Request exceeds remaining subcontract agreement balance and has been flagged for reviewer cross-check.";
+        }
 
         return redirect('/expense-requests?tab=my_requests')->with('success', $successMsg);
     }

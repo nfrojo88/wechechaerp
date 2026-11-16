@@ -245,6 +245,13 @@
                                             <div class="text-truncate text-muted"><i class="fa-solid {{ $tApproved ? 'fa-circle-check text-success' : 'fa-hourglass-half text-warning' }} me-1"></i>Approved: <strong class="{{ $tApproved ? 'text-success' : 'text-warning-emphasis' }}">{{ $tName ?? $tText }}</strong></div>
                                         </div>
                                     @endif
+                                    @if($item->category === 'Contract Work' && $item->type === 'expense_request' && isset($item->raw_model) && $item->raw_model->subconAgreement)
+                                        <div class="mt-1" style="font-size: 0.70rem; line-height: 1.35;">
+                                            <a href="{{ route('subcon-agreements.show', $item->raw_model->subconAgreement) }}" target="_blank" class="badge bg-secondary-subtle text-secondary border border-secondary-subtle text-decoration-none" title="Linked Subcontract Agreement: {{ $item->raw_model->subconAgreement->agreement_no }}">
+                                                <i class="fa-solid fa-file-contract text-primary me-1"></i>{{ $item->raw_model->subconAgreement->agreement_no }}
+                                            </a>
+                                        </div>
+                                    @endif
                                 </td>
 
                                 <td>
@@ -1227,6 +1234,66 @@
 
                     @if($item->type === 'expense_request')
                         @php $req = $item->raw_model; @endphp
+
+                        @if(optional($req)->subconAgreement)
+                            @php
+                                $subAgreement = $req->subconAgreement;
+                                $crossCheck = $subAgreement->getCrossCheckSummary($req->gross_amount ?? $req->amount);
+                            @endphp
+                            <div class="card border border-info border-opacity-25 rounded-3 mb-3 overflow-hidden shadow-xs">
+                                <div class="card-header bg-info bg-opacity-10 py-2.5 px-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <i class="fa-solid fa-file-contract text-primary fs-6"></i>
+                                        <div>
+                                            <h6 class="mb-0 fw-bold text-dark small">Subcontract Agreement Cross-Check (የኮንትራት ስራ ማረጋገጫ)</h6>
+                                            <span class="text-muted" style="font-size: 0.72rem;">
+                                                Agreement: <strong>{{ $subAgreement->agreement_no }}</strong> &bull; Subcontractor: <strong>{{ $subAgreement->subcontractor_display_name }}</strong>
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <a href="{{ route('subcon-agreements.show', $subAgreement) }}" target="_blank" class="btn btn-outline-primary btn-xs py-1 px-2 rounded-pill" style="font-size: 0.72rem;">
+                                        <i class="fa-solid fa-arrow-up-right-from-square me-1"></i>View Contract
+                                    </a>
+                                </div>
+                                <div class="card-body p-3 bg-white">
+                                    <div class="row g-2 text-center mb-2">
+                                        <div class="col-4 p-2 bg-light rounded-2 border">
+                                            <div class="text-muted small text-uppercase" style="font-size: 0.68rem;">Contract Ceiling</div>
+                                            <div class="fw-bold text-dark font-monospace" style="font-size: 0.82rem;">ETB {{ number_format($crossCheck['effective_total_amount'], 2) }}</div>
+                                        </div>
+                                        <div class="col-4 p-2 bg-light rounded-2 border">
+                                            <div class="text-muted small text-uppercase" style="font-size: 0.68rem;">Previously Disbursed</div>
+                                            <div class="fw-bold text-info font-monospace" style="font-size: 0.82rem;">ETB {{ number_format($crossCheck['total_disbursed_to_date'], 2) }}</div>
+                                        </div>
+                                        <div class="col-4 p-2 bg-light rounded-2 border">
+                                            <div class="text-muted small text-uppercase" style="font-size: 0.68rem;">Available Balance</div>
+                                            <div class="fw-bold {{ $crossCheck['available_balance_before'] <= 0 ? 'text-danger' : 'text-success' }} font-monospace" style="font-size: 0.82rem;">
+                                                ETB {{ number_format($crossCheck['available_balance_before'], 2) }}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="d-flex justify-content-between align-items-center small py-1 border-top">
+                                        <span class="text-muted">Current Ask Money Gross:</span>
+                                        <strong class="text-primary font-monospace">ETB {{ number_format($req->gross_amount ?? $req->amount, 2) }}</strong>
+                                    </div>
+                                    <div class="d-flex justify-content-between align-items-center small py-1 border-top">
+                                        <span class="text-muted">Remaining Balance After This:</span>
+                                        <strong class="{{ $crossCheck['balance_after_current_request'] < 0 ? 'text-danger' : 'text-success' }} font-monospace">
+                                            ETB {{ number_format($crossCheck['balance_after_current_request'], 2) }}
+                                        </strong>
+                                    </div>
+
+                                    @if($crossCheck['is_over_budget'])
+                                    <div class="alert alert-danger py-1.5 px-2 mb-0 mt-2 small d-flex align-items-center gap-1.5">
+                                        <i class="fa-solid fa-triangle-exclamation text-danger flex-shrink-0"></i>
+                                        <div><strong>Budget Alert:</strong> This request exceeds the remaining agreement balance by ETB {{ number_format($crossCheck['overage_amount'], 2) }}.</div>
+                                    </div>
+                                    @endif
+                                </div>
+                            </div>
+                        @endif
+
                         <div class="p-3 border rounded-3 bg-light">
                             <div class="fw-bold text-dark mb-2"><i class="fa-solid fa-timeline me-1 text-primary"></i> Review & Payment Timeline</div>
                             <ul class="list-unstyled mb-0 small text-muted">
@@ -1394,6 +1461,65 @@
                                     </div>
                                 </div>
                             </div>
+
+                            @if(optional($req)->subconAgreement)
+                                @php
+                                    $subAgreement = $req->subconAgreement;
+                                    $crossCheck = $subAgreement->getCrossCheckSummary($req->gross_amount ?? $req->amount);
+                                @endphp
+                                <div class="card border border-info border-opacity-25 rounded-3 mb-4 overflow-hidden shadow-xs">
+                                    <div class="card-header bg-info bg-opacity-10 py-2.5 px-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                        <div class="d-flex align-items-center gap-2">
+                                            <i class="fa-solid fa-file-contract text-primary fs-6"></i>
+                                            <div>
+                                                <h6 class="mb-0 fw-bold text-dark small">Subcontract Agreement Cross-Check (የኮንትራት ስራ ማረጋገጫ)</h6>
+                                                <span class="text-muted" style="font-size: 0.72rem;">
+                                                    Agreement: <strong>{{ $subAgreement->agreement_no }}</strong> &bull; Subcontractor: <strong>{{ $subAgreement->subcontractor_display_name }}</strong>
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <a href="{{ route('subcon-agreements.show', $subAgreement) }}" target="_blank" class="btn btn-outline-primary btn-xs py-1 px-2 rounded-pill" style="font-size: 0.72rem;">
+                                            <i class="fa-solid fa-arrow-up-right-from-square me-1"></i>View Contract
+                                        </a>
+                                    </div>
+                                    <div class="card-body p-3 bg-white">
+                                        <div class="row g-2 text-center mb-2">
+                                            <div class="col-4 p-2 bg-light rounded-2 border">
+                                                <div class="text-muted small text-uppercase" style="font-size: 0.68rem;">Contract Ceiling</div>
+                                                <div class="fw-bold text-dark font-monospace" style="font-size: 0.82rem;">ETB {{ number_format($crossCheck['effective_total_amount'], 2) }}</div>
+                                            </div>
+                                            <div class="col-4 p-2 bg-light rounded-2 border">
+                                                <div class="text-muted small text-uppercase" style="font-size: 0.68rem;">Previously Disbursed</div>
+                                                <div class="fw-bold text-info font-monospace" style="font-size: 0.82rem;">ETB {{ number_format($crossCheck['total_disbursed_to_date'], 2) }}</div>
+                                            </div>
+                                            <div class="col-4 p-2 bg-light rounded-2 border">
+                                                <div class="text-muted small text-uppercase" style="font-size: 0.68rem;">Available Balance</div>
+                                                <div class="fw-bold {{ $crossCheck['available_balance_before'] <= 0 ? 'text-danger' : 'text-success' }} font-monospace" style="font-size: 0.82rem;">
+                                                    ETB {{ number_format($crossCheck['available_balance_before'], 2) }}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="d-flex justify-content-between align-items-center small py-1 border-top">
+                                            <span class="text-muted">Current Requested Gross:</span>
+                                            <strong class="text-primary font-monospace">ETB {{ number_format($req->gross_amount ?? $req->amount, 2) }}</strong>
+                                        </div>
+                                        <div class="d-flex justify-content-between align-items-center small py-1 border-top">
+                                            <span class="text-muted">Balance After This Approval:</span>
+                                            <strong class="{{ $crossCheck['balance_after_current_request'] < 0 ? 'text-danger' : 'text-success' }} font-monospace">
+                                                ETB {{ number_format($crossCheck['balance_after_current_request'], 2) }}
+                                            </strong>
+                                        </div>
+
+                                        @if($crossCheck['is_over_budget'])
+                                        <div class="alert alert-danger py-1.5 px-2 mb-0 mt-2 small d-flex align-items-center gap-1.5">
+                                            <i class="fa-solid fa-triangle-exclamation text-danger flex-shrink-0"></i>
+                                            <div><strong>Budget Warning:</strong> This request exceeds the remaining agreement balance by ETB {{ number_format($crossCheck['overage_amount'], 2) }}.</div>
+                                        </div>
+                                        @endif
+                                    </div>
+                                </div>
+                            @endif
 
                             @if($pcr)
                                 {{-- GM View: Comprehensive Petty Cash Replenishment Statement & All Receipts --}}
@@ -1935,6 +2061,61 @@
                                             <option value="{{ $coaItem->id }}">[{{ $coaItem->code }}] {{ $coaItem->name }} — ETB {{ number_format($coaItem->current_balance ?? 0, 2) }}</option>
                                         @endforeach
                                     </select>
+                                </div>
+                            @endif
+
+                            @if(optional($req)->subconAgreement)
+                                @php
+                                    $subAgreement = $req->subconAgreement;
+                                    $crossCheck = $subAgreement->getCrossCheckSummary($req->gross_amount ?? $req->amount);
+                                @endphp
+                                <div class="card border border-info border-opacity-25 rounded-3 mb-3 overflow-hidden shadow-xs">
+                                    <div class="card-header bg-info bg-opacity-10 py-2.5 px-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                        <div class="d-flex align-items-center gap-2">
+                                            <i class="fa-solid fa-file-contract text-primary fs-6"></i>
+                                            <div>
+                                                <h6 class="mb-0 fw-bold text-dark small">Subcontract Agreement Cross-Check (የኮንትራት ስራ ማረጋገጫ)</h6>
+                                                <span class="text-muted" style="font-size: 0.72rem;">
+                                                    Agreement: <strong>{{ $subAgreement->agreement_no }}</strong> &bull; Subcontractor: <strong>{{ $subAgreement->subcontractor_display_name }}</strong>
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <a href="{{ route('subcon-agreements.show', $subAgreement) }}" target="_blank" class="btn btn-outline-primary btn-xs py-1 px-2 rounded-pill" style="font-size: 0.72rem;">
+                                            <i class="fa-solid fa-arrow-up-right-from-square me-1"></i>View Contract
+                                        </a>
+                                    </div>
+                                    <div class="card-body p-3 bg-white">
+                                        <div class="row g-2 text-center mb-2">
+                                            <div class="col-4 p-2 bg-light rounded-2 border">
+                                                <div class="text-muted small text-uppercase" style="font-size: 0.68rem;">Contract Ceiling</div>
+                                                <div class="fw-bold text-dark font-monospace" style="font-size: 0.82rem;">ETB {{ number_format($crossCheck['effective_total_amount'], 2) }}</div>
+                                            </div>
+                                            <div class="col-4 p-2 bg-light rounded-2 border">
+                                                <div class="text-muted small text-uppercase" style="font-size: 0.68rem;">Paid to Date</div>
+                                                <div class="fw-bold text-info font-monospace" style="font-size: 0.82rem;">ETB {{ number_format($crossCheck['total_disbursed_to_date'], 2) }}</div>
+                                            </div>
+                                            <div class="col-4 p-2 bg-light rounded-2 border">
+                                                <div class="text-muted small text-uppercase" style="font-size: 0.68rem;">Available Balance</div>
+                                                <div class="fw-bold {{ $crossCheck['available_balance_before'] <= 0 ? 'text-danger' : 'text-success' }} font-monospace" style="font-size: 0.82rem;">
+                                                    ETB {{ number_format($crossCheck['available_balance_before'], 2) }}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="d-flex justify-content-between align-items-center small py-1 border-top">
+                                            <span class="text-muted">Balance After This Disbursement:</span>
+                                            <strong class="{{ $crossCheck['balance_after_current_request'] < 0 ? 'text-danger' : 'text-success' }} font-monospace">
+                                                ETB {{ number_format($crossCheck['balance_after_current_request'], 2) }}
+                                            </strong>
+                                        </div>
+
+                                        @if($crossCheck['is_over_budget'])
+                                        <div class="alert alert-danger py-1.5 px-2 mb-0 mt-2 small d-flex align-items-center gap-1.5">
+                                            <i class="fa-solid fa-triangle-exclamation text-danger flex-shrink-0"></i>
+                                            <div><strong>Over-Ceiling Alert:</strong> This disbursement exceeds the remaining contract balance by ETB {{ number_format($crossCheck['overage_amount'], 2) }}.</div>
+                                        </div>
+                                        @endif
+                                    </div>
                                 </div>
                             @endif
 
