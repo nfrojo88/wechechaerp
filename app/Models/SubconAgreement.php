@@ -66,23 +66,47 @@ class SubconAgreement extends Model
     // Financial Tracking & Cross-Check Accessors
     public function getTotalPaidExpensesAttribute(): float
     {
-        return (float) $this->expenseRequests()
-            ->where('status', ExpenseRequest::STATUS_PAID)
-            ->sum('amount');
+        $reqs = $this->relationLoaded('expenseRequests')
+            ? $this->expenseRequests
+            : $this->expenseRequests()->get();
+
+        return (float) $reqs->where('status', ExpenseRequest::STATUS_PAID)
+            ->sum(function ($req) {
+                return (float) ($req->disbursed_amount > 0 ? $req->disbursed_amount : ($req->gross_amount > 0 ? $req->gross_amount : $req->amount));
+            });
     }
 
     public function getTotalPendingExpensesAttribute(): float
     {
-        return (float) $this->expenseRequests()
-            ->whereNotIn('status', [ExpenseRequest::STATUS_PAID, ExpenseRequest::STATUS_REJECTED])
-            ->sum('amount');
+        $reqs = $this->relationLoaded('expenseRequests')
+            ? $this->expenseRequests
+            : $this->expenseRequests()->get();
+
+        return (float) $reqs->whereNotIn('status', [ExpenseRequest::STATUS_PAID, ExpenseRequest::STATUS_REJECTED])
+            ->sum(function ($req) {
+                return (float) ($req->gross_amount > 0 ? $req->gross_amount : $req->amount);
+            });
     }
 
     public function getTotalApprovedIpcAmountAttribute(): float
     {
-        return (float) $this->ipcs()
-            ->where('status', 'approved')
-            ->sum('net_payable');
+        $ipcs = $this->relationLoaded('ipcs')
+            ? $this->ipcs
+            : $this->ipcs()->get();
+
+        return (float) $ipcs->filter(function ($ipc) {
+            $status = strtolower($ipc->status ?? '');
+            return in_array($status, ['approved', 'paid']);
+        })->sum(function ($ipc) {
+            return (float) (
+                $ipc->net_payable
+                ?? $ipc->net_amount
+                ?? $ipc->paid_amount
+                ?? $ipc->current_certified
+                ?? $ipc->current_work_value
+                ?? 0
+            );
+        });
     }
 
     public function getTotalDisbursedAmountAttribute(): float
