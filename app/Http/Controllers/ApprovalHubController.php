@@ -304,88 +304,158 @@ class ApprovalHubController extends Controller
             $items = $items->concat($efs);
         }
 
-        // 5. Fetch Purchase Requests with Procurement Payments
+        // 5. Fetch Purchase Requests with Procurement Payments & Materials
         try {
-            $prs = PurchaseRequest::with(['project', 'requestedBy', 'payment.coaAccount', 'payment.assignedStaff'])
-                ->whereNotNull('status')
-                ->whereIn('status', [
-                    PurchaseRequest::STATUS_PENDING_PAYMENT,
+            $prs = PurchaseRequest::with([
+                'project',
+                'requestedBy.employee',
+                'payment.coaAccount',
+                'payment.assignedStaff',
+                'payment.paidBy',
+                'items.product',
+                'proformaInvoices.supplier',
+                'proformaInvoices.items',
+                'gmDecisions',
+            ])
+            ->whereNotNull('status')
+            ->latest()
+            ->get()
+            ->map(function ($pr) {
+                $payment = $pr->payment;
+                $statusRaw = strtolower($pr->status ?? 'pending');
+
+                // Determine isPaid status
+                $isPaid = in_array($statusRaw, [
                     PurchaseRequest::STATUS_PENDING_RECEIPT_UPLOAD,
                     PurchaseRequest::STATUS_PENDING_RECEIPT_VERIFY,
                     PurchaseRequest::STATUS_PENDING_STORE_REVIEW,
                     PurchaseRequest::STATUS_INTAKE_COMPLETE,
                     PurchaseRequest::STATUS_COMPLETED,
-                ])
-                ->latest()
-                ->get()
-                ->map(function ($pr) {
-                    $payment = $pr->payment;
-                    $statusRaw = strtolower($pr->status ?? 'pending');
-                    $isPaid = in_array($statusRaw, [
-                        PurchaseRequest::STATUS_PENDING_RECEIPT_UPLOAD,
-                        PurchaseRequest::STATUS_PENDING_RECEIPT_VERIFY,
-                        PurchaseRequest::STATUS_PENDING_STORE_REVIEW,
-                        PurchaseRequest::STATUS_INTAKE_COMPLETE,
-                        PurchaseRequest::STATUS_COMPLETED,
-                    ]) || ($payment && $payment->status === 'paid');
+                    PurchaseRequest::STATUS_TRANSFERRED,
+                ]) || ($payment && $payment->status === 'paid');
 
-                    $statusKey = $isPaid ? 'paid' : ($statusRaw === PurchaseRequest::STATUS_PENDING_PAYMENT ? 'finance_queue' : 'pending_gm');
-                    $badgeColor = match($statusKey) {
-                        'paid'          => 'success',
-                        'rejected'      => 'danger',
-                        'finance_queue' => 'primary',
-                        default         => 'warning',
-                    };
+                if ($isPaid) {
+                    $statusKey = 'paid';
+                    $statusLabel = in_array($statusRaw, [PurchaseRequest::STATUS_COMPLETED, PurchaseRequest::STATUS_INTAKE_COMPLETE])
+                        ? 'Paid & Completed'
+                        : 'Paid (Pending Intake)';
+                    $badgeColor = 'success';
+                } elseif (in_array($statusRaw, [PurchaseRequest::STATUS_REJECTED, PurchaseRequest::STATUS_CANCELLED])) {
+                    $statusKey = 'rejected';
+                    $statusLabel = ucfirst($statusRaw);
+                    $badgeColor = 'danger';
+                } elseif ($statusRaw === PurchaseRequest::STATUS_PENDING_PAYMENT || ($payment && $payment->status === 'pending_assignment')) {
+                    $statusKey = 'finance_queue';
+                    $statusLabel = 'Payment Queue';
+                    $badgeColor = 'primary';
+                } elseif (in_array($statusRaw, [
+                    PurchaseRequest::STATUS_PENDING_COORDINATOR_APPROVAL,
+                    PurchaseRequest::STATUS_PENDING_PLANNING,
+                    'pending_coordinator_approval',
+                    'pending_planning_approval',
+                    PurchaseRequest::STATUS_DRAFT,
+                ])) {
+                    $statusKey = 'pending_hr';
+                    $statusLabel = ($statusRaw === PurchaseRequest::STATUS_PENDING_PLANNING) ? 'Pending Planning Review' : 'Pending Coordinator Review';
+                    $badgeColor = 'warning';
+                } else {
+                    $statusKey = 'pending_gm';
+                    $statusLabel = in_array($statusRaw, [PurchaseRequest::STATUS_PENDING_GM, 'pending_gm_decision'])
+                        ? 'Pending GM Decision'
+                        : 'Pending Procurement / GM';
+                    $badgeColor = 'info';
+                }
 
-                    $amount = (float)($payment?->amount ?? $pr->direct_buy_amount ?? 0);
-                    $vatType = $payment?->vat_type ?? 'none';
-                    $vatAmount = (float)($payment?->vat_amount ?? 0);
-                    if ($vatAmount <= 0 && in_array(strtolower($vatType), ['inclusive', 'vat_b'])) {
-                        $gross = (float)($payment?->gross_amount > 0 ? $payment->gross_amount : $amount);
-                        $rate = (float)($payment?->vat_rate > 0 ? $payment->vat_rate : 15.0);
-                        $base = round($gross / (1 + ($rate / 100)), 2);
-                        $vatAmount = round($gross - $base, 2);
+                // Amount Resolution
+                $amount = 0.0;
+                if ($payment && (float)$payment->amount > 0) {
+                    $amount = (float)$payment->amount;
+                } elseif ((float)($pr->direct_buy_amount ?? 0) > 0) {
+                    $amount = (float)$pr->direct_buy_amount;
+                } elseif ((float)($pr->estimated_total_cost ?? 0) > 0) {
+                    $amount = (float)$pr->estimated_total_cost;
+                } elseif ($pr->items && $pr->items->count() > 0) {
+                    $amount = (float)$pr->items->sum(function($itm) {
+                        return (float)($itm->estimated_total > 0 ? $itm->estimated_total : ((float)$itm->quantity * (float)($itm->estimated_unit_cost ?? 0)));
+                    });
+                }
+
+                $vatType = $payment?->vat_type ?? 'none';
+                $vatAmount = (float)($payment?->vat_amount ?? 0);
+                if ($vatAmount <= 0 && in_array(strtolower($vatType), ['inclusive', 'vat_b'])) {
+                    $gross = (float)($payment?->gross_amount > 0 ? $payment->gross_amount : $amount);
+                    $rate = (float)($payment?->vat_rate > 0 ? $payment->vat_rate : 15.0);
+                    $base = round($gross / (1 + ($rate / 100)), 2);
+                    $vatAmount = round($gross - $base, 2);
+                }
+                $hasVat = ($vatAmount > 0) || in_array(strtolower($vatType), ['inclusive', 'exclusive', 'vat_b', 'with_vat', 'standard']);
+
+                $baseAmount = (float)($payment?->gross_amount > 0 ? $payment->gross_amount : $amount);
+                $netAmount = (float)($payment?->net_amount > 0 ? $payment->net_amount : $amount);
+
+                // Material items summary
+                $totalMaterials = $pr->items ? $pr->items->count() : 0;
+                $materialsSummary = '';
+                if ($totalMaterials > 0) {
+                    $materialsSummary = $pr->items->take(3)->map(function ($itm) {
+                        $pName = $itm->product?->name ?? 'Material';
+                        $qty = (float)$itm->quantity;
+                        $unit = $itm->unit ?? ($itm->product?->unit ?? 'pcs');
+                        return "{$pName} ({$qty} {$unit})";
+                    })->implode(', ');
+                    if ($totalMaterials > 3) {
+                        $materialsSummary .= ' +' . ($totalMaterials - 3) . ' more';
                     }
-                    $hasVat = ($vatAmount > 0) || in_array(strtolower($vatType), ['inclusive', 'exclusive', 'vat_b', 'with_vat', 'standard']);
+                }
 
-                    $baseAmount = (float)($payment?->gross_amount > 0 ? $payment->gross_amount : $amount);
-                    $netAmount = (float)($payment?->net_amount > 0 ? $payment->net_amount : $amount);
+                $description = 'Purchase Request #' . $pr->pr_no;
+                if ($materialsSummary) {
+                    $description .= ' [' . $materialsSummary . ']';
+                }
+                if ($pr->justification) {
+                    $description .= ' — ' . $pr->justification;
+                }
 
-                    return (object) [
-                        'id_raw'           => $pr->id,
-                        'id_formatted'     => str_starts_with((string)$pr->pr_no, 'PR-') ? $pr->pr_no : ('PR-' . ($pr->pr_no ?? $pr->id)),
-                        'item_code'        => str_starts_with((string)$pr->pr_no, 'PR-') ? $pr->pr_no : ('PR-' . ($pr->pr_no ?? $pr->id)),
-                        'type'             => 'purchase_request',
-                        'date'             => $payment?->paid_at ?? $pr->created_at,
-                        'project'          => $pr->project ? $pr->project->name : 'Procurement',
-                        'category'         => 'Material Purchase',
-                        'description'      => 'Purchase Request #' . $pr->pr_no . ($pr->justification ? ' - ' . $pr->justification : ''),
-                        'applicant_name'   => $pr->requestedBy?->name ?? 'Procurement',
-                        'base_amount'      => $baseAmount,
-                        'vat_amount'       => $vatAmount,
-                        'vat_type'         => $vatType,
-                        'has_vat'          => $hasVat,
-                        'net_amount'       => $netAmount,
-                        'status'           => $isPaid ? 'Paid (Pending Intake)' : 'Payment Queue',
-                        'status_raw'       => $pr->status,
-                        'status_key'       => $statusKey,
-                        'color'            => $badgeColor,
-                        'attachment'       => null,
-                        'attachment_url'   => null,
-                        'rejection_reason' => null,
-                        'paid_at'          => $payment?->paid_at,
-                        'paid_by_name'     => $payment?->paidBy?->name ?? null,
-                        'payment_reference'=> $payment?->notes,
-                        'coa_name'         => $payment?->coaAccount?->name ?? null,
-                        'bank_name'        => null,
-                        'assigned_staff_id'=> $payment?->assigned_finance_staff_id ?? null,
-                        'assigned_staff_name'=> $payment?->assignedStaff?->name ?? null,
-                        'route_show'       => route('purchase-requests.show', $pr->id),
-                        'route_approve'    => route('purchase-requests.execute-payment', $pr->id),
-                        'route_reject'     => '#',
-                        'raw_model'        => $pr,
-                    ];
-                });
+                $applicantName = $pr->requestedBy?->name ?? 'Procurement Requester';
+                $deptOrProject = $pr->project ? $pr->project->name : ($pr->requestedBy?->department ?? 'Procurement');
+
+                return (object) [
+                    'id_raw'              => $pr->id,
+                    'id_formatted'        => str_starts_with((string)$pr->pr_no, 'PR-') ? $pr->pr_no : ('PR-' . ($pr->pr_no ?? $pr->id)),
+                    'item_code'           => str_starts_with((string)$pr->pr_no, 'PR-') ? $pr->pr_no : ('PR-' . ($pr->pr_no ?? $pr->id)),
+                    'type'                => 'purchase_request',
+                    'date'                => $payment?->paid_at ?? $pr->created_at,
+                    'project'             => $deptOrProject,
+                    'category'            => 'Material Purchase (የግዢ ጥያቄ)',
+                    'description'         => $description,
+                    'applicant_name'      => $applicantName,
+                    'base_amount'         => $baseAmount,
+                    'vat_amount'          => $vatAmount,
+                    'vat_type'            => $vatType,
+                    'has_vat'             => $hasVat,
+                    'net_amount'          => $netAmount,
+                    'status'              => $statusLabel,
+                    'status_raw'          => $pr->status,
+                    'status_key'          => $statusKey,
+                    'color'               => $badgeColor,
+                    'attachment'          => null,
+                    'attachment_url'      => null,
+                    'rejection_reason'    => $pr->rejection_reason ?? null,
+                    'paid_at'             => $payment?->paid_at,
+                    'paid_by_name'        => $payment?->paidBy?->name ?? null,
+                    'payment_reference'   => $payment?->notes,
+                    'coa_name'            => $payment?->coaAccount?->name ?? null,
+                    'bank_name'           => null,
+                    'assigned_staff_id'   => $payment?->assigned_finance_staff_id ?? null,
+                    'assigned_staff_name' => $payment?->assignedStaff?->name ?? null,
+                    'materials_summary'   => $materialsSummary,
+                    'materials_count'     => $totalMaterials,
+                    'route_show'          => route('purchase-requests.show', $pr->id),
+                    'route_approve'       => route('purchase-requests.execute-payment', $pr->id),
+                    'route_reject'        => '#',
+                    'raw_model'           => $pr,
+                ];
+            });
             $items = $items->concat($prs);
         } catch (\Throwable $e) {}
 
@@ -610,11 +680,20 @@ class ApprovalHubController extends Controller
             // STRICT LAW: Regular Finance Staff ONLY see expenses assigned to their staff ID to pay, or paid/requested by them
             $userId = (int) $user->id;
             $items = $items->filter(function ($item) use ($userId) {
+                $raw = $item->raw_model ?? null;
+
+                // If this finance staff created the request, they can track it across all stages
+                if ($raw && (
+                    (isset($raw->requested_by) && (int)$raw->requested_by === $userId) ||
+                    (isset($raw->created_by) && (int)$raw->created_by === $userId) ||
+                    (isset($raw->user_id) && (int)$raw->user_id === $userId)
+                )) {
+                    return true;
+                }
+
                 if (!in_array($item->status_key, ['finance_queue', 'paid', 'rejected'])) {
                     return false;
                 }
-
-                $raw = $item->raw_model ?? null;
 
                 // 1. Direct assignment to this finance staff to pay
                 if ((int)($item->assigned_staff_id ?? 0) === $userId) {
@@ -636,20 +715,11 @@ class ApprovalHubController extends Controller
                     return true;
                 }
 
-                // 2. For paid / rejected history: items actually paid by this staff or submitted by this staff
+                // 2. For paid / rejected history: items actually paid by this staff
                 if ($raw && isset($raw->paid_by) && (int)$raw->paid_by === $userId) {
                     return true;
                 }
                 if ($raw && isset($raw->payment) && $raw->payment && (int)$raw->payment->paid_by === $userId) {
-                    return true;
-                }
-                if ($raw && isset($raw->user_id) && (int)$raw->user_id === $userId) {
-                    return true;
-                }
-                if ($raw && isset($raw->created_by) && (int)$raw->created_by === $userId) {
-                    return true;
-                }
-                if ($raw && isset($raw->requested_by) && (int)$raw->requested_by === $userId) {
                     return true;
                 }
 
@@ -671,13 +741,23 @@ class ApprovalHubController extends Controller
                 return in_array($item->status_key, ['pending_gm', 'finance_queue', 'paid', 'rejected']);
             });
         } else {
-            // Any other authenticated user (e.g. Account Manager) only sees items assigned to them or created/paid by them
+            // Any other authenticated user (e.g. Requester, Account Manager) only sees items assigned to them or created/paid by them
             $userId = (int) ($user ? $user->id : 0);
             $items = $items->filter(function ($item) use ($userId) {
+                $raw = $item->raw_model ?? null;
+
+                // Requesters can see their own created requests across all stages
+                if ($raw && (
+                    (isset($raw->requested_by) && (int)$raw->requested_by === $userId) ||
+                    (isset($raw->created_by) && (int)$raw->created_by === $userId) ||
+                    (isset($raw->user_id) && (int)$raw->user_id === $userId)
+                )) {
+                    return true;
+                }
+
                 if (!in_array($item->status_key, ['finance_queue', 'paid', 'rejected'])) {
                     return false;
                 }
-                $raw = $item->raw_model ?? null;
                 if ((int)($item->assigned_staff_id ?? 0) === $userId) {
                     return true;
                 }
@@ -688,12 +768,6 @@ class ApprovalHubController extends Controller
                     return true;
                 }
                 if ($raw && isset($raw->paid_by) && (int)$raw->paid_by === $userId) {
-                    return true;
-                }
-                if ($raw && isset($raw->created_by) && (int)$raw->created_by === $userId) {
-                    return true;
-                }
-                if ($raw && isset($raw->user_id) && (int)$raw->user_id === $userId) {
                     return true;
                 }
                 return false;
@@ -809,7 +883,7 @@ class ApprovalHubController extends Controller
         // Collect distinct categories & projects for filter dropdowns
         $categories = [
             'Service', 'Transport', 'Loading & Unloading',
-            'Utility Expense', 'Contract Work', 'Office Material', 'Maintenance', 'Purchase', 'Other'
+            'Utility Expense', 'Contract Work', 'Office Material', 'Maintenance', 'Material Purchase', 'Purchase', 'Other'
         ];
 
         $projects = Project::orderBy('name')->get();

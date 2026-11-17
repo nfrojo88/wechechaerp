@@ -226,6 +226,9 @@ class ExpenseRequestController extends Controller
                     ->where('request_number', 'not like', 'EXP-PR-%')
                     ->where('category', '!=', 'Material');
             })
+            // Allow Purchase Request ("PR question") expense requests
+            ->orWhereNotNull('purchase_request_id')
+            ->orWhere('request_number', 'like', 'EXP-PR-%')
             // Always allow Credit Store Settlement expense requests
             ->orWhere('request_number', 'like', 'EXP-CR-%')
             ->orWhere('other_reason', 'Credit Store Purchase Settlement');
@@ -266,10 +269,11 @@ class ExpenseRequestController extends Controller
             'chartOfAccount',
             'coa.manager',
             'maintenanceRequest',
-            'purchaseRequest.items',
+            'purchaseRequest.items.product',
             'purchaseRequest.project',
             'purchaseRequest.supplier',
             'purchaseRequest.proformaInvoices.supplier',
+            'purchaseRequest.proformaInvoices.items',
             'purchaseRequest.gmDecisions',
             'subconAgreement.project',
             'subconAgreement.supplier',
@@ -1890,11 +1894,10 @@ class ExpenseRequestController extends Controller
             'financeStaff',
             'paidBy',
             'bankAccount',
-            'chartOfAccount'
-        ])
-        ->whereNull('purchase_request_id')
-        ->where('request_number', 'not like', 'EXP-PR-%')
-        ->where('category', '!=', 'Material');
+            'chartOfAccount',
+            'purchaseRequest.items.product',
+            'purchaseRequest.project',
+        ]);
 
         // STRICT DATABASE-LEVEL PAID HISTORY SCOPING
         $query->paidHistoryForUser($user);

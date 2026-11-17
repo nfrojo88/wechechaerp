@@ -277,6 +277,24 @@
                                 <span class="text-truncate d-inline-block" style="max-width: 220px;" title="{{ $req->description }}">
                                     {{ $req->description }}
                                 </span>
+                                @if($req->purchaseRequest && $req->purchaseRequest->items && $req->purchaseRequest->items->count() > 0)
+                                    <div class="mt-1 d-flex flex-wrap gap-1 align-items-center">
+                                        <a href="{{ route('purchase-requests.show', $req->purchaseRequest->id) }}" target="_blank" class="badge bg-success-subtle text-success text-decoration-none border border-success-subtle py-0.5 px-1.5" style="font-size: 0.7rem;" title="View Purchase Request">
+                                            <i class="fa-solid fa-cart-shopping me-1"></i>PR #{{ $req->purchaseRequest->pr_no }}
+                                        </a>
+                                        <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 py-0.5 px-1.5" style="font-size: 0.68rem;">
+                                            <i class="fa-solid fa-boxes-stacked me-1"></i>{{ $req->purchaseRequest->items->count() }} Material(s)
+                                        </span>
+                                        @foreach($req->purchaseRequest->items->take(2) as $mItm)
+                                            <span class="badge bg-light text-dark border py-0.5 px-1" style="font-size: 0.68rem;" title="{{ $mItm->product->name ?? 'Material' }}: {{ (float)$mItm->quantity }} {{ $mItm->unit ?? 'pcs' }}">
+                                                {{ Str::limit($mItm->product->name ?? 'Material', 16) }} ({{ (float)$mItm->quantity }} {{ $mItm->unit ?? 'pcs' }})
+                                            </span>
+                                        @endforeach
+                                        @if($req->purchaseRequest->items->count() > 2)
+                                            <small class="text-muted" style="font-size: 0.68rem;">+{{ $req->purchaseRequest->items->count() - 2 }} more</small>
+                                        @endif
+                                    </div>
+                                @endif
                             </td>
                             <td>
                                 {!! $req->status_badge !!}

@@ -128,6 +128,7 @@
                                 'Contract Work' => 'Contract Work (የኮንትራት ስራ)',
                                 'Office Material' => 'Office Material (የቢሮ እቃ)',
                                 'Maintenance' => 'Maintenance & Repairs (ጥገና)',
+                                'Material Purchase' => 'Material Purchase (የግዢ ጥያቄ / እቃዎች)',
                                 'Purchase' => 'Purchase (ግዢ)',
                                 'Other' => 'Other (ሌሎች)',
                             ];
@@ -208,8 +209,10 @@
                                 <td>
                                     @php
                                         $isUtilityCat = str_contains($item->category, 'Utility') || str_contains($item->category, 'WiFi') || str_contains($item->category, 'Rent');
+                                        $isMaterialCat = str_contains(strtolower($item->category), 'material') || str_contains($item->category, 'የግዢ ጥያቄ');
                                         $catColor = match(true) {
                                             $isUtilityCat => 'warning',
+                                            $isMaterialCat => 'success',
                                             $item->category === 'Service' => 'primary',
                                             $item->category === 'Transport' => 'info',
                                             in_array($item->category, ['Loading & Unloading', 'Loading / Unloading', 'Loading Unloading']) => 'warning',
@@ -220,6 +223,7 @@
                                         };
                                         $catAmharic = match(true) {
                                             $isUtilityCat => 'የፍጆታ ወጪ',
+                                            $isMaterialCat => 'የግዢ ጥያቄ / እቃዎች',
                                             $item->category === 'Service' => 'አገልግሎት',
                                             $item->category === 'Transport' => 'ትራንስፖርት',
                                             in_array($item->category, ['Loading & Unloading', 'Loading / Unloading', 'Loading Unloading']) => 'መጫን/ማውረድ',
@@ -258,6 +262,23 @@
                                     <div class="text-dark" style="font-size: .85rem; max-width: 260px; word-break: break-word;" title="{{ $item->description }}">
                                         {{ Str::limit($item->description, 60) }}
                                     </div>
+                                    @if($item->type === 'purchase_request' && isset($item->raw_model->items) && $item->raw_model->items->count() > 0)
+                                        <div class="mt-1 d-flex flex-wrap gap-1 align-items-center">
+                                            <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-1.5 py-0.5" style="font-size: 0.7rem;">
+                                                <i class="fa-solid fa-boxes-stacked me-1"></i>{{ $item->raw_model->items->count() }} Material(s)
+                                            </span>
+                                            @foreach($item->raw_model->items->take(3) as $mat)
+                                                <span class="badge bg-light text-dark border px-1.5 py-0.5" style="font-size: 0.68rem;" title="{{ $mat->product->name ?? 'Material' }}: {{ (float)$mat->quantity }} {{ $mat->unit ?? 'pcs' }}">
+                                                    <i class="fa-solid fa-cube text-primary me-0.5" style="font-size: 0.6rem;"></i>
+                                                    {{ Str::limit($mat->product->name ?? 'Material', 18) }}
+                                                    <strong class="text-muted ms-0.5">({{ (float)$mat->quantity }} {{ $mat->unit ?? 'pcs' }})</strong>
+                                                </span>
+                                            @endforeach
+                                            @if($item->raw_model->items->count() > 3)
+                                                <span class="text-muted small" style="font-size: 0.68rem;">+{{ $item->raw_model->items->count() - 3 }} more</span>
+                                            @endif
+                                        </div>
+                                    @endif
                                     @if(!empty($item->rejection_reason))
                                         <div class="small text-danger fw-semibold" style="font-size: .72rem;">
                                             <i class="fa-solid fa-triangle-exclamation me-1"></i>{{ Str::limit($item->rejection_reason, 45) }}
@@ -430,6 +451,10 @@
                                                 @elseif($item->status_key === 'paid')
                                                     <a href="{{ $item->route_show }}" class="btn btn-success-subtle text-success border border-success-subtle btn-sm fw-semibold" title="View completed PR">
                                                         <i class="fa-solid fa-check-circle me-1"></i> Paid
+                                                    </a>
+                                                @else
+                                                    <a href="{{ $item->route_show }}" class="btn btn-outline-primary btn-sm" title="View Purchase Request details">
+                                                        <i class="fa-solid fa-arrow-up-right-from-square me-1"></i> PR
                                                     </a>
                                                 @endif
 
@@ -1338,6 +1363,152 @@
                                     </a>
                                 </div>
                             @endif
+                        </div>
+                    @endif
+
+                    @if($item->type === 'purchase_request')
+                        @php
+                            $pr = $item->raw_model;
+                            $prItems = $pr ? ($pr->items ?? collect()) : collect();
+                            $selectedProforma = ($pr && $pr->proformaInvoices) ? $pr->proformaInvoices->firstWhere('gm_selected', true) : null;
+                            $prSupplier = $selectedProforma ? ($selectedProforma->supplier->name ?? $selectedProforma->supplier_name ?? null) : ($pr->supplier->name ?? null);
+                            $gmDecision = ($pr && method_exists($pr, 'gmDecisions')) ? $pr->gmDecisions()->latest()->first() : null;
+                        @endphp
+                        
+                        {{-- 📦 Purchase Request Statement & Requested Materials --}}
+                        <div class="card border border-primary border-opacity-25 rounded-4 mb-4 overflow-hidden shadow-xs">
+                            <div class="card-header bg-primary bg-opacity-10 py-3 px-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="rounded-circle p-2 text-white bg-primary d-flex align-items-center justify-content-center" style="width:34px;height:34px;">
+                                        <i class="fa-solid fa-cart-shopping fs-6"></i>
+                                    </span>
+                                    <div>
+                                        <h6 class="mb-0 fw-bold text-dark">Purchase Request Statement (የግዢ ጥያቄ) &bull; {{ $item->id_formatted }}</h6>
+                                        <small class="text-muted">Origin: <strong>{{ ($pr && $pr->material_request_id) ? 'Store Requisition (MR)' : 'Direct Purchase Request' }}</strong> &bull; Sourcing: <strong>{{ ucwords(str_replace('_', ' ', $pr->sourcing_method ?? 'proforma')) }}</strong></small>
+                                    </div>
+                                </div>
+                                <div class="d-flex align-items-center gap-2">
+                                    <a href="{{ route('purchase-requests.show', $pr->id) }}" target="_blank" class="btn btn-sm btn-primary rounded-pill px-3 shadow-xs">
+                                        <i class="fa-solid fa-arrow-up-right-from-square me-1"></i> View Full PR Workflow
+                                    </a>
+                                </div>
+                            </div>
+
+                            <div class="card-body p-3 bg-white">
+                                {{-- PR Metrics Row --}}
+                                <div class="row g-2 mb-3">
+                                    <div class="col-6 col-md-3">
+                                        <div class="p-2.5 rounded-3 bg-light border text-center">
+                                            <small class="text-muted text-uppercase fw-bold d-block" style="font-size:0.7rem;">PR Number</small>
+                                            <span class="fw-bold font-monospace text-primary fs-6">{{ $pr->pr_no }}</span>
+                                        </div>
+                                    </div>
+                                    <div class="col-6 col-md-3">
+                                        <div class="p-2.5 rounded-3 bg-light border text-center">
+                                            <small class="text-muted text-uppercase fw-bold d-block" style="font-size:0.7rem;">Stage</small>
+                                            <span class="badge bg-{{ $item->color }} rounded-pill px-2.5 py-1" style="font-size:0.75rem;">
+                                                {{ $item->status }}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div class="col-6 col-md-3">
+                                        <div class="p-2.5 rounded-3 bg-light border text-center">
+                                            <small class="text-muted text-uppercase fw-bold d-block" style="font-size:0.7rem;">Supplier / Vendor</small>
+                                            <span class="fw-semibold text-dark text-truncate d-block" style="font-size:0.82rem;" title="{{ $prSupplier ?: 'Pending Selection' }}">
+                                                {{ $prSupplier ?: 'Pending Selection' }}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div class="col-6 col-md-3">
+                                        <div class="p-2.5 rounded-3 bg-light border text-center">
+                                            <small class="text-muted text-uppercase fw-bold d-block" style="font-size:0.7rem;">Total Amount</small>
+                                            <strong class="text-success font-monospace fs-6">ETB {{ number_format($item->net_amount, 2) }}</strong>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                @if($gmDecision && $gmDecision->notes)
+                                    <div class="alert alert-info border-start border-4 border-info py-2 px-3 mb-3 small d-flex align-items-center gap-2">
+                                        <i class="fa-solid fa-user-shield text-info flex-shrink-0 fs-5"></i>
+                                        <div><strong>GM Approval Notes:</strong> {{ $gmDecision->notes }}</div>
+                                    </div>
+                                @endif
+
+                                {{-- 📦 Requested Materials & Items Table --}}
+                                <div class="d-flex align-items-center justify-content-between mb-2 mt-2">
+                                    <h6 class="fw-bold text-dark mb-0 small text-uppercase">
+                                        <i class="fa-solid fa-boxes-stacked text-primary me-1"></i>Requested Materials in this PR ({{ $prItems->count() }})
+                                    </h6>
+                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle font-monospace">{{ $prItems->count() }} item(s)</span>
+                                </div>
+
+                                <div class="table-responsive rounded-3 border">
+                                    <table class="table table-hover table-sm align-middle mb-0" style="font-size: 0.84rem;">
+                                        <thead class="table-dark small text-uppercase">
+                                            <tr>
+                                                <th class="ps-3 py-2" style="width: 40px;">#</th>
+                                                <th class="py-2">Item / Material Name</th>
+                                                <th class="py-2 text-center" style="width: 90px;">Qty</th>
+                                                <th class="py-2 text-center" style="width: 70px;">Unit</th>
+                                                <th class="py-2 text-end" style="width: 130px;">Unit Price (ETB)</th>
+                                                <th class="py-2 pe-3 text-end" style="width: 140px;">Total (ETB)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @php $matSum = 0.0; @endphp
+                                            @forelse($prItems as $idx => $mItem)
+                                                @php
+                                                    $mName = $mItem->product->name ?? $mItem->item_name ?? $mItem->description ?? ('Item #' . ($mItem->product_id ?? ($idx + 1)));
+                                                    $mQty = (float)$mItem->quantity;
+                                                    $mUnit = $mItem->unit ?? ($mItem->product->unit ?? 'pcs');
+                                                    $mUnitPrice = (float)($mItem->estimated_unit_cost ?? $mItem->unit_price ?? $mItem->estimated_unit_price ?? 0);
+                                                    if ($mUnitPrice <= 0 && $selectedProforma && $selectedProforma->items) {
+                                                        $pItm = $selectedProforma->items->firstWhere('product_id', $mItem->product_id);
+                                                        if ($pItm && (float)$pItm->unit_price > 0) {
+                                                            $mUnitPrice = (float)$pItm->unit_price;
+                                                        }
+                                                    }
+                                                    if ($mUnitPrice <= 0 && $prItems->count() === 1 && (float)$item->net_amount > 0) {
+                                                        $mUnitPrice = (float)$item->net_amount / ($mQty > 0 ? $mQty : 1);
+                                                    }
+                                                    $mLineTotal = (float)($mItem->estimated_total > 0 ? $mItem->estimated_total : ($mQty * $mUnitPrice));
+                                                    if ($mLineTotal <= 0 && $prItems->count() === 1 && (float)$item->net_amount > 0) {
+                                                        $mLineTotal = (float)$item->net_amount;
+                                                    }
+                                                    $matSum += $mLineTotal;
+                                                @endphp
+                                                <tr>
+                                                    <td class="ps-3 text-muted">{{ $idx + 1 }}</td>
+                                                    <td>
+                                                        <div class="fw-semibold text-dark">
+                                                            <i class="fa-solid fa-cube text-primary opacity-50 me-1" style="font-size:0.75rem;"></i>{{ $mName }}
+                                                        </div>
+                                                        @if(!empty($mItem->specifications) || !empty($mItem->specification))
+                                                            <small class="text-muted fst-italic ps-3 d-block" style="font-size:0.74rem;">
+                                                                {{ $mItem->specifications ?? $mItem->specification }}
+                                                            </small>
+                                                        @endif
+                                                    </td>
+                                                    <td class="text-center font-monospace fw-bold text-dark">{{ number_format($mQty, 2) }}</td>
+                                                    <td class="text-center text-muted small"><span class="badge bg-light text-dark border">{{ $mUnit }}</span></td>
+                                                    <td class="text-end font-monospace text-muted">{{ $mUnitPrice > 0 ? number_format($mUnitPrice, 2) : '—' }}</td>
+                                                    <td class="pe-3 text-end font-monospace fw-bold text-success">{{ number_format($mLineTotal, 2) }}</td>
+                                                </tr>
+                                            @empty
+                                                <tr>
+                                                    <td colspan="6" class="text-center py-3 text-muted">No material line items recorded on this Purchase Request.</td>
+                                                </tr>
+                                            @endforelse
+                                        </tbody>
+                                        <tfoot class="table-light">
+                                            <tr class="fw-bold">
+                                                <td colspan="5" class="text-end pe-2">Estimated Total:</td>
+                                                <td class="pe-3 text-end font-monospace text-success fs-6">ETB {{ number_format($matSum > 0 ? $matSum : $item->net_amount, 2) }}</td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+                            </div>
                         </div>
                     @endif
                 </div>
@@ -2398,6 +2569,40 @@
                             </div>
                             @endif
                         </div>
+
+                        @php
+                            $modalPr = $item->raw_model;
+                            $modalPrItems = $modalPr ? ($modalPr->items ?? collect()) : collect();
+                        @endphp
+                        @if($modalPrItems->count() > 0)
+                            <div class="card border border-primary-subtle bg-light rounded-3 p-2.5 mb-3">
+                                <div class="d-flex justify-content-between align-items-center mb-1 pb-1 border-bottom">
+                                    <small class="text-primary text-uppercase fw-bold" style="font-size:0.74rem;">
+                                        <i class="fa-solid fa-boxes-stacked me-1"></i>Materials Included in this Payment ({{ $modalPrItems->count() }})
+                                    </small>
+                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-0.5" style="font-size:0.7rem;">{{ $modalPrItems->count() }} Item(s)</span>
+                                </div>
+                                <div class="d-flex flex-column gap-1" style="max-height: 130px; overflow-y: auto;">
+                                    @foreach($modalPrItems as $mItm)
+                                        <div class="d-flex justify-content-between align-items-center bg-white p-1.5 rounded border small" style="font-size:0.76rem;">
+                                            <div class="text-truncate me-2" style="max-width: 65%;">
+                                                <i class="fa-solid fa-cube text-primary me-1" style="font-size:0.65rem;"></i>
+                                                <strong class="text-dark">{{ $mItm->product->name ?? 'Material' }}</strong>
+                                                @if(!empty($mItm->specifications))
+                                                    <span class="text-muted d-none d-sm-inline ms-1 fst-italic">({{ Str::limit($mItm->specifications, 25) }})</span>
+                                                @endif
+                                            </div>
+                                            <div class="font-monospace text-nowrap text-end">
+                                                <span class="badge bg-light text-dark border">{{ (float)$mItm->quantity }} {{ $mItm->unit ?? 'pcs' }}</span>
+                                                @if((float)($mItm->estimated_total ?? 0) > 0)
+                                                    <span class="text-success fw-bold ms-1">ETB {{ number_format($mItm->estimated_total, 2) }}</span>
+                                                @endif
+                                            </div>
+                                        </div>
+                                    @endforeach
+                                </div>
+                            </div>
+                        @endif
 
                         <!-- Gross / Base Invoice Amount -->
                         <div class="row g-3 mb-3">
