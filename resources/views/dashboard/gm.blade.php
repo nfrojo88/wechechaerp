@@ -594,6 +594,7 @@
                                     <th>Status</th>
                                     <th class="text-end">Contract Value (ETB)</th>
                                     <th class="text-end">Budget (ETB)</th>
+                                    <th class="text-end text-success">Realized Income (ETB)</th>
                                     <th class="text-end text-warning">Cash Disbursed (ETB)</th>
                                     <th class="text-end text-success">Material Used (ETB)</th>
                                     <th class="text-end fw-bold">Total Expense (ETB)</th>
@@ -627,6 +628,15 @@
                                             {{ number_format($pe['budget_allocated'], 0) }}
                                         @else
                                             <span class="text-muted fst-italic">Not set</span>
+                                        @endif
+                                    </td>
+                                    <td data-label="Realized Income" class="text-end font-tabular">
+                                        @if(($pe['total_income'] ?? 0) > 0)
+                                            <a href="{{ route('income.index', ['project_id' => $pe['id']]) }}" class="text-success fw-bold text-decoration-none" title="View Income Receipts logged for {{ $pe['name'] }}">
+                                                {{ number_format($pe['total_income'], 0) }} <i class="fas fa-arrow-up-right-from-square ms-1" style="font-size:0.65rem;"></i>
+                                            </a>
+                                        @else
+                                            <span class="text-muted">0</span>
                                         @endif
                                     </td>
                                     <td data-label="Cash Disbursed" class="text-end font-tabular">
@@ -678,6 +688,7 @@
                             <tfoot class="table-light">
                                 <tr class="fw-bold font-tabular">
                                     <td class="ps-3" colspan="4">Totals</td>
+                                    <td class="text-end text-success">{{ number_format($projectExpenses->sum('total_income'), 0) }} ETB</td>
                                     <td class="text-end text-warning">{{ number_format($projectExpenses->sum('cash_expenses'), 0) }} ETB</td>
                                     <td class="text-end text-success">{{ number_format($projectExpenses->sum('material_cost'), 0) }} ETB</td>
                                     <td class="text-end text-dark">{{ number_format($projectExpenses->sum('total_expense'), 0) }} ETB</td>

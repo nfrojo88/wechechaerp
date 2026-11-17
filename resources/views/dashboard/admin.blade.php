@@ -682,6 +682,7 @@
                             <th class="ps-3">Project</th>
                             <th>Contract Value</th>
                             <th>Allocated Budget</th>
+                            <th class="text-success">Realized Income</th>
                             <th>Cash Vouchers</th>
                             <th>Material Used</th>
                             <th>Total Incurred</th>
@@ -698,6 +699,15 @@
                                 </td>
                                 <td class="font-monospace text-muted">{{ number_format($proj['contract_value'], 2) }}</td>
                                 <td class="font-monospace fw-semibold">{{ number_format($proj['budget_allocated'], 2) }}</td>
+                                <td class="font-monospace text-success fw-bold">
+                                    @if(($proj['total_income'] ?? 0) > 0)
+                                        <a href="{{ route('income.index', ['project_id' => $proj['id']]) }}" class="text-success text-decoration-none" title="View Income Receipts">
+                                            {{ number_format($proj['total_income'], 2) }}
+                                        </a>
+                                    @else
+                                        <span class="text-muted font-monospace">0.00</span>
+                                    @endif
+                                </td>
                                 <td class="font-monospace text-secondary">{{ number_format($proj['cash_expenses'], 2) }}</td>
                                 <td class="font-monospace text-secondary">{{ number_format($proj['material_cost'], 2) }}</td>
                                 <td class="font-monospace fw-bold {{ $proj['budget_status'] === 'danger' ? 'text-danger' : 'text-dark' }}">
@@ -722,7 +732,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="8" class="text-center py-4 text-muted">
+                                <td colspan="9" class="text-center py-4 text-muted">
                                     <i class="fa-solid fa-folder-open fs-3 mb-2 opacity-50"></i>
                                     <p class="mb-0">No active projects found.</p>
                                 </td>

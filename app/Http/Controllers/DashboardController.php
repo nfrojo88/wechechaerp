@@ -1009,6 +1009,19 @@ class DashboardController extends Controller
                     $utilization      = $budgetAllocated > 0 ? min(999, round(($totalExpense / $budgetAllocated) * 100, 1)) : 0;
                     $budgetStatus     = $utilization >= 100 ? 'danger' : ($utilization >= 80 ? 'warning' : 'success');
 
+                    // Calculate Project Realized Income from IncomeRecord & Payments
+                    $projectIncome = 0.0;
+                    if (\Illuminate\Support\Facades\Schema::hasTable('income_records')) {
+                        $projectIncome += (float) \App\Models\IncomeRecord::where('project_id', $project->id)
+                            ->where('status', '!=', 'cancelled')
+                            ->sum('amount');
+                    }
+                    if (\Illuminate\Support\Facades\Schema::hasTable('payments')) {
+                        $projectIncome += (float) \App\Models\Payment::where('project_id', $project->id)->sum('amount');
+                    }
+
+                    $netMargin = $projectIncome - $totalExpense;
+
                     return [
                         'id'               => $project->id,
                         'name'             => $project->name,
@@ -1016,9 +1029,11 @@ class DashboardController extends Controller
                         'status'           => $project->status,
                         'contract_value'   => $contractValue,
                         'budget_allocated' => $budgetAllocated,
+                        'total_income'     => $projectIncome,
                         'cash_expenses'    => $cashExpenses,
                         'material_cost'    => $materialCost,
                         'total_expense'    => $totalExpense,
+                        'net_margin'       => $netMargin,
                         'remaining_budget' => max(0, $budgetAllocated - $totalExpense),
                         'utilization'      => $utilization,
                         'budget_status'    => $budgetStatus,
@@ -1408,6 +1423,19 @@ class DashboardController extends Controller
                     $utilization      = $budgetAllocated > 0 ? min(999, round(($totalExpense / $budgetAllocated) * 100, 1)) : 0;
                     $budgetStatus     = $utilization >= 100 ? 'danger' : ($utilization >= 80 ? 'warning' : 'success');
 
+                    // Calculate Project Realized Income from IncomeRecord & Payments
+                    $projectIncome = 0.0;
+                    if (\Illuminate\Support\Facades\Schema::hasTable('income_records')) {
+                        $projectIncome += (float) \App\Models\IncomeRecord::where('project_id', $project->id)
+                            ->where('status', '!=', 'cancelled')
+                            ->sum('amount');
+                    }
+                    if (\Illuminate\Support\Facades\Schema::hasTable('payments')) {
+                        $projectIncome += (float) \App\Models\Payment::where('project_id', $project->id)->sum('amount');
+                    }
+
+                    $netMargin = $projectIncome - $totalExpense;
+
                     return [
                         'id'               => $project->id,
                         'name'             => $project->name,
@@ -1415,9 +1443,11 @@ class DashboardController extends Controller
                         'status'           => $project->status,
                         'contract_value'   => $contractValue,
                         'budget_allocated' => $budgetAllocated,
+                        'total_income'     => $projectIncome,
                         'cash_expenses'    => $cashExpenses,
                         'material_cost'    => $materialCost,
                         'total_expense'    => $totalExpense,
+                        'net_margin'       => $netMargin,
                         'remaining_budget' => max(0, $budgetAllocated - $totalExpense),
                         'utilization'      => $utilization,
                         'budget_status'    => $budgetStatus,

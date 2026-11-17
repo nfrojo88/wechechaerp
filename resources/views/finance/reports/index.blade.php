@@ -187,25 +187,25 @@
                 </a>
             </div>
 
-            {{-- Expense Report by Site --}}
+            {{-- Expenses vs Income by Site --}}
             <div class="col-12 col-md-6 col-xl-4">
                 <a href="{{ route('reports.expense-by-site') }}" class="text-decoration-none">
                     <div class="card h-100 border-0 shadow-sm rounded-4 wc-report-card">
                         <div class="card-body p-4 d-flex flex-column">
                             <div class="d-flex align-items-center justify-content-between mb-3">
-                                <div class="wc-report-icon-box" style="background: rgba(239,68,68,.12); color: #ef4444;">
-                                    <i class="fa-solid fa-location-dot fs-4"></i>
+                                <div class="wc-report-icon-box" style="background: rgba(16,185,129,.12); color: #10b981;">
+                                    <i class="fa-solid fa-scale-balanced fs-4"></i>
                                 </div>
-                                <span class="badge rounded-pill px-2.5 py-1" style="background: rgba(239,68,68,.12); color: #ef4444; font-size: 0.72rem;">
-                                    Site Costing
+                                <span class="badge rounded-pill px-2.5 py-1" style="background: rgba(16,185,129,.12); color: #10b981; font-size: 0.72rem;">
+                                    Site Costing &amp; Revenue
                                 </span>
                             </div>
-                            <h6 class="fw-bold text-dark mb-1 fs-6">Expense Report by Site</h6>
+                            <h6 class="fw-bold text-dark mb-1 fs-6">Expenses vs Income by Site</h6>
                             <p class="text-muted small mb-4 flex-grow-1 lh-sm">
-                                Break down all operational expenses aggregated by Chart of Accounts category and construction site cost centers.
+                                Analyze project profitability, comparing company revenues and client receipts against real operational expenses per construction site.
                             </p>
-                            <div class="d-flex align-items-center text-danger small fw-semibold pt-2 border-top">
-                                <span>View Site Expenses</span>
+                            <div class="d-flex align-items-center text-success small fw-semibold pt-2 border-top">
+                                <span>View Expenses vs Income by Site</span>
                                 <i class="fa-solid fa-arrow-right ms-auto"></i>
                             </div>
                         </div>

@@ -148,6 +148,20 @@
                             @endcan
                         </td>
                     </tr>
+                    <tr class="table-success bg-opacity-10">
+                        <td class="text-success fw-bold">
+                            <i class="fa-solid fa-hand-holding-dollar me-1"></i>Realized Project Income
+                            <div class="small text-muted fw-normal" style="font-size: 0.72rem;">(Company Income &amp; Client Receipts)</div>
+                        </td>
+                        <td class="fw-bold text-success font-monospace fs-6">
+                            {{ number_format($projectIncome ?? 0, 2) }} ETB
+                            @if(($projectIncomeCount ?? 0) > 0)
+                                <a href="{{ route('income.index', ['project_id' => $project->id]) }}" class="badge bg-success text-white rounded-pill text-decoration-none small ms-1" style="font-size: 0.68rem;" title="View Income Receipts">
+                                    {{ $projectIncomeCount }} receipt(s) <i class="fa-solid fa-arrow-up-right-from-square ms-0.5"></i>
+                                </a>
+                            @endif
+                        </td>
+                    </tr>
                     <tr>
                         <td class="text-muted">
                             Expenses Without Budget

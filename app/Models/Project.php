@@ -110,6 +110,18 @@ class Project extends Model
         return $this->hasMany(ProjectBudgetAllocation::class);
     }
 
+    public function incomeRecords()
+    {
+        return $this->hasMany(IncomeRecord::class);
+    }
+
+    public function getTotalIncomeAttribute(): float
+    {
+        return (float) $this->incomeRecords()
+            ->where('status', '!=', 'cancelled')
+            ->sum('amount');
+    }
+
     // ── Budget helpers ────────────────────────────────────────────────────
 
     /**

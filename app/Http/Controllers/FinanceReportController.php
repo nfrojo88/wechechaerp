@@ -5,6 +5,11 @@ namespace App\Http\Controllers;
 use App\Models\ChartOfAccount;
 use App\Models\JournalEntryLine;
 use App\Models\JournalEntry;
+use App\Models\Project;
+use App\Models\IncomeRecord;
+use App\Models\Expense;
+use App\Models\ExpenseRequest;
+use App\Models\ProcurementPayment;
 use App\Services\Finance\TrialBalanceIntegrityService;
 use App\Services\Finance\AbnormalBalanceService;
 use App\Services\Finance\FinanceMetricsService;
@@ -294,22 +299,154 @@ class FinanceReportController extends Controller
     {
         $startDate = $request->input('start_date', Carbon::now()->startOfYear()->format('Y-m-d'));
         $endDate   = $request->input('end_date', Carbon::now()->format('Y-m-d'));
+        $selectedProjectId = $request->input('project_id');
 
-        $expenses = JournalEntryLine::join('journal_entries', 'journal_entry_lines.journal_entry_id', '=', 'journal_entries.id')
+        $projects = Project::where('status', '!=', 'cancelled')->orderBy('name')->get();
+        if ($projects->isEmpty()) {
+            $projects = Project::orderBy('name')->get();
+        }
+
+        // If a specific project is selected, fetch it
+        $selectedProject = ($selectedProjectId && $selectedProjectId !== 'all') 
+            ? Project::find($selectedProjectId) 
+            : null;
+
+        // 1. General GL Expense Breakdown
+        $expenseQuery = JournalEntryLine::join('journal_entries', 'journal_entry_lines.journal_entry_id', '=', 'journal_entries.id')
             ->join('chart_of_accounts', 'journal_entry_lines.account_id', '=', 'chart_of_accounts.id')
             ->where('chart_of_accounts.type', 'expense')
             ->where('journal_entries.status', 'posted')
-            ->selectRaw('
+            ->whereDate('journal_entries.entry_date', '>=', $startDate)
+            ->whereDate('journal_entries.entry_date', '<=', $endDate);
+
+        if ($selectedProject && \Illuminate\Support\Facades\Schema::hasColumn('journal_entry_lines', 'project_id')) {
+            $expenseQuery->where('journal_entry_lines.project_id', $selectedProject->id);
+        }
+
+        $expenses = $expenseQuery->selectRaw('
                 chart_of_accounts.name as account_name,
                 chart_of_accounts.code as account_code,
                 SUM(CASE WHEN side = "debit" THEN amount ELSE -amount END) as total_amount
             ')
-            ->whereDate('journal_entries.entry_date', '>=', $startDate)
-            ->whereDate('journal_entries.entry_date', '<=', $endDate)
             ->groupBy('chart_of_accounts.id', 'chart_of_accounts.name', 'chart_of_accounts.code')
             ->having('total_amount', '>', 0)
             ->get();
 
-        return view('finance.reports.expense_by_site', compact('expenses', 'startDate', 'endDate'));
+        // 2. Fetch Income Records by Site
+        $incomeRecordsQuery = IncomeRecord::with(['project', 'bankAccount', 'chartOfAccount'])
+            ->where('status', '!=', 'cancelled')
+            ->where(function ($q) use ($startDate, $endDate) {
+                $q->whereBetween('income_date', [$startDate, $endDate])
+                  ->orWhere(function ($sub) use ($startDate, $endDate) {
+                      $sub->whereNull('income_date')->whereBetween('receipt_date', [$startDate, $endDate]);
+                  });
+            });
+
+        if ($selectedProject) {
+            $incomeRecordsQuery->where('project_id', $selectedProject->id);
+        }
+
+        $incomeRecords = $incomeRecordsQuery->latest('income_date')->latest('id')->get();
+        $totalSiteIncome = (float) $incomeRecords->sum('amount');
+
+        // 3. Multi-Site Comparison Matrix (Expenses vs Income per Project Site)
+        $siteComparison = $projects->map(function ($proj) use ($startDate, $endDate) {
+            // Realized Income for this site from IncomeRecord
+            $siteIncome = (float) IncomeRecord::where('project_id', $proj->id)
+                ->where('status', '!=', 'cancelled')
+                ->where(function ($q) use ($startDate, $endDate) {
+                    $q->whereBetween('income_date', [$startDate, $endDate])
+                      ->orWhere(function ($sub) use ($startDate, $endDate) {
+                          $sub->whereNull('income_date')->whereBetween('receipt_date', [$startDate, $endDate]);
+                      });
+                })
+                ->sum('amount');
+
+            $incomeCount = IncomeRecord::where('project_id', $proj->id)
+                ->where('status', '!=', 'cancelled')
+                ->where(function ($q) use ($startDate, $endDate) {
+                    $q->whereBetween('income_date', [$startDate, $endDate])
+                      ->orWhere(function ($sub) use ($startDate, $endDate) {
+                          $sub->whereNull('income_date')->whereBetween('receipt_date', [$startDate, $endDate]);
+                      });
+                })
+                ->count();
+
+            // Real Expenses for this site
+            $cashExp = 0.0;
+            if (\Illuminate\Support\Facades\Schema::hasTable('expense_requests')) {
+                $cashExp += (float) ExpenseRequest::where('project_id', $proj->id)
+                    ->whereIn('status', [ExpenseRequest::STATUS_PAID, 'approved', 'assigned', 'reviewed'])
+                    ->whereDate('created_at', '>=', $startDate)
+                    ->whereDate('created_at', '<=', $endDate)
+                    ->sum('amount');
+            }
+            if (\Illuminate\Support\Facades\Schema::hasTable('expenses')) {
+                $cashExp += (float) Expense::where('project_id', $proj->id)
+                    ->whereDate('expense_date', '>=', $startDate)
+                    ->whereDate('expense_date', '<=', $endDate)
+                    ->sum('amount');
+            }
+            if (\Illuminate\Support\Facades\Schema::hasTable('procurement_payments')) {
+                $cashExp += (float) ProcurementPayment::where('status', 'paid')
+                    ->whereHas('purchaseRequest', fn($pq) => $pq->where('project_id', $proj->id))
+                    ->whereDate('payment_date', '>=', $startDate)
+                    ->whereDate('payment_date', '<=', $endDate)
+                    ->sum('amount');
+            }
+
+            // Fallback to journal lines if available
+            if ($cashExp == 0 && \Illuminate\Support\Facades\Schema::hasColumn('journal_entry_lines', 'project_id')) {
+                $journalExp = (float) JournalEntryLine::join('journal_entries', 'journal_entry_lines.journal_entry_id', '=', 'journal_entries.id')
+                    ->join('chart_of_accounts', 'journal_entry_lines.account_id', '=', 'chart_of_accounts.id')
+                    ->where('chart_of_accounts.type', 'expense')
+                    ->where('journal_entries.status', 'posted')
+                    ->where('journal_entry_lines.project_id', $proj->id)
+                    ->whereDate('journal_entries.entry_date', '>=', $startDate)
+                    ->whereDate('journal_entries.entry_date', '<=', $endDate)
+                    ->sum(DB::raw('CASE WHEN side = "debit" THEN amount ELSE -amount END'));
+                $cashExp = max(0, $journalExp);
+            }
+
+            $netMargin = $siteIncome - $cashExp;
+            $marginPct = $siteIncome > 0 ? round(($netMargin / $siteIncome) * 100, 1) : ($cashExp > 0 ? -100 : 0);
+
+            return [
+                'project'      => $proj,
+                'income'       => $siteIncome,
+                'income_count' => $incomeCount,
+                'expense'      => $cashExp,
+                'net_margin'   => $netMargin,
+                'margin_pct'   => $marginPct,
+                'status'       => $netMargin >= 0 ? 'profitable' : 'loss',
+            ];
+        });
+
+        // Calculate Totals
+        $glExpenseSum = (float) $expenses->sum('total_amount');
+        if ($selectedProject) {
+            $selectedSiteStat = $siteComparison->firstWhere('project.id', $selectedProject->id);
+            $grandTotalExpense = ($selectedSiteStat && $selectedSiteStat['expense'] > 0) ? $selectedSiteStat['expense'] : $glExpenseSum;
+        } else {
+            $comparisonTotalExp = (float) $siteComparison->sum('expense');
+            $grandTotalExpense = $comparisonTotalExp > 0 ? $comparisonTotalExp : $glExpenseSum;
+        }
+
+        $allSitesIncome = (float) $siteComparison->sum('income');
+        $grandTotalIncome = $selectedProject ? $totalSiteIncome : $allSitesIncome;
+        $netOperatingPosition = $grandTotalIncome - $grandTotalExpense;
+
+        return view('finance.reports.expense_by_site', compact(
+            'expenses',
+            'projects',
+            'selectedProject',
+            'incomeRecords',
+            'siteComparison',
+            'grandTotalIncome',
+            'grandTotalExpense',
+            'netOperatingPosition',
+            'startDate',
+            'endDate'
+        ));
     }
 }

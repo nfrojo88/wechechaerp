@@ -125,13 +125,29 @@ class ProjectController extends Controller
 
         $erp_plan = \App\Models\ErpPlanHeader::where('project_id', $project->id)->latest()->first();
 
+        // Project Realized Income from IncomeRecord & Payments
+        $projectIncome = 0.0;
+        $projectIncomeCount = 0;
+        if (\Illuminate\Support\Facades\Schema::hasTable('income_records')) {
+            $projectIncome += (float) \App\Models\IncomeRecord::where('project_id', $project->id)
+                ->where('status', '!=', 'cancelled')
+                ->sum('amount');
+            $projectIncomeCount += \App\Models\IncomeRecord::where('project_id', $project->id)
+                ->where('status', '!=', 'cancelled')
+                ->count();
+        }
+        if (\Illuminate\Support\Facades\Schema::hasTable('payments')) {
+            $projectIncome += (float) \App\Models\Payment::where('project_id', $project->id)->sum('amount');
+            $projectIncomeCount += \App\Models\Payment::where('project_id', $project->id)->count();
+        }
+
         if ($erp_plan) {
             $erp_plan->load('tasks.dependencies', 'tasks.resources', 'baselines', 'project', 'creator');
-            return view('erp_plans.show', compact('erp_plan', 'associatedCostSummary', 'associatedCosts'));
+            return view('erp_plans.show', compact('erp_plan', 'associatedCostSummary', 'associatedCosts', 'projectIncome', 'projectIncomeCount'));
         }
 
         $project->load(['defaultStore.pettyCashAccount', 'stores.pettyCashAccount', 'creator']);
-        return view('projects.show', compact('project', 'associatedCostSummary', 'associatedCosts'));
+        return view('projects.show', compact('project', 'associatedCostSummary', 'associatedCosts', 'projectIncome', 'projectIncomeCount'));
     }
 
     public function edit(Project $project)
