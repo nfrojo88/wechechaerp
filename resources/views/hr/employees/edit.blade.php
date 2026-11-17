@@ -678,24 +678,42 @@
                 </div>
                 @endif
 
+                {{-- Asset toolbar & quick actions --}}
+                <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2 p-2 bg-light rounded border">
+                    <div>
+                        <small class="text-muted fw-bold">
+                            <i class="fa-solid fa-boxes-stacked me-1 text-primary"></i>Fixed Asset Units:
+                            <span id="totalAvailableBadge" class="badge bg-success ms-1">{{ $fixedAssetUnits->count() }} Available / Assigned</span>
+                        </small>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <a href="{{ route('products.create') }}" target="_blank" class="btn btn-sm btn-outline-secondary" title="Add a new material or equipment in Catalog">
+                            <i class="fa-solid fa-plus me-1 text-success"></i>New Material
+                        </a>
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="btnSyncAssets" onclick="syncMaterialsAndAssets(this)" title="Sync newly added materials from Catalog into Fixed Assets">
+                            <i class="fa-solid fa-arrows-rotate me-1"></i>Sync New Materials
+                        </button>
+                    </div>
+                </div>
+
                 {{-- Category Filter Pills --}}
                 @php
                     $availableCategories = $fixedAssetUnits->map(function($u) {
                         return $u->parentAsset->category ?? 'General';
                     })->unique()->values();
                 @endphp
-                <div class="card border-0 bg-light p-2 mb-3 shadow-sm">
+                <div id="categoryFilterContainer" class="card border-0 bg-light p-2 mb-3 shadow-sm @if($availableCategories->count() <= 1) d-none @endif">
                     <div class="d-flex flex-wrap align-items-center gap-2">
                         <small class="text-muted fw-bold me-1"><i class="fa-solid fa-filter me-1"></i>Filter by Category:</small>
                         <button type="button" class="btn btn-xs btn-dark rounded-pill px-3 py-1 btn-category-filter active" data-category="ALL" onclick="filterByCategory('ALL', this)">
-                            All ({{ $fixedAssetUnits->count() }})
+                            All (<span class="cat-count-all">{{ $fixedAssetUnits->count() }}</span>)
                         </button>
                         @foreach($availableCategories as $cat)
                             @php
                                 $catCount = $fixedAssetUnits->filter(fn($u) => ($u->parentAsset->category ?? 'General') === $cat)->count();
                             @endphp
                             <button type="button" class="btn btn-xs btn-outline-secondary rounded-pill px-3 py-1 btn-category-filter" data-category="{{ $cat }}" onclick="filterByCategory('{{ $cat }}', this)">
-                                {{ $cat }} ({{ $catCount }})
+                                {{ $cat }} (<span class="cat-count-val">{{ $catCount }}</span>)
                             </button>
                         @endforeach
                     </div>
@@ -1254,7 +1272,7 @@
 </div>
 
 <script>
-const fixedAssetUnitsList = @json($fixedAssetsJson ?? []);
+let fixedAssetUnitsList = @json($fixedAssetsJson ?? []);
 let currentStep = 1;
 const totalSteps = 8;
 
@@ -1402,6 +1420,8 @@ function validateStep(step) {
 }
 
 // Live Search per row
+let assetSearchDebounce = null;
+
 function filterAssetOptions(input) {
     const entry = input.closest('.asset-entry');
     if (!entry) return;
@@ -1441,6 +1461,105 @@ function filterAssetOptions(input) {
             countBadge.innerHTML = '';
         }
     }
+
+    // Dynamic AJAX search fallback if 0 local matches found
+    if (matchCount === 0 && query.length >= 2) {
+        if (countBadge) {
+            countBadge.innerHTML = `<i class="fa-solid fa-spinner fa-spin me-1 text-primary"></i>Searching catalog & syncing new materials...`;
+        }
+        clearTimeout(assetSearchDebounce);
+        assetSearchDebounce = setTimeout(() => {
+            fetch(`{{ route('employees.fixed-asset-units.search') }}?q=${encodeURIComponent(query)}`)
+                .then(res => res.json())
+                .then(newUnits => {
+                    if (Array.isArray(newUnits) && newUnits.length > 0) {
+                        appendNewUnitsToAllSelects(newUnits);
+                        filterAssetOptions(input);
+                    } else {
+                        if (countBadge) {
+                            countBadge.innerHTML = `<i class="fa-solid fa-circle-exclamation me-1 text-warning"></i>No matching units found in catalog.`;
+                        }
+                    }
+                })
+                .catch(() => {});
+        }, 400);
+    }
+}
+
+function appendNewUnitsToAllSelects(newUnits) {
+    newUnits.forEach(u => {
+        const exists = fixedAssetUnitsList.some(item => item.id == u.id);
+        if (!exists) {
+            fixedAssetUnitsList.push(u);
+        }
+    });
+
+    document.querySelectorAll('.asset-select').forEach(select => {
+        const currentVal = select.value;
+        const existingIds = Array.from(select.options).map(o => String(o.value));
+
+        newUnits.forEach(u => {
+            if (!existingIds.includes(String(u.id))) {
+                const pName = u.name || (u.parent_asset ? u.parent_asset.name : 'Asset');
+                const pCat = u.category || (u.parent_asset ? u.parent_asset.category : 'General');
+                const detailStr = u.plate_number ? `Plate: ${u.plate_number}` : (u.serial_number ? `SN: ${u.serial_number}` : (u.brand ? `${u.brand} ${u.model || ''}` : 'In Store'));
+                const searchKeywords = `${u.unit_code} ${pName} ${pCat} ${detailStr} ${u.brand || ''} ${u.model || ''} ${u.serial_number || ''} ${u.plate_number || ''}`.toLowerCase();
+
+                const opt = document.createElement('option');
+                opt.value = u.id;
+                opt.dataset.category = pCat;
+                opt.dataset.search = searchKeywords;
+                opt.dataset.unitCode = u.unit_code;
+                opt.dataset.assetName = pName;
+                opt.dataset.specs = detailStr;
+                opt.textContent = `${u.unit_code} — ${pName} (${detailStr}) • [${pCat}]`;
+                select.appendChild(opt);
+            }
+        });
+
+        if (currentVal) select.value = currentVal;
+    });
+
+    updateCategoryPills();
+}
+
+function updateCategoryPills() {
+    const totalBadge = document.getElementById('totalAvailableBadge');
+    if (totalBadge) {
+        totalBadge.textContent = `${fixedAssetUnitsList.length} Available / Assigned`;
+    }
+    const allCatBadge = document.querySelector('.cat-count-all');
+    if (allCatBadge) {
+        allCatBadge.textContent = fixedAssetUnitsList.length;
+    }
+}
+
+function syncMaterialsAndAssets(btn) {
+    const origHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin me-1"></i>Syncing...`;
+
+    fetch(`{{ route('employees.fixed-asset-units.search') }}?sync=1`)
+        .then(res => res.json())
+        .then(data => {
+            if (Array.isArray(data) && data.length > 0) {
+                appendNewUnitsToAllSelects(data);
+                btn.innerHTML = `<i class="fa-solid fa-check text-success me-1"></i>Synced (${data.length})`;
+            } else {
+                btn.innerHTML = `<i class="fa-solid fa-check text-success me-1"></i>Synced!`;
+            }
+            setTimeout(() => {
+                btn.innerHTML = origHtml;
+                btn.disabled = false;
+            }, 2000);
+        })
+        .catch(err => {
+            btn.innerHTML = `<i class="fa-solid fa-triangle-exclamation text-danger me-1"></i>Sync Failed`;
+            setTimeout(() => {
+                btn.innerHTML = origHtml;
+                btn.disabled = false;
+            }, 2000);
+        });
 }
 
 function clearRowSearch(btn) {
@@ -1502,8 +1621,8 @@ function addAsset() {
     
     let optionsHtml = '<option value="">-- Choose an Available Asset Unit --</option>';
     fixedAssetUnitsList.forEach(u => {
-        const pName = u.parent_asset ? u.parent_asset.name : 'Asset';
-        const pCat = u.parent_asset ? u.parent_asset.category : 'General';
+        const pName = u.name || (u.parent_asset ? u.parent_asset.name : 'Asset');
+        const pCat = u.category || (u.parent_asset ? u.parent_asset.category : 'General');
         const detailStr = u.plate_number ? `Plate: ${u.plate_number}` : (u.serial_number ? `SN: ${u.serial_number}` : (u.brand ? `${u.brand} ${u.model || ''}` : 'In Store'));
         const searchKeywords = `${u.unit_code} ${pName} ${pCat} ${detailStr} ${u.brand || ''} ${u.model || ''} ${u.serial_number || ''} ${u.plate_number || ''}`.toLowerCase();
         optionsHtml += `<option value="${u.id}" data-category="${pCat}" data-search="${searchKeywords}" data-unit-code="${u.unit_code}" data-asset-name="${pName}" data-specs="${detailStr}">${u.unit_code} — ${pName} (${detailStr}) • [${pCat}]</option>`;

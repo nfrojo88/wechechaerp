@@ -107,7 +107,17 @@ class ProductController extends Controller
         $validated['asset_status']       = $validated['asset_status'] ?? 'Available';
         $validated['purchase_threshold'] = $validated['purchase_threshold'] ?? 5;
 
-        Product::create($validated);
+        $product = Product::create($validated);
+
+        // Auto-sync product to Fixed Assets & ensure units are generated immediately for employee assignment
+        try {
+            $catLower = strtolower(trim($product->category ?? ''));
+            if ($catLower !== 'consumable') {
+                \App\Models\FixedAsset::syncFromInventory($product->id);
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Product create auto-sync to FixedAsset: ' . $e->getMessage());
+        }
 
         return redirect()->route('products.index')->with('success', 'Product created successfully.');
     }
@@ -164,6 +174,16 @@ class ProductController extends Controller
         $validated['purchase_threshold'] = $validated['purchase_threshold'] ?? ($product->purchase_threshold ?? 5);
 
         $product->update($validated);
+
+        // Auto-sync product updates to Fixed Assets & ensure units are generated immediately for employee assignment
+        try {
+            $catLower = strtolower(trim($product->category ?? ''));
+            if ($catLower !== 'consumable') {
+                \App\Models\FixedAsset::syncFromInventory($product->id);
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Product update auto-sync to FixedAsset: ' . $e->getMessage());
+        }
 
         return redirect()->route('products.index')->with('success', 'Product updated successfully.');
     }

@@ -318,23 +318,48 @@ class FixedAsset extends Model
     {
         $text = strtolower($productCategory . ' ' . $productName);
 
-        if (str_contains($text, 'printer') || str_contains($text, 'scanner') || str_contains($text, 'computer') || str_contains($text, 'laptop') || str_contains($text, 'desktop') || str_contains($text, 'server') || str_contains($text, 'monitor') || str_contains($text, 'it') || str_contains($text, 'ups') || str_contains($text, 'copier')) {
+        if (str_contains($text, 'safety') || str_contains($text, 'harness') || str_contains($text, 'helmet') || str_contains($text, 'vest') || str_contains($text, 'goggle') || str_contains($text, 'respirator') || str_contains($text, 'ppe') || str_contains($text, 'boot')) {
+            return 'Safety Equipment';
+        }
+        if (str_contains($text, 'printer') || str_contains($text, 'scanner') || str_contains($text, 'computer') || str_contains($text, 'laptop') || str_contains($text, 'desktop') || str_contains($text, 'server') || str_contains($text, 'monitor') || str_contains($text, 'screen') || str_contains($text, 'it') || str_contains($text, 'ups') || str_contains($text, 'copier') || str_contains($text, 'tablet') || str_contains($text, 'phone')) {
             return 'Computer & IT';
         }
-        if (str_contains($text, 'vehicle') || str_contains($text, 'truck') || str_contains($text, 'pickup') || str_contains($text, 'car') || str_contains($text, 'van') || str_contains($text, 'automotive')) {
+        if (str_contains($text, 'vehicle') || str_contains($text, 'truck') || str_contains($text, 'pickup') || str_contains($text, 'car') || str_contains($text, 'van') || str_contains($text, 'automotive') || str_contains($text, 'tractor') || str_contains($text, 'trailer')) {
             return 'Vehicle';
         }
         if (str_contains($text, 'machinery') || str_contains($text, 'excavator') || str_contains($text, 'crane') || str_contains($text, 'loader') || str_contains($text, 'roller') || str_contains($text, 'grader') || str_contains($text, 'bulldozer') || str_contains($text, 'forklift') || str_contains($text, 'mixer')) {
             return 'Heavy Machinery';
         }
-        if (str_contains($text, 'chair') || str_contains($text, 'table') || str_contains($text, 'desk') || str_contains($text, 'cabinet') || str_contains($text, 'furniture') || str_contains($text, 'shelf') || str_contains($text, 'shelving') || str_contains($text, 'safe')) {
+        if (str_contains($text, 'chair') || str_contains($text, 'table') || str_contains($text, 'desk') || str_contains($text, 'cabinet') || str_contains($text, 'furniture') || str_contains($text, 'shelf') || str_contains($text, 'shelving') || str_contains($text, 'safe') || str_contains($text, 'locker')) {
             return 'Furniture';
         }
-        if (str_contains($text, 'tool') || str_contains($text, 'drill') || str_contains($text, 'grinder') || str_contains($text, 'welder') || str_contains($text, 'saw') || str_contains($text, 'pump') || str_contains($text, 'generator') || str_contains($text, 'compressor')) {
+        if (str_contains($text, 'office equipment') || str_contains($text, 'projector') || str_contains($text, 'shredder')) {
+            return 'Office Equipment';
+        }
+        if (str_contains($text, 'tool') || str_contains($text, 'drill') || str_contains($text, 'grinder') || str_contains($text, 'welder') || str_contains($text, 'saw') || str_contains($text, 'pump') || str_contains($text, 'generator') || str_contains($text, 'compressor') || str_contains($text, 'vibrator') || str_contains($text, 'jack') || str_contains($text, 'wrench') || str_contains($text, 'cutter')) {
             return 'Tools & Equipment';
         }
-        if (str_contains($text, 'electronic') || str_contains($text, 'camera') || str_contains($text, 'projector') || str_contains($text, 'tv') || str_contains($text, 'radio') || str_contains($text, 'appliance')) {
+        if (str_contains($text, 'electronic') || str_contains($text, 'camera') || str_contains($text, 'tv') || str_contains($text, 'radio') || str_contains($text, 'appliance') || str_contains($text, 'multimeter') || str_contains($text, 'tester')) {
             return 'Electronics';
+        }
+        if (str_contains($text, 'mechanical') || str_contains($text, 'engine') || str_contains($text, 'motor')) {
+            return 'Mechanical';
+        }
+        if (str_contains($text, 'electrical')) {
+            return 'Electrical';
+        }
+
+        // Retain original product category if already standard and meaningful
+        $cleanCat = trim($productCategory);
+        $validStandardCats = [
+            'Safety Equipment', 'Tools & Equipment', 'Mechanical', 'Electrical',
+            'Computer & IT', 'Office Equipment', 'Vehicle', 'Heavy Machinery',
+            'Furniture', 'Electronics', 'Fixed Asset',
+        ];
+        foreach ($validStandardCats as $vCat) {
+            if (strcasecmp($cleanCat, $vCat) === 0) {
+                return $vCat;
+            }
         }
 
         return 'Other';
@@ -382,54 +407,24 @@ class FixedAsset extends Model
                     return 0; // Explicitly marked as Consumable, do not create or sync fixed assets
                 }
 
-                $assetCategories = [
-                    'fixed asset', 'fixed assets', 'fixed_asset',
-                    'computer & it', 'it equipment', 'it',
-                    'office equipment',
-                    'equipment',
-                    'vehicle', 'vehicles', 'automotive',
-                    'heavy machinery', 'machinery', 'heavy equipment',
-                    'furniture', 'furniture & fixture',
-                    'tools', 'tools & equipment',
-                    'electronics',
-                    'appliances', 'appliance',
-                    'hardware',
-                    'printer', 'printers',
+                $rawMaterials = [
+                    'cement & concrete', 'cement', 'concrete',
+                    'aggregates', 'aggregate', 'sand', 'gravel',
+                    'chemicals & adhesives', 'chemical', 'chemicals', 'adhesive', 'adhesives',
+                    'paints & coatings', 'paint', 'paints', 'coating',
                 ];
 
-                $assetKeywords = [
-                    'printer', 'scanner', 'copier', 'photocopier',
-                    'laptop', 'desktop', 'computer', 'server', 'monitor', 'screen', 'ups', 'router', 'switch',
-                    'generator', 'compressor', 'pump', 'welder', 'welding', 'drill', 'grinder', 'saw',
-                    'excavator', 'loader', 'roller', 'grader', 'bulldozer', 'crane', 'forklift', 'mixer', 'vibrator',
-                    'truck', 'pickup', 'car', 'van', 'vehicle', 'tractor', 'trailer',
-                    'chair', 'table', 'desk', 'cabinet', 'shelf', 'shelving', 'safe',
-                    'camera', 'projector', 'radio', 'walkie talkie', 'television', 'tv', 'refrigerator', 'ac', 'air conditioner',
-                ];
-
-                $isAsset = in_array($cat, $assetCategories)
-                    || in_array($subCat, $assetCategories)
-                    || str_contains($cat, 'asset') 
-                    || str_contains($subCat, 'asset')
-                    || str_starts_with($sku, 'FA-') 
-                    || str_starts_with($sku, 'AST-');
-
-                if (!$isAsset) {
-                    foreach ($assetKeywords as $keyword) {
-                        if (str_contains($nameLower, $keyword)) {
-                            $isAsset = true;
-                            break;
-                        }
-                    }
+                if (in_array($cat, $rawMaterials) || in_array($subCat, $rawMaterials)) {
+                    return 0; // Pure bulk consumable raw materials
                 }
 
-                if (!$isAsset) {
-                    return 0; // Not an asset product, do not create or sync fixed assets
-                }
                 $query->where('id', $specificProductId);
             } elseif ($searchQuery && strlen(trim($searchQuery)) >= 2) {
                 $cleanSearch = trim($searchQuery);
-                $query->where(function($q) use ($cleanSearch) {
+                $query->where(function($q) {
+                    $q->whereNull('category')
+                      ->orWhere(DB::raw('LOWER(TRIM(category))'), '!=', 'consumable');
+                })->where(function($q) use ($cleanSearch) {
                     $q->where('name', 'like', "%{$cleanSearch}%")
                       ->orWhere('sku', 'like', "%{$cleanSearch}%")
                       ->orWhere('category', 'like', "%{$cleanSearch}%")
@@ -445,6 +440,9 @@ class FixedAsset extends Model
                     'Heavy Machinery', 'heavy machinery', 'Machinery', 'machinery', 'Heavy Equipment',
                     'Furniture', 'furniture', 'Furniture & Fixture', 'furniture & fixture',
                     'Tools', 'tools', 'Tools & Equipment', 'tools & equipment',
+                    'Safety Equipment', 'safety equipment', 'Safety', 'safety', 'PPE', 'ppe',
+                    'Mechanical', 'mechanical',
+                    'Electrical', 'electrical',
                     'Electronics', 'electronics',
                     'Appliances', 'appliances', 'Appliance', 'appliance',
                     'Hardware', 'hardware',
@@ -453,22 +451,42 @@ class FixedAsset extends Model
 
                 $assetKeywords = [
                     'printer', 'scanner', 'copier', 'photocopier',
-                    'laptop', 'desktop', 'computer', 'server', 'monitor', 'screen', 'ups', 'router', 'switch',
-                    'generator', 'compressor', 'pump', 'welder', 'welding', 'drill', 'grinder', 'saw',
-                    'excavator', 'loader', 'roller', 'grader', 'bulldozer', 'crane', 'forklift', 'mixer', 'vibrator',
+                    'laptop', 'desktop', 'computer', 'server', 'monitor', 'screen', 'ups', 'router', 'switch', 'tablet', 'phone', 'mobile',
+                    'generator', 'compressor', 'pump', 'welder', 'welding', 'drill', 'grinder', 'saw', 'cutter', 'wrench', 'plier', 'hammer',
+                    'excavator', 'loader', 'roller', 'grader', 'bulldozer', 'crane', 'forklift', 'mixer', 'vibrator', 'compactor', 'engine', 'motor',
                     'truck', 'pickup', 'car', 'van', 'vehicle', 'tractor', 'trailer',
-                    'chair', 'table', 'desk', 'cabinet', 'shelf', 'shelving', 'safe',
+                    'chair', 'table', 'desk', 'cabinet', 'shelf', 'shelving', 'safe', 'locker',
                     'camera', 'projector', 'radio', 'walkie talkie', 'television', 'tv', 'refrigerator', 'ac', 'air conditioner',
+                    'harness', 'helmet', 'vest', 'goggle', 'boots', 'mask', 'respirator', 'belt', 'ppe',
+                    'theodolite', 'total station', 'level', 'tripod', 'meter', 'gauge', 'tester', 'multimeter',
+                    'ladder', 'scaffold', 'wheelbarrow', 'torch', 'jack', 'jackhammer',
                 ];
 
                 $query->where(function($q) {
                     $q->whereNull('category')
-                      ->orWhere(DB::raw('LOWER(category)'), '!=', 'consumable');
+                      ->orWhere(DB::raw('LOWER(TRIM(category))'), '!=', 'consumable');
                 })->where(function($q) use ($assetCategories, $assetKeywords) {
                     $q->whereIn('category', $assetCategories)
                       ->orWhereIn('sub_category', $assetCategories)
+                      ->orWhere('category', 'like', '%Equipment%')
+                      ->orWhere('category', 'like', '%equipment%')
+                      ->orWhere('category', 'like', '%Asset%')
+                      ->orWhere('category', 'like', '%asset%')
+                      ->orWhere('category', 'like', '%Tool%')
+                      ->orWhere('category', 'like', '%tool%')
+                      ->orWhere('category', 'like', '%Safety%')
+                      ->orWhere('category', 'like', '%safety%')
+                      ->orWhere('category', 'like', '%Machin%')
+                      ->orWhere('category', 'like', '%machin%')
+                      ->orWhere('category', 'like', '%Vehicle%')
+                      ->orWhere('category', 'like', '%vehicle%')
+                      ->orWhere('category', 'like', '%Mechanical%')
+                      ->orWhere('category', 'like', '%Electrical%')
                       ->orWhere('sku', 'like', 'FA-%')
-                      ->orWhere('sku', 'like', 'AST-%');
+                      ->orWhere('sku', 'like', 'AST-%')
+                      ->orWhere('sku', 'like', 'EQ-%')
+                      ->orWhere('sku', 'like', 'TL-%')
+                      ->orWhere('sku', 'like', 'SAF-%');
 
                     foreach ($assetKeywords as $keyword) {
                         $q->orWhere('name', 'like', "%{$keyword}%");
@@ -609,11 +627,11 @@ class FixedAsset extends Model
                         }
 
                         // Fixed assets total_quantity reflects inventory balance as master
-                        $fixedAsset->total_quantity = $storeStockQty;
+                        $fixedAsset->total_quantity = max($storeStockQty, 1);
                         $fixedAsset->saveQuietly();
 
                         $currentUnitsCount = $fixedAsset->units()->count();
-                        if ($currentUnitsCount < $storeStockQty) {
+                        if ($currentUnitsCount < $fixedAsset->total_quantity) {
                             $fixedAsset->generateUnitsToMatchQuantity([
                                 'purchase_price'   => $unitCost,
                                 'current_location' => $storeName,
@@ -644,7 +662,19 @@ class FixedAsset extends Model
                         if ($fixedAsset->trashed()) $fixedAsset->restore();
                         if (!$fixedAsset->store_id) {
                             $fixedAsset->store_id = $defaultStoreId;
-                            $fixedAsset->saveQuietly();
+                        }
+                        if ($fixedAsset->total_quantity < 1) {
+                            $fixedAsset->total_quantity = 1;
+                        }
+                        $fixedAsset->saveQuietly();
+
+                        $currentUnitsCount = $fixedAsset->units()->count();
+                        if ($currentUnitsCount < $fixedAsset->total_quantity) {
+                            $fixedAsset->generateUnitsToMatchQuantity([
+                                'purchase_price'   => $globalUnitCost,
+                                'current_location' => $defaultStoreName,
+                                'condition'        => $prod->equipment_condition ?: 'good',
+                            ]);
                         }
                     } else {
                         $basePrefix = self::generateCleanPrefix($prod->name, $prod->sku);

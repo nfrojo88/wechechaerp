@@ -196,6 +196,13 @@ class EmployeeController extends Controller
         $projects = Project::where('status', '!=', 'cancelled')->select('id', 'name', 'status')->get();
         $departments = \App\Models\Department::where('is_active', true)->select('id', 'name')->get();
         
+        // Auto-sync non-consumable catalog materials into FixedAssets & FixedAssetUnits so newly added materials appear immediately
+        try {
+            \App\Models\FixedAsset::syncFromInventory();
+        } catch (\Throwable $e) {
+            Log::warning('Employee create syncFromInventory notice: ' . $e->getMessage());
+        }
+
         // Available Centralized Fixed Asset Units (In Store) - select light columns only
         $fixedAssetUnits = \App\Models\FixedAssetUnit::select('id', 'fixed_asset_id', 'unit_code', 'status', 'condition', 'brand', 'model', 'serial_number', 'plate_number')
             ->with(['parentAsset' => fn($q) => $q->select('id', 'name', 'category')])
@@ -984,6 +991,13 @@ class EmployeeController extends Controller
         $projects     = Project::where('status', '!=', 'cancelled')->select('id', 'name', 'status')->get();
         $departments  = \App\Models\Department::where('is_active', true)->select('id', 'name')->get();
 
+        // Auto-sync non-consumable catalog materials into FixedAssets & FixedAssetUnits so newly added materials appear immediately
+        try {
+            \App\Models\FixedAsset::syncFromInventory();
+        } catch (\Throwable $e) {
+            Log::warning('Employee edit syncFromInventory notice: ' . $e->getMessage());
+        }
+
         // Always include all units currently assigned to this employee
         $assignedUnits = \App\Models\FixedAssetUnit::select('id', 'fixed_asset_id', 'unit_code', 'status', 'condition', 'brand', 'model', 'serial_number', 'plate_number', 'assigned_to_employee_id')
             ->with(['parentAsset' => fn($q) => $q->select('id', 'name', 'category')])
@@ -1023,16 +1037,26 @@ class EmployeeController extends Controller
     }
 
     /**
-     * AJAX: Search available fixed asset units (in_store) for employee edit form.
-     * Used to support large inventories without loading all units on page load.
+     * AJAX: Search available fixed asset units (in_store) for employee form.
+     * Used to support large inventories and dynamically sync newly added materials from catalog.
      */
     public function searchFixedAssetUnits(Request $request)
     {
-        $q       = $request->get('q', '');
+        $q       = trim((string) $request->get('q', ''));
         $exclude = array_filter(array_map('intval', (array) $request->get('exclude', [])));
+        $sync    = (bool) $request->get('sync', false);
+
+        // If sync requested or search query provided, run syncFromInventory to pull newly added materials
+        if ($sync || (!empty($q) && strlen($q) >= 2)) {
+            try {
+                \App\Models\FixedAsset::syncFromInventory(null, !empty($q) ? $q : null);
+            } catch (\Throwable $e) {
+                Log::warning('searchFixedAssetUnits sync notice: ' . $e->getMessage());
+            }
+        }
 
         $query = \App\Models\FixedAssetUnit::select('id', 'fixed_asset_id', 'unit_code', 'status', 'condition', 'brand', 'model', 'serial_number', 'plate_number', 'assigned_to_employee_id')
-            ->with(['parentAsset' => fn($pq) => $pq->select('id', 'name', 'category')])
+            ->with(['parentAsset' => fn($pq) => $pq->select('id', 'name', 'category', 'code_prefix')])
             ->where('status', \App\Models\FixedAssetUnit::STATUS_IN_STORE);
 
         if (!empty($exclude)) {
@@ -1046,11 +1070,49 @@ class EmployeeController extends Controller
                    ->orWhere('plate_number', 'like', "%{$q}%")
                    ->orWhere('brand', 'like', "%{$q}%")
                    ->orWhere('model', 'like', "%{$q}%")
-                   ->orWhereHas('parentAsset', fn($pa) => $pa->where('name', 'like', "%{$q}%")->orWhere('category', 'like', "%{$q}%"));
+                   ->orWhereHas('parentAsset', fn($pa) => $pa->where('name', 'like', "%{$q}%")->orWhere('category', 'like', "%{$q}%")->orWhere('description', 'like', "%{$q}%"));
             });
         }
 
-        $units = $query->orderBy('unit_code')->limit(100)->get();
+        $units = $query->orderBy('unit_code')->limit(150)->get();
+
+        // If no units found and search query matches a product or fixed asset that has 0 in-store units:
+        if ($units->isEmpty() && !empty($q)) {
+            $matchedProduct = \App\Models\Product::where(function($pq) {
+                    $pq->whereNull('category')
+                       ->orWhere(DB::raw('LOWER(TRIM(category))'), '!=', 'consumable');
+                })
+                ->where(function($pq) use ($q) {
+                    $pq->where('name', 'like', "%{$q}%")
+                       ->orWhere('sku', 'like', "%{$q}%");
+                })->first();
+
+            if ($matchedProduct) {
+                try {
+                    \App\Models\FixedAsset::syncFromInventory($matchedProduct->id);
+                    $fa = \App\Models\FixedAsset::where(function($f) use ($matchedProduct) {
+                        $f->whereRaw('LOWER(TRIM(name)) = ?', [strtolower(trim($matchedProduct->name))])
+                          ->orWhere('description', 'like', "%(Product ID: {$matchedProduct->id})%")
+                          ->orWhere('description', 'like', "%SKU: " . ($matchedProduct->sku ?? '') . "%");
+                    })->first();
+
+                    if ($fa) {
+                        if ($fa->units()->where('status', \App\Models\FixedAssetUnit::STATUS_IN_STORE)->count() === 0) {
+                            $fa->total_quantity = max((int)$fa->total_quantity, $fa->units()->count()) + 1;
+                            $fa->saveQuietly();
+                            $fa->generateUnitsToMatchQuantity([
+                                'purchase_price'   => $fa->unit_cost ?: ($matchedProduct->unit_price ?: 0),
+                                'current_location' => $fa->store?->name ?? 'Main Store',
+                                'condition'        => $matchedProduct->equipment_condition ?: 'good',
+                            ]);
+                        }
+                        $units = $fa->units()->where('status', \App\Models\FixedAssetUnit::STATUS_IN_STORE)->get();
+                    }
+                } catch (\Throwable $e) {
+                    Log::warning('searchFixedAssetUnits on-demand unit provision: ' . $e->getMessage());
+                }
+            }
+        }
 
         return response()->json($units->map(fn($u) => [
             'id'           => $u->id,
