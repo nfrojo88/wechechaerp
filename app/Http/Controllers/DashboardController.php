@@ -2700,6 +2700,35 @@ class DashboardController extends Controller
             ->take(6)
             ->get(), collect());
 
+        // 9. Site Petty Cash Material Purchases (Direct Spot Buys on Site)
+        $sitePettyCashPurchases = $this->safe(fn() => \App\Models\PettyCashMaterialPurchase::with([
+            'store.project',
+            'purchaser',
+            'chartOfAccount',
+            'items.product',
+            'deliveryReceipt',
+            'materialRequest',
+        ])
+        ->latest('purchase_date')
+        ->latest('id')
+        ->take(15)
+        ->get(), collect());
+
+        $sitePettyCashKpi = [
+            'total_count'           => $this->safe(fn() => \App\Models\PettyCashMaterialPurchase::count(), 0),
+            'total_amount'          => $this->safe(fn() => (float) \App\Models\PettyCashMaterialPurchase::sum('total_amount'), 0.0),
+            'month_count'           => $this->safe(fn() => \App\Models\PettyCashMaterialPurchase::whereMonth('purchase_date', now()->month)->whereYear('purchase_date', now()->year)->count(), 0),
+            'month_amount'          => $this->safe(fn() => (float) \App\Models\PettyCashMaterialPurchase::whereMonth('purchase_date', now()->month)->whereYear('purchase_date', now()->year)->sum('total_amount'), 0.0),
+            'total_items_count'     => $this->safe(fn() => \App\Models\PettyCashMaterialPurchaseItem::count(), 0),
+            'missing_receipt_count' => $this->safe(fn() => \App\Models\PettyCashMaterialPurchase::where(function($q) {
+                $q->whereNull('attachment_path')->orWhere('attachment_path', '');
+            })->where(function($q) {
+                $q->whereNull('receipt_no')->orWhere('receipt_no', '');
+            })->where(function($q) {
+                $q->whereNull('fs_no')->orWhere('fs_no', '');
+            })->count(), 0),
+        ];
+
         return view('dashboard.audit', compact(
             'kpi',
             'underAuditReplenishments',
@@ -2708,7 +2737,9 @@ class DashboardController extends Controller
             'storeAuditKpi',
             'paidNotReceivedAlerts',
             'transfersOver48hList',
-            'recentFindings'
+            'recentFindings',
+            'sitePettyCashPurchases',
+            'sitePettyCashKpi'
         ));
     }
 }

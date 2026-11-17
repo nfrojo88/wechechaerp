@@ -81,6 +81,9 @@
                     <a href="{{ route('finance.replenishments.index', ['tab' => 'under_audit']) }}" class="btn btn-light border btn-sm rounded-pill px-3 text-dark fw-semibold" style="min-height: 34px; display: inline-flex; align-items: center;">
                         <i class="fa-solid fa-hand-holding-dollar text-warning me-1"></i> Petty Cash Audit
                     </a>
+                    <a href="#site-petty-cash-materials" class="btn btn-light border btn-sm rounded-pill px-3 text-dark fw-semibold" style="min-height: 34px; display: inline-flex; align-items: center;">
+                        <i class="fa-solid fa-cart-flatbed text-success me-1"></i> Site Petty Cash Buys
+                    </a>
                     <a href="{{ route('audit.inventory') }}" class="btn btn-light border btn-sm rounded-pill px-3 text-dark fw-semibold" style="min-height: 34px; display: inline-flex; align-items: center;">
                         <i class="fa-solid fa-warehouse text-info me-1"></i> Inventory Overview
                     </a>
@@ -389,6 +392,164 @@
             </div>
         </div>
 
+    </div>
+
+    <!-- SITE PETTY CASH MATERIAL PURCHASES (Direct Spot Buys in Site) -->
+    <div id="site-petty-cash-materials" class="card border-0 shadow-sm rounded-3 mb-4 bg-white border-top border-4 border-success">
+        <div class="card-header bg-white border-bottom py-3 px-3 px-md-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div>
+                <h5 class="fw-bold mb-0 text-dark fs-6">
+                    <i class="fa-solid fa-cart-flatbed text-success me-2"></i>Site Petty Cash Material Purchases &amp; Spot Intake Oversight
+                    <span class="text-muted fw-normal fs-7 ms-1">(በሳይት የተገዙ ዕቃዎች በፔቲ ካሽ)</span>
+                </h5>
+                <small class="text-muted">Direct spot purchases of materials purchased using petty cash on project sites &amp; stores with instantaneous inventory intake</small>
+            </div>
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <span class="badge bg-success bg-opacity-10 text-success border border-success font-monospace px-2.5 py-1.5 rounded-pill fs-7">
+                    <i class="fa-solid fa-receipt me-1"></i>{{ $sitePettyCashKpi['total_count'] ?? 0 }} Buys (ETB {{ number_format($sitePettyCashKpi['total_amount'] ?? 0, 2) }})
+                </span>
+                @if(($sitePettyCashKpi['missing_receipt_count'] ?? 0) > 0)
+                    <span class="badge bg-danger text-white font-monospace px-2.5 py-1.5 rounded-pill fs-7" title="Purchases with missing attachment or FS receipt numbers">
+                        <i class="fa-solid fa-triangle-exclamation me-1"></i>{{ $sitePettyCashKpi['missing_receipt_count'] }} Missing Slip / FS
+                    </span>
+                @endif
+                <a href="{{ route('store-keeper.petty-cash-purchases.index') }}" class="btn btn-sm btn-outline-success rounded-pill px-3 fw-semibold" style="min-height: 34px; display: inline-flex; align-items: center;">
+                    View All in Store Hub <i class="fa-solid fa-arrow-right ms-1"></i>
+                </a>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive wc-table-mobile-cards">
+                <table class="table table-hover align-middle mb-0 small">
+                    <thead class="bg-light text-muted text-uppercase" style="font-size: 0.75rem;">
+                        <tr>
+                            <th class="ps-4 py-2.5">Purchase # &amp; Date</th>
+                            <th class="py-2.5">Site / Store</th>
+                            <th class="py-2.5">Purchaser (Staff)</th>
+                            <th class="py-2.5">Petty Cash Account</th>
+                            <th class="py-2.5">Supplier &amp; Receipt / FS</th>
+                            <th class="py-2.5" style="min-width: 260px;">Purchased Materials (ዕቃዎች)</th>
+                            <th class="py-2.5 text-end">Total Amount</th>
+                            <th class="py-2.5 text-center">Intake Status</th>
+                            <th class="pe-4 py-2.5 text-end">Audit Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @forelse($sitePettyCashPurchases as $pcPurchase)
+                            <tr>
+                                <td data-label="Purchase #" class="ps-4 py-3">
+                                    <span class="fw-bold font-monospace text-dark d-block">#{{ $pcPurchase->purchase_no }}</span>
+                                    <small class="text-muted d-block">
+                                        <i class="fa-regular fa-calendar me-1"></i>{{ optional($pcPurchase->purchase_date)->format('M d, Y') ?? 'N/A' }}
+                                    </small>
+                                    @if($pcPurchase->materialRequest)
+                                        <small class="badge bg-light border text-muted mt-1 font-monospace" style="font-size: 0.68rem;" title="Linked Material Request">
+                                            MR: {{ $pcPurchase->materialRequest->request_number }}
+                                        </small>
+                                    @endif
+                                </td>
+                                <td data-label="Site / Store" class="py-3">
+                                    <strong class="text-dark d-block">
+                                        <i class="fa-solid fa-location-dot text-danger me-1"></i>{{ $pcPurchase->store?->project?->name ?? 'Main Site' }}
+                                    </strong>
+                                    <small class="text-muted">{{ $pcPurchase->store?->name ?? 'Site Store' }}</small>
+                                </td>
+                                <td data-label="Purchaser" class="py-3">
+                                    <span class="d-block text-dark fw-semibold">
+                                        <i class="fa-solid fa-user-tag text-secondary me-1"></i>{{ $pcPurchase->purchaser?->name ?? 'Site Staff' }}
+                                    </span>
+                                    <small class="text-muted">{{ $pcPurchase->purchaser?->email ?? '' }}</small>
+                                </td>
+                                <td data-label="Petty Cash" class="py-3">
+                                    @if($pcPurchase->chartOfAccount)
+                                        <span class="badge bg-light border text-dark font-monospace d-inline-block text-truncate" style="max-width: 170px;" title="{{ $pcPurchase->chartOfAccount->name }}">
+                                            [{{ $pcPurchase->chartOfAccount->code }}] {{ $pcPurchase->chartOfAccount->name }}
+                                        </span>
+                                    @else
+                                        <span class="text-muted small">Not Linked</span>
+                                    @endif
+                                </td>
+                                <td data-label="Supplier & Receipt" class="py-3">
+                                    <div class="d-flex flex-column">
+                                        <strong class="text-dark">{{ $pcPurchase->supplier_name ?: 'Local Spot Vendor' }}</strong>
+                                        <div class="d-flex flex-wrap gap-1 mt-0.5">
+                                            @if($pcPurchase->fs_no)
+                                                <span class="badge bg-primary bg-opacity-10 text-primary border border-primary font-monospace" style="font-size: 0.68rem;">FS: {{ $pcPurchase->fs_no }}</span>
+                                            @endif
+                                            @if($pcPurchase->receipt_no)
+                                                <span class="badge bg-secondary bg-opacity-10 text-secondary border font-monospace" style="font-size: 0.68rem;">Rec: {{ $pcPurchase->receipt_no }}</span>
+                                            @endif
+                                            @if($pcPurchase->supplier_tin)
+                                                <span class="badge bg-light text-muted border font-monospace" style="font-size: 0.68rem;">TIN: {{ $pcPurchase->supplier_tin }}</span>
+                                            @endif
+                                            @if(!$pcPurchase->fs_no && !$pcPurchase->receipt_no && !$pcPurchase->attachment_path)
+                                                <span class="badge bg-danger bg-opacity-10 text-danger border border-danger" style="font-size: 0.68rem;">
+                                                    <i class="fa-solid fa-triangle-exclamation me-1"></i>No Slip Recorded
+                                                </span>
+                                            @endif
+                                        </div>
+                                        @if($pcPurchase->attachment_path)
+                                            <a href="{{ asset($pcPurchase->attachment_path) }}" target="_blank" class="text-primary small text-decoration-none mt-1 fw-semibold d-inline-flex align-items-center gap-1">
+                                                <i class="fa-solid fa-paperclip"></i> View Attached Slip
+                                            </a>
+                                        @endif
+                                    </div>
+                                </td>
+                                <td data-label="Purchased Materials" class="py-3">
+                                    <div class="d-flex flex-wrap gap-1">
+                                        @forelse($pcPurchase->items as $item)
+                                            <span class="badge bg-white border text-dark fw-normal text-start py-1 px-2 shadow-xs" style="font-size: 0.74rem;">
+                                                <i class="fa-solid fa-box text-success me-1"></i>
+                                                <strong class="text-dark">{{ $item->product?->name ?? 'Material' }}</strong>: 
+                                                <span class="fw-semibold">{{ number_format((float)$item->quantity, 2) }} {{ $item->unit ?? 'pcs' }}</span>
+                                                <span class="text-muted ms-1">@ ETB {{ number_format((float)$item->unit_price, 2) }}</span>
+                                            </span>
+                                        @empty
+                                            <span class="text-muted fst-italic small">No item rows</span>
+                                        @endforelse
+                                    </div>
+                                    <div class="text-muted small mt-1 font-monospace" style="font-size: 0.7rem;">
+                                        Total Items: {{ $pcPurchase->items->count() }} line(s)
+                                    </div>
+                                </td>
+                                <td data-label="Total Amount" class="py-3 text-end font-monospace font-tabular">
+                                    <strong class="text-dark fs-6 d-block">ETB {{ number_format((float)$pcPurchase->total_amount, 2) }}</strong>
+                                    <small class="text-muted">{{ $pcPurchase->items->count() }} items</small>
+                                </td>
+                                <td data-label="Intake Status" class="py-3 text-center">
+                                    @if($pcPurchase->deliveryReceipt)
+                                        <span class="badge bg-success bg-opacity-10 text-success border border-success rounded-pill px-2.5 py-1" style="font-size: 0.72rem;">
+                                            <i class="fa-solid fa-circle-check me-1"></i>Stock In (GRN: {{ $pcPurchase->deliveryReceipt->delivery_number }})
+                                        </span>
+                                    @else
+                                        <span class="badge bg-primary bg-opacity-10 text-primary border border-primary rounded-pill px-2.5 py-1" style="font-size: 0.72rem;">
+                                            <i class="fa-solid fa-dolly me-1"></i>Instant Intake
+                                        </span>
+                                    @endif
+                                </td>
+                                <td data-label="Audit Action" class="pe-4 py-3 text-end">
+                                    <div class="d-inline-flex gap-1">
+                                        <button type="button" class="btn btn-sm btn-outline-success rounded-pill px-2.5 shadow-xs fw-semibold" style="min-height: 30px; display: inline-flex; align-items: center;" data-bs-toggle="modal" data-bs-target="#sitePettyCashAuditModal{{ $pcPurchase->id }}" title="Audit Itemized Inspection">
+                                            <i class="fa-solid fa-magnifying-glass me-1"></i> Inspect
+                                        </button>
+                                        <a href="{{ route('store-keeper.petty-cash-purchases.show', $pcPurchase->id) }}" class="btn btn-sm btn-light border rounded-pill px-2 text-secondary shadow-xs" style="min-height: 30px; display: inline-flex; align-items: center;" title="View Store Voucher">
+                                            <i class="fa-solid fa-arrow-up-right-from-square"></i>
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                        @empty
+                            <tr>
+                                <td colspan="9" class="text-center py-4 text-muted">
+                                    <i class="fa-solid fa-cart-flatbed fa-2x text-muted mb-2 d-block"></i>
+                                    No site petty cash material purchases recorded yet.
+                                </td>
+                            </tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
 
     <!-- CRITICAL AUDIT RISK: Paid But Not Received -->
@@ -914,6 +1075,171 @@
                         </button>
                     </div>
                 </form>
+            </div>
+        </div>
+    @endforeach
+
+    <!-- Site Petty Cash Material Purchase Audit Modals -->
+    @foreach($sitePettyCashPurchases as $pcPurchase)
+        <div class="modal fade" id="sitePettyCashAuditModal{{ $pcPurchase->id }}" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+                <div class="modal-content border-0 shadow-lg rounded-3 overflow-hidden">
+                    <div class="modal-header py-3 px-4 text-white flex-shrink-0" style="background: linear-gradient(135deg, #065f46 0%, #047857 100%); border-bottom: 3px solid #10b981;">
+                        <div class="d-flex align-items-center gap-3">
+                            <div class="p-2 bg-white bg-opacity-20 rounded-circle text-white">
+                                <i class="fa-solid fa-cart-flatbed fa-lg"></i>
+                            </div>
+                            <div>
+                                <h5 class="modal-title fw-bold mb-0 text-white fs-6">
+                                    Site Petty Cash Buy: #{{ $pcPurchase->purchase_no }}
+                                </h5>
+                                <small class="text-white-50">
+                                    Recorded on {{ optional($pcPurchase->purchase_date)->format('M d, Y') }} &bull; Store: {{ $pcPurchase->store?->name ?? 'Site Store' }}
+                                </small>
+                            </div>
+                        </div>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+
+                    <div class="modal-body p-4 bg-light flex-grow-1" style="overflow-y: auto;">
+                        <!-- 4-Card Audit Summary -->
+                        <div class="row g-3 mb-4">
+                            <div class="col-sm-6 col-md-3">
+                                <div class="bg-white p-3 rounded-3 border h-100 shadow-xs">
+                                    <small class="text-muted text-uppercase fw-bold d-block" style="font-size: 0.68rem;">Site / Store</small>
+                                    <strong class="text-dark d-block mt-1">{{ $pcPurchase->store?->project?->name ?? 'Main Site' }}</strong>
+                                    <small class="text-secondary">{{ $pcPurchase->store?->name ?? 'Store' }}</small>
+                                </div>
+                            </div>
+                            <div class="col-sm-6 col-md-3">
+                                <div class="bg-white p-3 rounded-3 border h-100 shadow-xs">
+                                    <small class="text-muted text-uppercase fw-bold d-block" style="font-size: 0.68rem;">Purchased By</small>
+                                    <strong class="text-dark d-block mt-1">{{ $pcPurchase->purchaser?->name ?? 'Staff' }}</strong>
+                                    <small class="text-secondary">{{ $pcPurchase->purchaser?->email ?? '' }}</small>
+                                </div>
+                            </div>
+                            <div class="col-sm-6 col-md-3">
+                                <div class="bg-white p-3 rounded-3 border h-100 shadow-xs">
+                                    <small class="text-muted text-uppercase fw-bold d-block" style="font-size: 0.68rem;">Supplier &amp; Receipt</small>
+                                    <strong class="text-dark d-block mt-1">{{ $pcPurchase->supplier_name ?: 'Spot Vendor' }}</strong>
+                                    <small class="text-muted font-monospace">FS: {{ $pcPurchase->fs_no ?? ($pcPurchase->receipt_no ?? 'None') }}</small>
+                                </div>
+                            </div>
+                            <div class="col-sm-6 col-md-3">
+                                <div class="bg-white p-3 rounded-3 border h-100 shadow-xs">
+                                    <small class="text-muted text-uppercase fw-bold d-block" style="font-size: 0.68rem;">Petty Cash Disbursed</small>
+                                    <strong class="text-success fs-6 font-monospace d-block mt-1">ETB {{ number_format((float)$pcPurchase->total_amount, 2) }}</strong>
+                                    <small class="text-muted font-monospace">[{{ $pcPurchase->chartOfAccount?->code }}]</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        @if($pcPurchase->notes)
+                            <div class="alert alert-light border rounded-3 p-3 mb-4 text-dark small">
+                                <i class="fa-solid fa-circle-info text-primary me-2"></i>
+                                <strong>Purchaser Remarks / Purpose:</strong> {{ $pcPurchase->notes }}
+                            </div>
+                        @endif
+
+                        <!-- Itemized Materials Table -->
+                        <div class="bg-white rounded-3 border overflow-hidden shadow-xs mb-4">
+                            <div class="p-3 border-bottom bg-light d-flex justify-content-between align-items-center">
+                                <h6 class="fw-bold mb-0 text-dark small text-uppercase">
+                                    <i class="fa-solid fa-boxes-stacked text-success me-1.5"></i>Itemized Purchased Materials (ዕቃዎች)
+                                </h6>
+                                <span class="badge bg-success bg-opacity-10 text-success border border-success">{{ $pcPurchase->items->count() }} Line Items</span>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle mb-0 small">
+                                    <thead class="bg-light text-muted text-uppercase" style="font-size: 0.72rem;">
+                                        <tr>
+                                            <th class="ps-3 py-2">#</th>
+                                            <th class="py-2">Item / Material Description</th>
+                                            <th class="py-2 text-center">Quantity</th>
+                                            <th class="py-2 text-center">Unit</th>
+                                            <th class="py-2 text-end">Unit Price (ETB)</th>
+                                            <th class="pe-3 py-2 text-end">Total (ETB)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @forelse($pcPurchase->items as $idx => $item)
+                                            <tr>
+                                                <td class="ps-3 py-2.5 text-muted">{{ $idx + 1 }}</td>
+                                                <td class="py-2.5">
+                                                    <strong class="text-dark d-block">{{ $item->product?->name ?? 'Material Item' }}</strong>
+                                                    @if($item->remarks)
+                                                        <small class="text-muted">{{ $item->remarks }}</small>
+                                                    @endif
+                                                </td>
+                                                <td class="py-2.5 text-center font-monospace font-tabular fw-semibold">{{ number_format((float)$item->quantity, 2) }}</td>
+                                                <td class="py-2.5 text-center"><span class="badge bg-light border text-dark">{{ $item->unit ?? 'pcs' }}</span></td>
+                                                <td class="py-2.5 text-end font-monospace font-tabular">{{ number_format((float)$item->unit_price, 2) }}</td>
+                                                <td class="pe-3 py-2.5 text-end font-monospace font-tabular fw-bold text-dark">{{ number_format((float)$item->total_price, 2) }}</td>
+                                            </tr>
+                                        @empty
+                                            <tr>
+                                                <td colspan="6" class="text-center py-3 text-muted">No items recorded.</td>
+                                            </tr>
+                                        @endforelse
+                                    </tbody>
+                                    <tfoot class="bg-light fw-bold">
+                                        <tr>
+                                            <td colspan="5" class="ps-3 py-2.5 text-uppercase text-dark text-end">Grand Total Disbursed:</td>
+                                            <td class="pe-3 py-2.5 text-end font-monospace text-success fs-6">ETB {{ number_format((float)$pcPurchase->total_amount, 2) }}</td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Scanned Receipt / Slip Card -->
+                        <div class="bg-white rounded-3 border p-3 shadow-xs">
+                            <h6 class="fw-bold mb-2 text-dark small text-uppercase">
+                                <i class="fa-solid fa-receipt text-primary me-1.5"></i>Vendor Receipt / Cash Slip Documentation
+                            </h6>
+                            @if($pcPurchase->attachment_path)
+                                @php
+                                    $ext = strtolower(pathinfo($pcPurchase->attachment_path, PATHINFO_EXTENSION));
+                                    $isImage = in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'gif']);
+                                @endphp
+                                @if($isImage)
+                                    <div class="text-center p-2 bg-light rounded-3 border mb-2">
+                                        <a href="{{ asset($pcPurchase->attachment_path) }}" target="_blank">
+                                            <img src="{{ asset($pcPurchase->attachment_path) }}" class="img-fluid rounded border shadow-xs" style="max-height: 280px; object-fit: contain;" alt="Receipt Slip">
+                                        </a>
+                                        <small class="text-muted d-block mt-1 font-monospace">{{ basename($pcPurchase->attachment_path) }}</small>
+                                    </div>
+                                @endif
+                                <div class="d-flex align-items-center justify-content-between p-2.5 bg-light rounded-2 border">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <i class="fa-solid fa-paperclip text-primary fa-lg"></i>
+                                        <span class="font-monospace small text-dark">{{ basename($pcPurchase->attachment_path) }}</span>
+                                    </div>
+                                    <a href="{{ asset($pcPurchase->attachment_path) }}" target="_blank" class="btn btn-sm btn-outline-primary rounded-pill px-3">
+                                        <i class="fa-solid fa-up-right-from-square me-1"></i> Open Full Document
+                                    </a>
+                                </div>
+                            @else
+                                <div class="p-3 bg-danger bg-opacity-10 border border-danger rounded-3 text-danger small">
+                                    <i class="fa-solid fa-triangle-exclamation me-1.5"></i>
+                                    <strong>Audit Caution:</strong> No scanned receipt or voucher attachment was uploaded for this purchase. Internal Audit can raise a query to verify proof of payment.
+                                </div>
+                            @endif
+                        </div>
+                    </div>
+
+                    <div class="modal-footer bg-light border-top py-3 px-4 flex-shrink-0 d-flex justify-content-between align-items-center">
+                        <a href="{{ route('audit.findings.index', ['store_id' => $pcPurchase->store_id]) }}" class="btn btn-outline-danger btn-sm rounded-pill px-3 fw-semibold">
+                            <i class="fa-solid fa-clipboard-question me-1"></i> Raise Audit Finding / Query
+                        </a>
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn btn-light border rounded-pill px-4" data-bs-dismiss="modal">Close</button>
+                            <a href="{{ route('store-keeper.petty-cash-purchases.show', $pcPurchase->id) }}" class="btn btn-primary rounded-pill px-4 fw-bold shadow-xs">
+                                <i class="fa-solid fa-print me-1.5"></i> Printable Store Voucher
+                            </a>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     @endforeach
