@@ -49,7 +49,21 @@
                         </div>
                         <div class="col-md-6">
                             <span class="text-muted small d-block">Project / Site</span>
-                            <strong class="text-dark fs-6">{{ $income->project->name ?? '—' }}</strong>
+                            @if($income->project)
+                                <strong class="text-dark fs-6"><i class="fa-solid fa-location-dot text-danger me-1"></i>{{ $income->project->name }}</strong>
+                                @if(!empty($income->project->code) || !empty($income->project->location))
+                                    <div class="text-muted small mt-0.5">
+                                        @if(!empty($income->project->code))
+                                            <span class="badge bg-light text-secondary border font-monospace">{{ $income->project->code }}</span>
+                                        @endif
+                                        @if(!empty($income->project->location))
+                                            <span class="ms-1">{{ $income->project->location }}</span>
+                                        @endif
+                                    </div>
+                                @endif
+                            @else
+                                <strong class="text-muted fs-6">—</strong>
+                            @endif
                         </div>
                         <div class="col-md-6">
                             <span class="text-muted small d-block">Deposited to Account (COA)</span>

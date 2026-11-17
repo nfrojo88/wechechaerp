@@ -54,7 +54,9 @@
                         <select name="project_id" class="form-select">
                             <option value="">-- No Project --</option>
                             @foreach($projects ?? [] as $p)
-                                <option value="{{ $p->id }}">{{ $p->name }}</option>
+                                <option value="{{ $p->id }}" {{ old('project_id') == $p->id ? 'selected' : '' }}>
+                                    {{ $p->name }} @if(!empty($p->code)) ({{ $p->code }}) @endif @if(!empty($p->location)) • {{ $p->location }} @endif
+                                </option>
                             @endforeach
                         </select>
                     </div>

@@ -338,7 +338,10 @@ class IncomeController extends Controller
         $rentalTotal         = IncomeRecord::where('category', 'rental')->where('status', 'confirmed')->sum('amount');
         $constructionTotal   = IncomeRecord::where('category', 'construction')->where('status', 'confirmed')->sum('amount');
 
-        $projects = Project::where('status', 'active')->get();
+        $projects = Project::with('stores')->where('status', '!=', 'cancelled')->orderBy('name')->get();
+        if ($projects->isEmpty()) {
+            $projects = Project::with('stores')->orderBy('name')->get();
+        }
 
         return view('finance.income.index', compact(
             'incomes',
@@ -361,7 +364,10 @@ class IncomeController extends Controller
     public function create()
     {
         $this->ensureSchema();
-        $projects     = Project::where('status', 'active')->get();
+        $projects = Project::with('stores')->where('status', '!=', 'cancelled')->orderBy('name')->get();
+        if ($projects->isEmpty()) {
+            $projects = Project::with('stores')->orderBy('name')->get();
+        }
         $bankAccounts = BankAccount::where('is_active', true)->get();
         $coaAccounts  = $this->getCoaAccounts();
         return view('finance.income.create', compact('projects', 'bankAccounts', 'coaAccounts'));

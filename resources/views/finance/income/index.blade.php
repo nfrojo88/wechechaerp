@@ -164,10 +164,67 @@
         </div>
     </div>
 
+    <!-- Available Projects & Sites Overview Bar -->
+    <div class="card shadow-sm border-0 mb-4 bg-white rounded-3">
+        <div class="card-body py-2.5 px-3">
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-primary-subtle text-primary p-2 rounded-circle">
+                        <i class="fa-solid fa-city fs-6"></i>
+                    </span>
+                    <div>
+                        <span class="fw-bold text-dark" style="font-size: 0.90rem;">Available Construction Projects &amp; Sites</span>
+                        <span class="badge bg-light text-secondary border rounded-pill ms-1" style="font-size: 0.72rem;">{{ $projects->count() }} Sites Registered</span>
+                    </div>
+                </div>
+                @if(request()->filled('project_id') && request('project_id') !== 'all')
+                    <a href="{{ route('income.index', request()->except('project_id', 'page')) }}" class="btn btn-sm btn-outline-danger rounded-pill px-2.5 py-0.5" style="font-size: 0.75rem;">
+                        <i class="fa-solid fa-xmark me-1"></i>Clear Site Filter
+                    </a>
+                @endif
+            </div>
+            <div class="d-flex align-items-center gap-2 flex-wrap" style="font-size: 0.82rem;">
+                <a href="{{ route('income.index', array_merge(request()->except('project_id', 'page'))) }}" 
+                   class="btn btn-sm rounded-pill {{ !request('project_id') || request('project_id') == 'all' ? 'btn-primary' : 'btn-outline-secondary' }} px-3 py-1 shadow-xs fw-semibold" style="font-size: 0.78rem;">
+                    <i class="fa-solid fa-border-all me-1"></i>All Sites ({{ $projects->count() }})
+                </a>
+                @forelse($projects as $p)
+                    <a href="{{ route('income.index', array_merge(request()->except('page'), ['project_id' => $p->id])) }}" 
+                       class="btn btn-sm rounded-pill {{ request('project_id') == $p->id ? 'btn-primary shadow-xs' : 'btn-outline-secondary' }} px-2.5 py-1 text-nowrap"
+                       style="font-size: 0.78rem;"
+                       title="{{ $p->name }} • Code: {{ $p->code ?: 'N/A' }} • Location: {{ $p->location ?: 'N/A' }} • Client: {{ $p->client_name ?: 'N/A' }}">
+                        <i class="fa-solid fa-location-dot me-1 {{ request('project_id') == $p->id ? 'text-white' : 'text-danger' }}"></i>
+                        <span class="fw-semibold">{{ $p->name }}</span>
+                        @if(!empty($p->code))
+                            <span class="badge {{ request('project_id') == $p->id ? 'bg-white text-primary' : 'bg-light text-muted border' }} ms-1 font-monospace" style="font-size: 0.68rem;">{{ $p->code }}</span>
+                        @endif
+                        @if(!empty($p->location))
+                            <span class="opacity-75 ms-1 small" style="font-size: 0.72rem;">({{ $p->location }})</span>
+                        @endif
+                    </a>
+                @empty
+                    <span class="text-muted small"><i class="fa-solid fa-circle-exclamation me-1"></i>No project sites currently registered.</span>
+                @endforelse
+            </div>
+        </div>
+    </div>
+
     <!-- Filter Section -->
     <div class="card shadow-sm border-0 mb-4">
         <div class="card-header bg-white border-0 pt-3 pb-0 d-flex justify-content-between align-items-center">
-            <h6 class="fw-bold mb-0 text-dark"><i class="fas fa-filter me-2 text-primary"></i>Filter Income &amp; Receipt Records</h6>
+            <div class="d-flex align-items-center gap-2">
+                <h6 class="fw-bold mb-0 text-dark"><i class="fas fa-filter me-2 text-primary"></i>Filter Income &amp; Receipt Records</h6>
+                @if(request()->filled('project_id') && request('project_id') !== 'all')
+                    @php
+                        $activeProj = $projects->firstWhere('id', request('project_id'));
+                    @endphp
+                    @if($activeProj)
+                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2.5 py-1 rounded-pill small">
+                            <i class="fa-solid fa-location-dot me-1 text-danger"></i>Site: {{ $activeProj->name }}
+                        </span>
+                    @endif
+                @endif
+            </div>
             @if(request()->anyFilled(['category', 'project_id', 'from_date', 'to_date', 'search']))
                 <a href="{{ route('income.index') }}" class="btn btn-outline-secondary btn-sm rounded-pill px-3 py-1 text-decoration-none">
                     <i class="fa-solid fa-rotate-left me-1"></i>Reset Filters
@@ -192,7 +249,9 @@
                         <select name="project_id" class="form-select bg-light border text-dark form-select-sm rounded-3">
                             <option value="">All Sites</option>
                             @foreach($projects as $p)
-                                <option value="{{ $p->id }}" {{ request('project_id') == $p->id ? 'selected' : '' }}>{{ $p->name }}</option>
+                                <option value="{{ $p->id }}" {{ request('project_id') == $p->id ? 'selected' : '' }}>
+                                    {{ $p->name }} @if(!empty($p->code)) ({{ $p->code }}) @endif @if(!empty($p->location)) • {{ $p->location }} @endif
+                                </option>
                             @endforeach
                         </select>
                     </div>
@@ -285,9 +344,23 @@
                                     <i class="fas {{ $icon }} me-1"></i> {{ ucfirst($inc->category) }}
                                 </span>
                             </td>
-                            <td class="text-muted text-truncate" style="max-width: 140px;" title="{{ $inc->project->name ?? '—' }}">
-                                <div class="text-dark fw-semibold text-truncate">{{ $inc->project->name ?? '—' }}</div>
-                                <div class="text-muted small text-truncate" style="font-size: 0.74rem;" title="{{ $inc->deposit_account_name }}">
+                            <td style="max-width: 170px;">
+                                @if($inc->project)
+                                    <div class="text-dark fw-semibold text-truncate" title="{{ $inc->project->name }}">
+                                        <i class="fa-solid fa-location-dot text-danger me-1"></i>{{ $inc->project->name }}
+                                    </div>
+                                    <div class="text-muted small text-truncate" style="font-size: 0.74rem;" title="{{ $inc->project->code ?? '' }} {{ $inc->project->location ? '• ' . $inc->project->location : '' }}">
+                                        @if(!empty($inc->project->code))
+                                            <span class="badge bg-light text-secondary border font-monospace px-1 py-0" style="font-size: 0.70rem;">{{ $inc->project->code }}</span>
+                                        @endif
+                                        @if(!empty($inc->project->location))
+                                            <span class="ms-1">{{ $inc->project->location }}</span>
+                                        @endif
+                                    </div>
+                                @else
+                                    <span class="text-muted small">— No Project/Site —</span>
+                                @endif
+                                <div class="text-muted small text-truncate mt-0.5" style="font-size: 0.74rem;" title="{{ $inc->deposit_account_name }}">
                                     <i class="fa-solid fa-building-columns me-1 text-primary"></i>{{ $inc->deposit_account_name }}
                                 </div>
                             </td>
@@ -470,12 +543,21 @@
 
                             <div class="mb-3">
                                 <label class="form-label fw-semibold small text-dark">Project / Site (Optional)</label>
-                                <select name="project_id" id="incomeProjectSelect" class="form-select bg-light border text-dark">
+                                <select name="project_id" id="incomeProjectSelect" class="form-select bg-light border text-dark" onchange="handleProjectChange(this);">
                                     <option value="">Select Project Site...</option>
                                     @foreach($projects as $p)
-                                        <option value="{{ $p->id }}">{{ $p->name }}</option>
+                                        <option value="{{ $p->id }}" 
+                                                data-client="{{ $p->client_name ?? '' }}" 
+                                                data-code="{{ $p->code ?? '' }}" 
+                                                data-location="{{ $p->location ?? '' }}"
+                                                {{ old('project_id') == $p->id ? 'selected' : '' }}>
+                                            {{ $p->name }} @if(!empty($p->code)) ({{ $p->code }}) @endif @if(!empty($p->location)) • {{ $p->location }} @endif
+                                        </option>
                                     @endforeach
                                 </select>
+                                <div class="form-text small text-muted mt-1" id="selectedProjectHint" style="display: none;">
+                                    <i class="fa-solid fa-location-dot text-danger me-1"></i><span id="selectedProjectHintText"></span>
+                                </div>
                             </div>
 
                             <div class="mb-3">
@@ -914,6 +996,36 @@ function handleDepositAccountChange() {
     const hiddenBank = document.getElementById('modalBankAccountId');
     if (hiddenBank) {
         hiddenBank.value = bankId;
+    }
+}
+
+function handleProjectChange(select) {
+    if (!select) return;
+    const opt = select.options[select.selectedIndex];
+    const hint = document.getElementById('selectedProjectHint');
+    const hintText = document.getElementById('selectedProjectHintText');
+    const buyerNameInput = document.getElementById('modalBuyerName');
+    
+    if (opt && opt.value) {
+        const client = opt.getAttribute('data-client') || '';
+        const code = opt.getAttribute('data-code') || '';
+        const location = opt.getAttribute('data-location') || '';
+        
+        let details = [];
+        if (code) details.push('Code: ' + code);
+        if (location) details.push('Location: ' + location);
+        if (client) details.push('Client: ' + client);
+        
+        if (hint && hintText) {
+            hintText.textContent = details.length ? details.join(' • ') : opt.text.trim();
+            hint.style.display = 'block';
+        }
+        
+        if (buyerNameInput && !buyerNameInput.value.trim() && client) {
+            buyerNameInput.value = client;
+        }
+    } else {
+        if (hint) hint.style.display = 'none';
     }
 }
 
