@@ -992,7 +992,7 @@
                                 </label>
                                 <select name="assigned_to_user_id" class="form-select form-select-lg rounded-3">
                                     <option value="">— Unassigned —</option>
-                                    @foreach($staff as $s)
+                                    @foreach(($staff ?? []) as $s)
                                         <option value="{{ $s->id }}" {{ $maintenanceRequest->assigned_to_user_id == $s->id ? 'selected' : '' }}>
                                             {{ $s->name }}
                                         </option>
@@ -1179,7 +1179,7 @@
                                 Destination Store <span class="text-danger">*</span>
                             </label>
                             <select name="destination_store_id" class="form-select rounded-3" required>
-                                @foreach($stores as $st)
+                                @foreach(($stores ?? []) as $st)
                                     <option value="{{ $st->id }}" {{ $loop->first ? 'selected' : '' }}>
                                         {{ $st->name }} ({{ $st->code ?? 'Store' }})
                                     </option>
@@ -1224,7 +1224,7 @@
                                                 <select name="items[0][product_id]" class="form-select form-select-sm product-select mb-1" onchange="handleProductChange(this, 0)">
                                                     <option value="">— Select Catalog Product —</option>
                                                     <option value="custom">✏️ + Custom / Unlisted Spare Part</option>
-                                                    @foreach($products as $p)
+                                                    @foreach(($products ?? []) as $p)
                                                         <option value="{{ $p->id }}" data-unit="{{ $p->unit ?? 'pcs' }}">
                                                             {{ $p->name }} {{ $p->sku ? "({$p->sku})" : '' }} [{{ $p->category ?? 'General' }}]
                                                         </option>
@@ -1578,7 +1578,7 @@ function addMaterialRow() {
             <select name="items[${idx}][product_id]" class="form-select form-select-sm product-select mb-1" onchange="handleProductChange(this, ${idx})">
                 <option value="">— Select Catalog Product —</option>
                 <option value="custom">✏️ + Custom / Unlisted Spare Part</option>
-                @foreach($products as $p)
+                @foreach(($products ?? []) as $p)
                     <option value="{{ $p->id }}" data-unit="{{ $p->unit ?? 'pcs' }}">
                         {{ $p->name }} {{ $p->sku ? "({$p->sku})" : '' }} [{{ $p->category ?? 'General' }}]
                     </option>

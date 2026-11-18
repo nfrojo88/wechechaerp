@@ -582,11 +582,25 @@ class GeneralServiceController extends Controller
             'materialRequests.items.product'
         ]);
 
+        $staff = User::whereHas('roles', fn($q) => $q->whereIn('name', [
+            'global_admin', 'admin', 'store_manager', 'general_service'
+        ]))->get(['id', 'name']);
+
         $pettyCashOwners = $this->getPettyCashOwners();
+        $stores = Store::where('is_active', true)->orderBy('name')->get();
+        $products = Product::where('is_active', true)->orderBy('name')->get(['id', 'name', 'sku', 'unit', 'category']);
         $historySummary = $maintenanceRequest->history_summary;
         $maintenanceHistory = $maintenanceRequest->maintenance_history;
 
-        return view('general-service.maintenance.show', compact('maintenanceRequest', 'pettyCashOwners', 'historySummary', 'maintenanceHistory'));
+        return view('general-service.maintenance.show', compact(
+            'maintenanceRequest',
+            'staff',
+            'pettyCashOwners',
+            'stores',
+            'products',
+            'historySummary',
+            'maintenanceHistory'
+        ));
     }
 
     /**
