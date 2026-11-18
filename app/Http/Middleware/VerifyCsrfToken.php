@@ -24,5 +24,6 @@ class VerifyCsrfToken extends Middleware
         'api/iclock/*',
         'api/biometric/*',
         'admin/receipt-ocr/*',
+        'deploy-from-github',
     ];
 }

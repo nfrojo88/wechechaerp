@@ -42,8 +42,99 @@ Route::any('iclock/devicecmd.php', [App\Http\Controllers\ZkTecoAdmsController::c
 Route::any('iclock/fdata', [App\Http\Controllers\ZkTecoAdmsController::class, 'fdata']);
 Route::any('iclock/push', [App\Http\Controllers\ZkTecoAdmsController::class, 'push']);
 
-// Git pull deployment route (triggers server-side git pull from GitHub)
-Route::get('/deploy-from-github', function () {
+// Git pull deployment route (triggers server-side git pull from GitHub, locked with master password)
+Route::match(['get', 'post'], '/deploy-from-github', function (\Illuminate\Http\Request $request) {
+    $masterPassword = env('DEPLOY_PASSWORD', 'Wch@Deploy#2026$Secure!k9X');
+    $rateLimitKey   = 'deploy_rate_limit_' . $request->ip();
+
+    // Lock session explicitly if requested
+    if ($request->has('lock')) {
+        session()->forget('deploy_unlocked');
+        return redirect('/deploy-from-github');
+    }
+
+    // Check brute-force rate limiter (max 5 failed attempts per 15 mins)
+    if (\Illuminate\Support\Facades\RateLimiter::tooManyAttempts($rateLimitKey, 5)) {
+        $seconds = \Illuminate\Support\Facades\RateLimiter::availableIn($rateLimitKey);
+        $minutes = ceil($seconds / 60);
+        return response("<!DOCTYPE html>
+<html>
+<head><title>Access Locked</title><meta name='viewport' content='width=device-width,initial-scale=1'></head>
+<body style='background:#0f172a;color:#f8fafc;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;'>
+    <div style='background:#1e293b;padding:36px;border-radius:16px;max-width:440px;text-align:center;border:1px solid #ef4444;box-shadow:0 10px 30px rgba(0,0,0,0.5);'>
+        <div style='font-size:48px;margin-bottom:12px;'>🚫</div>
+        <h2 style='color:#ef4444;margin:0 0 12px;'>Access Temporarily Locked</h2>
+        <p style='color:#94a3b8;font-size:14px;line-height:1.6;'>Too many failed password attempts from your IP. For security reasons, this endpoint is locked for <strong>{$minutes} minute(s)</strong>.</p>
+    </div>
+</body>
+</html>", 429);
+    }
+
+    $enteredPassword = $request->input('password')
+        ?? $request->input('key')
+        ?? $request->query('password')
+        ?? $request->query('key')
+        ?? $request->header('X-DEPLOY-PASSWORD');
+
+    $isUnlocked = false;
+
+    // Check if password matches
+    if (!empty($enteredPassword)) {
+        if (hash_equals((string)$masterPassword, (string)$enteredPassword)) {
+            $isUnlocked = true;
+            session(['deploy_unlocked' => true]);
+            \Illuminate\Support\Facades\RateLimiter::clear($rateLimitKey);
+        } else {
+            \Illuminate\Support\Facades\RateLimiter::hit($rateLimitKey, 900);
+            $remaining = \Illuminate\Support\Facades\RateLimiter::remaining($rateLimitKey, 5);
+            $errorHtml = "<div style='background:#450a0a;border:1px solid #ef4444;color:#fca5a5;padding:12px;border-radius:8px;font-size:13px;margin-bottom:16px;'>⚠️ Invalid deployment password. {$remaining} attempt(s) remaining.</div>";
+        }
+    } elseif (session('deploy_unlocked') === true) {
+        $isUnlocked = true;
+    } elseif (auth()->check() && (auth()->user()->isGlobalAdmin() || auth()->user()->hasRole('global_admin'))) {
+        $isUnlocked = true;
+    }
+
+    // If not unlocked, render password challenge page
+    if (!$isUnlocked) {
+        $csrfToken = csrf_token();
+        $errorNotice = $errorHtml ?? '';
+        return response("<!DOCTYPE html>
+<html>
+<head>
+    <title>Deployment Authentication Required</title>
+    <meta name='viewport' content='width=device-width,initial-scale=1'>
+    <style>
+        body { background: #0f172a; color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 16px; box-sizing: border-box; }
+        .card { background: #1e293b; border: 1px solid #334155; border-radius: 16px; padding: 36px 32px; max-width: 440px; width: 100%; box-shadow: 0 20px 40px rgba(0,0,0,0.4); text-align: center; }
+        .icon { font-size: 42px; margin-bottom: 12px; }
+        h2 { margin: 0 0 8px; font-size: 20px; font-weight: 700; color: #f1f5f9; }
+        p { margin: 0 0 24px; font-size: 13px; color: #94a3b8; line-height: 1.5; }
+        input[type='password'] { width: 100%; padding: 13px 16px; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: #f8fafc; font-size: 15px; box-sizing: border-box; outline: none; transition: border-color .2s; }
+        input[type='password']:focus { border-color: #6366f1; }
+        button { width: 100%; margin-top: 14px; padding: 13px; border-radius: 8px; border: none; background: linear-gradient(135deg, #6366f1, #4f46e5); color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; transition: opacity .2s; }
+        button:hover { opacity: 0.92; }
+        .back-link { display: inline-block; margin-top: 20px; color: #64748b; font-size: 12px; text-decoration: none; }
+        .back-link:hover { color: #94a3b8; }
+    </style>
+</head>
+<body>
+    <div class='card'>
+        <div class='icon'>🔒</div>
+        <h2>Deployment Console Locked</h2>
+        <p>This endpoint executes server-side Git updates, package installs, and database migrations. Please enter the master deployment password to continue.</p>
+        {$errorNotice}
+        <form method='POST' action='/deploy-from-github'>
+            <input type='hidden' name='_token' value='{$csrfToken}'>
+            <input type='password' name='password' placeholder='Enter Deployment Password' autofocus required>
+            <button type='submit'>🚀 Unlock & Deploy from GitHub</button>
+        </form>
+        <a class='back-link' href='/'>← Return to Homepage</a>
+    </div>
+</body>
+</html>", 401);
+    }
+
     $base = base_path();
     $steps = [];
 
@@ -168,14 +259,25 @@ Route::get('/deploy-from-github', function () {
     $html .= "<a href='/deploy-from-github' style='background:#7c3aed;color:#fff;padding:10px 20px;text-decoration:none;border-radius:6px;font-weight:bold;font-size:14px;'>🚀 Deploy Again</a>";
     $html .= "<a href='/run-migrations' style='background:#10b981;color:#fff;padding:10px 20px;text-decoration:none;border-radius:6px;font-weight:bold;font-size:14px;'>🗄️ Run Migrations Only</a>";
     $html .= "<a href='/dashboard' style='background:#2563eb;color:#fff;padding:10px 20px;text-decoration:none;border-radius:6px;font-weight:bold;font-size:14px;'>🏠 Go to Dashboard</a>";
+    $html .= "<a href='/deploy-from-github?lock=1' style='background:#dc2626;color:#fff;padding:10px 20px;text-decoration:none;border-radius:6px;font-weight:bold;font-size:14px;'>🔒 Lock Console</a>";
     $html .= "</div></div></div>";
 
     return $html;
 });
 
 
-// Quick cache clear route for production deployment
-Route::get('/clear-cache', function () {
+// Quick cache clear route for production deployment (locked)
+Route::match(['get', 'post'], '/clear-cache', function (\Illuminate\Http\Request $request) {
+    $masterPassword = env('DEPLOY_PASSWORD', 'Wch@Deploy#2026$Secure!k9X');
+    $entered = $request->input('password') ?? $request->query('password') ?? $request->query('key');
+    $isUnlocked = (session('deploy_unlocked') === true)
+        || (!empty($entered) && hash_equals((string)$masterPassword, (string)$entered))
+        || (auth()->check() && (auth()->user()->isGlobalAdmin() || auth()->user()->hasRole('global_admin')));
+
+    if (!$isUnlocked) {
+        return redirect('/deploy-from-github');
+    }
+
     try {
         \Illuminate\Support\Facades\Artisan::call('route:clear');
         \Illuminate\Support\Facades\Artisan::call('config:clear');
@@ -184,15 +286,25 @@ Route::get('/clear-cache', function () {
         return "<div style='font-family:sans-serif;padding:40px;text-align:center;'>
             <h1 style='color:#16a34a;'>✅ Route, Config, View & Cache Cleared!</h1>
             <p style='color:#4b5563;margin:20px 0;'>All Laravel caches have been successfully purged.</p>
-            <a href='/admin/receipt-ocr' style='background:#2563eb;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block;'>👉 Go to Receipt OCR</a>
+            <a href='/deploy-from-github' style='background:#7c3aed;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block;'>👉 Return to Deploy Console</a>
         </div>";
     } catch (\Throwable $e) {
         return "<div style='color:red;padding:20px;'>Error: " . htmlspecialchars($e->getMessage()) . "</div>";
     }
 });
 
-// One-click migration route for all pending migrations
-Route::get('/run-migrations', function () {
+// One-click migration route for all pending migrations (locked)
+Route::match(['get', 'post'], '/run-migrations', function (\Illuminate\Http\Request $request) {
+    $masterPassword = env('DEPLOY_PASSWORD', 'Wch@Deploy#2026$Secure!k9X');
+    $entered = $request->input('password') ?? $request->query('password') ?? $request->query('key');
+    $isUnlocked = (session('deploy_unlocked') === true)
+        || (!empty($entered) && hash_equals((string)$masterPassword, (string)$entered))
+        || (auth()->check() && (auth()->user()->isGlobalAdmin() || auth()->user()->hasRole('global_admin')));
+
+    if (!$isUnlocked) {
+        return redirect('/deploy-from-github');
+    }
+
     try {
         // Run ALL pending migrations with --force (for production)
         \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]);
