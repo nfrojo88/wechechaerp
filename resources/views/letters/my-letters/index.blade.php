@@ -206,9 +206,9 @@
                                     <div class="text-muted" style="font-size: 0.72rem;">Emp Code: {{ $letter->employee->employee_code }}</div>
                                 @elseif($letter->addressedTo)
                                     <div class="fw-semibold text-dark small">
-                                        <i class="fa-solid fa-user-check text-success me-1"></i>{{ $letter->addressedTo->name }}
+                                        <i class="fa-solid fa-user-check text-success me-1"></i>{{ $letter->addressedTo?->name ?? 'N/A' }}
                                     </div>
-                                    <div class="text-muted" style="font-size: 0.72rem;">{{ $letter->addressedTo->email }}</div>
+                                    <div class="text-muted" style="font-size: 0.72rem;">{{ $letter->addressedTo?->email ?? '' }}</div>
                                 @else
                                     <span class="text-muted small fst-italic">Pending Assignment</span>
                                 @endif

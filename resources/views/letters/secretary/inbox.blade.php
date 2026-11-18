@@ -202,7 +202,7 @@
                                 @endif
                                 <div class="small text-muted d-flex align-items-center gap-1">
                                     <i class="fa-solid fa-user text-secondary"></i>
-                                    <span>{{ $letter->creator->name ?? ($letter->sender ?? 'Employee') }}</span>
+                                    <span>{{ $letter->creator?->name ?? ($letter->sender ?? 'Employee') }}</span>
                                     @if($letter->priority === 'urgent')
                                         <span class="badge bg-danger rounded-pill ms-1 px-2 py-0.5" style="font-size: 0.65rem;">URGENT</span>
                                     @elseif($letter->priority === 'high')
@@ -290,8 +290,8 @@
                                                 </div>
                                                 <small class="text-muted" style="font-size: 0.7rem;">Employee Code: {{ $letter->employee->employee_code }}</small>
                                             @elseif($letter->addressedTo)
-                                                <div class="fw-semibold text-dark small">{{ $letter->addressedTo->name ?? 'N/A' }}</div>
-                                                <small class="text-muted" style="font-size: 0.7rem;">{{ $letter->addressedTo->email ?? '' }}</small>
+                                                <div class="fw-semibold text-dark small">{{ $letter->addressedTo?->name ?? 'N/A' }}</div>
+                                                <small class="text-muted" style="font-size: 0.7rem;">{{ $letter->addressedTo?->email ?? '' }}</small>
                                             @endif
                                         </div>
                                         @if(!$isRegistered && !$isRejected)
@@ -496,7 +496,7 @@
                                                 @if($letter->employee)
                                                     <i class="fa-solid fa-user-tie text-success me-1"></i>{{ $letter->employee->full_name }}
                                                 @elseif($letter->addressedTo)
-                                                    {{ $letter->addressedTo->name }}
+                                                    {{ $letter->addressedTo?->name ?? 'N/A' }}
                                                 @else
                                                     <span class="text-muted fst-italic">Not assigned yet</span>
                                                 @endif

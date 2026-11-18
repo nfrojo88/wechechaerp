@@ -172,7 +172,7 @@
                         <div class="col-md-6">
                             <div class="p-2 border rounded bg-white">
                                 <span class="text-muted d-block">Created By:</span>
-                                <strong class="text-dark">{{ $letter->creator->name ?? 'Employee' }} ({{ $letter->creator->email ?? '' }})</strong>
+                                <strong class="text-dark">{{ $letter->creator?->name ?? 'Employee' }} ({{ $letter->creator?->email ?? '' }})</strong>
                             </div>
                         </div>
                         <div class="col-md-6">
@@ -345,7 +345,7 @@
                         </span>
                         @endif
                     </div>
-                    <p class="small text-muted mb-1">Decided &amp; closed by <strong>{{ $letter->closer->name ?? 'Staff' }}</strong> on {{ $letter->closed_at ? $letter->closed_at->format('M d, Y H:i') : '' }}.</p>
+                    <p class="small text-muted mb-1">Decided &amp; closed by <strong>{{ $letter->closer?->name ?? 'Staff' }}</strong> on {{ $letter->closed_at ? $letter->closed_at->format('M d, Y H:i') : '' }}.</p>
                     @if($letter->closing_notes)
                     <div class="small p-2 bg-white rounded border text-dark mt-2">
                         <strong>Decision / Closing Notes:</strong> {{ $letter->closing_notes }}
@@ -467,7 +467,7 @@
                                         <small class="text-muted">{{ $log->created_at->format('M d, Y H:i') }}</small>
                                     </div>
                                     <div class="small text-dark">{{ $log->description }}</div>
-                                    <small class="text-muted" style="font-size: 0.72rem;">By: <strong>{{ $log->user->name ?? 'System' }}</strong></small>
+                                    <small class="text-muted" style="font-size: 0.72rem;">By: <strong>{{ $log->user?->name ?? 'System' }}</strong></small>
                                 </div>
                             @endforeach
                         @endif
