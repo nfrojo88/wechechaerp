@@ -15,8 +15,8 @@
                 <span class="badge bg-white text-secondary border px-3 py-2 shadow-xs rounded-pill d-none d-sm-inline-flex align-items-center">
                     <i class="fa-regular fa-calendar text-primary me-2"></i>{{ now()->format('l, F j, Y') }}
                 </span>
-                <a href="{{ route('store-keeper.petty-cash-purchases.create') }}" class="btn btn-success btn-sm shadow-xs fw-bold" style="min-height: 38px; display: inline-flex; align-items: center;">
-                    <i class="fa-solid fa-cart-shopping me-1"></i> Buy Material (Petty Cash)
+                <a href="{{ route('store-keeper.petty-cash-purchases.index') }}" class="btn btn-success btn-sm shadow-xs fw-bold" style="min-height: 38px; display: inline-flex; align-items: center;">
+                    <i class="fa-solid fa-cart-shopping me-1"></i> Petty Cash Purchases
                 </a>
                 <a href="{{ route('store-manager.transfers.create') }}" class="btn btn-primary btn-sm shadow-xs" style="min-height: 38px; display: inline-flex; align-items: center;">
                     <i class="fa-solid fa-exchange-alt me-1"></i> New Transfer

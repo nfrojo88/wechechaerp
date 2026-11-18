@@ -26,9 +26,6 @@
             </div>
         </div>
         <div class="d-flex flex-wrap gap-2">
-            <a href="{{ route('store-keeper.petty-cash-purchases.create') }}" class="btn btn-outline-success btn-sm shadow-sm">
-                <i class="fa-solid fa-plus me-1"></i> New Purchase
-            </a>
             <button type="button" class="btn btn-primary btn-sm shadow-sm px-3" onclick="window.print()">
                 <i class="fa-solid fa-print me-1"></i> Print Voucher
             </button>
@@ -195,6 +192,69 @@
 
         {{-- Right: Meta Details & Receipt Attachment --}}
         <div class="col-lg-4">
+
+            {{-- ── Decision & Purchase Audit Trail ─────────────────────────── --}}
+            <div class="card border-0 shadow-sm rounded-3 mb-4 bg-white border-start border-4 border-info">
+                <div class="card-header bg-white border-bottom py-3">
+                    <h6 class="mb-0 fw-bold text-dark">
+                        <i class="fa-solid fa-shield-halved text-info me-2"></i>Decision &amp; Purchase Audit Trail
+                    </h6>
+                </div>
+                <div class="card-body p-3">
+                    {{-- Planning Manager Decision --}}
+                    <div class="d-flex gap-3 mb-3 pb-3 border-bottom">
+                        <div class="rounded-circle bg-primary bg-opacity-10 text-primary d-flex align-items-center justify-content-center flex-shrink-0" style="width: 36px; height: 36px;">
+                            <i class="fa-solid fa-user-check"></i>
+                        </div>
+                        <div>
+                            <small class="text-muted fw-bold text-uppercase d-block" style="font-size:0.68rem;">1. Planning Approval (Buy with Petty Cash)</small>
+                            <strong class="text-dark">{{ $purchase->decider->name ?? $purchase->materialRequest->planningApprover->name ?? 'Planning Manager' }}</strong>
+                            <small class="text-muted d-block">
+                                {{ optional($purchase->decided_at ?? $purchase->materialRequest->planning_approved_at)->format('d M, Y (H:i)') ?? 'Approved' }}
+                            </small>
+                            <span class="badge bg-success-subtle text-success border border-success-subtle mt-1" style="font-size: 0.7rem;">
+                                <i class="fa-solid fa-check me-1"></i>Approved for Site Petty Cash
+                            </span>
+                        </div>
+                    </div>
+
+                    {{-- Store Keeper Purchase --}}
+                    <div class="d-flex gap-3 {{ $purchase->materialRequest ? 'mb-3 pb-3 border-bottom' : '' }}">
+                        <div class="rounded-circle bg-success bg-opacity-10 text-success d-flex align-items-center justify-content-center flex-shrink-0" style="width: 36px; height: 36px;">
+                            <i class="fa-solid fa-cart-shopping"></i>
+                        </div>
+                        <div>
+                            <small class="text-muted fw-bold text-uppercase d-block" style="font-size:0.68rem;">2. Purchase &amp; Goods Intake</small>
+                            <strong class="text-dark">{{ $purchase->purchaser->name ?? 'Store Keeper' }}</strong>
+                            <small class="text-muted d-block">
+                                {{ optional($purchase->created_at)->format('d M, Y (H:i)') }}
+                            </small>
+                            <div class="mt-1 small">
+                                Amount Spent: <strong class="text-success font-monospace">ETB {{ number_format($purchase->total_amount, 2) }}</strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    {{-- Origin Request Info --}}
+                    @if($purchase->materialRequest)
+                    <div class="d-flex gap-3">
+                        <div class="rounded-circle bg-secondary bg-opacity-10 text-secondary d-flex align-items-center justify-content-center flex-shrink-0" style="width: 36px; height: 36px;">
+                            <i class="fa-solid fa-file-lines"></i>
+                        </div>
+                        <div>
+                            <small class="text-muted fw-bold text-uppercase d-block" style="font-size:0.68rem;">Origin Material Request</small>
+                            <span class="fw-bold font-monospace text-primary">#{{ $purchase->materialRequest->reference_number }}</span>
+                            <small class="text-muted d-block">
+                                Project: <strong>{{ $purchase->materialRequest->project->name ?? 'Site' }}</strong>
+                                @if($purchase->materialRequest->requestedBy)
+                                    &bull; Requested by: {{ $purchase->materialRequest->requestedBy->name }}
+                                @endif
+                            </small>
+                        </div>
+                    </div>
+                    @endif
+                </div>
+            </div>
 
             {{-- Metadata Card --}}
             <div class="card border-0 shadow-sm rounded-3 mb-4 bg-white">

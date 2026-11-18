@@ -20,8 +20,8 @@
             </div>
         </div>
         <div class="d-flex flex-wrap gap-2">
-            <a href="{{ route('store-keeper.petty-cash-purchases.create') }}" class="btn btn-success btn-sm shadow-sm px-3 fw-bold">
-                <i class="fa-solid fa-cart-shopping me-1"></i> Buy Material with this Fund
+            <a href="{{ route('store-keeper.petty-cash-purchases.index') }}" class="btn btn-success btn-sm shadow-sm px-3 fw-bold">
+                <i class="fa-solid fa-cart-shopping me-1"></i> Petty Cash Purchases Queue
             </a>
             <button type="button" class="btn btn-primary btn-sm shadow-sm px-3" onclick="window.print()">
                 <i class="fa-solid fa-print me-1"></i> Print Voucher

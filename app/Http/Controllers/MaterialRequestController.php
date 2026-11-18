@@ -383,10 +383,10 @@ class MaterialRequestController extends Controller
      */
     public function planningApprovePettyCash(MaterialRequest $materialRequest)
     {
+        /** @var \App\Models\User|null $user */
         $user = auth()->user();
-        $roles = $user ? $user->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray() : [];
-        if (!in_array('planning_manager', $roles) && !$user->hasRole('Planning Manager')) {
-            abort(403, 'Unauthorized: Emergency material requests awaiting planning approval can only be approved by the Planning Manager.');
+        if (!$user?->hasAnyRole(['planning_manager', 'Planning Manager', 'coordinator', 'Coordinator', 'admin', 'global_admin'])) {
+            abort(403, 'Unauthorized: Material requests can only be approved for Site Petty Cash by the Planning Manager, Coordinator, or Administrator.');
         }
 
         Gate::authorize('approvePlanning', $materialRequest);
@@ -397,6 +397,13 @@ class MaterialRequestController extends Controller
             'status'                    => 'approved_for_petty_cash',
             'purchase_method'           => 'petty_cash',
         ]);
+
+        // Explicitly mark active items as petty cash lines
+        foreach ($materialRequest->items as $item) {
+            if ($item->status !== 'rejected') {
+                $item->update(['status' => 'petty_cash']);
+            }
+        }
 
         // Mark companion Purchase Requests so they don't clutter normal PR queues
         try {
@@ -488,9 +495,8 @@ class MaterialRequestController extends Controller
     {
         /** @var \App\Models\User|null $user */
         $user = auth()->user();
-        $roles = $user ? $user->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray() : [];
-        if (!in_array('planning_manager', $roles) && !$user?->hasRole('Planning Manager')) {
-            abort(403, 'Unauthorized: Emergency material requests awaiting planning approval can only be decided by the Planning Manager.');
+        if (!$user?->hasAnyRole(['planning_manager', 'Planning Manager', 'coordinator', 'Coordinator', 'admin', 'global_admin'])) {
+            abort(403, 'Unauthorized: Emergency material requests awaiting planning approval can only be decided by the Planning Manager, Coordinator, or Administrator.');
         }
 
         Gate::authorize('approvePlanning', $materialRequest);

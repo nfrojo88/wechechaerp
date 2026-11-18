@@ -120,6 +120,39 @@ class PettyCashMaterialPurchaseController extends Controller
                         $table->foreignId('material_request_id')->nullable()->after('delivery_receipt_id')->constrained('material_requests')->nullOnDelete();
                     });
                 }
+                if (!Schema::hasColumn('petty_cash_material_purchases', 'material_request_item_id')) {
+                    Schema::table('petty_cash_material_purchases', function (Blueprint $table) {
+                        $table->foreignId('material_request_item_id')->nullable()->after('material_request_id')->constrained('material_request_items')->nullOnDelete();
+                    });
+                }
+                if (!Schema::hasColumn('petty_cash_material_purchases', 'decided_by')) {
+                    Schema::table('petty_cash_material_purchases', function (Blueprint $table) {
+                        $table->foreignId('decided_by')->nullable()->after('purchased_by')->constrained('users')->nullOnDelete();
+                    });
+                }
+                if (!Schema::hasColumn('petty_cash_material_purchases', 'decided_at')) {
+                    Schema::table('petty_cash_material_purchases', function (Blueprint $table) {
+                        $table->timestamp('decided_at')->nullable()->after('decided_by');
+                    });
+                }
+                if (!Schema::hasColumn('petty_cash_material_purchases', 'is_physical_store_only')) {
+                    Schema::table('petty_cash_material_purchases', function (Blueprint $table) {
+                        $table->boolean('is_physical_store_only')->default(false)->after('attachment_path');
+                    });
+                }
+            }
+
+            if (Schema::hasTable('material_request_items')) {
+                if (!Schema::hasColumn('material_request_items', 'status')) {
+                    Schema::table('material_request_items', function (Blueprint $table) {
+                        $table->string('status', 30)->default('pending')->after('quantity_fulfilled')->index();
+                    });
+                }
+                if (!Schema::hasColumn('material_request_items', 'rejection_reason')) {
+                    Schema::table('material_request_items', function (Blueprint $table) {
+                        $table->text('rejection_reason')->nullable()->after('notes');
+                    });
+                }
             }
 
             if (Schema::hasTable('material_requests') && !Schema::hasColumn('material_requests', 'purchase_method')) {
@@ -248,6 +281,19 @@ class PettyCashMaterialPurchaseController extends Controller
 
         $pettyCashAccount = $activeStore ? $this->resolveStoreSitePettyCash($activeStore, $user) : null;
 
+        $replenishedPurchaseNos = PettyCashReplenishmentItem::pluck('reference')->filter()->toArray();
+        $unreplenishedPurchases = $activeStore && $pettyCashAccount ? PettyCashMaterialPurchase::where('store_id', $activeStore->id)
+            ->where('chart_of_account_id', $pettyCashAccount->id)
+            ->whereNotIn('purchase_no', $replenishedPurchaseNos)
+            ->latest('purchase_date')
+            ->get() : collect();
+        $unreplenishedTotal = (float) $unreplenishedPurchases->sum('total_amount');
+
+        $pendingReplenishment = $pettyCashAccount ? PettyCashReplenishment::where('chart_of_account_id', $pettyCashAccount->id)
+            ->whereIn('status', [PettyCashReplenishment::STATUS_PENDING, PettyCashReplenishment::STATUS_UNDER_AUDIT])
+            ->latest()
+            ->first() : null;
+
         // Active Bank & Cash accounts for replacement money disbursement
         $sourceAccounts = ChartOfAccount::where('is_active', true)
             ->where('code', '!=', '1010')
@@ -281,6 +327,51 @@ class PettyCashMaterialPurchaseController extends Controller
             });
         }
         $replenishments = $replenishmentsQuery->paginate(15, ['*'], 'rep_page')->withQueryString();
+
+        // ── Planning-Approved Petty Cash Material Lines Awaiting Storekeeper Purchase ──
+        $pendingPettyCashItemsQuery = \App\Models\MaterialRequestItem::with([
+            'materialRequest.project',
+            'materialRequest.destinationStore',
+            'materialRequest.planningApprover',
+            'materialRequest.creator',
+            'materialRequest.requestedBy',
+            'product'
+        ])
+        ->whereHas('materialRequest', function ($q) use ($isStoreKeeper, $assignedStore, $request) {
+            $q->whereNotIn('status', ['rejected', 'cancelled', 'draft', 'pending_approval']);
+            if ($isStoreKeeper && $assignedStore) {
+                $q->where(function ($sq) use ($assignedStore) {
+                    $sq->where('destination_store_id', $assignedStore->id)
+                       ->orWhere('project_id', $assignedStore->project_id);
+                });
+            } elseif ($request->filled('store_id')) {
+                $st = Store::find($request->store_id);
+                $q->where(function ($sq) use ($request, $st) {
+                    $sq->where('destination_store_id', $request->store_id)
+                       ->when($st && $st->project_id, fn($ssq) => $ssq->orWhere('project_id', $st->project_id));
+                });
+            }
+        })
+        ->where(function ($q) {
+            $q->where('status', 'petty_cash')
+              ->orWhere(function ($sub) {
+                  $sub->whereNotIn('status', ['approved', 'rejected', 'purchased'])
+                      ->whereHas('materialRequest', function ($mq) {
+                          $mq->where(function ($inner) {
+                              $inner->where('status', 'approved_for_petty_cash')
+                                    ->orWhere('purchase_method', 'petty_cash');
+                          })->where(function ($inner2) {
+                              $inner2->where('planning_approval_status', 'approved')
+                                     ->orWhereNotNull('planning_approved_by');
+                          });
+                      });
+              });
+        })
+        ->where('status', '!=', 'purchased')
+        ->where('status', '!=', 'rejected')
+        ->latest('id');
+
+        $pendingPettyCashItems = $pendingPettyCashItemsQuery->get();
 
         // Emergency Material Requests approved for Site Petty Cash purchase
         $pendingEmergencyMrsQuery = \App\Models\MaterialRequest::with(['project', 'store', 'creator', 'requestedBy', 'items.product', 'planningApprover'])
@@ -316,12 +407,18 @@ class PettyCashMaterialPurchaseController extends Controller
             'sourceAccounts',
             'storeKeepers',
             'replenishments',
-            'pendingEmergencyMrs'
+            'pendingEmergencyMrs',
+            'pendingPettyCashItems',
+            'unreplenishedPurchases',
+            'unreplenishedTotal',
+            'pendingReplenishment'
         ));
     }
 
     /**
-     * Create Petty Cash Material Purchase Form
+     * Complete Petty Cash Material Purchase Form
+     * Strictly requires a Planning Manager approved material line.
+     * Manual creation without a Planning Manager decision is prohibited.
      */
     public function create(Request $request)
     {
@@ -332,106 +429,84 @@ class PettyCashMaterialPurchaseController extends Controller
         $assignedStore = $this->resolveAssignedStore($user);
         $isStoreKeeper = $user && $user->hasRole('store_keeper') && !$user->hasAnyRole(['admin', 'global_admin', 'store_manager']);
 
-        $stores = Store::where('is_active', true)->orderBy('name')->get();
-        $products = Product::where('is_active', true)->orderBy('name')->get();
+        // Check for material request item id
+        $itemId = $request->input('material_request_item_id') ?: $request->input('item_id');
 
-        $targetStore = $assignedStore ?? $stores->first();
-
-        // ── Pre-fill from Emergency Material Request if provided ──────────────
-        $selectedMaterialRequest = null;
-        $prefilledItems = collect();
-
-        if ($request->filled('material_request_id')) {
-            $selectedMaterialRequest = \App\Models\MaterialRequest::with(['items.product', 'project', 'store', 'planningApprover', 'requestedBy'])->find($request->material_request_id);
-            if ($selectedMaterialRequest) {
-                if ($selectedMaterialRequest->destination_store_id) {
-                    $mStore = Store::find($selectedMaterialRequest->destination_store_id);
-                    if ($mStore) {
-                        $targetStore = $mStore;
-                    }
-                } elseif ($selectedMaterialRequest->project_id) {
-                    $pStore = Store::where('project_id', $selectedMaterialRequest->project_id)->first();
-                    if ($pStore) {
-                        $targetStore = $pStore;
-                    }
+        // If parent emergency MR was provided without item, select its first active petty cash line
+        if (!$itemId && $request->filled('material_request_id')) {
+            $parentMr = \App\Models\MaterialRequest::with('items')->find($request->material_request_id);
+            if ($parentMr) {
+                $firstItem = $parentMr->items()->whereNotIn('status', ['purchased', 'rejected'])->first();
+                if ($firstItem) {
+                    $itemId = $firstItem->id;
                 }
-
-                $prefilledItems = $selectedMaterialRequest->items->map(function ($it) {
-                    return [
-                        'product_id'   => $it->product_id,
-                        'product_name' => $it->product?->name ?? 'Material',
-                        'product_code' => $it->product?->code ?? $it->product?->sku ?? '',
-                        'quantity'     => (float) $it->quantity,
-                        'unit'         => $it->product?->unit ?? $it->unit ?? 'pcs',
-                        'unit_price'   => (float) ($it->product?->unit_price ?? 0),
-                        'remarks'      => $it->notes ?? '',
-                    ];
-                });
             }
         }
 
-        // Available Emergency MRs for quick selection
-        $pendingEmergencyMrsQuery = \App\Models\MaterialRequest::with(['project', 'store', 'creator', 'requestedBy', 'items.product', 'planningApprover'])
-            ->where(function($q) {
-                $q->where('status', 'approved_for_petty_cash')
-                  ->orWhere(fn($sq) => $sq->where('purchase_method', 'petty_cash')->whereNotIn('status', ['completed', 'fulfilled', 'rejected', 'cancelled']));
-            })
-            ->latest('planning_approved_at')
-            ->latest('id');
-
-        if ($isStoreKeeper && $assignedStore) {
-            $pendingEmergencyMrsQuery->where(function ($q) use ($assignedStore) {
-                $q->where('destination_store_id', $assignedStore->id)
-                  ->orWhere('project_id', $assignedStore->project_id);
-            });
+        // Rule: Direct manual creation without a linked Planning decision is prohibited
+        if (!$itemId) {
+            return redirect()->route('store-keeper.petty-cash-purchases.index')
+                ->with('info', 'Direct manual creation of petty cash purchases is disabled. Please select an approved material line from the queue below to complete purchase.');
         }
-        $pendingEmergencyMrs = $pendingEmergencyMrsQuery->get();
 
+        $mrItem = \App\Models\MaterialRequestItem::with([
+            'materialRequest.project',
+            'materialRequest.destinationStore',
+            'materialRequest.planningApprover',
+            'materialRequest.creator',
+            'materialRequest.requestedBy',
+            'product'
+        ])->findOrFail($itemId);
+
+        $mr = $mrItem->materialRequest;
+        if (!$mr) {
+            abort(403, 'Unauthorized: Invalid Material Request.');
+        }
+
+        // Verify Planning Manager / Coordinator decision
+        $isPlanningApproved = ($mr->planning_approval_status === 'approved' || !empty($mr->planning_approved_by));
+        $isPettyCashItem = ($mrItem->status === 'petty_cash') || 
+            ((in_array($mr->status, ['approved_for_petty_cash']) || $mr->purchase_method === 'petty_cash') && !in_array($mrItem->status, ['approved', 'rejected']));
+
+        if (!$isPlanningApproved || !$isPettyCashItem || in_array($mrItem->status, ['rejected'])) {
+            abort(403, 'Unauthorized: This material item has not been approved for Petty Cash purchase by the Planning Manager.');
+        }
+
+        // Verify not already purchased
+        if ($mrItem->status === 'purchased') {
+            return redirect()->route('store-keeper.petty-cash-purchases.index')
+                ->with('warning', "Material '{$mrItem->product?->name}' from Request #{$mr->reference_number} has already been purchased.");
+        }
+
+        // Storekeeper site authorization check: only own site allowed
+        if ($isStoreKeeper && $assignedStore) {
+            $matchesStore = ($mr->destination_store_id && $mr->destination_store_id == $assignedStore->id);
+            $matchesProject = ($mr->project_id && $assignedStore->project_id && $mr->project_id == $assignedStore->project_id);
+            if (!$matchesStore && !$matchesProject) {
+                abort(403, 'Unauthorized: You can only complete purchases for materials assigned to your site/store.');
+            }
+        }
+
+        $targetStore = $assignedStore ?? $mr->destinationStore ?? ($mr->project_id ? Store::where('project_id', $mr->project_id)->first() : null) ?? Store::first();
         $pettyCashAccount = $targetStore ? $this->resolveStoreSitePettyCash($targetStore, $user) : null;
 
+        $slipService = app(\App\Services\SlipSequenceService::class);
+        $nextReceivingSlip = $targetStore ? $slipService->getNextExpected((int)$targetStore->id, 'receive') : null;
+
         $replenishedPurchaseNos = PettyCashReplenishmentItem::pluck('reference')->filter()->toArray();
-
-        // Map every store to its dedicated separate Site Petty Cash account, keeper, and unreplenished expenses
-        $storesData = $stores->mapWithKeys(function ($st) use ($user, $replenishedPurchaseNos) {
-            $acc = $this->resolveStoreSitePettyCash($st, $user);
-            $keeper = $st->manager ?? $st->users()->first();
-            $phone = $keeper?->phone ?? $keeper?->employee?->phone ?? $keeper?->employee?->mobile_phone ?? '';
-            $unreplSpent = (float) PettyCashMaterialPurchase::where('store_id', $st->id)
-                ->where('chart_of_account_id', $acc->id)
-                ->whereNotIn('purchase_no', $replenishedPurchaseNos)
-                ->sum('total_amount');
-
-            return [$st->id => [
-                'store_id'            => $st->id,
-                'store_name'          => $st->name,
-                'store_code'          => $st->code,
-                'account_id'          => $acc->id,
-                'account_code'        => $acc->code,
-                'account_name'        => $acc->name,
-                'balance'             => (float) $acc->ledger_balance,
-                'keeper_id'           => $keeper?->id,
-                'keeper_name'         => $keeper?->name ?? 'Store Keeper',
-                'keeper_phone'        => $phone,
-                'unreplenished_total' => $unreplSpent,
-            ]];
-        });
-
-        // Unreplenished purchases for the target store
         $unreplenishedPurchases = $targetStore && $pettyCashAccount ? PettyCashMaterialPurchase::where('store_id', $targetStore->id)
             ->where('chart_of_account_id', $pettyCashAccount->id)
             ->whereNotIn('purchase_no', $replenishedPurchaseNos)
             ->latest('purchase_date')
             ->get() : collect();
-
         $unreplenishedTotal = (float) $unreplenishedPurchases->sum('total_amount');
 
-        // Check if there is already a pending or under_audit request
         $pendingReplenishment = $pettyCashAccount ? PettyCashReplenishment::where('chart_of_account_id', $pettyCashAccount->id)
             ->whereIn('status', [PettyCashReplenishment::STATUS_PENDING, PettyCashReplenishment::STATUS_UNDER_AUDIT])
             ->latest()
             ->first() : null;
 
-        // Source Bank and Cash accounts
+        $stores = Store::where('is_active', true)->orderBy('name')->get();
         $sourceAccounts = ChartOfAccount::where('is_active', true)
             ->where('code', '!=', '1010')
             ->where(function ($q) {
@@ -446,34 +521,30 @@ class PettyCashMaterialPurchaseController extends Controller
             })
             ->orderBy('name')
             ->get();
-
         $storeKeepers = User::where('is_active', true)->orderBy('name')->get();
 
-        $slipService = app(\App\Services\SlipSequenceService::class);
-        $nextReceivingSlip = $targetStore ? $slipService->getNextExpected((int)$targetStore->id, 'receive') : null;
-
         return view('store-keeper.petty-cash-purchases.create', compact(
+            'mrItem',
+            'mr',
             'assignedStore',
+            'targetStore',
             'isStoreKeeper',
             'stores',
-            'products',
             'pettyCashAccount',
-            'storesData',
-            'sourceAccounts',
-            'storeKeepers',
+            'nextReceivingSlip',
             'unreplenishedPurchases',
             'unreplenishedTotal',
             'pendingReplenishment',
-            'selectedMaterialRequest',
-            'prefilledItems',
-            'pendingEmergencyMrs',
-            'nextReceivingSlip'
+            'sourceAccounts',
+            'storeKeepers'
         ));
     }
 
     /**
      * Store Petty Cash Material Purchase
-     * Increments inventory on hand, creates Receive Slip (GRN), and records Petty Cash Journal Entry
+     * Validates Planning decision link, checks site petty cash balance, verifies unique receipt #,
+     * deducts petty cash, increments store stock on hand, generates Model 19 (GRN), marks item purchased,
+     * and logs audit entry.
      */
     public function store(Request $request)
     {
@@ -484,185 +555,190 @@ class PettyCashMaterialPurchaseController extends Controller
         $assignedStore = $this->resolveAssignedStore($user);
         $isStoreKeeper = $user && $user->hasRole('store_keeper') && !$user->hasAnyRole(['admin', 'global_admin', 'store_manager']);
 
-        // Force store_id for store keeper to assigned store if present
-        if ($isStoreKeeper && $assignedStore) {
-            $request->merge(['store_id' => $assignedStore->id]);
+        // 1. Enforce linked Planning Manager decision (Reject direct unapproved calls with HTTP 403)
+        $itemId = $request->input('material_request_item_id') ?: $request->input('item_id');
+        if (!$itemId) {
+            abort(403, 'Unauthorized: Petty cash purchases must be linked to an approved Planning Manager decision. Manual creation is prohibited.');
         }
 
+        $mrItem = \App\Models\MaterialRequestItem::with([
+            'materialRequest.project',
+            'materialRequest.destinationStore',
+            'materialRequest.planningApprover',
+            'product'
+        ])->findOrFail($itemId);
+
+        $mr = $mrItem->materialRequest;
+        if (!$mr) {
+            abort(403, 'Unauthorized: Invalid Material Request.');
+        }
+
+        // Verify Planning Manager / Coordinator decision
+        $isPlanningApproved = ($mr->planning_approval_status === 'approved' || !empty($mr->planning_approved_by));
+        $isPettyCashItem = ($mrItem->status === 'petty_cash') || 
+            ((in_array($mr->status, ['approved_for_petty_cash']) || $mr->purchase_method === 'petty_cash') && !in_array($mrItem->status, ['approved', 'rejected']));
+
+        if (!$isPlanningApproved || !$isPettyCashItem || in_array($mrItem->status, ['rejected'])) {
+            abort(403, 'Unauthorized: This material item has not been approved for Petty Cash purchase by the Planning Manager.');
+        }
+
+        // Verify not already purchased
+        if ($mrItem->status === 'purchased') {
+            return back()->withInput()->with('error', 'This material item has already been marked as purchased.');
+        }
+
+        // Storekeeper site authorization check: only own site allowed
+        if ($isStoreKeeper && $assignedStore) {
+            $matchesStore = ($mr->destination_store_id && $mr->destination_store_id == $assignedStore->id);
+            $matchesProject = ($mr->project_id && $assignedStore->project_id && $mr->project_id == $assignedStore->project_id);
+            if (!$matchesStore && !$matchesProject) {
+                abort(403, 'Unauthorized: You can only complete petty cash purchases for your assigned site/store.');
+            }
+        }
+
+        // 2. Validate input fields
         $validated = $request->validate([
-            'store_id'            => 'required|exists:stores,id',
-            'chart_of_account_id' => 'nullable|exists:chart_of_accounts,id',
-            'material_request_id' => 'nullable|exists:material_requests,id',
-            'purchase_date'       => 'required|date',
-            'supplier_name'       => 'required|string|max:255',
-            'supplier_tin'        => 'nullable|string|max:20',
-            'fs_no'               => 'nullable|string|max:20',
-            'receipt_no'             => 'required|string|max:100',
-            'notes'                  => 'nullable|string|max:1000',
-            'attachment'             => 'nullable|file|mimes:pdf,jpg,jpeg,png,webp|max:10240',
-            'is_physical_store_only' => 'nullable|boolean',
-            'items'                  => 'required|array|min:1',
-            'items.*.product_id'  => 'required|exists:products,id',
-            'items.*.quantity'    => 'required|numeric|min:0.001',
-            'items.*.unit_price'  => 'required|numeric|min:0',
-            'items.*.unit'        => 'nullable|string|max:30',
-            'items.*.remarks'     => 'nullable|string|max:255',
+            'material_request_item_id' => 'required|exists:material_request_items,id',
+            'total_amount'             => 'required|numeric|min:0.01',
+            'supplier_name'            => 'required|string|max:255',
+            'supplier_tin'             => 'nullable|string|max:20',
+            'fs_no'                    => 'nullable|string|max:20',
+            'receipt_no'               => 'required|string|max:100|unique:petty_cash_material_purchases,receipt_no',
+            'purchase_date'            => 'required|date',
+            'attachment'               => 'required|file|mimes:pdf,jpg,jpeg,png,webp|max:10240',
+            'slip_no'                  => 'nullable|string|max:100',
+            'notes'                    => 'nullable|string|max:1000',
+            'is_physical_store_only'   => 'nullable|boolean',
+        ], [
+            'receipt_no.unique'        => 'This Cash Receipt / FS number has already been recorded. Receipt number must be unique.',
+            'receipt_no.required'      => 'Receipt / FS number is required.',
+            'attachment.required'      => 'A photo or scan of the cash sales receipt is required.',
+            'total_amount.required'    => 'The amount of money spent (ETB) is required.',
+            'total_amount.min'         => 'The amount spent must be greater than zero.',
+            'supplier_name.required'   => 'The supplier / vendor name is required.',
+            'purchase_date.required'   => 'The purchase date is required.',
         ]);
 
-        $store = Store::findOrFail($validated['store_id']);
-
-        // Determine dedicated separate Site Petty Cash account (NEVER 1010)
+        // 3. Determine store & verify site petty cash balance
+        $store = $assignedStore ?? $mr->destinationStore ?? ($mr->project_id ? Store::where('project_id', $mr->project_id)->first() : null) ?? Store::firstOrFail();
         $pettyCashAccount = $this->resolveStoreSitePettyCash($store, $user);
-        $coaId = $pettyCashAccount->id;
+        $availableBalance = (float)($pettyCashAccount->current_balance ?? 0);
+        $totalAmount = (float)$validated['total_amount'];
 
-        // Handle attachment upload
-        $attachmentPath = null;
-        if ($request->hasFile('attachment')) {
-            $attachmentPath = FileUploadService::upload($request->file('attachment'), 'petty_cash_purchases');
+        if ($totalAmount > $availableBalance) {
+            return back()->withInput()->withErrors([
+                'total_amount' => "Purchase amount (ETB " . number_format($totalAmount, 2) . ") exceeds the available Site Petty Cash balance of ETB " . number_format($availableBalance, 2) . ". Please request fund replenishment first."
+            ])->with('error', "Purchase amount exceeds available Site Petty Cash balance (ETB " . number_format($availableBalance, 2) . ").");
         }
 
+        // 4. Handle attachment upload
+        $attachmentPath = FileUploadService::upload($request->file('attachment'), 'petty_cash_purchases');
         $isPhysicalStoreOnly = $request->boolean('is_physical_store_only');
 
         try {
-            $purchase = DB::transaction(function () use ($validated, $store, $pettyCashAccount, $attachmentPath, $user, $request, $isPhysicalStoreOnly) {
-            $today = date('Ymd');
-            $countToday = PettyCashMaterialPurchase::whereDate('created_at', now())->count() + 1;
-            $purchaseNo = 'PCMP-' . $today . '-' . str_pad($countToday, 4, '0', STR_PAD_LEFT);
+            $purchase = DB::transaction(function () use ($validated, $store, $pettyCashAccount, $attachmentPath, $user, $request, $isPhysicalStoreOnly, $mrItem, $mr, $totalAmount) {
+                $today = date('Ymd');
+                $countToday = PettyCashMaterialPurchase::whereDate('created_at', now())->count() + 1;
+                $purchaseNo = 'PCMP-' . $today . '-' . str_pad($countToday, 4, '0', STR_PAD_LEFT);
 
-            // Compute total amount
-            $totalAmount = 0;
-            foreach ($validated['items'] as $item) {
-                $totalAmount += (float)$item['quantity'] * (float)$item['unit_price'];
-            }
+                $quantity = (float)$mrItem->quantity;
+                $unitPrice = $quantity > 0 ? round($totalAmount / $quantity, 4) : $totalAmount;
+                $product = $mrItem->product;
+                $unit = $product?->unit_of_measure ?? $product?->unit ?? 'pcs';
 
-            // 1. Create Purchase Record
-            $purchase = PettyCashMaterialPurchase::create([
-                'purchase_no'            => $purchaseNo,
-                'store_id'               => $store->id,
-                'chart_of_account_id'    => $pettyCashAccount?->id,
-                'purchased_by'           => $user->id,
-                'purchase_date'          => $validated['purchase_date'],
-                'supplier_name'          => $validated['supplier_name'],
-                'supplier_tin'           => $validated['supplier_tin'] ?? null,
-                'fs_no'                  => $validated['fs_no'] ?? null,
-                'receipt_no'             => $validated['receipt_no'],
-                'total_amount'           => $totalAmount,
-                'notes'                  => $validated['notes'] ?? null,
-                'attachment_path'        => $attachmentPath,
-                'material_request_id'    => $validated['material_request_id'] ?? null,
-                'is_physical_store_only' => $isPhysicalStoreOnly,
-                'status'                 => 'completed',
-            ]);
-
-            // If this purchase fulfills an Emergency Material Request, mark MR as completed
-            if (!empty($validated['material_request_id'])) {
-                $mr = \App\Models\MaterialRequest::find($validated['material_request_id']);
-                if ($mr) {
-                    $mr->update([
-                        'status' => 'completed',
-                        'notes'  => ($mr->notes ? $mr->notes . "\n" : '') . "Fulfilled via Petty Cash Purchase #{$purchaseNo} (Slip/Receipt: {$validated['receipt_no']}) on " . date('Y-m-d') . " by {$user->name}.",
-                    ]);
-
-                    // Complete companion PRs if any
-                    $mr->loadMissing('purchaseRequests');
-                    foreach ($mr->purchaseRequests as $pr) {
-                        $pr->update(['status' => \App\Models\PurchaseRequest::STATUS_COMPLETED]);
-                        try {
-                            \App\Models\PrWorkflowLog::create([
-                                'purchase_request_id' => $pr->id,
-                                'from_stage'          => $pr->status,
-                                'to_stage'            => \App\Models\PurchaseRequest::STATUS_COMPLETED,
-                                'action'              => 'petty_cash_fulfilled',
-                                'actor_role'          => 'store_keeper',
-                                'actor_id'            => $user->id,
-                                'notes'               => "Emergency Request fulfilled via Petty Cash Purchase #{$purchaseNo} (Receipt/Slip: {$validated['receipt_no']}). Materials added to store stock.",
-                                'created_at'          => now(),
-                            ]);
-                        } catch (\Throwable $e) {}
-                    }
-                }
-            }
-
-            // 2. Create Dummy PO for DeliveryReceipt (required by schema)
-            $refNumber = 'PETTY-CASH-' . time();
-            $dummyPo = PurchaseOrder::firstOrCreate(
-                ['supplier_name' => $validated['supplier_name']],
-                [
-                    'reference_number' => $refNumber,
-                    'status'           => 'delivered',
-                    'total_amount'     => $totalAmount,
-                    'issued_date'      => $validated['purchase_date'],
-                    'created_by'       => $user->id,
-                ]
-            );
-
-            // 3. Strictly consume next slip from store's receiving sequence
-            $slipService = app(\App\Services\SlipSequenceService::class);
-            $slipResult = $slipService->consumeNext(
-                storeId: $store->id,
-                slipType: 'receive',
-                inputSlipNo: $request->input('slip_no') ?: null,
-                sourceType: 'petty_cash',
-                metadata: ['petty_cash_material_purchase_id' => $purchase->id]
-            );
-            $drNo = $slipResult['slip_no'];
-
-            // 4. Create Receive Slip (DeliveryReceipt)
-            $deliveryReceipt = DeliveryReceipt::create([
-                'dr_no'                  => $drNo,
-                'slip_no'                => $drNo,
-                'slip_type'              => 'receive',
-                'source_type'            => 'petty_cash',
-                'store_id'               => $store->id,
-                'received_date'          => $validated['purchase_date'],
-                'receipt_date'           => $validated['purchase_date'],
-                'supplier_name'          => $validated['supplier_name'],
-                'reference_no'           => $validated['receipt_no'],
-                'purchase_order_id'      => $dummyPo->id,
-                'received_by'            => $user->id,
-                'created_by'             => $user->id,
-                'status'                 => 'received',
-                'is_void'                => false,
-                'sequence_status'        => 'valid',
-                'notes'                  => "Petty Cash Purchase {$purchaseNo} - {$validated['supplier_name']}",
-                'slip_receipt_path'      => $attachmentPath,
-                'is_physical_store_only' => $isPhysicalStoreOnly,
-                'physical_slip_notes'    => $isPhysicalStoreOnly ? "Internal physical store slip (Excluded from VAT)" : null,
-            ]);
-
-            // 5. Process Items, Increment Inventory, and Create Movement
-            foreach ($validated['items'] as $itemData) {
-                $qty = (float) $itemData['quantity'];
-                $unitPrice = (float) $itemData['unit_price'];
-                $lineTotal = round($qty * $unitPrice, 2);
-
-                $product = Product::find($itemData['product_id']);
-                $unit = $itemData['unit'] ?? ($product?->unit_of_measure ?? $product?->unit ?? 'pcs');
-
-                // Record purchase item
-                $purchase->items()->create([
-                    'product_id'  => $itemData['product_id'],
-                    'quantity'    => $qty,
-                    'unit'        => $unit,
-                    'unit_price'  => $unitPrice,
-                    'total_price' => $lineTotal,
-                    'remarks'     => $itemData['remarks'] ?? null,
+                // 4a. Create PettyCashMaterialPurchase record
+                $purchase = PettyCashMaterialPurchase::create([
+                    'purchase_no'              => $purchaseNo,
+                    'store_id'                 => $store->id,
+                    'chart_of_account_id'      => $pettyCashAccount?->id,
+                    'purchased_by'             => $user->id,
+                    'purchase_date'            => $validated['purchase_date'],
+                    'supplier_name'            => $validated['supplier_name'],
+                    'supplier_tin'             => $validated['supplier_tin'] ?? null,
+                    'fs_no'                    => $validated['fs_no'] ?? null,
+                    'receipt_no'               => $validated['receipt_no'],
+                    'total_amount'             => $totalAmount,
+                    'notes'                    => $validated['notes'] ?? null,
+                    'attachment_path'          => $attachmentPath,
+                    'material_request_id'      => $mr->id,
+                    'material_request_item_id' => $mrItem->id,
+                    'decided_by'               => $mr->planning_approved_by,
+                    'decided_at'               => $mr->planning_approved_at,
+                    'is_physical_store_only'   => $isPhysicalStoreOnly,
+                    'status'                   => 'completed',
                 ]);
 
-                // Create DeliveryReceiptItem
+                // 4b. Create single PettyCashMaterialPurchaseItem matching MR line
+                $purchase->items()->create([
+                    'product_id'  => $mrItem->product_id,
+                    'quantity'    => $quantity,
+                    'unit'        => $unit,
+                    'unit_price'  => $unitPrice,
+                    'total_price' => $totalAmount,
+                    'remarks'     => $validated['notes'] ?? null,
+                ]);
+
+                // 4c. Create Dummy PO for DeliveryReceipt (required by schema)
+                $dummyPo = PurchaseOrder::firstOrCreate(
+                    ['supplier_name' => $validated['supplier_name']],
+                    [
+                        'reference_number' => 'PETTY-CASH-' . time(),
+                        'status'           => 'delivered',
+                        'total_amount'     => $totalAmount,
+                        'issued_date'      => $validated['purchase_date'],
+                        'created_by'       => $user->id,
+                    ]
+                );
+
+                // 4d. Consume next slip from store's receiving sequence (Model 19 GRN)
+                $slipService = app(\App\Services\SlipSequenceService::class);
+                $slipResult = $slipService->consumeNext(
+                    storeId: $store->id,
+                    slipType: 'receive',
+                    inputSlipNo: $request->input('slip_no') ?: null,
+                    sourceType: 'petty_cash',
+                    metadata: ['petty_cash_material_purchase_id' => $purchase->id]
+                );
+                $drNo = $slipResult['slip_no'];
+
+                // 4e. Create Receive Slip (DeliveryReceipt)
+                $deliveryReceipt = DeliveryReceipt::create([
+                    'dr_no'                  => $drNo,
+                    'slip_no'                => $drNo,
+                    'slip_type'              => 'receive',
+                    'source_type'            => 'petty_cash',
+                    'store_id'               => $store->id,
+                    'received_date'          => $validated['purchase_date'],
+                    'receipt_date'           => $validated['purchase_date'],
+                    'supplier_name'          => $validated['supplier_name'],
+                    'reference_no'           => $validated['receipt_no'],
+                    'purchase_order_id'      => $dummyPo->id,
+                    'received_by'            => $user->id,
+                    'created_by'             => $user->id,
+                    'status'                 => 'received',
+                    'is_void'                => false,
+                    'sequence_status'        => 'valid',
+                    'notes'                  => "Petty Cash Purchase {$purchaseNo} - {$validated['supplier_name']} for MR #{$mr->reference_number}",
+                    'slip_receipt_path'      => $attachmentPath,
+                    'is_physical_store_only' => $isPhysicalStoreOnly,
+                    'physical_slip_notes'    => $isPhysicalStoreOnly ? "Internal physical store slip (Excluded from VAT)" : null,
+                ]);
+
                 $deliveryReceipt->items()->create([
-                    'product_id'        => $itemData['product_id'],
-                    'quantity_received' => $qty,
-                    'accepted_quantity' => $qty,
+                    'product_id'        => $mrItem->product_id,
+                    'quantity_received' => $quantity,
+                    'accepted_quantity' => $quantity,
                     'rejected_quantity' => 0,
                     'unit'              => $unit,
                 ]);
 
-                // Update / Increment Store Inventory
+                $purchase->delivery_receipt_id = $deliveryReceipt->id;
+
+                // 4f. Increment Store Stock on Hand & Log Inventory Movement
                 $inventory = Inventory::firstOrCreate(
                     [
                         'store_id'   => $store->id,
-                        'product_id' => $itemData['product_id'],
+                        'product_id' => $mrItem->product_id,
                     ],
                     [
                         'quantity_on_hand'  => 0,
@@ -672,145 +748,169 @@ class PettyCashMaterialPurchaseController extends Controller
                     ]
                 );
 
-                $inventory->increment('quantity_on_hand', $qty);
+                $inventory->increment('quantity_on_hand', $quantity);
                 $inventory->update([
                     'last_movement_at' => now(),
                     'unit_cost'        => $unitPrice > 0 ? $unitPrice : $inventory->unit_cost,
                 ]);
 
-                // Log Inventory Movement
                 InventoryMovement::create([
                     'inventory_id'   => $inventory->id,
                     'type'           => 'purchase',
-                    'quantity'       => $qty,
+                    'quantity'       => $quantity,
                     'reference_type' => PettyCashMaterialPurchase::class,
                     'reference_id'   => $purchase->id,
                     'performed_by'   => $user->id,
-                    'remarks'        => "Petty Cash Buy ({$purchaseNo}): +{$qty} {$unit} from {$validated['supplier_name']} [Rcpt: {$validated['receipt_no']}]",
+                    'remarks'        => "Petty Cash Buy ({$purchaseNo}): +{$quantity} {$unit} {$product?->name} [Rcpt: {$validated['receipt_no']}]",
                 ]);
-            }
 
-            $purchase->delivery_receipt_id = $deliveryReceipt->id;
+                // 4g. Deduct Petty Cash Balance via Journal Entry
+                if ($pettyCashAccount && $totalAmount > 0) {
+                    $expenseAccount = ChartOfAccount::where('code', '5100')->first()
+                        ?? ChartOfAccount::where('code', '6901')->first()
+                        ?? ChartOfAccount::where('type', 'expense')->first();
 
-            // 6. Journal Entry (Balance derives strictly from posted lines)
-            if ($pettyCashAccount && $totalAmount > 0) {
-
-                // Find expense/inventory account (Cost of Material: 5100, or Supply Expense: 6901)
-                $expenseAccount = ChartOfAccount::where('code', '5100')->first()
-                    ?? ChartOfAccount::where('code', '6901')->first()
-                    ?? ChartOfAccount::where('type', 'expense')->first();
-
-                if ($expenseAccount) {
-                    $journalEngine = app(\App\Services\Finance\JournalEngine::class);
-                    $lines = [
-                        [
-                            'account_id'  => $expenseAccount->id,
-                            'description' => "Material purchase: {$validated['supplier_name']} (#{$purchaseNo})",
-                            'side'        => 'debit',
-                            'amount'      => $totalAmount,
-                        ],
-                        [
-                            'account_id'  => $pettyCashAccount->id,
-                            'description' => "Paid from Petty Cash [{$pettyCashAccount->code}] {$pettyCashAccount->name}",
-                            'side'        => 'credit',
-                            'amount'      => $totalAmount,
-                        ],
-                    ];
-
-                    $journalEntry = $journalEngine->createEntry(
-                        'petty_cash_material_purchase',
-                        $purchase->id,
-                        "Petty Cash Material Purchase #{$purchaseNo} - {$validated['supplier_name']} (Rcpt: {$validated['receipt_no']})",
-                        $lines,
-                        $user->id,
-                        $user->id,
-                        $validated['purchase_date']
-                    );
-
-                    $purchase->journal_entry_id = $journalEntry->id;
-                }
-            }
-
-            $purchase->save();
-
-            // Auto-link to central Receipt table for fiscal and tax declarations (skip if physical store only)
-            if (!$isPhysicalStoreOnly && ($attachmentPath || !empty($validated['fs_no']))) {
-                try {
-                    $ocrService = app(\App\Services\ReceiptOcrService::class);
-                    $ocrItems = [];
-                    foreach ($validated['items'] as $it) {
-                        $prod = Product::find($it['product_id']);
-                        $pName = $prod ? $prod->name : 'Material';
-                        $qty = (float)$it['quantity'];
-                        $price = (float)$it['unit_price'];
-                        $lineTot = round($qty * $price, 2);
-                        $ocrItems[] = [
-                            'item_description' => $pName . (!empty($it['remarks']) ? ' - ' . $it['remarks'] : ''),
-                            'uom'              => '9',
-                            'qty'              => $qty,
-                            'unit_price'       => $price,
-                            'total_value'      => $lineTot,
-                            'vat'              => round($lineTot * 0.15, 2),
-                            'value_after_vat'  => round($lineTot * 1.15, 2),
+                    if ($expenseAccount) {
+                        $journalEngine = app(\App\Services\Finance\JournalEngine::class);
+                        $lines = [
+                            [
+                                'account_id'  => $expenseAccount->id,
+                                'description' => "Material purchase: {$product?->name} ({$purchaseNo}) from {$validated['supplier_name']}",
+                                'side'        => 'debit',
+                                'amount'      => $totalAmount,
+                            ],
+                            [
+                                'account_id'  => $pettyCashAccount->id,
+                                'description' => "Paid from Petty Cash [{$pettyCashAccount->code}] {$pettyCashAccount->name}",
+                                'side'        => 'credit',
+                                'amount'      => $totalAmount,
+                            ],
                         ];
+
+                        $journalEntry = $journalEngine->createEntry(
+                            'petty_cash_material_purchase',
+                            $purchase->id,
+                            "Petty Cash Material Purchase #{$purchaseNo} - {$validated['supplier_name']} (Rcpt: {$validated['receipt_no']})",
+                            $lines,
+                            $user->id,
+                            $user->id,
+                            $validated['purchase_date']
+                        );
+
+                        $purchase->journal_entry_id = $journalEntry->id;
                     }
-
-                    $scanData = [
-                        'vendor_name'       => $validated['supplier_name'],
-                        'supplier_tin'      => $validated['supplier_tin'] ?? '',
-                        'tin_valid'         => !empty($validated['supplier_tin']) && strlen(trim($validated['supplier_tin'])) === 10,
-                        'buyer_tin'         => '0038480010',
-                        'fs_no'             => $validated['fs_no'] ?? $validated['receipt_no'],
-                        'fs_no_raw'         => $validated['fs_no'] ?? $validated['receipt_no'],
-                        'fs_no_valid'       => !empty($validated['fs_no']) && strlen(trim($validated['fs_no'])) === 8,
-                        'receipt_date_ymd'  => $validated['purchase_date'],
-                        'subtotal'          => $totalAmount,
-                        'vat_amount'        => round($totalAmount * 0.15, 2),
-                        'total_amount'      => round($totalAmount * 1.15, 2),
-                        'currency'          => 'ETB',
-                        'description'       => "Petty Cash Purchase: " . $purchaseNo,
-                        'engine'            => 'Receipt OCR / Form',
-                        'engine_slug'       => 'petty_cash',
-                        'confidence'        => 'high',
-                        'confidence_score'  => 95,
-                        'qc_notes'          => "Site Petty Cash receipt #{$purchaseNo}",
-                        'items'             => $ocrItems,
-                    ];
-
-                    $ocrService->saveReceipt(
-                        $scanData,
-                        $attachmentPath ?: 'receipts/manual_petty_cash.pdf',
-                        $purchase,
-                        $user->id,
-                        $store->project_id ?? null,
-                        'material'
-                    );
-                } catch (\Throwable $ocrEx) {
-                    \Illuminate\Support\Facades\Log::warning("Could not auto-create linked Receipt for Petty Cash Purchase #{$purchaseNo}: " . $ocrEx->getMessage());
                 }
-            } elseif ($isPhysicalStoreOnly && class_exists(\App\Models\ExpenseHubVatDecision::class)) {
-                // If flagged as store-only physical slip, mark ExpenseHubVatDecision as NO_VAT
-                try {
-                    \App\Models\ExpenseHubVatDecision::updateOrCreate(
-                        [
-                            'source_type' => 'petty_cash_purchase',
-                            'source_id'   => $purchase->id,
-                        ],
-                        [
-                            'vat_status'         => \App\Models\ExpenseHubVatDecision::STATUS_NO_VAT,
-                            'no_vat_reason_code' => 'physical_store_slip',
-                            'no_vat_reason_note' => 'Physical Store Slip (Site Internal Inventory Only - Excluded from VAT)',
-                            'decided_by'         => $user->id,
-                            'decided_at'         => now(),
-                        ]
-                    );
-                } catch (\Throwable $vatEx) {
-                    \Illuminate\Support\Facades\Log::warning("Could not sync ExpenseHubVatDecision for physical store slip #{$purchaseNo}: " . $vatEx->getMessage());
-                }
-            }
 
-            return $purchase;
-        });
+                $purchase->save();
+
+                // 4h. Mark request line as "Purchased"
+                $mrItem->update([
+                    'status'             => 'purchased',
+                    'quantity_fulfilled' => $quantity,
+                ]);
+
+                // Check if all lines of the MR are now purchased/fulfilled
+                $hasUnfinished = \App\Models\MaterialRequestItem::where('material_request_id', $mr->id)
+                    ->whereNotIn('status', ['purchased', 'rejected'])
+                    ->exists();
+
+                if (!$hasUnfinished) {
+                    $mr->update([
+                        'status' => 'completed',
+                        'notes'  => ($mr->notes ? $mr->notes . "\n" : '') . "All items fulfilled via Site Petty Cash (latest: Purchase #{$purchaseNo}) on " . date('Y-m-d') . " by {$user->name}.",
+                    ]);
+
+                    // Also complete companion PRs
+                    $mr->loadMissing('purchaseRequests');
+                    foreach ($mr->purchaseRequests as $pr) {
+                        $pr->update(['status' => \App\Models\PurchaseRequest::STATUS_COMPLETED]);
+                    }
+                }
+
+                // 4i. Audit Log: who decided, who purchased, when, and amount
+                $decider = $mr->planningApprover ?? User::find($mr->planning_approved_by);
+                $deciderName = $decider?->name ?? 'Planning Manager';
+                $decidedAtFormatted = optional($mr->planning_approved_at)->format('Y-m-d H:i') ?? 'N/A';
+
+                ActivityLog::log(
+                    'petty_cash_material_purchased',
+                    "Petty Cash Purchase #{$purchaseNo} of ETB " . number_format($totalAmount, 2) . " for Material Request #{$mr->reference_number} ({$product?->name}) completed by {$user->name}. Decision by {$deciderName} on {$decidedAtFormatted}.",
+                    'petty_cash',
+                    $purchase,
+                    [
+                        'purchase_no'              => $purchaseNo,
+                        'material_request_id'      => $mr->id,
+                        'material_request_ref'     => $mr->reference_number,
+                        'material_request_item_id' => $mrItem->id,
+                        'product_id'               => $mrItem->product_id,
+                        'product_name'             => $product?->name,
+                        'quantity'                 => $quantity,
+                        'unit'                     => $unit,
+                        'total_amount'             => $totalAmount,
+                        'receipt_no'               => $validated['receipt_no'],
+                        'supplier_name'            => $validated['supplier_name'],
+                        'decided_by_id'            => $mr->planning_approved_by,
+                        'decided_by_name'          => $deciderName,
+                        'decided_at'               => $mr->planning_approved_at?->toIso8601String(),
+                        'purchased_by_id'          => $user->id,
+                        'purchased_by_name'        => $user->name,
+                        'purchased_at'             => now()->toIso8601String(),
+                    ]
+                );
+
+                // Auto-link to central Receipt table for fiscal and tax declarations (skip if physical store only)
+                if (!$isPhysicalStoreOnly && ($attachmentPath || !empty($validated['fs_no']))) {
+                    try {
+                        $ocrService = app(\App\Services\ReceiptOcrService::class);
+                        $ocrItems = [
+                            [
+                                'item_description' => ($product?->name ?? 'Material') . (!empty($validated['notes']) ? ' - ' . $validated['notes'] : ''),
+                                'uom'              => '9',
+                                'qty'              => $quantity,
+                                'unit_price'       => $unitPrice,
+                                'total_value'      => $totalAmount,
+                                'vat'              => round($totalAmount * 0.15, 2),
+                                'value_after_vat'  => round($totalAmount * 1.15, 2),
+                            ]
+                        ];
+
+                        $scanData = [
+                            'vendor_name'       => $validated['supplier_name'],
+                            'supplier_tin'      => $validated['supplier_tin'] ?? '',
+                            'tin_valid'         => !empty($validated['supplier_tin']) && strlen(trim($validated['supplier_tin'])) === 10,
+                            'buyer_tin'         => '0038480010',
+                            'fs_no'             => $validated['fs_no'] ?? $validated['receipt_no'],
+                            'fs_no_raw'         => $validated['fs_no'] ?? $validated['receipt_no'],
+                            'fs_no_valid'       => !empty($validated['fs_no']) && strlen(trim($validated['fs_no'])) === 8,
+                            'receipt_date_ymd'  => $validated['purchase_date'],
+                            'subtotal'          => $totalAmount,
+                            'vat_amount'        => round($totalAmount * 0.15, 2),
+                            'total_amount'      => round($totalAmount * 1.15, 2),
+                            'currency'          => 'ETB',
+                            'description'       => "Petty Cash Purchase: " . $purchaseNo,
+                            'engine'            => 'Receipt OCR / Form',
+                            'engine_slug'       => 'petty_cash',
+                            'confidence'        => 'high',
+                            'confidence_score'  => 95,
+                            'qc_notes'          => "Site Petty Cash receipt #{$purchaseNo}",
+                            'items'             => $ocrItems,
+                        ];
+
+                        $ocrService->saveReceipt(
+                            $scanData,
+                            $attachmentPath ?: 'receipts/manual_petty_cash.pdf',
+                            $purchase,
+                            $user->id,
+                            $store->project_id ?? null,
+                            'material'
+                        );
+                    } catch (\Throwable $ocrEx) {
+                        \Illuminate\Support\Facades\Log::warning("Could not auto-create linked Receipt for Petty Cash Purchase #{$purchaseNo}: " . $ocrEx->getMessage());
+                    }
+                }
+
+                return $purchase;
+            });
         } catch (\App\Exceptions\SlipSequenceGapException $e) {
             return back()->withInput()->withErrors(['slip_no' => $e->getMessage()])
                 ->with('error', $e->getMessage())
@@ -828,13 +928,8 @@ class PettyCashMaterialPurchaseController extends Controller
             return back()->withInput()->with('error', 'Failed to record purchase: ' . $e->getMessage());
         }
 
-        $successMsg = "Material purchase #{$purchase->purchase_no} recorded successfully! Stock has been added to {$store->name} inventory, GRN slip generated, and Petty Cash ledger updated.";
-        if (!empty($validated['material_request_id'])) {
-            $successMsg .= " Linked Emergency Material Request has been marked as FULFILLED.";
-        }
-
         return redirect()->route('store-keeper.petty-cash-purchases.show', $purchase)
-            ->with('success', $successMsg);
+            ->with('success', "Material '{$mrItem->product?->name}' purchased successfully! Stock added to {$store->name}, Model 19 GRN slip generated, and Site Petty Cash updated.");
     }
 
     /**
@@ -844,7 +939,19 @@ class PettyCashMaterialPurchaseController extends Controller
     {
         self::ensureSchema();
 
-        $purchase->load(['store', 'purchaser', 'chartOfAccount', 'items.product', 'deliveryReceipt', 'journalEntry.lines.account']);
+        $purchase->load([
+            'store',
+            'purchaser',
+            'chartOfAccount',
+            'items.product',
+            'deliveryReceipt',
+            'journalEntry.lines.account',
+            'decider',
+            'materialRequestItem.product',
+            'materialRequest.project',
+            'materialRequest.destinationStore',
+            'materialRequest.planningApprover'
+        ]);
 
         return view('store-keeper.petty-cash-purchases.show', compact('purchase'));
     }

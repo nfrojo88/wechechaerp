@@ -25,9 +25,9 @@
             </p>
         </div>
         <div class="d-flex flex-wrap gap-2">
-            <a href="{{ route('store-keeper.petty-cash-purchases.create') }}" class="btn btn-primary btn-sm shadow-sm px-3 fw-bold text-white">
+            <button type="button" class="btn btn-primary btn-sm shadow-sm px-3 fw-bold text-white" data-bs-toggle="modal" data-bs-target="#askReplenishmentModal">
                 <i class="fa-solid fa-hand-holding-dollar me-1"></i> Ask for Replenishment (Audit)
-            </a>
+            </button>
             <a href="{{ route('finance.replenishments.index', ['tab' => 'under_audit']) }}" class="btn btn-outline-primary btn-sm shadow-sm px-2.5 fw-semibold" title="View company Petty Cash Replenishments & Audit Queue">
                 <i class="fa-solid fa-scale-balanced me-1"></i> Audit Hub
             </a>
@@ -41,9 +41,6 @@
                     <i class="fa-solid fa-boxes-stacked me-1"></i> View Stock
                 </a>
             @endif
-            <a href="{{ route('store-keeper.petty-cash-purchases.create') }}" class="btn btn-success btn-sm shadow-sm px-3 fw-bold">
-                <i class="fa-solid fa-plus-circle me-1"></i> Buy Material (Petty Cash)
-            </a>
         </div>
     </div>
 
@@ -104,86 +101,14 @@
                         <small class="text-muted" style="font-size:0.73rem;">
                             Fund: <strong>{{ $pettyCashAccount->name ?? 'Site Petty Cash' }}</strong> [{{ $pettyCashAccount->code ?? 'Site Fund' }}]
                         </small>
-                        <a href="{{ route('store-keeper.petty-cash-purchases.create') }}" class="btn btn-xs btn-outline-primary fw-bold">
+                        <button type="button" class="btn btn-xs btn-outline-primary fw-bold" data-bs-toggle="modal" data-bs-target="#askReplenishmentModal">
                             <i class="fa-solid fa-hand-holding-dollar me-1"></i>Ask Replenish
-                        </a>
+                        </button>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-
-    {{-- ── Emergency Material Requests Approved for Petty Cash Purchase ──────── --}}
-    @if(isset($pendingEmergencyMrs) && $pendingEmergencyMrs->isNotEmpty())
-    <div class="card border-0 shadow-sm rounded-3 mb-4 bg-white border-start border-4 border-danger">
-        <div class="card-header bg-danger bg-opacity-10 py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
-            <div class="d-flex align-items-center gap-2">
-                <span class="badge bg-danger text-white px-2.5 py-1.5"><i class="fa-solid fa-bolt me-1"></i>URGENT SITE DEMAND</span>
-                <h6 class="mb-0 fw-bold text-danger">
-                    Emergency Material Requests Waiting for Petty Cash Purchase ({{ $pendingEmergencyMrs->count() }})
-                </h6>
-            </div>
-            <small class="text-muted">Approved by Planning Manager to be bought immediately on spot using Site Petty Cash.</small>
-        </div>
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
-                    <thead class="table-light">
-                        <tr>
-                            <th class="ps-3">Request #</th>
-                            <th>Project / Site Store</th>
-                            <th>Materials Requested</th>
-                            <th>Requested By</th>
-                            <th>Approved Date</th>
-                            <th class="text-end pe-3">Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach($pendingEmergencyMrs as $emr)
-                        <tr>
-                            <td class="ps-3">
-                                <span class="fw-bold font-monospace text-primary">#{{ $emr->reference_number }}</span>
-                                <span class="badge bg-danger-subtle text-danger border ms-1" style="font-size:0.7rem;">Emergency</span>
-                            </td>
-                            <td>
-                                <div class="fw-semibold text-dark">{{ $emr->project->name ?? 'Site Project' }}</div>
-                                <small class="text-muted"><i class="fa-solid fa-warehouse me-1"></i>{{ $emr->store->name ?? 'Store' }}</small>
-                            </td>
-                            <td>
-                                <div class="d-flex flex-wrap gap-1" style="max-width: 360px;">
-                                    @foreach($emr->items as $itm)
-                                        <span class="badge bg-light text-dark border font-monospace py-1 px-2">
-                                            <i class="fa-solid fa-cube text-danger me-1"></i>{{ $itm->product->name ?? 'Material' }}:
-                                            <strong>{{ (float)$itm->quantity }} {{ $itm->product->unit ?? $itm->unit ?? 'pcs' }}</strong>
-                                        </span>
-                                    @endforeach
-                                </div>
-                            </td>
-                            <td>
-                                <div class="small fw-semibold text-dark">{{ $emr->requestedBy->name ?? $emr->creator->name ?? 'Site Engineer' }}</div>
-                                <small class="text-muted">{{ $emr->created_at->diffForHumans() }}</small>
-                            </td>
-                            <td>
-                                <span class="badge bg-success-subtle text-success border border-success-subtle">
-                                    <i class="fa-solid fa-check-circle me-1"></i>Planning Approved
-                                </span>
-                                <small class="text-muted d-block" style="font-size:0.75rem;">
-                                    {{ $emr->planning_approved_at ? $emr->planning_approved_at->format('M d, H:i') : $emr->updated_at->format('M d, H:i') }}
-                                </small>
-                            </td>
-                            <td class="text-end pe-3">
-                                <a href="{{ route('store-keeper.petty-cash-purchases.create', ['material_request_id' => $emr->id]) }}" class="btn btn-sm btn-success fw-bold shadow-sm px-3">
-                                    <i class="fa-solid fa-cart-shopping me-1"></i> Buy with Petty Cash
-                                </a>
-                            </td>
-                        </tr>
-                        @endforeach
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-    @endif
 
     {{-- ── Filters & Search ─────────────────────────────────────────────────── --}}
     <div class="card border-0 shadow-sm rounded-3 mb-4 bg-white">
@@ -224,16 +149,23 @@
         </div>
     </div>
 
-    {{-- ── Tab Navigation: Purchases vs Replacements ────────────────────────── --}}
+    {{-- ── Tab Navigation: Queue vs Purchases vs Replacements ────────────────── --}}
     @php
-        $activeTab = request('tab', 'purchases');
+        $activeTab = request('tab', ($pendingPettyCashItems->count() > 0 ? 'queue' : 'purchases'));
     @endphp
     <ul class="nav nav-pills mb-3 gap-2" id="pettyCashTabs" role="tablist">
         <li class="nav-item" role="presentation">
-            <a href="{{ route('store-keeper.petty-cash-purchases.index', array_merge(request()->except(['tab', 'rep_page']), ['tab' => 'purchases'])) }}" 
-               class="nav-link py-2 px-3 fw-semibold rounded-3 shadow-xs {{ $activeTab !== 'replacements' ? 'active bg-success text-white' : 'bg-white text-dark border' }}">
-                <i class="fa-solid fa-cart-flatbed me-1.5"></i> Material Purchases
-                <span class="badge {{ $activeTab !== 'replacements' ? 'bg-white text-success' : 'bg-light text-dark' }} ms-1.5">{{ number_format($totalPurchases) }}</span>
+            <a href="{{ route('store-keeper.petty-cash-purchases.index', array_merge(request()->except(['tab', 'page', 'rep_page']), ['tab' => 'queue'])) }}" 
+               class="nav-link py-2 px-3 fw-semibold rounded-3 shadow-xs {{ $activeTab === 'queue' ? 'active bg-danger text-white' : 'bg-white text-dark border' }}">
+                <i class="fa-solid fa-cart-shopping me-1.5"></i> Approved Materials Awaiting Purchase
+                <span class="badge {{ $activeTab === 'queue' ? 'bg-white text-danger' : 'bg-danger text-white' }} ms-1.5">{{ $pendingPettyCashItems->count() }}</span>
+            </a>
+        </li>
+        <li class="nav-item" role="presentation">
+            <a href="{{ route('store-keeper.petty-cash-purchases.index', array_merge(request()->except(['tab', 'page', 'rep_page']), ['tab' => 'purchases'])) }}" 
+               class="nav-link py-2 px-3 fw-semibold rounded-3 shadow-xs {{ $activeTab === 'purchases' ? 'active bg-success text-white' : 'bg-white text-dark border' }}">
+                <i class="fa-solid fa-cart-flatbed me-1.5"></i> Purchases History
+                <span class="badge {{ $activeTab === 'purchases' ? 'bg-white text-success' : 'bg-light text-dark' }} ms-1.5">{{ number_format($totalPurchases) }}</span>
             </a>
         </li>
         <li class="nav-item" role="presentation">
@@ -245,7 +177,100 @@
         </li>
     </ul>
 
-    @if($activeTab !== 'replacements')
+    @if($activeTab === 'queue')
+    {{-- ── Approved Materials Awaiting Purchase Table ───────────────────────── --}}
+    <div class="card border-0 shadow-sm rounded-3 mb-4 bg-white border-start border-4 border-danger">
+        <div class="card-header bg-danger bg-opacity-10 py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-danger text-white px-2.5 py-1.5"><i class="fa-solid fa-bolt me-1"></i>PLANNING APPROVED</span>
+                <h6 class="mb-0 fw-bold text-danger">
+                    Materials Approved for Petty Cash Purchase ({{ $pendingPettyCashItems->count() }})
+                </h6>
+            </div>
+            <small class="text-muted">Approved by Planning Manager / Coordinator to be bought directly using Site Petty Cash funds.</small>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-3">Material Name &amp; Code</th>
+                            <th>Quantity</th>
+                            <th>Unit</th>
+                            <th>Request #</th>
+                            <th>Project / Site</th>
+                            <th>Decision Date</th>
+                            <th>Approved By</th>
+                            <th class="text-end pe-3">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @forelse($pendingPettyCashItems as $item)
+                        <tr>
+                            <td class="ps-3">
+                                <div class="fw-bold text-dark">{{ $item->product->name ?? 'Material' }}</div>
+                                <span class="badge bg-light text-secondary font-monospace" style="font-size:0.72rem;">{{ $item->product->code ?? $item->product->sku ?? 'ITEM' }}</span>
+                                @if($item->notes)
+                                    <small class="text-muted d-block mt-0.5"><i class="fa-solid fa-comment-dots me-1"></i>{{ $item->notes }}</small>
+                                @endif
+                            </td>
+                            <td>
+                                <span class="badge bg-light text-dark border font-monospace fs-6 px-2.5 py-1">
+                                    {{ (float)$item->quantity }}
+                                </span>
+                            </td>
+                            <td>
+                                <span class="badge bg-secondary-subtle text-dark border">
+                                    {{ $item->product->unit_of_measure ?? $item->product->unit ?? 'pcs' }}
+                                </span>
+                            </td>
+                            <td>
+                                <span class="fw-bold font-monospace text-primary">#{{ $item->materialRequest->reference_number }}</span>
+                                @if($item->materialRequest->source)
+                                    <small class="text-muted d-block" style="font-size:0.7rem;">{{ $item->materialRequest->source }}</small>
+                                @endif
+                            </td>
+                            <td>
+                                <div class="fw-semibold text-dark">{{ $item->materialRequest->project->name ?? 'Site Project' }}</div>
+                                <small class="text-muted"><i class="fa-solid fa-warehouse me-1"></i>{{ $item->materialRequest->destinationStore->name ?? $assignedStore->name ?? 'Store' }}</small>
+                            </td>
+                            <td>
+                                <span class="text-dark small fw-semibold">
+                                    {{ optional($item->materialRequest->planning_approved_at)->format('M d, Y H:i') ?? $item->updated_at->format('M d, Y H:i') }}
+                                </span>
+                                <small class="text-muted d-block" style="font-size:0.7rem;">
+                                    {{ optional($item->materialRequest->planning_approved_at ?? $item->updated_at)->diffForHumans() }}
+                                </small>
+                            </td>
+                            <td>
+                                <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1">
+                                    <i class="fa-solid fa-user-check me-1"></i>{{ $item->materialRequest->planningApprover->name ?? 'Planning Manager' }}
+                                </span>
+                            </td>
+                            <td class="text-end pe-3">
+                                <a href="{{ route('store-keeper.petty-cash-purchases.create', ['material_request_item_id' => $item->id]) }}" class="btn btn-sm btn-success fw-bold shadow-sm px-3 text-nowrap">
+                                    <i class="fa-solid fa-cart-shopping me-1"></i> Complete Purchase
+                                </a>
+                            </td>
+                        </tr>
+                        @empty
+                        <tr>
+                            <td colspan="8" class="text-center py-5 text-muted">
+                                <i class="fa-solid fa-circle-check fa-3x mb-3 text-success opacity-50 d-block"></i>
+                                <h6 class="fw-bold text-dark">No Materials Waiting for Petty Cash Purchase</h6>
+                                <p class="small text-muted mb-0">
+                                    When the Planning Manager or Coordinator reviews Site Material Requests and chooses "Buy with Petty Cash",
+                                    the approved material lines will automatically appear here for immediate spot purchase.
+                                </p>
+                            </td>
+                        </tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    @elseif($activeTab === 'purchases')
     {{-- ── Purchases Table ─────────────────────────────────────────────────── --}}
     <div class="card border-0 shadow-sm rounded-3 mb-4">
         <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
@@ -332,10 +357,7 @@
                         <td colspan="9" class="text-center py-5 text-muted">
                             <i class="fa-solid fa-cart-flatbed fa-3x mb-3 text-secondary opacity-25 d-block"></i>
                             <h6 class="fw-bold">No Petty Cash Material Purchases Recorded</h6>
-                            <p class="small text-muted mb-3">You can buy small site materials directly using Petty Cash and have them added immediately to store inventory.</p>
-                            <a href="{{ route('store-keeper.petty-cash-purchases.create') }}" class="btn btn-success btn-sm">
-                                <i class="fa-solid fa-plus-circle me-1"></i> Record First Petty Cash Buy
-                            </a>
+                            <p class="small text-muted mb-0">Materials approved by the Planning Manager with "Buy with Petty Cash" will automatically appear in your queue for purchase.</p>
                         </td>
                     </tr>
                     @endforelse
@@ -598,6 +620,147 @@
                     <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
                     <button type="submit" class="btn btn-success btn-sm fw-bold px-4">
                         <i class="fa-solid fa-paper-plane me-1"></i> Confirm &amp; Send Replacement
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{{-- ── Modal: Ask for Replenishment (Send to Internal Audit) ─────────────────── --}}
+<div class="modal fade" id="askReplenishmentModal" tabindex="-1" aria-labelledby="askReplenishmentModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+            <form action="{{ route('store-keeper.petty-cash-purchases.request-replacement') }}" method="POST" enctype="multipart/form-data" id="askReplenishmentForm">
+                @csrf
+                <div class="modal-header py-3 text-white" style="background: linear-gradient(135deg, #1e3a8a, #2563eb);">
+                    <div>
+                        <h5 class="modal-title fw-bold mb-0" id="askReplenishmentModalLabel">
+                            <i class="fa-solid fa-hand-holding-dollar me-2"></i>Ask for Replenishment (Send to Audit)
+                        </h5>
+                        <small class="text-white-50" style="font-size:0.75rem;">
+                            Route spot purchase vouchers directly to Internal Audit for clearance &amp; fund replenishment
+                        </small>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+
+                    {{-- Store & Account Summary Ribbon --}}
+                    <div class="p-3 rounded-3 bg-light border mb-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+                        <div>
+                            <small class="text-muted text-uppercase fw-bold d-block" style="font-size:0.68rem;">Destination Store &amp; Site Fund</small>
+                            <span class="badge bg-primary px-2 py-1 me-2 font-monospace">
+                                {{ $assignedStore->name ?? ($stores->first()->name ?? 'Site Store') }}
+                            </span>
+                            <strong class="text-dark small">
+                                {{ $pettyCashAccount->name ?? 'Site Petty Cash' }} [{{ $pettyCashAccount->code ?? 'N/A' }}]
+                            </strong>
+                        </div>
+                        <div>
+                            <span class="badge bg-warning text-dark font-monospace px-2.5 py-1.5">
+                                Current Balance: ETB {{ number_format($pettyCashAccount->current_balance ?? 0, 2) }}
+                            </span>
+                        </div>
+                    </div>
+
+                    {{-- Active Pending / Under-Audit Alert --}}
+                    @if(isset($pendingReplenishment) && $pendingReplenishment)
+                    <div class="alert alert-info border-0 shadow-xs rounded-3 p-2.5 mb-3 d-flex align-items-center gap-2" role="alert">
+                        <i class="fa-solid fa-clock-rotate-left fa-lg text-info"></i>
+                        <small class="text-dark">
+                            <strong>Active Request In Progress:</strong> Replenishment <strong>#{{ $pendingReplenishment->request_no }}</strong> (ETB {{ number_format($pendingReplenishment->requested_amount, 2) }}) is currently 
+                            <span class="badge bg-primary text-uppercase">{{ str_replace('_', ' ', $pendingReplenishment->status) }}</span>. 
+                            <a href="{{ route('finance.replenishments.index', ['tab' => 'under_audit']) }}" target="_blank" class="fw-bold text-decoration-underline ms-1">View in Audit Hub &rarr;</a>
+                        </small>
+                    </div>
+                    @endif
+
+                    {{-- Unreplenished Purchases List / Breakdown --}}
+                    <div class="card border rounded-3 mb-3 bg-light bg-opacity-50">
+                        <div class="card-header bg-white py-2 px-3 d-flex justify-content-between align-items-center border-bottom">
+                            <span class="small fw-bold text-dark">
+                                <i class="fa-solid fa-receipt text-primary me-1"></i> Spot Purchases to Replenish ({{ isset($unreplenishedPurchases) ? $unreplenishedPurchases->count() : 0 }})
+                            </span>
+                            <strong class="text-danger font-monospace small">
+                                Total Spent: ETB {{ number_format($unreplenishedTotal ?? 0, 2) }}
+                            </strong>
+                        </div>
+                        <div class="card-body p-0">
+                            @if(isset($unreplenishedPurchases) && $unreplenishedPurchases->count() > 0)
+                            <div class="table-responsive" style="max-height: 150px; overflow-y: auto;">
+                                <table class="table table-sm table-hover mb-0 align-middle" style="font-size: 0.78rem;">
+                                    <thead class="table-light sticky-top">
+                                        <tr>
+                                            <th class="ps-3">Purchase #</th>
+                                            <th>Date</th>
+                                            <th>Supplier</th>
+                                            <th>Receipt #</th>
+                                            <th class="text-end pe-3">Amount (ETB)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach($unreplenishedPurchases as $p)
+                                        <tr>
+                                            <td class="ps-3 font-monospace fw-bold text-primary">{{ $p->purchase_no }}</td>
+                                            <td>{{ \Carbon\Carbon::parse($p->purchase_date)->format('M d, Y') }}</td>
+                                            <td>{{ $p->supplier_name }}</td>
+                                            <td class="font-monospace text-muted">{{ $p->receipt_no }}</td>
+                                            <td class="text-end pe-3 font-monospace fw-bold text-dark">{{ number_format($p->total_amount, 2) }}</td>
+                                        </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                            </div>
+                            @else
+                            <div class="p-3 text-center text-muted small">
+                                <i class="fa-solid fa-circle-check text-success me-1"></i>All previous purchases have been audited &amp; replenished.
+                            </div>
+                            @endif
+                        </div>
+                    </div>
+
+                    {{-- Form Fields --}}
+                    <input type="hidden" name="store_id" value="{{ $assignedStore->id ?? ($stores->first()->id ?? '') }}">
+
+                    <div class="row g-3">
+                        <div class="col-md-7">
+                            <label class="form-label fw-semibold small text-dark">
+                                Requested Replenishment Amount (ETB) <span class="text-danger">*</span>
+                            </label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text fw-bold">ETB</span>
+                                <input type="number" step="0.01" min="1" name="requested_amount" class="form-control font-monospace fw-bold fs-6" 
+                                       value="{{ ($unreplenishedTotal ?? 0) > 0 ? number_format($unreplenishedTotal, 2, '.', '') : '' }}" 
+                                       placeholder="0.00" required>
+                            </div>
+                        </div>
+
+                        <div class="col-md-5">
+                            <label class="form-label fw-semibold small text-dark">Urgency Level</label>
+                            <select name="urgency" class="form-select form-select-sm">
+                                <option value="Normal">Normal</option>
+                                <option value="Urgent" selected>Urgent (Low Site Fund)</option>
+                                <option value="Critical">Critical (Zero Fund)</option>
+                            </select>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label fw-semibold small text-dark">Notes / Explanation for Internal Audit</label>
+                            <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="Explain the site situation or urgency...">Replenishment request for verified spot material purchases on site</textarea>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label fw-semibold small text-dark">Supporting Audit Summary / Document (Optional)</label>
+                            <input type="file" name="attachment" class="form-control form-control-sm" accept=".pdf,.jpg,.jpeg,.png,.webp">
+                        </div>
+                    </div>
+
+                </div>
+                <div class="modal-footer bg-light py-2">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm fw-bold px-4">
+                        <i class="fa-solid fa-paper-plane me-1"></i> Submit to Internal Audit
                     </button>
                 </div>
             </form>

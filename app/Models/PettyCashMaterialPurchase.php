@@ -17,6 +17,8 @@ class PettyCashMaterialPurchase extends Model
         'store_id',
         'chart_of_account_id',
         'purchased_by',
+        'decided_by',
+        'decided_at',
         'purchase_date',
         'supplier_name',
         'supplier_tin',
@@ -28,12 +30,14 @@ class PettyCashMaterialPurchase extends Model
         'delivery_receipt_id',
         'journal_entry_id',
         'material_request_id',
+        'material_request_item_id',
         'is_physical_store_only',
         'status',
     ];
 
     protected $casts = [
         'purchase_date'          => 'date',
+        'decided_at'             => 'datetime',
         'total_amount'           => 'decimal:2',
         'is_physical_store_only' => 'boolean',
     ];
@@ -53,6 +57,11 @@ class PettyCashMaterialPurchase extends Model
         return $this->belongsTo(User::class, 'purchased_by');
     }
 
+    public function decider()
+    {
+        return $this->belongsTo(User::class, 'decided_by');
+    }
+
     public function deliveryReceipt()
     {
         return $this->belongsTo(DeliveryReceipt::class);
@@ -66,6 +75,11 @@ class PettyCashMaterialPurchase extends Model
     public function materialRequest()
     {
         return $this->belongsTo(MaterialRequest::class, 'material_request_id');
+    }
+
+    public function materialRequestItem()
+    {
+        return $this->belongsTo(MaterialRequestItem::class, 'material_request_item_id');
     }
 
     public function items()

@@ -1,5 +1,5 @@
 @extends('layouts.app')
-@section('title', 'Buy Material with Petty Cash - Store Keeper')
+@section('title', 'Complete Material Purchase (Petty Cash) - Store Keeper')
 
 @section('content')
 @push('styles')
@@ -8,23 +8,24 @@
 
 <div class="container-fluid">
 
-    {{-- ── Header ────────────────────────────────────────────────────────────── --}}
+    {{-- ── Top Navigation & Header ────────────────────────────────────────────── --}}
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
         <div class="d-flex align-items-center gap-3">
-            <a href="{{ route('store-keeper.petty-cash-purchases.index') }}" class="btn btn-outline-secondary btn-sm shadow-sm">
+            <a href="{{ route('store-keeper.petty-cash-purchases.index') }}" class="btn btn-outline-secondary btn-sm shadow-sm" title="Back to Petty Cash Purchases">
                 <i class="fa-solid fa-arrow-left"></i>
             </a>
             <div>
                 <div class="d-flex align-items-center gap-2 mb-1">
                     <h3 class="fw-bold text-dark mb-0">
-                        <i class="fa-solid fa-cart-shopping text-success me-2"></i>Buy Material (Petty Cash)
+                        <i class="fa-solid fa-cart-shopping text-success me-2"></i>Complete Material Purchase
                     </h3>
                     <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-2 py-1">
-                        Immediate Stock Inflow
+                        <i class="fa-solid fa-lock me-1"></i>Planning Approved
                     </span>
                 </div>
                 <p class="text-muted small mb-0">
-                    Purchase urgent site materials using spot Petty Cash and have them added directly into store inventory on hand.
+                    Record spot purchase details for approved material from Request 
+                    <strong class="font-monospace text-primary">#{{ $mr->reference_number }}</strong>.
                 </p>
             </div>
         </div>
@@ -33,7 +34,7 @@
                 <div class="d-flex align-items-center gap-2">
                     <i class="fa-solid fa-wallet text-warning fa-lg"></i>
                     <div>
-                        <small class="text-muted text-uppercase fw-bold d-block" style="font-size:0.68rem;">Available Petty Cash</small>
+                        <small class="text-muted text-uppercase fw-bold d-block" style="font-size:0.68rem;">Available Site Petty Cash</small>
                         <strong class="text-dark font-monospace" id="currentPettyCashDisplay">
                             ETB {{ number_format($pettyCashAccount->current_balance ?? 0, 2) }}
                         </strong>
@@ -41,7 +42,7 @@
                 </div>
             </div>
             <button type="button" class="btn btn-primary btn-sm fw-bold shadow-sm px-3 py-2 text-white" data-bs-toggle="modal" data-bs-target="#askReplenishmentModal" title="Ask for replacement money & submit directly to Internal Audit">
-                <i class="fa-solid fa-hand-holding-dollar me-1"></i> Ask for Replenishment (Send to Audit)
+                <i class="fa-solid fa-hand-holding-dollar me-1"></i> Ask for Replenishment (Audit)
             </button>
             @canany(['admin', 'global_admin', 'finance_head', 'finance_officer', 'store_manager'])
             <button type="button" class="btn btn-outline-warning btn-sm fw-bold shadow-sm px-2.5 py-2 text-dark" data-bs-toggle="modal" data-bs-target="#sendReplacementModal" title="Direct spot disbursement voucher (Admin / Finance override)">
@@ -86,159 +87,228 @@
     </div>
     @endif
 
-    {{-- Emergency Material Request Pre-fill Alert Banner --}}
-    @if(isset($selectedMaterialRequest))
-        <div class="card border-0 shadow-sm rounded-3 mb-4 bg-white border-start border-4 border-danger">
-            <div class="card-body p-3 d-flex flex-wrap justify-content-between align-items-center gap-3">
-                <div class="d-flex align-items-center gap-3">
-                    <div class="rounded-circle bg-danger bg-opacity-10 p-2 text-danger d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;">
-                        <i class="fa-solid fa-bolt fa-xl text-danger"></i>
-                    </div>
-                    <div>
-                        <div class="d-flex align-items-center gap-2">
-                            <h6 class="mb-0 fw-bold text-dark">
-                                Fulfilling Emergency Material Request:
-                                <span class="text-primary font-monospace">#{{ $selectedMaterialRequest->reference_number }}</span>
-                            </h6>
-                            <span class="badge bg-danger">Emergency Site Demand</span>
-                        </div>
-                        <p class="mb-0 text-muted small mt-0.5">
-                            Project: <strong>{{ $selectedMaterialRequest->project->name ?? 'Site' }}</strong> &bull;
-                            Requested by: <strong>{{ $selectedMaterialRequest->requestedBy->name ?? 'Site Engineer' }}</strong> &bull;
-                            Approved for Site Petty Cash by: <strong>{{ $selectedMaterialRequest->planningApprover->name ?? 'Planning Manager' }}</strong>
-                        </p>
-                    </div>
-                </div>
-                <div class="d-flex align-items-center gap-2">
-                    <span class="badge bg-warning text-dark px-3 py-2 fw-bold">
-                        <i class="fa-solid fa-pencil me-1"></i>Enter Money &amp; Slip No below then buy it
-                    </span>
-                    <a href="{{ route('store-keeper.petty-cash-purchases.create') }}" class="btn btn-sm btn-outline-secondary" title="Clear pre-fill and create manual purchase">
-                        Clear Pre-fill
-                    </a>
-                </div>
-            </div>
-        </div>
-    @elseif(isset($pendingEmergencyMrs) && $pendingEmergencyMrs->isNotEmpty())
-        <div class="alert alert-warning border-0 shadow-sm rounded-3 mb-4 d-flex align-items-center justify-content-between flex-wrap gap-2">
+    {{-- ── Approved Material Specification Card (STRICTLY READ-ONLY) ───────────── --}}
+    <div class="card border-0 shadow-sm rounded-3 mb-4 bg-white border-start border-4 border-success">
+        <div class="card-header bg-success bg-opacity-10 py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
             <div class="d-flex align-items-center gap-2">
-                <i class="fa-solid fa-bolt text-danger fa-lg"></i>
-                <div>
-                    <strong class="text-dark">{{ $pendingEmergencyMrs->count() }} Emergency Material Request(s) approved for Site Petty Cash purchase.</strong>
-                    <div class="small text-muted">Auto-populate materials so you don't have to enter them manually:</div>
+                <span class="badge bg-success text-white px-2.5 py-1.5"><i class="fa-solid fa-lock me-1"></i>READ-ONLY SPECIFICATION</span>
+                <h6 class="mb-0 fw-bold text-success">
+                    Planning Manager Approved Material Line
+                </h6>
+            </div>
+            <span class="badge bg-light text-dark border">
+                Decision: <strong class="text-success ms-1">Buy with Petty Cash</strong>
+            </span>
+        </div>
+        <div class="card-body p-3 p-md-4">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label text-muted text-uppercase fw-bold small" style="font-size:0.7rem;">Material / Item Name</label>
+                    <div class="p-2.5 rounded bg-light border">
+                        <strong class="text-dark fs-6 d-block">{{ $mrItem->product->name ?? 'Material Item' }}</strong>
+                        <span class="badge bg-secondary font-monospace" style="font-size:0.75rem;">
+                            {{ $mrItem->product->code ?? $mrItem->product->sku ?? 'CODE' }}
+                        </span>
+                        @if($mrItem->product->category)
+                            <span class="badge bg-light text-muted border ms-1">{{ $mrItem->product->category }}</span>
+                        @endif
+                    </div>
+                </div>
+
+                <div class="col-md-2 col-6">
+                    <label class="form-label text-muted text-uppercase fw-bold small" style="font-size:0.7rem;">Quantity</label>
+                    <div class="p-2.5 rounded bg-light border text-center">
+                        <span class="fs-5 fw-bold font-monospace text-dark">{{ (float)$mrItem->quantity }}</span>
+                    </div>
+                </div>
+
+                <div class="col-md-2 col-6">
+                    <label class="form-label text-muted text-uppercase fw-bold small" style="font-size:0.7rem;">Unit</label>
+                    <div class="p-2.5 rounded bg-light border text-center">
+                        <span class="fs-6 fw-bold text-dark">{{ $mrItem->product->unit_of_measure ?? $mrItem->product->unit ?? 'pcs' }}</span>
+                    </div>
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label text-muted text-uppercase fw-bold small" style="font-size:0.7rem;">Request &amp; Project</label>
+                    <div class="p-2.5 rounded bg-light border">
+                        <div class="fw-bold font-monospace text-primary">#{{ $mr->reference_number }}</div>
+                        <small class="text-muted d-block">
+                            Project: <strong>{{ $mr->project->name ?? 'Site Project' }}</strong> &bull; Store: <strong>{{ $targetStore->name }}</strong>
+                        </small>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label text-muted text-uppercase fw-bold small" style="font-size:0.7rem;">Planning Decision Audit</label>
+                    <div class="p-2 rounded bg-light border small">
+                        <i class="fa-solid fa-user-check text-success me-1"></i>
+                        Approved by: <strong>{{ $mr->planningApprover->name ?? 'Planning Manager' }}</strong>
+                        on <strong>{{ optional($mr->planning_approved_at)->format('d M, Y (H:i)') ?? 'Approved' }}</strong>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label text-muted text-uppercase fw-bold small" style="font-size:0.7rem;">Requester &amp; Notes</label>
+                    <div class="p-2 rounded bg-light border small">
+                        <i class="fa-solid fa-clipboard-question text-primary me-1"></i>
+                        Requested by: <strong>{{ $mr->requestedBy->name ?? $mr->creator->name ?? 'Site Team' }}</strong>
+                        @if($mrItem->notes)
+                            &mdash; <em>"{{ $mrItem->notes }}"</em>
+                        @endif
+                    </div>
                 </div>
             </div>
-            <div class="dropdown">
-                <button class="btn btn-sm btn-warning dropdown-toggle fw-bold text-dark shadow-xs" type="button" data-bs-toggle="dropdown">
-                    <i class="fa-solid fa-bolt me-1 text-danger"></i> Select Emergency Request to Fulfill
-                </button>
-                <ul class="dropdown-menu dropdown-menu-end shadow-sm">
-                    @foreach($pendingEmergencyMrs as $pemr)
-                    <li>
-                        <a class="dropdown-item py-2" href="{{ route('store-keeper.petty-cash-purchases.create', ['material_request_id' => $pemr->id]) }}">
-                            <div class="fw-bold font-monospace text-primary">#{{ $pemr->reference_number }}</div>
-                            <small class="text-muted d-block">{{ $pemr->project->name }} &bull; {{ $pemr->items->count() }} items</small>
-                        </a>
-                    </li>
-                    @endforeach
-                </ul>
-            </div>
         </div>
-    @endif
+    </div>
 
-    {{-- ── Main Purchase Form ────────────────────────────────────────────────── --}}
+    {{-- ── Main Form: Storekeeper Fill-Only Purchase Details ──────────────────── --}}
     <form action="{{ route('store-keeper.petty-cash-purchases.store') }}" method="POST" enctype="multipart/form-data" id="pettyCashPurchaseForm">
         @csrf
-        @if(isset($selectedMaterialRequest))
-            <input type="hidden" name="material_request_id" value="{{ $selectedMaterialRequest->id }}">
-        @endif
+        <input type="hidden" name="material_request_item_id" value="{{ $mrItem->id }}">
+        <input type="hidden" name="store_id" value="{{ $targetStore->id }}">
+        <input type="hidden" name="chart_of_account_id" id="pettyCashAccountIdInput" value="{{ $pettyCashAccount->id ?? '' }}">
 
         <div class="row g-4 mb-4">
 
-            {{-- Left Column: Store & Receipt Details --}}
-            <div class="col-lg-4">
-                <div class="card border-0 shadow-sm rounded-3 h-100 bg-white">
+            {{-- Left Column: Expenditure & Vendor Receipt --}}
+            <div class="col-lg-6">
+                <div class="card border-0 shadow-sm rounded-3 bg-white h-100">
                     <div class="card-header bg-white border-bottom py-3">
                         <h6 class="mb-0 fw-bold text-dark">
-                            <i class="fa-solid fa-file-invoice-dollar text-primary me-2"></i>Purchase &amp; Receipt Details
+                            <i class="fa-solid fa-receipt text-primary me-2"></i>Purchase Money &amp; Vendor Receipt
                         </h6>
                     </div>
                     <div class="card-body p-3 p-md-4">
 
-                        {{-- Store Selection --}}
+                        {{-- Money Spent (ETB) --}}
                         <div class="mb-3">
-                            <label class="form-label fw-semibold text-dark small">
-                                Destination Store <span class="text-danger">*</span>
+                            <label class="form-label fw-semibold text-dark small d-flex justify-content-between align-items-center">
+                                <span>Amount Spent from Petty Cash (ETB) <span class="text-danger">*</span></span>
+                                <span class="badge bg-warning text-dark font-monospace" id="formPettyCashBalanceBadge">
+                                    Available: ETB {{ number_format($pettyCashAccount->current_balance ?? 0, 2) }}
+                                </span>
                             </label>
-                            @if($isStoreKeeper && $assignedStore)
-                                <div class="p-2 rounded bg-light border d-flex align-items-center justify-content-between">
-                                    <div class="d-flex align-items-center gap-2">
-                                        <i class="fa-solid fa-warehouse text-primary"></i>
-                                        <div>
-                                            <strong class="d-block small text-dark">{{ $assignedStore->name }}</strong>
-                                            <small class="text-muted font-monospace">{{ $assignedStore->code ?? 'STORE' }}</small>
-                                        </div>
-                                    </div>
-                                    <span class="badge bg-success small">Assigned</span>
-                                </div>
-                                <input type="hidden" name="store_id" value="{{ $assignedStore->id }}">
-                            @else
-                                <select name="store_id" id="storeSelect" class="form-select form-select-sm" required>
-                                    <option value="">-- Select Store --</option>
-                                    @foreach($stores as $st)
-                                        <option value="{{ $st->id }}" {{ (old('store_id', $assignedStore->id ?? null) == $st->id) ? 'selected' : '' }}>
-                                            {{ $st->name }} ({{ $st->code ?? 'N/A' }})
-                                        </option>
-                                    @endforeach
-                                </select>
-                            @endif
-                            <small class="text-muted d-block mt-1" style="font-size:0.75rem;">Materials will be added to this store's stock.</small>
+                            <div class="input-group input-group-lg">
+                                <span class="input-group-text fw-bold text-success">ETB</span>
+                                <input type="number" step="0.01" min="0.01" name="total_amount" id="pettyTotalAmount" 
+                                       class="form-control font-monospace fw-bold fs-4 text-dark @error('total_amount') is-invalid @enderror" 
+                                       placeholder="0.00" value="{{ old('total_amount') }}" required autofocus>
+                            </div>
+                            <small class="text-muted d-block mt-1" style="font-size:0.75rem;">
+                                Enter the exact money spent for this purchase. Amount cannot exceed available site petty cash balance.
+                            </small>
+                            <div class="alert alert-danger py-2 px-3 small border-0 mt-2 d-none" id="insufficientBalanceAlert">
+                                <i class="fa-solid fa-triangle-exclamation me-1"></i>
+                                <strong>Warning:</strong> The entered amount exceeds your available site petty cash balance (ETB {{ number_format($pettyCashAccount->current_balance ?? 0, 2) }}).
+                            </div>
+                            @error('total_amount')
+                                <div class="text-danger small mt-1"><i class="fa-solid fa-circle-exclamation me-1"></i>{{ $message }}</div>
+                            @enderror
                         </div>
 
-                        {{-- Dedicated Site Petty Cash Account --}}
+                        {{-- Supplier / Merchant Name --}}
                         <div class="mb-3">
                             <label class="form-label fw-semibold text-dark small">
-                                Paying Petty Cash Account <span class="text-danger">*</span>
+                                Supplier / Merchant / Shop Name <span class="text-danger">*</span>
                             </label>
-                            <div class="p-2 rounded bg-light border d-flex align-items-center justify-content-between" id="pettyCashAccountCard">
-                                <div class="d-flex align-items-center gap-2">
-                                    <i class="fa-solid fa-coins text-warning"></i>
-                                    <div>
-                                        <strong class="d-block small text-dark" id="pettyCashNameDisplay">{{ $pettyCashAccount->name ?? 'Site Petty Cash' }}</strong>
-                                        <small class="text-muted font-monospace" id="pettyCashCodeDisplay">[{{ $pettyCashAccount->code ?? 'N/A' }}]</small>
-                                    </div>
+                            <input type="text" name="supplier_name" id="pettySupplierName" 
+                                   class="form-control form-control-sm @error('supplier_name') is-invalid @enderror" 
+                                   placeholder="e.g. Merkato Hardware, TotalEnergies, Local Shop" 
+                                   value="{{ old('supplier_name') }}" required>
+                            @error('supplier_name')
+                                <div class="text-danger small mt-1"><i class="fa-solid fa-circle-exclamation me-1"></i>{{ $message }}</div>
+                            @enderror
+                        </div>
+
+                        {{-- Cash Receipt / FS Number --}}
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold text-dark small">
+                                Receipt / FS Number (Serial Number) <span class="text-danger">*</span>
+                            </label>
+                            <input type="text" name="receipt_no" id="pettyReceiptNo" 
+                                   class="form-control form-control-sm font-monospace fw-bold @error('receipt_no') is-invalid @enderror" 
+                                   placeholder="e.g. CR-89412, FS-0042, INV-1092" 
+                                   value="{{ old('receipt_no') }}" required>
+                            <small class="text-muted d-block mt-1" style="font-size:0.73rem;">
+                                Official serial number printed on vendor's paper cash receipt. Must be unique.
+                            </small>
+                            @error('receipt_no')
+                                <div class="text-danger small mt-1"><i class="fa-solid fa-circle-exclamation me-1"></i>{{ $message }}</div>
+                            @enderror
+                        </div>
+
+                        {{-- Supplier TIN & FS Number (Optional / Fiscal) --}}
+                        <div class="row g-2 mb-3">
+                            <div class="col-6">
+                                <label class="form-label fw-semibold text-dark small">
+                                    Supplier TIN (Optional)
+                                </label>
+                                <input type="text" name="supplier_tin" id="pettySupplierTin" maxlength="10" 
+                                       class="form-control form-control-sm font-monospace" 
+                                       placeholder="10-digit TIN" value="{{ old('supplier_tin') }}">
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label fw-semibold text-dark small">
+                                    FS Number (Optional)
+                                </label>
+                                <input type="text" name="fs_no" id="pettyFsNo" maxlength="8" 
+                                       class="form-control form-control-sm font-monospace" 
+                                       placeholder="8-digit FS" value="{{ old('fs_no') }}">
+                            </div>
+                        </div>
+
+                        {{-- Cash Sales Receipt Photo Upload --}}
+                        <div class="mb-0">
+                            <label class="form-label fw-semibold text-dark small">
+                                Upload Photo of Cash Sales Receipt <span class="text-danger">*</span>
+                            </label>
+                            <input type="file" name="attachment" id="pettyAttachmentInput" 
+                                   class="form-control form-control-sm @error('attachment') is-invalid @enderror" 
+                                   accept="image/*,.pdf" required>
+                            <small class="text-muted d-block mt-1" style="font-size:0.73rem;">
+                                Clear photo or PDF of the stamped physical cash sales receipt.
+                            </small>
+                            @error('attachment')
+                                <div class="text-danger small mt-1"><i class="fa-solid fa-circle-exclamation me-1"></i>{{ $message }}</div>
+                            @enderror
+                        </div>
+
+                        {{-- Dynamic OCR Feedback & Duplicate Alert Area --}}
+                        <div id="pettyOcrFeedbackArea" class="mt-2"></div>
+
+                    </div>
+                </div>
+            </div>
+
+            {{-- Right Column: Store Intake (Model 19 GRN), Date & Notes --}}
+            <div class="col-lg-6">
+                <div class="card border-0 shadow-sm rounded-3 bg-white h-100 d-flex flex-column">
+                    <div class="card-header bg-white border-bottom py-3">
+                        <h6 class="mb-0 fw-bold text-dark">
+                            <i class="fa-solid fa-warehouse text-success me-2"></i>Goods Intake &amp; Model 19 (GRN)
+                        </h6>
+                    </div>
+                    <div class="card-body p-3 p-md-4 flex-grow-1">
+
+                        {{-- Store Location & Petty Cash Account Information --}}
+                        <div class="p-3 rounded-3 bg-light border mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <div>
+                                    <small class="text-muted text-uppercase fw-bold d-block" style="font-size:0.68rem;">Receiving Store Warehouse</small>
+                                    <strong class="text-dark small"><i class="fa-solid fa-warehouse text-primary me-1"></i>{{ $targetStore->name }}</strong>
+                                    <span class="badge bg-secondary font-monospace ms-1">{{ $targetStore->code ?? 'STORE' }}</span>
                                 </div>
-                                <span class="badge bg-warning text-dark font-monospace" id="pettyCashBalanceDisplay">
+                                <span class="badge bg-success small"><i class="fa-solid fa-check me-1"></i>Stock Credited</span>
+                            </div>
+                            <div class="border-top pt-2 mt-2 d-flex justify-content-between align-items-center">
+                                <div>
+                                    <small class="text-muted text-uppercase fw-bold d-block" style="font-size:0.68rem;">Paying Petty Cash Fund</small>
+                                    <span class="text-dark small font-monospace">[{{ $pettyCashAccount->code ?? 'FUND' }}] {{ $pettyCashAccount->name ?? 'Site Petty Cash' }}</span>
+                                </div>
+                                <span class="badge bg-warning text-dark font-monospace">
                                     ETB {{ number_format($pettyCashAccount->current_balance ?? 0, 2) }}
                                 </span>
-                            </div>
-                            <input type="hidden" name="chart_of_account_id" id="pettyCashAccountIdInput" value="{{ $pettyCashAccount->id ?? '' }}">
-                            <small class="text-muted d-block mt-1" style="font-size:0.75rem;">
-                                <i class="fa-solid fa-shield-halved text-success me-1"></i>Dedicated site petty cash fund for this store (isolated from corporate 1010).
-                            </small>
-
-                            {{-- Zero / Low Balance Warning & Quick Replenish Request Trigger --}}
-                            <div class="p-2.5 rounded-3 border border-warning bg-warning bg-opacity-10 mt-2 {{ ($pettyCashAccount->current_balance ?? 0) <= 0 ? '' : 'd-none' }}" id="zeroBalanceAlert">
-                                <div class="d-flex align-items-center gap-2 mb-2">
-                                    <i class="fa-solid fa-triangle-exclamation text-warning fa-lg"></i>
-                                    <small class="text-dark">
-                                        <strong>Fund balance is ETB 0.00:</strong> Store Keeper needs replacement funds. Submit unreplenished purchases directly to Internal Audit for clearance.
-                                    </small>
-                                </div>
-                                <button type="button" class="btn btn-primary btn-sm w-100 fw-bold shadow-xs py-1.5" data-bs-toggle="modal" data-bs-target="#askReplenishmentModal">
-                                    <i class="fa-solid fa-hand-holding-dollar me-1"></i> Ask for Replenishment (Send to Audit)
-                                </button>
-                            </div>
-
-                            <div class="mt-2.5 d-flex justify-content-between align-items-center">
-                                <a href="javascript:void(0)" class="text-primary small fw-semibold text-decoration-none" data-bs-toggle="modal" data-bs-target="#askReplenishmentModal">
-                                    <i class="fa-solid fa-hand-holding-dollar me-1"></i>Ask for Replenishment
-                                </a>
-                                @canany(['admin', 'global_admin', 'finance_head', 'store_manager'])
-                                <a href="javascript:void(0)" class="text-muted small text-decoration-none" data-bs-toggle="modal" data-bs-target="#sendReplacementModal">
-                                    <i class="fa-solid fa-money-bill-transfer me-1"></i>Direct Disburse
-                                </a>
-                                @endcanany
                             </div>
                         </div>
 
@@ -247,45 +317,18 @@
                             <label class="form-label fw-semibold text-dark small">
                                 Purchase Date <span class="text-danger">*</span>
                             </label>
-                            <input type="date" name="purchase_date" id="pettyPurchaseDate" class="form-control form-control-sm" value="{{ old('purchase_date', date('Y-m-d')) }}" required>
+                            <input type="date" name="purchase_date" id="pettyPurchaseDate" 
+                                   class="form-control form-control-sm @error('purchase_date') is-invalid @enderror" 
+                                   value="{{ old('purchase_date', date('Y-m-d')) }}" required>
+                            @error('purchase_date')
+                                <div class="text-danger small mt-1"><i class="fa-solid fa-circle-exclamation me-1"></i>{{ $message }}</div>
+                            @enderror
                         </div>
 
-                        {{-- Supplier / Merchant Name --}}
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold text-dark small">
-                                Supplier / Merchant / Shop <span class="text-danger">*</span>
-                            </label>
-                            <input type="text" name="supplier_name" id="pettySupplierName" class="form-control form-control-sm" placeholder="e.g. Merkato Hardware, TotalEnergies, Site Vendor" value="{{ old('supplier_name') }}" required>
-                        </div>
-
-                        {{-- Supplier TIN & FS Number (Auto-detected by OCR) --}}
-                        <div class="row g-2 mb-3">
-                            <div class="col-6">
-                                <label class="form-label fw-semibold text-dark small">
-                                    Supplier TIN
-                                </label>
-                                <input type="text" name="supplier_tin" id="pettySupplierTin" maxlength="10" class="form-control form-control-sm font-monospace" placeholder="10-digit TIN" value="{{ old('supplier_tin') }}">
-                            </div>
-                            <div class="col-6">
-                                <label class="form-label fw-semibold text-dark small">
-                                    FS Number
-                                </label>
-                                <input type="text" name="fs_no" id="pettyFsNo" maxlength="8" class="form-control form-control-sm font-monospace" placeholder="8-digit FS" value="{{ old('fs_no') }}">
-                            </div>
-                        </div>
-
-                        {{-- Receipt / Invoice Number --}}
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold text-dark small">
-                                Cash Receipt / Voucher # <span class="text-danger">*</span>
-                            </label>
-                            <input type="text" name="receipt_no" id="pettyReceiptNo" class="form-control form-control-sm font-monospace" placeholder="e.g. CR-89412, INV-0042" value="{{ old('receipt_no') }}" required>
-                        </div>
-
-                        {{-- Store GRN Slip Number --}}
+                        {{-- Store GRN Slip Number (Model 19) --}}
                         <div class="mb-3">
                             <label class="form-label fw-semibold text-dark small d-flex justify-content-between align-items-center">
-                                <span>Store GRN Slip #</span>
+                                <span>Model 19 (GRN) Receiving Slip #</span>
                                 <div class="d-flex align-items-center gap-1">
                                     @if(!empty($nextReceivingSlip) && $nextReceivingSlip['has_sequence'])
                                         <span id="pettyNextSlipBadge" class="badge text-white font-monospace" style="background-color: #0d9488;">
@@ -295,207 +338,65 @@
                                     <button type="button" class="btn btn-xs btn-outline-danger py-0 px-2 fw-semibold" 
                                             data-bs-toggle="modal" data-bs-target="#voidSlipModal"
                                             data-target-input="#pettySlipNo"
-                                            data-store-select="#storeSelect"
-                                            data-store-id="{{ $assignedStore->id ?? ($stores->first()->id ?? '') }}"
+                                            data-store-id="{{ $targetStore->id }}"
                                             data-slip-type="receive"
-                                            title="Void spoiled or damaged paper slip in physical book">
+                                            title="Void spoiled paper slip">
                                         <i class="fas fa-ban me-1 text-danger"></i>Void Slip #
                                     </button>
                                 </div>
                             </label>
                             <div class="input-group input-group-sm">
                                 <span class="input-group-text bg-light"><i class="fas fa-hashtag text-muted"></i></span>
-                                <input type="text" name="slip_no" id="pettySlipNo" class="form-control form-control-sm font-monospace fw-bold @error('slip_no') is-invalid @enderror" placeholder="{{ !empty($nextReceivingSlip) && $nextReceivingSlip['has_sequence'] ? 'Auto: #' . $nextReceivingSlip['formatted_slip'] : 'Auto from sequence' }}" value="{{ old('slip_no') }}">
+                                <input type="text" name="slip_no" id="pettySlipNo" 
+                                       class="form-control form-control-sm font-monospace fw-bold @error('slip_no') is-invalid @enderror" 
+                                       placeholder="{{ !empty($nextReceivingSlip) && $nextReceivingSlip['has_sequence'] ? 'Auto: #' . $nextReceivingSlip['formatted_slip'] : 'Auto from store sequence' }}" 
+                                       value="{{ old('slip_no') }}">
                                 <button type="button" class="btn btn-outline-danger btn-sm" 
                                         data-bs-toggle="modal" data-bs-target="#voidSlipModal"
                                         data-target-input="#pettySlipNo"
-                                        data-store-select="#storeSelect"
-                                        data-store-id="{{ $assignedStore->id ?? ($stores->first()->id ?? '') }}"
+                                        data-store-id="{{ $targetStore->id }}"
                                         data-slip-type="receive"
                                         title="Void spoiled slip and use next">
                                     <i class="fas fa-ban me-1"></i>Void
                                 </button>
                             </div>
                             <small class="text-muted d-block mt-1" style="font-size:0.73rem;">
-                                Leave blank to auto-consume next receiving slip (#{{ $nextReceivingSlip['formatted_slip'] ?? '...' }}). Strict sequential order enforced.
+                                Leave blank to automatically consume the next Model 19 receiving slip (#{{ $nextReceivingSlip['formatted_slip'] ?? '...' }}).
                             </small>
                             @error('slip_no')
                                 <div class="text-danger small mt-1"><i class="fas fa-exclamation-circle me-1"></i>{{ $message }}</div>
                             @enderror
                         </div>
 
-                        {{-- Receipt Attachment --}}
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold text-dark small">
-                                Attach Receipt Image / PDF
-                            </label>
-                            <input type="file" name="attachment" id="pettyAttachmentInput" class="form-control form-control-sm" accept="image/*,.pdf">
-                            <small class="text-muted d-block mt-1" style="font-size:0.73rem;">Photo of paper receipt or physical voucher.</small>
-                        </div>
-
-                        {{-- Physical Slip (Store Only — Do Not Show in VAT) Option --}}
+                        {{-- Physical Store Slip (Non-VAT) Option --}}
                         <div class="mb-3 p-2 bg-light border rounded">
                             <div class="form-check form-switch mb-0">
                                 <input class="form-check-input" type="checkbox" name="is_physical_store_only" id="isPhysicalStoreOnlyPetty" value="1" {{ old('is_physical_store_only') ? 'checked' : '' }}>
                                 <label class="form-check-label small fw-bold text-dark" for="isPhysicalStoreOnlyPetty">
-                                    <i class="fa-solid fa-warehouse text-warning me-1"></i>Physical Slip (Store Only — Do Not Show in VAT)
+                                    <i class="fa-solid fa-warehouse text-warning me-1"></i>Physical Slip (Store Only — Excluded from VAT)
                                 </label>
                             </div>
                             <small class="text-muted d-block mt-1 ps-4" style="font-size:0.73rem;">
-                                Internal physical slip for site store inventory only. Will not be sent to central VAT / TAS tax declarations.
+                                Internal physical slip for site store inventory intake only. Excluded from tax declarations.
                             </small>
                         </div>
 
-                        {{-- Dynamic OCR Feedback & Duplicate Alert Area --}}
-                        <div id="pettyOcrFeedbackArea"></div>
-
-                        {{-- Notes --}}
+                        {{-- Remarks / Notes --}}
                         <div class="mb-0">
-                            <label class="form-label fw-semibold text-dark small">Notes / Purpose</label>
-                            <textarea name="notes" id="pettyNotes" rows="2" class="form-control form-control-sm" placeholder="Purpose or site usage note...">{{ old('notes', isset($selectedMaterialRequest) ? "Emergency Material Request #{$selectedMaterialRequest->reference_number} - Spot purchase for " . ($selectedMaterialRequest->project->name ?? 'Site Store') : '') }}</textarea>
+                            <label class="form-label fw-semibold text-dark small">Remarks / Storekeeper Notes</label>
+                            <textarea name="notes" id="pettyNotes" rows="2" class="form-control form-control-sm" placeholder="Optional notes regarding purchase or merchant...">{{ old('notes') }}</textarea>
                         </div>
 
                     </div>
-                </div>
-            </div>
 
-            {{-- Right Column: Materials Line Items --}}
-            <div class="col-lg-8">
-                <div class="card border-0 shadow-sm rounded-3 h-100 bg-white d-flex flex-column">
-                    <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
-                        <div>
-                            <h6 class="mb-0 fw-bold text-dark">
-                                <i class="fa-solid fa-boxes-stacked text-success me-2"></i>Materials to Buy &amp; Add to Inventory
-                            </h6>
-                            <small class="text-muted">Specify products, quantities, and price paid</small>
-                        </div>
-                        <div class="d-flex gap-2">
-                            <button type="button" class="btn btn-sm btn-outline-primary shadow-xs" data-bs-toggle="modal" data-bs-target="#quickNewProductModal">
-                                <i class="fa-solid fa-plus me-1"></i> New Product Catalog Item
-                            </button>
-                            <button type="button" class="btn btn-sm btn-success shadow-xs" id="addRowBtn">
-                                <i class="fa-solid fa-plus me-1"></i> Add Material Row
-                            </button>
-                        </div>
-                    </div>
-
-                    <div class="card-body p-0 flex-grow-1">
-                        <div class="table-responsive">
-                            <table class="table table-hover align-middle mb-0" id="materialsTable">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th style="width: 40%;" class="ps-3">Material / Product <span class="text-danger">*</span></th>
-                                        <th style="width: 15%;">Quantity <span class="text-danger">*</span></th>
-                                        <th style="width: 15%;">Unit</th>
-                                        <th style="width: 15%;">Unit Price (ETB) <span class="text-danger">*</span></th>
-                                        <th style="width: 15%;" class="text-end">Total (ETB)</th>
-                                        <th style="width: 5%;" class="text-center pe-3"></th>
-                                    </tr>
-                                </thead>
-                                <tbody id="itemsTbody">
-                                    @if(isset($prefilledItems) && $prefilledItems->count() > 0)
-                                        @foreach($prefilledItems as $idx => $pItem)
-                                        <tr class="item-row table-warning bg-opacity-25">
-                                            <td class="ps-3">
-                                                <select name="items[{{ $idx }}][product_id]" class="form-select form-select-sm product-select" required>
-                                                    <option value="">-- Choose Material --</option>
-                                                    @foreach($products as $p)
-                                                        <option value="{{ $p->id }}"
-                                                                data-unit="{{ $p->unit_of_measure ?? $p->unit ?? 'pcs' }}"
-                                                                data-price="{{ $p->unit_price ?? $p->standard_cost ?? 0 }}"
-                                                                @selected($pItem['product_id'] == $p->id)>
-                                                            {{ $p->name }} [{{ $p->code ?? $p->sku ?? 'PRD' }}]
-                                                        </option>
-                                                    @endforeach
-                                                </select>
-                                                @if(!empty($pItem['remarks']))
-                                                    <small class="text-muted d-block mt-1"><i class="fa-solid fa-comment-dots me-1"></i>{{ $pItem['remarks'] }}</small>
-                                                @endif
-                                            </td>
-                                            <td>
-                                                <input type="number" step="0.001" min="0.001" name="items[{{ $idx }}][quantity]" value="{{ $pItem['quantity'] }}" class="form-control form-control-sm qty-input text-center fw-bold" placeholder="0.00" required>
-                                            </td>
-                                            <td>
-                                                <input type="text" name="items[{{ $idx }}][unit]" value="{{ $pItem['unit'] }}" class="form-control form-control-sm unit-input bg-light" placeholder="pcs" readonly>
-                                            </td>
-                                            <td>
-                                                <input type="number" step="0.01" min="0" name="items[{{ $idx }}][unit_price]" value="{{ $pItem['unit_price'] > 0 ? $pItem['unit_price'] : '' }}" class="form-control form-control-sm price-input text-end fw-bold border-warning" placeholder="Enter money..." required autofocus>
-                                            </td>
-                                            <td class="text-end">
-                                                <strong class="row-total-display font-monospace text-dark">{{ number_format($pItem['quantity'] * $pItem['unit_price'], 2) }}</strong>
-                                            </td>
-                                            <td class="text-center pe-3">
-                                                <button type="button" class="btn btn-sm btn-link text-danger p-0 remove-row-btn" title="Remove Row">
-                                                    <i class="fa-solid fa-trash-can"></i>
-                                                </button>
-                                            </td>
-                                        </tr>
-                                        @endforeach
-                                    @else
-                                        {{-- Row 1 Default --}}
-                                        <tr class="item-row">
-                                            <td class="ps-3">
-                                                <select name="items[0][product_id]" class="form-select form-select-sm product-select" required>
-                                                    <option value="">-- Choose Material --</option>
-                                                    @foreach($products as $p)
-                                                        <option value="{{ $p->id }}" data-unit="{{ $p->unit_of_measure ?? $p->unit ?? 'pcs' }}" data-price="{{ $p->unit_price ?? $p->standard_cost ?? 0 }}">
-                                                            {{ $p->name }} [{{ $p->code ?? $p->sku ?? 'PRD' }}]
-                                                        </option>
-                                                    @endforeach
-                                                </select>
-                                            </td>
-                                            <td>
-                                                <input type="number" step="0.001" min="0.001" name="items[0][quantity]" class="form-control form-control-sm qty-input text-center fw-bold" placeholder="0.00" required>
-                                            </td>
-                                            <td>
-                                                <input type="text" name="items[0][unit]" class="form-control form-control-sm unit-input bg-light" placeholder="pcs" readonly>
-                                            </td>
-                                            <td>
-                                                <input type="number" step="0.01" min="0" name="items[0][unit_price]" class="form-control form-control-sm price-input text-end fw-bold" placeholder="0.00" required>
-                                            </td>
-                                            <td class="text-end">
-                                                <strong class="row-total-display font-monospace text-dark">0.00</strong>
-                                            </td>
-                                            <td class="text-center pe-3">
-                                                <button type="button" class="btn btn-sm btn-link text-danger p-0 remove-row-btn" title="Remove Row" disabled>
-                                                    <i class="fa-solid fa-trash-can"></i>
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    @endif
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-
-                    {{-- Summary Footer --}}
-                    <div class="card-footer bg-light border-top p-3">
-                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
-                            <div class="d-flex align-items-center gap-2">
-                                <span class="badge bg-secondary" id="totalItemsBadge">1 Material</span>
-                                <small class="text-muted" id="inventoryPreviewNotice">
-                                    <i class="fa-solid fa-circle-check text-success me-1"></i>Stock will be credited to inventory upon submission.
-                                </small>
-                            </div>
-                            <div class="text-end">
-                                <span class="text-muted small text-uppercase fw-bold d-block" style="font-size:0.7rem;">Total Purchase Amount</span>
-                                <h3 class="fw-bold text-success font-monospace mb-0" id="grandTotalDisplay">ETB 0.00</h3>
-                            </div>
-                        </div>
-
-                        <div class="alert alert-danger py-2 px-3 small border-0 mt-3 d-none" id="insufficientBalanceAlert">
-                            <i class="fa-solid fa-triangle-exclamation me-1"></i>
-                            <strong>Warning:</strong> The purchase total exceeds your active Petty Cash balance.
-                        </div>
-
-                        <div class="mt-3 text-end">
-                            <a href="{{ route('store-keeper.petty-cash-purchases.index') }}" class="btn btn-outline-secondary btn-sm me-2">
-                                Cancel
-                            </a>
-                            <button type="submit" class="btn btn-success btn-sm px-4 fw-bold shadow-sm" id="submitPurchaseBtn">
-                                <i class="fa-solid fa-circle-check me-1"></i> Confirm Purchase &amp; Add Stock
-                            </button>
-                        </div>
+                    {{-- Form Footer --}}
+                    <div class="card-footer bg-light border-top p-3 d-flex justify-content-between align-items-center">
+                        <a href="{{ route('store-keeper.petty-cash-purchases.index') }}" class="btn btn-outline-secondary btn-sm">
+                            Cancel
+                        </a>
+                        <button type="submit" class="btn btn-success btn-sm px-4 fw-bold shadow-sm" id="submitPurchaseBtn">
+                            <i class="fa-solid fa-circle-check me-1"></i> Confirm &amp; Complete Purchase
+                        </button>
                     </div>
 
                 </div>
@@ -504,213 +405,6 @@
         </div>
     </form>
 
-</div>
-
-{{-- ── Quick New Product Modal ──────────────────────────────────────────────── --}}
-<div class="modal fade" id="quickNewProductModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0 shadow">
-            <div class="modal-header bg-primary text-white py-3">
-                <h6 class="modal-title fw-bold">
-                    <i class="fa-solid fa-box-open me-2"></i>Quick Add Product to Catalog
-                </h6>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <form id="quickProductForm" action="{{ route('store-manager.products.store') }}" method="POST">
-                @csrf
-                <div class="modal-body p-4">
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold small text-dark">Material / Product Name <span class="text-danger">*</span></label>
-                        <input type="text" name="name" id="newProdName" class="form-control form-control-sm" placeholder="e.g. Cement 42.5N, 4-inch Nails, PVC Pipe" required>
-                    </div>
-                    <div class="row g-2 mb-3">
-                        <div class="col-6">
-                            <label class="form-label fw-semibold small text-dark">Unit of Measure <span class="text-danger">*</span></label>
-                            <select name="unit" id="newProdUnit" class="form-select form-select-sm" required>
-                                <option value="pcs">Pieces (pcs)</option>
-                                <option value="kg">Kilograms (kg)</option>
-                                <option value="bags">Bags</option>
-                                <option value="liters">Liters</option>
-                                <option value="meters">Meters (m)</option>
-                                <option value="rolls">Rolls</option>
-                                <option value="boxes">Boxes</option>
-                                <option value="sets">Sets</option>
-                            </select>
-                        </div>
-                        <div class="col-6">
-                            <label class="form-label fw-semibold small text-dark">Category</label>
-                            <input type="text" name="category" class="form-control form-control-sm" placeholder="e.g. Hardware, Building, Electrical">
-                        </div>
-                    </div>
-                    <div class="mb-0">
-                        <label class="form-label fw-semibold small text-dark">Standard Cost (ETB)</label>
-                        <input type="number" step="0.01" name="standard_cost" class="form-control form-control-sm" placeholder="0.00">
-                    </div>
-                </div>
-                <div class="modal-footer bg-light py-2">
-                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary btn-sm fw-bold">Save &amp; Add</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-{{-- ── Modal: Send Replacement Money to Store Keeper ─────────────────────── --}}
-<div class="modal fade" id="sendReplacementModal" tabindex="-1" aria-labelledby="sendReplacementModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
-        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
-            <form action="{{ route('store-keeper.petty-cash-purchases.send-replacement') }}" method="POST" enctype="multipart/form-data" id="sendReplacementForm">
-                @csrf
-                <div class="modal-header bg-warning text-dark py-3">
-                    <div>
-                        <h5 class="modal-title fw-bold mb-0" id="sendReplacementModalLabel">
-                            <i class="fa-solid fa-money-bill-transfer me-2"></i>Send Replacement Money to Store Keeper
-                        </h5>
-                        <small class="text-dark-50" style="font-size:0.75rem;">Disburse spot replenishment funds into this Store's Site Petty Cash account</small>
-                    </div>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body p-4">
-
-                    {{-- Store & Fund Summary Ribbon --}}
-                    <div class="p-3 rounded-3 bg-light border mb-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
-                        <div>
-                            <small class="text-muted text-uppercase fw-bold d-block" style="font-size:0.68rem;">Destination Store &amp; Site Fund</small>
-                            <span class="badge bg-primary px-2 py-1 me-2 font-monospace" id="modalStoreNameBadge">
-                                {{ $assignedStore->name ?? ($stores->first()->name ?? 'Site Store') }}
-                            </span>
-                            <strong class="text-dark small" id="modalSitePettyAccountDisplay">
-                                {{ $pettyCashAccount->name ?? 'Site Petty Cash' }} [{{ $pettyCashAccount->code ?? 'N/A' }}]
-                            </strong>
-                        </div>
-                        <div>
-                            <span class="badge bg-warning text-dark font-monospace px-2.5 py-1.5" id="modalCurrentBalanceDisplay">
-                                Current Balance: ETB {{ number_format($pettyCashAccount->current_balance ?? 0, 2) }}
-                            </span>
-                        </div>
-                    </div>
-
-                    <input type="hidden" name="store_id" id="modalRepStoreId" value="{{ $assignedStore->id ?? ($stores->first()->id ?? '') }}">
-
-                    <div class="row g-2 g-md-3 filter-form">
-                        {{-- Recipient Store Keeper --}}
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold small text-dark">
-                                Recipient Store Keeper <span class="text-danger">*</span>
-                            </label>
-                            <select name="recipient_id" id="modalRecipientSelect" class="form-select form-select-sm" required>
-                                @foreach($storeKeepers as $k)
-                                    @php
-                                        $kPhone = $k->phone ?? $k->employee->phone ?? $k->employee->mobile_phone ?? '';
-                                    @endphp
-                                    <option value="{{ $k->id }}" data-store="{{ $k->store_id }}" data-phone="{{ $kPhone }}"
-                                        {{ (optional($assignedStore)->manager_id == $k->id || Auth::id() == $k->id) ? 'selected' : '' }}>
-                                        {{ $k->name }} ({{ $k->email }}) {{ $kPhone ? '— ' . $kPhone : '' }}
-                                    </option>
-                                @endforeach
-                            </select>
-                            <small class="text-muted d-block mt-1" style="font-size:0.72rem;">Custodian responsible for this site fund</small>
-                        </div>
-
-                        {{-- Disbursing / Source Account --}}
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold small text-dark">
-                                Source Funding Account (Bank / Cash) <span class="text-danger">*</span>
-                            </label>
-                            <select name="source_coa_id" id="modalSourceCoaSelect" class="form-select form-select-sm" required>
-                                <option value="">-- Choose Paying Bank / Cash Account --</option>
-                                @foreach($sourceAccounts as $sa)
-                                    <option value="{{ $sa->id }}" {{ $loop->first ? 'selected' : '' }}>
-                                        [{{ $sa->code }}] {{ $sa->name }} (ETB {{ number_format($sa->current_balance, 2) }})
-                                    </option>
-                                @endforeach
-                            </select>
-                            <small class="text-muted d-block mt-1" style="font-size:0.72rem;">Account credited for this cash transfer</small>
-                        </div>
-
-                        {{-- Replacement Amount (ETB) --}}
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold small text-dark">
-                                Replacement Amount (ETB) <span class="text-danger">*</span>
-                            </label>
-                            <div class="input-group input-group-sm">
-                                <span class="input-group-text fw-bold">ETB</span>
-                                <input type="number" step="0.01" min="1" name="amount" id="modalRepAmount" class="form-control font-monospace fw-bold fs-6" placeholder="0.00" required>
-                            </div>
-                            <div class="d-flex gap-1 mt-1.5 flex-wrap">
-                                <span class="text-muted small me-1" style="font-size:0.72rem;">Quick:</span>
-                                <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-1.5 quick-amt-btn" data-amt="5000">+5,000</button>
-                                <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-1.5 quick-amt-btn" data-amt="10000">+10,000</button>
-                                <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-1.5 quick-amt-btn" data-amt="25000">+25,000</button>
-                                <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-1.5 quick-amt-btn" data-amt="50000">+50,000</button>
-                            </div>
-                        </div>
-
-                        {{-- Transfer Date --}}
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold small text-dark">
-                                Transfer / Disbursement Date <span class="text-danger">*</span>
-                            </label>
-                            <input type="date" name="transfer_date" class="form-control form-control-sm" value="{{ date('Y-m-d') }}" required>
-                        </div>
-
-                        {{-- Payment Method --}}
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold small text-dark">
-                                Payment Method / Mode <span class="text-danger">*</span>
-                            </label>
-                            <select name="payment_method" class="form-select form-select-sm" required>
-                                <option value="Bank Transfer / CBE Birr" selected>Bank Transfer (CBE / Commercial)</option>
-                                <option value="Cash in Hand">Cash on Hand (Direct Handover)</option>
-                                <option value="Telebirr / Mobile Money">Telebirr / Mobile Money</option>
-                                <option value="Awash Bank Transfer">Awash Bank Transfer</option>
-                                <option value="Cheque">Bank Cheque</option>
-                                <option value="Other">Other Mode</option>
-                            </select>
-                        </div>
-
-                        {{-- Reference / Voucher # --}}
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold small text-dark">
-                                Transfer / Voucher Ref # <span class="text-danger">*</span>
-                            </label>
-                            <input type="text" name="reference_no" class="form-control form-control-sm font-monospace" placeholder="e.g. TRX-94821, VCH-2026-001, Cheque #" required>
-                        </div>
-
-                        {{-- Purpose / Reason --}}
-                        <div class="col-12">
-                            <label class="form-label fw-semibold small text-dark">Disbursement Purpose &amp; Information</label>
-                            <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="Describe the reason or urgent site requirements...">Site Petty Cash replacement fund for spot store materials and site consumables</textarea>
-                        </div>
-
-                        {{-- Attachment / Proof --}}
-                        <div class="col-md-7">
-                            <label class="form-label fw-semibold small text-dark">Bank Transfer Slip / Voucher Proof (Optional)</label>
-                            <input type="file" name="attachment" class="form-control form-control-sm" accept=".pdf,.jpg,.jpeg,.png,.webp">
-                        </div>
-
-                        {{-- SMS Notification Checkbox --}}
-                        <div class="col-md-5 d-flex align-items-center">
-                            <div class="form-check form-switch mt-3">
-                                <input class="form-check-input" type="checkbox" name="send_sms" value="1" id="modalSendSmsCheck" checked>
-                                <label class="form-check-label small fw-semibold text-dark" for="modalSendSmsCheck">
-                                    <i class="fa-solid fa-comment-sms text-success me-1"></i>Send SMS Alert to Keeper
-                                </label>
-                            </div>
-                        </div>
-                    </div>
-
-                </div>
-                <div class="modal-footer bg-light py-2">
-                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-success btn-sm fw-bold px-4" id="submitRepBtn">
-                        <i class="fa-solid fa-paper-plane me-1"></i> Confirm &amp; Send Replacement
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
 </div>
 
 {{-- ── Modal: Ask for Replenishment (Send to Internal Audit) ─────────────────── --}}
@@ -736,15 +430,15 @@
                     <div class="p-3 rounded-3 bg-light border mb-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
                         <div>
                             <small class="text-muted text-uppercase fw-bold d-block" style="font-size:0.68rem;">Destination Store &amp; Site Fund</small>
-                            <span class="badge bg-primary px-2 py-1 me-2 font-monospace" id="modalAskStoreBadge">
-                                {{ $assignedStore->name ?? ($stores->first()->name ?? 'Site Store') }}
+                            <span class="badge bg-primary px-2 py-1 me-2 font-monospace">
+                                {{ $targetStore->name }}
                             </span>
-                            <strong class="text-dark small" id="modalAskAccountDisplay">
+                            <strong class="text-dark small">
                                 {{ $pettyCashAccount->name ?? 'Site Petty Cash' }} [{{ $pettyCashAccount->code ?? 'N/A' }}]
                             </strong>
                         </div>
                         <div>
-                            <span class="badge bg-warning text-dark font-monospace px-2.5 py-1.5" id="modalAskBalanceDisplay">
+                            <span class="badge bg-warning text-dark font-monospace px-2.5 py-1.5">
                                 Current Balance: ETB {{ number_format($pettyCashAccount->current_balance ?? 0, 2) }}
                             </span>
                         </div>
@@ -766,9 +460,9 @@
                     <div class="card border rounded-3 mb-3 bg-light bg-opacity-50">
                         <div class="card-header bg-white py-2 px-3 d-flex justify-content-between align-items-center border-bottom">
                             <span class="small fw-bold text-dark">
-                                <i class="fa-solid fa-receipt text-primary me-1"></i> Spot Purchases to Replenish (<span id="modalUnreplCount">{{ $unreplenishedPurchases->count() }}</span>)
+                                <i class="fa-solid fa-receipt text-primary me-1"></i> Spot Purchases to Replenish ({{ $unreplenishedPurchases->count() }})
                             </span>
-                            <strong class="text-danger font-monospace small" id="modalUnreplenishedTotalDisplay">
+                            <strong class="text-danger font-monospace small">
                                 Total Spent: ETB {{ number_format($unreplenishedTotal, 2) }}
                             </strong>
                         </div>
@@ -785,7 +479,7 @@
                                             <th class="text-end pe-3">Amount (ETB)</th>
                                         </tr>
                                     </thead>
-                                    <tbody id="modalUnreplenishedItemsList">
+                                    <tbody>
                                         @foreach($unreplenishedPurchases as $p)
                                         <tr>
                                             <td class="ps-3 font-monospace fw-bold text-primary">{{ $p->purchase_no }}</td>
@@ -799,76 +493,53 @@
                                 </table>
                             </div>
                             @else
-                            <div class="p-3 text-center text-muted small" id="modalNoUnreplenishedNote">
-                                <i class="fa-solid fa-circle-check text-success me-1"></i> All previous spot purchases have been audited and cleared. You can submit an advance replenishment request.
+                            <div class="p-3 text-center text-muted small">
+                                <i class="fa-solid fa-circle-check text-success me-1"></i>All previous purchases have been audited &amp; replenished.
                             </div>
                             @endif
                         </div>
                     </div>
 
-                    <input type="hidden" name="store_id" id="modalReqStoreId" value="{{ $assignedStore->id ?? ($stores->first()->id ?? '') }}">
+                    {{-- Form Fields --}}
+                    <input type="hidden" name="store_id" value="{{ $targetStore->id }}">
 
-                    <div class="row g-2 g-md-3 filter-form">
-                        {{-- Requested Amount --}}
-                        <div class="col-md-6">
+                    <div class="row g-3">
+                        <div class="col-md-7">
                             <label class="form-label fw-semibold small text-dark">
-                                Requested Amount (ETB) <span class="text-danger">*</span>
+                                Requested Replenishment Amount (ETB) <span class="text-danger">*</span>
                             </label>
                             <div class="input-group input-group-sm">
                                 <span class="input-group-text fw-bold">ETB</span>
-                                <input type="number" step="0.01" min="1" name="requested_amount" id="modalAskAmount" class="form-control font-monospace fw-bold fs-6" 
-                                    value="{{ $unreplenishedTotal > 0 ? number_format($unreplenishedTotal, 2, '.', '') : '' }}" placeholder="0.00" required>
-                            </div>
-                            <div class="d-flex gap-1 mt-1.5 flex-wrap">
-                                @if($unreplenishedTotal > 0)
-                                <button type="button" class="btn btn-xs btn-outline-primary py-0 px-1.5 quick-ask-btn" data-amt="{{ number_format($unreplenishedTotal, 2, '.', '') }}">
-                                    Exact Spent ({{ number_format($unreplenishedTotal, 2) }})
-                                </button>
-                                @endif
-                                <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-1.5 quick-ask-btn" data-amt="5000">+5,000</button>
-                                <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-1.5 quick-ask-btn" data-amt="10000">+10,000</button>
-                                <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-1.5 quick-ask-btn" data-amt="25000">+25,000</button>
-                                <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-1.5 quick-ask-btn" data-amt="50000">+50,000</button>
+                                <input type="number" step="0.01" min="1" name="requested_amount" class="form-control font-monospace fw-bold fs-6" 
+                                       value="{{ $unreplenishedTotal > 0 ? number_format($unreplenishedTotal, 2, '.', '') : '' }}" 
+                                       placeholder="0.00" required>
                             </div>
                         </div>
 
-                        {{-- Urgency Level --}}
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold small text-dark">Urgency Level <span class="text-danger">*</span></label>
+                        <div class="col-md-5">
+                            <label class="form-label fw-semibold small text-dark">Urgency Level</label>
                             <select name="urgency" class="form-select form-select-sm">
-                                <option value="Normal">Normal Clearance</option>
-                                <option value="Urgent" selected>Urgent (Site Procurement Required)</option>
-                                <option value="Emergency">Emergency (Site Halt Risk)</option>
+                                <option value="Normal">Normal</option>
+                                <option value="Urgent" selected>Urgent (Low Site Fund)</option>
+                                <option value="Critical">Critical (Zero Fund)</option>
                             </select>
-                            <small class="text-muted d-block mt-1" style="font-size:0.72rem;">Priority flag for Internal Audit inspection queue</small>
                         </div>
 
-                        {{-- Purpose & Justification --}}
                         <div class="col-12">
-                            <label class="form-label fw-semibold small text-dark">Reason / Notes for Internal Audit</label>
-                            <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="Describe the reason or urgent site requirements...">Site Petty Cash replenishment for spot store material purchases and site consumables. Vouchers attached for audit clearance.</textarea>
+                            <label class="form-label fw-semibold small text-dark">Notes / Explanation for Internal Audit</label>
+                            <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="Explain the site situation or urgency...">Replenishment request for verified spot material purchases on site</textarea>
                         </div>
 
-                        {{-- Supporting Receipts / Summary PDF --}}
                         <div class="col-12">
-                            <label class="form-label fw-semibold small text-dark">Supporting Receipts / Batch Bills (Optional)</label>
+                            <label class="form-label fw-semibold small text-dark">Supporting Audit Summary / Document (Optional)</label>
                             <input type="file" name="attachment" class="form-control form-control-sm" accept=".pdf,.jpg,.jpeg,.png,.webp">
-                            <small class="text-muted" style="font-size:0.72rem;">Upload combined receipts PDF or invoice scans if needed.</small>
-                        </div>
-                    </div>
-
-                    {{-- Company Standard Audit System Callout --}}
-                    <div class="p-2.5 rounded-3 bg-primary bg-opacity-10 border border-primary border-opacity-25 mt-3 d-flex align-items-center gap-2 text-dark small">
-                        <i class="fa-solid fa-scale-balanced fa-lg text-primary"></i>
-                        <div>
-                            <strong>Standard Audit Clearance Workflow:</strong> This request and all individual spot vouchers will be routed directly to the <strong>Internal Audit Team queue</strong>. Once audited and cleared, Finance will disburse the replacement funds to this Site Petty Cash account.
                         </div>
                     </div>
 
                 </div>
                 <div class="modal-footer bg-light py-2">
                     <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary btn-sm fw-bold px-4" id="submitAskReplenishBtn">
+                    <button type="submit" class="btn btn-primary btn-sm fw-bold px-4">
                         <i class="fa-solid fa-paper-plane me-1"></i> Submit to Internal Audit
                     </button>
                 </div>
@@ -877,403 +548,143 @@
     </div>
 </div>
 
+{{-- ── Modal: Send Replacement Money to Store Keeper ─────────────────────── --}}
+@canany(['admin', 'global_admin', 'finance_head', 'finance_officer', 'store_manager'])
+<div class="modal fade" id="sendReplacementModal" tabindex="-1" aria-labelledby="sendReplacementModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+            <form action="{{ route('store-keeper.petty-cash-purchases.send-replacement') }}" method="POST" enctype="multipart/form-data" id="sendReplacementForm">
+                @csrf
+                <div class="modal-header bg-warning text-dark py-3">
+                    <div>
+                        <h5 class="modal-title fw-bold mb-0" id="sendReplacementModalLabel">
+                            <i class="fa-solid fa-money-bill-transfer me-2"></i>Send Replacement Money to Store Keeper
+                        </h5>
+                        <small class="text-dark-50" style="font-size:0.75rem;">Disburse spot replenishment funds into this Store's Site Petty Cash account</small>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+
+                    <input type="hidden" name="store_id" value="{{ $targetStore->id }}">
+
+                    <div class="row g-2 g-md-3 filter-form">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold small text-dark">
+                                Recipient Store Keeper <span class="text-danger">*</span>
+                            </label>
+                            <select name="recipient_id" class="form-select form-select-sm" required>
+                                @foreach($storeKeepers as $k)
+                                    @php
+                                        $kPhone = $k->phone ?? $k->employee->phone ?? $k->employee->mobile_phone ?? '';
+                                    @endphp
+                                    <option value="{{ $k->id }}" {{ (optional($assignedStore)->manager_id == $k->id || Auth::id() == $k->id) ? 'selected' : '' }}>
+                                        {{ $k->name }} ({{ $k->email }}) {{ $kPhone ? '— ' . $kPhone : '' }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold small text-dark">
+                                Source Funding Account (Bank / Cash) <span class="text-danger">*</span>
+                            </label>
+                            <select name="source_coa_id" class="form-select form-select-sm" required>
+                                <option value="">-- Choose Paying Bank / Cash Account --</option>
+                                @foreach($sourceAccounts as $sa)
+                                    <option value="{{ $sa->id }}" {{ $loop->first ? 'selected' : '' }}>
+                                        [{{ $sa->code }}] {{ $sa->name }} (ETB {{ number_format($sa->current_balance, 2) }})
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold small text-dark">
+                                Replacement Amount (ETB) <span class="text-danger">*</span>
+                            </label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text fw-bold">ETB</span>
+                                <input type="number" step="0.01" min="1" name="amount" id="modalRepAmount" class="form-control font-monospace fw-bold fs-6" placeholder="0.00" required>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold small text-dark">
+                                Transfer / Disbursement Date <span class="text-danger">*</span>
+                            </label>
+                            <input type="date" name="transfer_date" class="form-control form-control-sm" value="{{ date('Y-m-d') }}" required>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold small text-dark">
+                                Payment Method <span class="text-danger">*</span>
+                            </label>
+                            <select name="payment_method" class="form-select form-select-sm" required>
+                                <option value="Bank Transfer / CBE Birr" selected>Bank Transfer (CBE / Commercial)</option>
+                                <option value="Cash in Hand">Cash on Hand (Direct Handover)</option>
+                                <option value="Telebirr / Mobile Money">Telebirr / Mobile Money</option>
+                                <option value="Awash Bank Transfer">Awash Bank Transfer</option>
+                                <option value="Cheque">Bank Cheque</option>
+                                <option value="Other">Other Mode</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold small text-dark">
+                                Transfer / Voucher Ref # <span class="text-danger">*</span>
+                            </label>
+                            <input type="text" name="reference_no" class="form-control form-control-sm font-monospace" placeholder="e.g. TRX-94821, VCH-001" required>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label fw-semibold small text-dark">Disbursement Purpose</label>
+                            <textarea name="notes" class="form-control form-control-sm" rows="2">Site Petty Cash replacement fund for spot store materials</textarea>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label fw-semibold small text-dark">Attachment (Optional)</label>
+                            <input type="file" name="attachment" class="form-control form-control-sm" accept=".pdf,.jpg,.jpeg,.png,.webp">
+                        </div>
+                    </div>
+
+                </div>
+                <div class="modal-footer bg-light py-2">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success btn-sm fw-bold px-4">
+                        <i class="fa-solid fa-paper-plane me-1"></i> Confirm &amp; Send Replacement
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+@endcanany
+
 @push('scripts')
 <script src="{{ asset('js/receipt-ocr-scanner.js') }}"></script>
-<script type="application/json" id="storesDataScript">{!! json_encode($storesData ?? []) !!}</script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    let rowIndex = {{ isset($prefilledItems) && $prefilledItems->count() > 0 ? $prefilledItems->count() : 1 }};
-    let availablePettyCash = parseFloat("{{ $pettyCashAccount->current_balance ?? 0 }}") || 0;
-    const storesData = JSON.parse(document.getElementById('storesDataScript')?.textContent || '[]');
-
-    const tbody = document.getElementById('itemsTbody');
-    const addRowBtn = document.getElementById('addRowBtn');
-    const grandTotalDisplay = document.getElementById('grandTotalDisplay');
-    const totalItemsBadge = document.getElementById('totalItemsBadge');
+    const availablePettyCash = parseFloat("{{ $pettyCashAccount->current_balance ?? 0 }}") || 0;
+    const amountInput = document.getElementById('pettyTotalAmount');
     const alertDiv = document.getElementById('insufficientBalanceAlert');
-    const storeSelect = document.getElementById('storeSelect');
-    const zeroBalanceAlert = document.getElementById('zeroBalanceAlert');
+    const submitBtn = document.getElementById('submitPurchaseBtn');
 
-    // Quick Amount Buttons in Replacement & Audit Modals
-    document.querySelectorAll('.quick-amt-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
-            const amt = this.getAttribute('data-amt');
-            const amtInput = document.getElementById('modalRepAmount');
-            if (amtInput) {
-                amtInput.value = parseFloat(amt).toFixed(2);
-            }
-        });
-    });
-
-    document.querySelectorAll('.quick-ask-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
-            const amt = this.getAttribute('data-amt');
-            const amtInput = document.getElementById('modalAskAmount');
-            if (amtInput) {
-                amtInput.value = parseFloat(amt).toFixed(2);
-            }
-        });
-    });
-
-    // Synchronize Store and Site Petty Cash info
-    function syncStoreInfo(stId) {
-        if (!stId || !storesData[stId]) return;
-        const acc = storesData[stId];
-
-        // Main Form updates
-        const pettyName = document.getElementById('pettyCashNameDisplay');
-        const pettyCode = document.getElementById('pettyCashCodeDisplay');
-        const pettyBadge = document.getElementById('pettyCashBalanceDisplay');
-        const topBalance = document.getElementById('currentPettyCashDisplay');
-        const accInput = document.getElementById('pettyCashAccountIdInput');
-
-        if (pettyName) pettyName.textContent = acc.account_name;
-        if (pettyCode) pettyCode.textContent = '[' + acc.account_code + ']';
-        const formatted = 'ETB ' + acc.balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-        if (pettyBadge) pettyBadge.textContent = formatted;
-        if (topBalance) topBalance.textContent = formatted;
-        if (accInput) accInput.value = acc.account_id;
-
-        availablePettyCash = parseFloat(acc.balance) || 0;
-
-        // Toggle zero balance alert
-        if (zeroBalanceAlert) {
-            if (availablePettyCash <= 0) {
-                zeroBalanceAlert.classList.remove('d-none');
-            } else {
-                zeroBalanceAlert.classList.add('d-none');
-            }
-        }
-
-        // Direct Disburse Modal updates
-        const modalStoreId = document.getElementById('modalRepStoreId');
-        const modalBadge = document.getElementById('modalStoreNameBadge');
-        const modalAccDisplay = document.getElementById('modalSitePettyAccountDisplay');
-        const modalBalDisplay = document.getElementById('modalCurrentBalanceDisplay');
-
-        if (modalStoreId) modalStoreId.value = stId;
-        if (modalBadge) modalBadge.textContent = acc.store_name;
-        if (modalAccDisplay) modalAccDisplay.textContent = acc.account_name + ' [' + acc.account_code + ']';
-        if (modalBalDisplay) modalBalDisplay.textContent = 'Current Balance: ' + formatted;
-
-        // Ask Replenishment (Send to Audit) Modal updates
-        const askStoreId = document.getElementById('modalReqStoreId');
-        const askBadge = document.getElementById('modalAskStoreBadge');
-        const askAccDisplay = document.getElementById('modalAskAccountDisplay');
-        const askBalDisplay = document.getElementById('modalAskBalanceDisplay');
-        const askAmtInput = document.getElementById('modalAskAmount');
-        const unreplTotalDisplay = document.getElementById('modalUnreplenishedTotalDisplay');
-
-        if (askStoreId) askStoreId.value = stId;
-        if (askBadge) askBadge.textContent = acc.store_name;
-        if (askAccDisplay) askAccDisplay.textContent = acc.account_name + ' [' + acc.account_code + ']';
-        if (askBalDisplay) askBalDisplay.textContent = 'Current Balance: ' + formatted;
-
-        if (acc.unreplenished_total !== undefined) {
-            if (unreplTotalDisplay) {
-                unreplTotalDisplay.textContent = 'Total Spent: ETB ' + acc.unreplenished_total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-            }
-            if (askAmtInput && acc.unreplenished_total > 0) {
-                askAmtInput.value = acc.unreplenished_total.toFixed(2);
-            }
-        }
-
-        // Auto-select keeper if matched
-        const recipientSelect = document.getElementById('modalRecipientSelect');
-        if (recipientSelect && acc.keeper_id) {
-            recipientSelect.value = acc.keeper_id;
-        }
-
-        recalculate();
-    }
-
-    // Dynamic Site Petty Cash Switcher when store changes
-    if (storeSelect) {
-        storeSelect.addEventListener('change', function() {
-            syncStoreInfo(this.value);
-        });
-    }
-
-    // AJAX Handler for Ask Replenishment (Send to Audit) Form
-    const askRepForm = document.getElementById('askReplenishmentForm');
-    if (askRepForm) {
-        askRepForm.addEventListener('submit', function(e) {
-            e.preventDefault();
-            const submitBtn = document.getElementById('submitAskReplenishBtn');
-            const originalBtnHtml = submitBtn.innerHTML;
-            submitBtn.disabled = true;
-            submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i> Submitting to Internal Audit...';
-
-            const formData = new FormData(this);
-
-            fetch(this.action, {
-                method: 'POST',
-                body: formData,
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'Accept': 'application/json'
-                }
-            })
-            .then(res => res.json())
-            .then(data => {
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = originalBtnHtml;
-
-                if (data.success) {
-                    // Hide modal
-                    const modalEl = document.getElementById('askReplenishmentModal');
-                    const modalInst = bootstrap.Modal.getInstance(modalEl);
-                    if (modalInst) modalInst.hide();
-
-                    askRepForm.reset();
-
-                    // Show success banner at top of form
-                    const banner = document.createElement('div');
-                    banner.className = 'alert alert-success border-0 shadow-sm rounded-3 p-3 mb-4 d-flex flex-wrap justify-content-between align-items-center gap-3';
-                    banner.innerHTML = `
-                        <div class="d-flex align-items-center gap-3">
-                            <i class="fa-solid fa-circle-check fa-2x text-success"></i>
-                            <div>
-                                <strong class="d-block text-dark fs-6">Replenishment Request #${data.request_no} Submitted Directly to Internal Audit!</strong>
-                                <span class="small text-muted">${data.message} (${data.vouchers_count || 0} purchase vouchers bundled).</span>
-                            </div>
-                        </div>
-                        <div class="d-flex gap-2">
-                            <a href="${data.audit_url}" class="btn btn-sm btn-primary fw-bold px-3">
-                                <i class="fa-solid fa-scale-balanced me-1"></i> Track in Audit &amp; Replenishments Hub
-                            </a>
-                        </div>
-                    `;
-                    const formEl = document.getElementById('pettyCashPurchaseForm');
-                    formEl.parentNode.insertBefore(banner, formEl);
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                } else {
-                    alert(data.message || 'Error submitting replenishment request.');
-                }
-            })
-            .catch(err => {
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = originalBtnHtml;
-                console.error(err);
-                askRepForm.submit();
-            });
-        });
-    }
-
-    // AJAX Handler for Send Replacement Form
-    const sendRepForm = document.getElementById('sendReplacementForm');
-    if (sendRepForm) {
-        sendRepForm.addEventListener('submit', function(e) {
-            e.preventDefault();
-            const submitBtn = document.getElementById('submitRepBtn');
-            const originalBtnHtml = submitBtn.innerHTML;
-            submitBtn.disabled = true;
-            submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i> Disbursing Money...';
-
-            const formData = new FormData(this);
-
-            fetch(this.action, {
-                method: 'POST',
-                body: formData,
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'Accept': 'application/json'
-                }
-            })
-            .then(res => res.json())
-            .then(data => {
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = originalBtnHtml;
-
-                if (data.success) {
-                    // Update state
-                    const stId = formData.get('store_id');
-                    if (storesData[stId]) {
-                        storesData[stId].balance = data.new_balance;
-                    }
-                    availablePettyCash = parseFloat(data.new_balance) || 0;
-
-                    // Update UI balances
-                    const formatted = data.formatted_balance || ('ETB ' + availablePettyCash.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
-                    const topBal = document.getElementById('currentPettyCashDisplay');
-                    const badgeBal = document.getElementById('pettyCashBalanceDisplay');
-                    if (topBal) topBal.textContent = formatted;
-                    if (badgeBal) badgeBal.textContent = formatted;
-
-                    if (zeroBalanceAlert) {
-                        zeroBalanceAlert.classList.add('d-none');
-                    }
-
-                    // Hide modal
-                    const modalEl = document.getElementById('sendReplacementModal');
-                    const modalInst = bootstrap.Modal.getInstance(modalEl);
-                    if (modalInst) modalInst.hide();
-
-                    sendRepForm.reset();
-
-                    // Show success banner at top of form
-                    const banner = document.createElement('div');
-                    banner.className = 'alert alert-success border-0 shadow-sm rounded-3 p-3 mb-4 d-flex justify-content-between align-items-center';
-                    banner.innerHTML = `
-                        <div class="d-flex align-items-center gap-2">
-                            <i class="fa-solid fa-circle-check fa-lg text-success"></i>
-                            <div>
-                                <strong>Replacement Money Sent Successfully!</strong>
-                                <span class="d-block small text-dark">${data.message} Voucher #: <strong>${data.voucher_no}</strong></span>
-                            </div>
-                        </div>
-                        <a href="${data.voucher_url}" target="_blank" class="btn btn-sm btn-outline-success fw-bold">
-                            <i class="fa-solid fa-print me-1"></i> View / Print Voucher
-                        </a>
-                    `;
-                    const formEl = document.getElementById('pettyCashPurchaseForm');
-                    formEl.parentNode.insertBefore(banner, formEl);
-
-                    recalculate();
-                } else {
-                    alert(data.message || 'Error sending replacement money.');
-                }
-            })
-            .catch(err => {
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = originalBtnHtml;
-                console.error(err);
-                // Fallback to regular form submission if AJAX fails
-                sendRepForm.submit();
-            });
-        });
-    }
-
-    // Product template options from existing select
-    const productOptionsHtml = document.querySelector('.product-select') ? document.querySelector('.product-select').innerHTML : '';
-
-    function recalculate() {
-        let grandTotal = 0;
-        let count = 0;
-        const rows = document.querySelectorAll('.item-row');
-
-        rows.forEach(function(row) {
-            count++;
-            const qty = parseFloat(row.querySelector('.qty-input').value) || 0;
-            const price = parseFloat(row.querySelector('.price-input').value) || 0;
-            const lineTotal = qty * price;
-
-            row.querySelector('.row-total-display').textContent = lineTotal.toLocaleString('en-US', {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2
-            });
-
-            grandTotal += lineTotal;
-        });
-
-        grandTotalDisplay.textContent = 'ETB ' + grandTotal.toLocaleString('en-US', {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2
-        });
-
-        totalItemsBadge.textContent = count + (count === 1 ? ' Material' : ' Materials');
-
-        // Check if balance warning needed
-        if (availablePettyCash > 0 && grandTotal > availablePettyCash) {
+    function validateAmount() {
+        if (!amountInput) return;
+        const entered = parseFloat(amountInput.value) || 0;
+        if (entered > availablePettyCash && availablePettyCash > 0) {
             alertDiv.classList.remove('d-none');
         } else {
             alertDiv.classList.add('d-none');
         }
-
-        // Enable/disable remove button
-        const removeBtns = document.querySelectorAll('.remove-row-btn');
-        removeBtns.forEach(btn => {
-            btn.disabled = rows.length <= 1;
-        });
     }
 
-    function attachRowListeners(row) {
-        const prodSelect = row.querySelector('.product-select');
-        const unitInput = row.querySelector('.unit-input');
-        const qtyInput = row.querySelector('.qty-input');
-        const priceInput = row.querySelector('.price-input');
-        const removeBtn = row.querySelector('.remove-row-btn');
-
-        prodSelect.addEventListener('change', function() {
-            const selectedOpt = this.options[this.selectedIndex];
-            if (selectedOpt) {
-                const unit = selectedOpt.getAttribute('data-unit') || 'pcs';
-                const price = parseFloat(selectedOpt.getAttribute('data-price')) || 0;
-                unitInput.value = unit;
-                if (!priceInput.value && price > 0) {
-                    priceInput.value = price;
-                }
-            }
-            recalculate();
-        });
-
-        qtyInput.addEventListener('input', recalculate);
-        priceInput.addEventListener('input', recalculate);
-
-        removeBtn.addEventListener('click', function() {
-            if (document.querySelectorAll('.item-row').length > 1) {
-                row.remove();
-                recalculate();
-            }
-        });
+    if (amountInput) {
+        amountInput.addEventListener('input', validateAmount);
     }
 
-    // Attach listeners to initial rows and calculate initial values
-    document.querySelectorAll('.item-row').forEach(attachRowListeners);
-    recalculate();
-
-    // Add row button
-    if (addRowBtn) {
-        addRowBtn.addEventListener('click', function() {
-            const tr = document.createElement('tr');
-            tr.className = 'item-row';
-            tr.innerHTML = `
-                <td class="ps-3">
-                    <select name="items[${rowIndex}][product_id]" class="form-select form-select-sm product-select" required>
-                        ${productOptionsHtml}
-                    </select>
-                </td>
-                <td>
-                    <input type="number" step="0.001" min="0.001" name="items[${rowIndex}][quantity]" class="form-control form-control-sm qty-input text-center fw-bold" placeholder="0.00" required>
-                </td>
-                <td>
-                    <input type="text" name="items[${rowIndex}][unit]" class="form-control form-control-sm unit-input bg-light" placeholder="pcs" readonly>
-                </td>
-                <td>
-                    <input type="number" step="0.01" min="0" name="items[${rowIndex}][unit_price]" class="form-control form-control-sm price-input text-end fw-bold" placeholder="0.00" required>
-                </td>
-                <td class="text-end">
-                    <strong class="row-total-display font-monospace text-dark">0.00</strong>
-                </td>
-                <td class="text-center pe-3">
-                    <button type="button" class="btn btn-sm btn-link text-danger p-0 remove-row-btn" title="Remove Row">
-                        <i class="fa-solid fa-trash-can"></i>
-                    </button>
-                </td>
-            `;
-
-            tbody.appendChild(tr);
-            attachRowListeners(tr);
-            rowIndex++;
-            recalculate();
-        });
-    }
-
-    // Form confirmation
-    const purchaseForm = document.getElementById('pettyCashPurchaseForm');
-    if (purchaseForm) {
-        purchaseForm.addEventListener('submit', function(e) {
-            const rows = document.querySelectorAll('.item-row');
-            if (rows.length === 0) {
-                e.preventDefault();
-                alert('Please add at least one material item.');
-                return false;
-            }
-            return true;
-        });
-    }
-
-    // Initialize AI Receipt OCR Scanner
+    // Initialize Receipt OCR Scanner if available
     if (window.ReceiptOcrScanner) {
         ReceiptOcrScanner.init({
             fileInput: '#pettyAttachmentInput',
@@ -1292,48 +703,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (rNo && !rNo.value && scanData.data && scanData.data.fs_no) {
                     rNo.value = scanData.data.fs_no;
                 }
-            },
-            onItemsExtracted: function(items) {
-                if (!Array.isArray(items) || items.length === 0) return;
-                const rows = document.querySelectorAll('.item-row');
-                items.forEach(function(item, idx) {
-                    let targetRow = rows[idx];
-                    if (!targetRow && addRowBtn) {
-                        addRowBtn.click();
-                        const newRows = document.querySelectorAll('.item-row');
-                        targetRow = newRows[newRows.length - 1];
-                    }
-                    if (targetRow) {
-                        const qtyInput = targetRow.querySelector('.qty-input');
-                        const priceInput = targetRow.querySelector('.price-input');
-                        const select = targetRow.querySelector('.product-select');
-                        if (qtyInput && item.qty) {
-                            qtyInput.value = item.qty;
-                            qtyInput.dispatchEvent(new Event('input', { bubbles: true }));
-                        }
-                        if (priceInput && item.unit_price) {
-                            priceInput.value = item.unit_price;
-                            priceInput.dispatchEvent(new Event('input', { bubbles: true }));
-                        }
-                        if (select && item.item_description) {
-                            const desc = item.item_description.toLowerCase();
-                            for (let i = 0; i < select.options.length; i++) {
-                                const optText = (select.options[i].text || '').toLowerCase();
-                                if (optText && (optText.includes(desc) || desc.includes(optText))) {
-                                    select.selectedIndex = i;
-                                    select.dispatchEvent(new Event('change', { bubbles: true }));
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                });
+                if (amountInput && !amountInput.value && scanData.data && scanData.data.total_amount) {
+                    amountInput.value = parseFloat(scanData.data.total_amount).toFixed(2);
+                    validateAmount();
+                }
             }
         });
     }
 });
 </script>
 @endpush
+
 @if(session('slip_gap_info'))
 @php $gap = session('slip_gap_info'); @endphp
 <div class="modal fade" id="pettyVoidMissingModal" tabindex="-1" aria-hidden="true">
@@ -1354,7 +734,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 <div class="modal-body p-4">
                     <div class="alert alert-warning py-2 px-3 small border-0 mb-3">
                         <i class="fa-solid fa-triangle-exclamation me-1"></i>
-                        The following missing slip numbers will be marked as <strong>VOID</strong> in the sequential book to allow issuing slip <strong>#{{ $gap['given_number'] }}</strong>:
+                        Missing slip numbers marked as <strong>VOID</strong> in sequential book:
                     </div>
                     
                     <div class="p-3 bg-light rounded border text-center font-monospace fw-bold text-danger mb-3" style="letter-spacing: 1px;">
@@ -1363,13 +743,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
                     <div class="mb-3">
                         <label class="form-label fw-bold small text-dark">Reason for Voiding Slips <span class="text-danger">*</span></label>
-                        <textarea name="reason" class="form-control form-control-sm" rows="3" required placeholder="e.g. Spoiled physical leaves, paper torn, skipped accidentally..."></textarea>
+                        <textarea name="reason" class="form-control form-control-sm" rows="3" required placeholder="e.g. Spoiled physical leaves..."></textarea>
                     </div>
-
-                    <p class="text-muted small mb-0">
-                        <i class="fa-solid fa-shield-halved text-warning me-1"></i>
-                        Voided slips create no stock movements, count towards sequence consumption, and can never be reused.
-                    </p>
                 </div>
                 <div class="modal-footer bg-light py-2">
                     <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
@@ -1386,4 +761,3 @@ document.addEventListener('DOMContentLoaded', function() {
 @include('partials._void_slip_modal')
 
 @endsection
-
