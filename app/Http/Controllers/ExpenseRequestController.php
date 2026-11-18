@@ -217,6 +217,12 @@ class ExpenseRequestController extends Controller
                 });
                 $sub->orWhere('assigned_finance_staff_id', $user->id)
                     ->orWhere('finance_staff_id', $user->id);
+                $sub->orWhereHas('purchaseRequest', function ($pq) use ($user) {
+                    $pq->where('requested_by', $user->id);
+                });
+                $sub->orWhereHas('coa', function ($cq) use ($user) {
+                    $cq->where('assigned_to', $user->id)->orWhere('manager_id', $user->id);
+                });
             });
         };
 
@@ -1149,6 +1155,12 @@ class ExpenseRequestController extends Controller
                 $lifecycle = app(\App\Services\ProcurementLifecycleService::class);
                 $pr = $expenseRequest->purchaseRequest;
                 if ($pr) {
+                    if ($pr->status !== \App\Models\PurchaseRequest::STATUS_PENDING_PAYMENT) {
+                        $pr->update([
+                            'status'             => \App\Models\PurchaseRequest::STATUS_PENDING_PAYMENT,
+                            'current_owner_role' => 'finance',
+                        ]);
+                    }
                     \App\Models\ProcurementPayment::updateOrCreate(
                         ['purchase_request_id' => $pr->id],
                         [

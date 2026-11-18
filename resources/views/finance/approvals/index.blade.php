@@ -426,9 +426,11 @@
                                                             || str_contains($prAuthRoleNames, 'finance_manager')
                                                             || str_contains($prAuthRoleNames, 'admin'));
                                                         $prPayment = optional($item->raw_model)->payment;
-                                                        $isAssignedToMe = (
-                                                            $prPayment && (int)$prPayment->assigned_finance_staff_id === (int)auth()->id()
-                                                        );
+                                                        $prAssignedStaffId = $item->assigned_staff_id 
+                                                            ?? optional($prPayment)->assigned_finance_staff_id 
+                                                            ?? optional(optional($item->raw_model)->expenseRequest)->assigned_finance_staff_id
+                                                            ?? optional(optional($item->raw_model)->expenseRequest)->finance_staff_id;
+                                                        $isAssignedToMe = ((int)$prAssignedStaffId === (int)auth()->id());
                                                     @endphp
 
                                                     @if($isAssignedToMe || $prIsFinHeadOrAdmin)

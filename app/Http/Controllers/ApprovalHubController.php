@@ -316,6 +316,9 @@ class ApprovalHubController extends Controller
                 'proformaInvoices.supplier',
                 'proformaInvoices.items',
                 'gmDecisions',
+                'expenseRequest.assignedFinanceStaff',
+                'expenseRequest.financeStaff',
+                'expenseRequest.coa',
             ])
             ->whereNotNull('status')
             ->latest()
@@ -344,9 +347,16 @@ class ApprovalHubController extends Controller
                     $statusKey = 'rejected';
                     $statusLabel = ucfirst($statusRaw);
                     $badgeColor = 'danger';
-                } elseif ($statusRaw === PurchaseRequest::STATUS_PENDING_PAYMENT || ($payment && $payment->status === 'pending_assignment')) {
+                } elseif (
+                    $statusRaw === PurchaseRequest::STATUS_PENDING_PAYMENT
+                    || in_array($statusRaw, ['pending_payment', 'pending_assignment', 'finance_assigned', 'assigned_to_finance', 'assigned'])
+                    || ($payment && in_array(strtolower($payment->status), ['pending_assignment', 'pending_payment', 'assigned']))
+                    || ($payment && !empty($payment->assigned_finance_staff_id) && $payment->status !== 'paid')
+                    || ($pr->expenseRequest && in_array($pr->expenseRequest->status, [\App\Models\ExpenseRequest::STATUS_APPROVED_ASSIGNED, \App\Models\ExpenseRequest::STATUS_ASSIGNED]))
+                ) {
                     $statusKey = 'finance_queue';
-                    $statusLabel = 'Payment Queue';
+                    $isAssigned = ($payment && !empty($payment->assigned_finance_staff_id)) || ($pr->expenseRequest && !empty($pr->expenseRequest->assigned_finance_staff_id));
+                    $statusLabel = $isAssigned ? 'Payment Queue (Assigned)' : 'Payment Queue';
                     $badgeColor = 'primary';
                 } elseif (in_array($statusRaw, [
                     PurchaseRequest::STATUS_PENDING_COORDINATOR_APPROVAL,
@@ -444,10 +454,10 @@ class ApprovalHubController extends Controller
                     'paid_at'             => $payment?->paid_at,
                     'paid_by_name'        => $payment?->paidBy?->name ?? null,
                     'payment_reference'   => $payment?->notes,
-                    'coa_name'            => $payment?->coaAccount?->name ?? null,
+                    'coa_name'            => $payment?->coaAccount?->name ?? ($pr->expenseRequest?->coa?->name ?? null),
                     'bank_name'           => null,
-                    'assigned_staff_id'   => $payment?->assigned_finance_staff_id ?? null,
-                    'assigned_staff_name' => $payment?->assignedStaff?->name ?? null,
+                    'assigned_staff_id'   => $payment?->assigned_finance_staff_id ?? ($pr->expenseRequest?->assigned_finance_staff_id ?? ($pr->expenseRequest?->finance_staff_id ?? null)),
+                    'assigned_staff_name' => $payment?->assignedStaff?->name ?? ($pr->expenseRequest?->assignedFinanceStaff?->name ?? ($pr->expenseRequest?->financeStaff?->name ?? null)),
                     'materials_summary'   => $materialsSummary,
                     'materials_count'     => $totalMaterials,
                     'route_show'          => route('purchase-requests.show', $pr->id),
@@ -714,6 +724,19 @@ class ApprovalHubController extends Controller
                 if ($raw && isset($raw->payment) && $raw->payment && (int)($raw->payment->assigned_finance_staff_id ?? 0) === $userId) {
                     return true;
                 }
+                if ($raw && isset($raw->payment) && $raw->payment && $raw->payment->coaAccount && (
+                    (int)($raw->payment->coaAccount->assigned_to ?? 0) === $userId ||
+                    (int)($raw->payment->coaAccount->manager_id ?? 0) === $userId
+                )) {
+                    return true;
+                }
+                if ($raw && isset($raw->expenseRequest) && $raw->expenseRequest && (
+                    (int)($raw->expenseRequest->assigned_finance_staff_id ?? 0) === $userId ||
+                    (int)($raw->expenseRequest->finance_staff_id ?? 0) === $userId ||
+                    (int)($raw->expenseRequest->user_id ?? 0) === $userId
+                )) {
+                    return true;
+                }
 
                 // 2. For paid / rejected history: items actually paid by this staff
                 if ($raw && isset($raw->paid_by) && (int)$raw->paid_by === $userId) {
@@ -750,7 +773,8 @@ class ApprovalHubController extends Controller
                 if ($raw && (
                     (isset($raw->requested_by) && (int)$raw->requested_by === $userId) ||
                     (isset($raw->created_by) && (int)$raw->created_by === $userId) ||
-                    (isset($raw->user_id) && (int)$raw->user_id === $userId)
+                    (isset($raw->user_id) && (int)$raw->user_id === $userId) ||
+                    (isset($raw->purchaseRequest) && $raw->purchaseRequest && (int)($raw->purchaseRequest->requested_by ?? 0) === $userId)
                 )) {
                     return true;
                 }
@@ -761,10 +785,28 @@ class ApprovalHubController extends Controller
                 if ((int)($item->assigned_staff_id ?? 0) === $userId) {
                     return true;
                 }
+                if ($raw && isset($raw->assigned_finance_staff_id) && (int)$raw->assigned_finance_staff_id === $userId) {
+                    return true;
+                }
                 if ($raw && isset($raw->assigned_to) && (int)$raw->assigned_to === $userId) {
                     return true;
                 }
                 if ($raw && isset($raw->coa) && (int)($raw->coa->assigned_to ?? 0) === $userId) {
+                    return true;
+                }
+                if ($raw && isset($raw->payment) && $raw->payment && (int)($raw->payment->assigned_finance_staff_id ?? 0) === $userId) {
+                    return true;
+                }
+                if ($raw && isset($raw->payment) && $raw->payment && $raw->payment->coaAccount && (
+                    (int)($raw->payment->coaAccount->assigned_to ?? 0) === $userId ||
+                    (int)($raw->payment->coaAccount->manager_id ?? 0) === $userId
+                )) {
+                    return true;
+                }
+                if ($raw && isset($raw->expenseRequest) && $raw->expenseRequest && (
+                    (int)($raw->expenseRequest->assigned_finance_staff_id ?? 0) === $userId ||
+                    (int)($raw->expenseRequest->finance_staff_id ?? 0) === $userId
+                )) {
                     return true;
                 }
                 if ($raw && isset($raw->paid_by) && (int)$raw->paid_by === $userId) {

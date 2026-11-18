@@ -282,6 +282,8 @@ class PurchaseRequest extends Model
     public function marketingVariance(){ return $this->hasOne(PrMarketingVariance::class)->latestOfMany(); }
     public function payment()        { return $this->hasOne(ProcurementPayment::class); }
     public function payments()       { return $this->hasMany(ProcurementPayment::class); }
+    public function expenseRequest() { return $this->hasOne(ExpenseRequest::class); }
+    public function expenseRequests(){ return $this->hasMany(ExpenseRequest::class); }
     public function creditLedger()   { return $this->hasOne(CreditStoreLedger::class); }
     public function receipt()        { return $this->hasOne(ProcurementReceipt::class); }
     public function driverBooking()  { return $this->hasOne(DriverBooking::class); }
