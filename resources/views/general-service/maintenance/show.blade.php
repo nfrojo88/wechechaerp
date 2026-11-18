@@ -1532,9 +1532,7 @@ function calcTotalCost() {
 document.addEventListener('DOMContentLoaded', function() {
     calcTotalCost();
 });
-</script>
-@endpush
-<script>
+
 function toggleReplacementOptions(selectEl) {
     const container = document.getElementById('replacement_options_container');
     if (container) {
