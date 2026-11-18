@@ -331,25 +331,35 @@
                                             @endif
                                         </td>
 
-                                        {{-- Linked Requisitions (Ask Money / Ask Material) --}}
+                                        {{-- Linked Requisitions & Costs --}}
                                         <td class="py-3">
                                             <div class="d-flex flex-column gap-1">
-                                                {{-- Money --}}
-                                                @if($mReq->expenseRequests->isNotEmpty())
+                                                @if($mReq->total_cost > 0)
+                                                    <span class="badge bg-success bg-opacity-10 text-success fw-bold font-monospace align-self-start">
+                                                        <i class="fa-solid fa-money-bill-wave me-1"></i>Total: {{ number_format($mReq->total_cost, 2) }} ETB
+                                                    </span>
+                                                    <div class="small text-muted" style="font-size:0.75rem;">
+                                                        Labor: {{ number_format($mReq->labor_cost ?? 0, 2) }} | Parts: {{ number_format($mReq->material_cost ?? 0, 2) }}
+                                                    </div>
+                                                @elseif($mReq->expenseRequests->isNotEmpty())
                                                     @foreach($mReq->expenseRequests as $lkExp)
                                                         <div class="small">
                                                             <span class="badge bg-success bg-opacity-10 text-success fw-bold font-monospace">
                                                                 <i class="fa-solid fa-hand-holding-dollar me-1"></i>{{ number_format($lkExp->amount, 2) }} ETB
                                                             </span>
-                                                            <span class="badge bg-light text-muted border small">{{ ucfirst(str_replace('_', ' ', $lkExp->status)) }}</span>
                                                         </div>
                                                     @endforeach
                                                 @else
-                                                    <span class="text-muted small" style="font-size: 0.75rem;">No Money Asked</span>
+                                                    <span class="text-muted small fst-italic" style="font-size: 0.75rem;">Stage 2/3: Diagnosis only</span>
                                                 @endif
 
-                                                {{-- Material --}}
-                                                @if($mReq->materialRequests->isNotEmpty())
+                                                @if(!empty($mReq->materials_data) && is_array($mReq->materials_data))
+                                                    <div class="small">
+                                                        <span class="badge bg-primary bg-opacity-10 text-primary fw-semibold">
+                                                            <i class="fa-solid fa-boxes-stacked me-1"></i>{{ count($mReq->materials_data) }} Spare Part(s)
+                                                        </span>
+                                                    </div>
+                                                @elseif($mReq->materialRequests->isNotEmpty())
                                                     <div class="small">
                                                         <span class="badge bg-primary bg-opacity-10 text-primary fw-semibold">
                                                             <i class="fa-solid fa-boxes-stacked me-1"></i>{{ $mReq->materialRequests->count() }} Material Req(s)
@@ -362,18 +372,18 @@
                                         {{-- GM Actions --}}
                                         <td class="py-3 pe-4 text-end">
                                             <div class="d-flex justify-content-end gap-2 flex-wrap">
-                                                @if($mReq->gs_status === 'submitted_to_gm')
+                                                @if(in_array($mReq->gs_status, ['submitted_to_gm', 'gm_on_hold']))
                                                     <button type="button" class="btn btn-warning btn-sm text-dark fw-bold rounded-pill px-3 shadow-xs" data-bs-toggle="modal" data-bs-target="#gmInitialModal{{ $mReq->id }}">
-                                                        <i class="fa-solid fa-gavel me-1"></i>Review Permission
+                                                        <i class="fa-solid fa-gavel me-1"></i>{{ $mReq->gs_status === 'gm_on_hold' ? 'Resume / Review (On Hold)' : 'Stage 3 Review' }}
                                                     </button>
-                                                @elseif($mReq->gs_status === 'pending_gm_final')
+                                                @elseif(in_array($mReq->gs_status, ['pending_gm_final', 'gm_on_hold_final']))
                                                     <button type="button" class="btn btn-primary btn-sm text-white fw-bold rounded-pill px-3 shadow-xs" data-bs-toggle="modal" data-bs-target="#gmFinalModal{{ $mReq->id }}">
-                                                        <i class="fa-solid fa-check-double me-1"></i>Approve Petty Cash
+                                                        <i class="fa-solid fa-check-double me-1"></i>{{ $mReq->gs_status === 'gm_on_hold_final' ? 'Resume / Review (On Hold)' : 'Stage 6 Final Decision' }}
                                                     </button>
                                                 @else
-                                                    <button type="button" class="btn btn-secondary btn-sm text-white fw-bold rounded-pill px-3 shadow-xs" data-bs-toggle="modal" data-bs-target="#grantGmApprovalModal{{ $mReq->id }}">
-                                                        <i class="fa-solid fa-sliders me-1"></i>Manage Action
-                                                    </button>
+                                                    <a href="{{ route('general-service.maintenance.show', $mReq->id) }}" class="btn btn-outline-primary btn-sm rounded-pill px-3 shadow-xs">
+                                                        <i class="fa-solid fa-eye me-1"></i>View Details
+                                                    </a>
                                                 @endif
                                                 <a href="{{ route('general-service.maintenance.show', $mReq->id) }}" class="btn btn-outline-secondary btn-sm rounded-pill px-2" title="Open Full Maintenance Details">
                                                     <i class="fa-solid fa-arrow-up-right-from-square"></i>
@@ -971,9 +981,14 @@
 @endphp
 @foreach($allTicketModals as $mReq)
 
-{{-- ── A. STEP 2: GM INITIAL DECISION MODAL (APPROVE VS RETURN) ─────────────── --}}
+{{-- ── A. STAGE 3: GM FIRST REVIEW MODAL ─────────────────────────────────────── --}}
+@php
+    $unit = $mReq->fixedAssetUnit;
+    $historySummary = $mReq->history_summary;
+    $maintenanceHistory = $mReq->maintenance_history;
+@endphp
 <div class="modal fade" id="gmInitialModal{{ $mReq->id }}" tabindex="-1" aria-hidden="true" data-bs-backdrop="true">
-    <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-dialog modal-dialog-centered modal-xl">
         <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
             <div class="modal-header py-3 px-4 text-white" style="background: linear-gradient(135deg, #1e3a8a 0%, #0f172a 100%) !important;">
                 <div class="d-flex align-items-center gap-3">
@@ -981,88 +996,259 @@
                         <i class="fa-solid fa-gavel fs-5"></i>
                     </div>
                     <div>
-                        <h5 class="modal-title fw-bold text-white mb-0">Step 2: Executive Review — Ticket #{{ $mReq->request_no }}</h5>
-                        <small class="text-white-50">General Service asks: "Go ahead and maintain this material?"</small>
+                        <h5 class="modal-title fw-bold text-white mb-0">Stage 3: Executive GM First Review — Ticket #{{ $mReq->request_no }}</h5>
+                        <small class="text-white-50">Review asset details, diagnosis &amp; full maintenance history before granting permission</small>
                     </div>
                 </div>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body p-4 bg-light">
-                {{-- Asset & Issue Summary --}}
-                <div class="p-3 bg-white rounded-3 border mb-3">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <strong class="text-dark fs-6">{{ $mReq->asset_name }}</strong>
-                        @if($mReq->asset_code)
-                            <span class="badge bg-dark font-monospace">{{ $mReq->asset_code }}</span>
+
+                {{-- 1. Complete Asset Details --}}
+                <div class="card border-0 shadow-xs rounded-3 bg-white p-3 mb-3 border-start border-4 border-primary">
+                    <h6 class="fw-bold text-dark mb-2 small text-uppercase"><i class="fa-solid fa-truck-pickup me-1 text-primary"></i>Asset Identification &amp; Location</h6>
+                    <div class="row g-2 text-dark">
+                        <div class="col-md-3">
+                            <small class="text-muted d-block" style="font-size:0.75rem;">Equipment / Asset Name:</small>
+                            <strong class="fs-6 text-dark">{{ $mReq->asset_name }}</strong>
+                        </div>
+                        <div class="col-md-2">
+                            <small class="text-muted d-block" style="font-size:0.75rem;">Asset Code / Tag:</small>
+                            <span class="badge bg-dark font-monospace">{{ $mReq->asset_code ?: ($unit?->unit_code ?? '—') }}</span>
+                        </div>
+                        <div class="col-md-2">
+                            <small class="text-muted d-block" style="font-size:0.75rem;">Serial / Chassis #:</small>
+                            <span class="font-monospace text-secondary">{{ $unit?->serial_number ?: ($unit?->chassis_number ?? '—') }}</span>
+                        </div>
+                        <div class="col-md-2">
+                            <small class="text-muted d-block" style="font-size:0.75rem;">Plate Number:</small>
+                            <span class="badge bg-light text-dark border">{{ $unit?->plate_number ?: '—' }}</span>
+                        </div>
+                        <div class="col-md-3">
+                            <small class="text-muted d-block" style="font-size:0.75rem;">Odometer / Mileage:</small>
+                            <strong class="text-dark">{{ $mReq->odometer ?: 'Not Recorded' }}</strong>
+                        </div>
+                        <div class="col-md-4 mt-2">
+                            <small class="text-muted d-block" style="font-size:0.75rem;">Site / Location Store:</small>
+                            <span class="badge bg-light text-dark border">
+                                <i class="fa-solid fa-location-dot me-1 text-danger"></i>{{ $unit?->parentAsset?->store?->name ?? 'Main Site Store' }}
+                            </span>
+                        </div>
+                        <div class="col-md-4 mt-2">
+                            <small class="text-muted d-block" style="font-size:0.75rem;">Assigned Operator / Custodian:</small>
+                            <strong class="text-dark">{{ $mReq->employee?->full_name ?? ($unit?->assignedEmployee?->full_name ?? 'Unassigned') }}</strong>
+                        </div>
+                        <div class="col-md-4 mt-2">
+                            <small class="text-muted d-block" style="font-size:0.75rem;">Reported By / Creator:</small>
+                            <span class="text-muted">{{ $mReq->reportedBy->name ?? 'Staff' }} ({{ $mReq->created_at->format('M d, Y') }})</span>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- 2. Problem Description & GS Diagnosis --}}
+                <div class="card border-0 shadow-xs rounded-3 bg-white p-3 mb-3 border-start border-4 border-warning">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <h6 class="fw-bold text-dark mb-1 small text-uppercase"><i class="fa-solid fa-triangle-exclamation me-1 text-warning"></i>Reported Issue / Fault</h6>
+                            <div class="p-2.5 rounded bg-light border small text-dark" style="white-space: pre-wrap; min-height: 80px;">{{ $mReq->description }}</div>
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="fw-bold text-dark mb-1 small text-uppercase"><i class="fa-solid fa-clipboard-check me-1 text-success"></i>GS Technical Diagnosis &amp; Findings</h6>
+                            <div class="p-2.5 rounded bg-light border small text-dark" style="white-space: pre-wrap; min-height: 80px;">{{ $mReq->diagnosis ?: ($mReq->admin_notes ?: 'Pending GS technical inspection write-up') }}</div>
+                        </div>
+                        @if(!empty($mReq->diagnosis_attachments))
+                            <div class="col-12">
+                                <small class="text-muted fw-bold text-uppercase d-block mb-1" style="font-size:0.75rem;">Inspection Photos / Slips:</small>
+                                <div class="d-flex gap-2 flex-wrap">
+                                    @foreach($mReq->diagnosis_attachments as $att)
+                                        <a href="{{ $att }}" target="_blank" class="btn btn-sm btn-outline-secondary rounded-pill px-3 py-1">
+                                            <i class="fa-solid fa-paperclip me-1"></i>View Attachment {{ $loop->iteration }}
+                                        </a>
+                                    @endforeach
+                                </div>
+                            </div>
                         @endif
                     </div>
-                    <div class="small text-muted mb-2">
-                        Reported by: <strong>{{ $mReq->reportedBy->name ?? ($mReq->employee->full_name ?? 'Staff') }}</strong> &bull; Reported to / Handled by: <strong>{{ $mReq->assignedTo->name ?? 'Wondimagnhu Siyum' }}</strong>
+                </div>
+
+                {{-- 3. FULL MAINTENANCE HISTORY & Summary Totals --}}
+                <div class="card border-0 shadow-xs rounded-3 bg-white p-3 mb-3 border-start border-4 border-info">
+                    <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom flex-wrap gap-2">
+                        <div>
+                            <h6 class="fw-bold text-dark mb-0"><i class="fa-solid fa-clock-rotate-left me-1 text-info"></i>Full Maintenance History for this Asset</h6>
+                            <small class="text-muted">Lifetime breakdown logs, parts changed, and expenditures recorded for <strong>{{ $mReq->asset_name }}</strong></small>
+                        </div>
+                        <div class="d-flex gap-2 flex-wrap">
+                            <span class="badge bg-info bg-opacity-15 text-info-emphasis border border-info border-opacity-25 px-2.5 py-1">
+                                <i class="fa-solid fa-wrench me-1"></i>{{ $historySummary['total_repairs'] }} Past Repair(s)
+                            </span>
+                            <span class="badge bg-success bg-opacity-15 text-success border border-success border-opacity-25 px-2.5 py-1 font-monospace fw-bold">
+                                <i class="fa-solid fa-coins me-1"></i>Total Spent: {{ number_format($historySummary['total_spent'], 2) }} ETB
+                            </span>
+                            <span class="badge bg-light text-muted border px-2.5 py-1">
+                                <i class="fa-regular fa-calendar me-1"></i>Last Repair: {{ $historySummary['last_repair_date'] ? $historySummary['last_repair_date']->format('d M Y') : 'None recorded' }}
+                            </span>
+                        </div>
                     </div>
-                    <div class="p-2.5 rounded bg-light border-start border-4 border-warning small text-dark" style="white-space: pre-wrap;">
-                        {{ $mReq->description }}
-                    </div>
-                    @if($mReq->admin_notes)
-                        <div class="mt-2 pt-2 border-top small text-muted" style="white-space: pre-wrap;">
-                            <strong class="text-secondary"><i class="fa-solid fa-note-sticky me-1"></i>General Service Notes:</strong>
-                            {{ $mReq->admin_notes }}
+
+                    @if($maintenanceHistory->isNotEmpty())
+                        <div class="table-responsive rounded-3 border">
+                            <table class="table table-sm table-hover align-middle mb-0" style="font-size: 0.8rem;">
+                                <thead class="table-light text-secondary text-uppercase" style="font-size: 0.72rem;">
+                                    <tr>
+                                        <th class="ps-3 py-2">Ticket #</th>
+                                        <th class="py-2">Date</th>
+                                        <th class="py-2">Problem / Diagnosis</th>
+                                        <th class="py-2">Parts Changed</th>
+                                        <th class="py-2">Labor Cost</th>
+                                        <th class="py-2">Material Cost</th>
+                                        <th class="py-2">Total Spent</th>
+                                        <th class="py-2">Technician / Workshop</th>
+                                        <th class="py-2 pe-3 text-end">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach($maintenanceHistory as $hTick)
+                                    @php
+                                        $hExp = (float)$hTick->expenseRequests->sum('amount');
+                                        $hLab = (float)($hTick->labor_cost ?: $hExp);
+                                        $hMat = (float)($hTick->material_cost ?: 0);
+                                        $hTot = (float)($hTick->total_cost ?: ($hLab + $hMat));
+                                        $hPartsCount = !empty($hTick->materials_data) ? count($hTick->materials_data) : $hTick->materialRequests->sum(fn($mr) => $mr->items->count());
+                                    @endphp
+                                    <tr>
+                                        <td class="ps-3 font-monospace fw-bold text-primary">{{ $hTick->request_no }}</td>
+                                        <td class="text-muted text-nowrap">{{ $hTick->created_at ? $hTick->created_at->format('M d, Y') : '—' }}</td>
+                                        <td>
+                                            <div class="fw-semibold text-dark">{{ $hTick->issue_type_label }}</div>
+                                            <small class="text-muted text-truncate d-block" style="max-width: 180px;" title="{{ $hTick->description }}">{{ $hTick->description }}</small>
+                                        </td>
+                                        <td>
+                                            @if($hPartsCount > 0)
+                                                <span class="badge bg-info bg-opacity-10 text-dark border">
+                                                    {{ $hPartsCount }} Part(s)
+                                                </span>
+                                            @else
+                                                <span class="text-muted">—</span>
+                                            @endif
+                                        </td>
+                                        <td class="font-monospace">{{ $hLab > 0 ? number_format($hLab, 2) . ' ETB' : '—' }}</td>
+                                        <td class="font-monospace">{{ $hMat > 0 ? number_format($hMat, 2) . ' ETB' : '—' }}</td>
+                                        <td class="font-monospace fw-bold text-success">{{ $hTot > 0 ? number_format($hTot, 2) . ' ETB' : '—' }}</td>
+                                        <td class="text-muted">{{ $hTick->technician_name ?: ($hTick->maintenance_person_name ?: 'Internal/GS') }}</td>
+                                        <td class="text-end pe-3">
+                                            <span class="badge {{ $hTick->status_badge['class'] }}">{{ $hTick->status_badge['label'] }}</span>
+                                        </td>
+                                    </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    @else
+                        <div class="p-3 bg-light rounded text-center small text-muted">
+                            <i class="fa-solid fa-circle-info me-1"></i>No previous maintenance records found for this asset unit. This is the first reported service request.
                         </div>
                     @endif
                 </div>
 
+                {{-- 4. GM Action Controls (Approve, Reject, Hold) --}}
                 <div class="row g-3">
-                    {{-- 1. Approve Path --}}
-                    <div class="col-md-6">
+                    {{-- Option 1: APPROVE --}}
+                    <div class="col-md-4">
                         <div class="card h-100 border-success shadow-xs rounded-3 bg-white p-3 d-flex flex-column justify-content-between">
                             <div>
                                 <div class="d-flex align-items-center gap-2 mb-2 text-success">
                                     <i class="fa-solid fa-circle-check fs-4"></i>
-                                    <h6 class="fw-bold mb-0 text-success">Approve Permission</h6>
+                                    <h6 class="fw-bold mb-0 text-success">1. Approve Permission</h6>
                                 </div>
-                                <p class="small text-muted mb-3">
-                                    Authorize General Service to go ahead and proceed with maintenance. The request returns to GS to add technician details and assign a Petty Cash Owner for your final approval.
+                                <p class="small text-muted mb-2">
+                                    Authorizes proceeding with maintenance. Sends ticket BACK to General Service to add spare parts, labor cost, and technician bank details.
                                 </p>
                             </div>
                             <form action="{{ route('gm.maintenance-approvals.initial-decision', $mReq) }}" method="POST">
                                 @csrf
                                 <input type="hidden" name="action" value="approve">
-                                <div class="mb-3">
-                                    <label class="form-label small text-secondary fw-semibold">GM Directives / Remarks (Optional):</label>
-                                    <input type="text" name="gm_notes" class="form-control form-control-sm rounded-3" placeholder="e.g. Approved. Expedite repair within 2 days.">
+                                <div class="mb-2">
+                                    <label class="form-label small text-secondary fw-semibold mb-1">GM Directives (Optional):</label>
+                                    <input type="text" name="gm_notes" class="form-control form-control-sm rounded-3" placeholder="e.g. Approved. Obtain 2 quotes for parts...">
                                 </div>
                                 <button type="submit" class="btn btn-success fw-bold w-100 rounded-pill py-2 shadow-sm">
-                                    <i class="fa-solid fa-check me-1"></i>Approve — Go Ahead &amp; Maintain
+                                    <i class="fa-solid fa-check me-1"></i>Approve &amp; Send to GS
                                 </button>
                             </form>
                         </div>
                     </div>
 
-                    {{-- 2. Return Path --}}
-                    <div class="col-md-6">
+                    {{-- Option 2: HOLD --}}
+                    <div class="col-md-4">
+                        <div class="card h-100 border-secondary shadow-xs rounded-3 bg-white p-3 d-flex flex-column justify-content-between">
+                            <div>
+                                <div class="d-flex align-items-center gap-2 mb-2 text-secondary">
+                                    <i class="fa-solid fa-pause-circle fs-4"></i>
+                                    <h6 class="fw-bold mb-0 text-dark">2. Place On Hold</h6>
+                                </div>
+                                <p class="small text-muted mb-2">
+                                    Pause this request. It will show as "On Hold" to General Service with your mandatory reason. You can resume or reject later.
+                                </p>
+                            </div>
+                            @if($mReq->gs_status === 'gm_on_hold')
+                                <form action="{{ route('gm.maintenance-approvals.initial-decision', $mReq) }}" method="POST">
+                                    @csrf
+                                    <input type="hidden" name="action" value="resume">
+                                    <div class="p-2 bg-light rounded small mb-2 text-secondary">
+                                        <strong>Current Hold Reason:</strong> {{ $mReq->hold_reason }}
+                                    </div>
+                                    <button type="submit" class="btn btn-warning text-dark fw-bold w-100 rounded-pill py-2">
+                                        <i class="fa-solid fa-play me-1"></i>Resume from Hold
+                                    </button>
+                                </form>
+                            @else
+                                <form action="{{ route('gm.maintenance-approvals.initial-decision', $mReq) }}" method="POST">
+                                    @csrf
+                                    <input type="hidden" name="action" value="hold">
+                                    <div class="mb-2">
+                                        <label class="form-label small text-secondary fw-semibold mb-1">Hold Reason <span class="text-danger">*</span>:</label>
+                                        <input type="text" name="hold_reason" class="form-control form-control-sm rounded-3" placeholder="e.g. Budget review required..." required>
+                                    </div>
+                                    <div class="mb-2">
+                                        <label class="form-label small text-secondary fw-semibold mb-1">Scheduled Review Date:</label>
+                                        <input type="date" name="hold_review_date" class="form-control form-control-sm rounded-3">
+                                    </div>
+                                    <button type="submit" class="btn btn-outline-secondary fw-bold w-100 rounded-pill py-2">
+                                        <i class="fa-solid fa-pause me-1"></i>Place On Hold
+                                    </button>
+                                </form>
+                            @endif
+                        </div>
+                    </div>
+
+                    {{-- Option 3: REJECT --}}
+                    <div class="col-md-4">
                         <div class="card h-100 border-danger shadow-xs rounded-3 bg-white p-3 d-flex flex-column justify-content-between">
                             <div>
                                 <div class="d-flex align-items-center gap-2 mb-2 text-danger">
-                                    <i class="fa-solid fa-rotate-left fs-4"></i>
-                                    <h6 class="fw-bold mb-0 text-danger">Return Request</h6>
+                                    <i class="fa-solid fa-ban fs-4"></i>
+                                    <h6 class="fw-bold mb-0 text-danger">3. Reject Maintenance</h6>
                                 </div>
-                                <p class="small text-muted mb-3">
-                                    Send request back to General Service. GS will be required to provide <strong>Money</strong>, <strong>Time</strong>, and <strong>Material</strong> requirements before resubmitting.
+                                <p class="small text-muted mb-2">
+                                    Decline the request. Ticket ends immediately, the asset is released back to operational use, and the requester is notified.
                                 </p>
                             </div>
                             <form action="{{ route('gm.maintenance-approvals.initial-decision', $mReq) }}" method="POST">
                                 @csrf
-                                <input type="hidden" name="action" value="return">
-                                <div class="mb-3">
-                                    <label class="form-label small text-danger fw-semibold">Return Reason / Feedback <span class="text-danger">*</span>:</label>
-                                    <textarea name="return_reason" class="form-control form-control-sm border-danger rounded-3" rows="2" placeholder="Specify why this is returned and request money/time/material estimates..." required></textarea>
+                                <input type="hidden" name="action" value="reject">
+                                <div class="mb-2">
+                                    <label class="form-label small text-danger fw-semibold mb-1">Mandatory Rejection Reason <span class="text-danger">*</span>:</label>
+                                    <textarea name="rejection_reason" class="form-control form-control-sm border-danger rounded-3" rows="2" placeholder="Specify why this maintenance is rejected..." required></textarea>
                                 </div>
                                 <button type="submit" class="btn btn-outline-danger fw-bold w-100 rounded-pill py-2">
-                                    <i class="fa-solid fa-rotate-left me-1"></i>Return to General Service
+                                    <i class="fa-solid fa-ban me-1"></i>Reject &amp; Release Asset
                                 </button>
                             </form>
                         </div>
                     </div>
                 </div>
+
             </div>
             <div class="modal-footer bg-white border-top py-2.5 px-4">
                 <button type="button" class="btn btn-light border rounded-pill px-4" data-bs-dismiss="modal">Close</button>
@@ -1071,104 +1257,150 @@
     </div>
 </div>
 
-{{-- ── B. STEP 4 & 5: GM FINAL APPROVAL MODAL (PETTY CASH & FINANCE/STORE ROUTING) --}}
+{{-- ── B. STAGE 6: GM FINAL APPROVAL & ROUTING MODAL ────────────────────────── --}}
 <div class="modal fade" id="gmFinalModal{{ $mReq->id }}" tabindex="-1" aria-hidden="true" data-bs-backdrop="true">
-    <div class="modal-dialog modal-dialog-centered modal-lg">
-        <form action="{{ route('gm.maintenance-approvals.final-approval', $mReq) }}" method="POST" class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
-            @csrf
+    <div class="modal-dialog modal-dialog-centered modal-xl">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
             <div class="modal-header py-3 px-4 text-white" style="background: linear-gradient(135deg, #10b981 0%, #064e3b 100%) !important;">
                 <div class="d-flex align-items-center gap-3">
                     <div class="rounded-circle d-flex align-items-center justify-content-center text-white" style="width:40px;height:40px;background:rgba(255,255,255,0.2);flex-shrink:0;">
                         <i class="fa-solid fa-file-signature fs-5"></i>
                     </div>
                     <div>
-                        <h5 class="modal-title fw-bold text-white mb-0">Step 4 &amp; 5: Executive Approval of Petty Cash — Ticket #{{ $mReq->request_no }}</h5>
-                        <small class="text-white-50">Approve Petty Cash assignment &amp; route to Finance Expenses &amp; Store PR</small>
+                        <h5 class="modal-title fw-bold text-white mb-0">Stage 6: Executive GM Final Decision — Ticket #{{ $mReq->request_no }}</h5>
+                        <small class="text-white-50">Approve final expenditure &amp; automatically route money to Finance Head &amp; parts to Store</small>
                     </div>
                 </div>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body p-4 bg-light">
-                
-                {{-- If from Returned flow, highlight Money, Time, and Material --}}
-                @if($mReq->is_returned_flow || $mReq->money_amount || $mReq->estimated_time || $mReq->material_description)
-                    <div class="card border-primary border-opacity-50 shadow-xs rounded-3 bg-white p-3 mb-3">
-                        <div class="d-flex align-items-center gap-2 mb-2">
-                            <span class="badge bg-primary text-white rounded-pill px-2.5 py-1">Returned Request Details</span>
-                            <span class="small text-muted">Provided by General Service upon return</span>
+
+                {{-- Asset Summary & Lifetime Totals --}}
+                <div class="card border-0 shadow-xs rounded-3 bg-white p-3 mb-3 border-start border-4 border-success">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <div>
+                            <strong class="fs-6 text-dark">{{ $mReq->asset_name }}</strong>
+                            <span class="badge bg-dark font-monospace ms-1">{{ $mReq->asset_code ?: ($unit?->unit_code ?? '—') }}</span>
+                            <div class="small text-muted mt-1">
+                                Site: <strong>{{ $unit?->parentAsset?->store?->name ?? 'Main Site Store' }}</strong> &bull; Plate: <strong>{{ $unit?->plate_number ?: 'N/A' }}</strong> &bull; Odometer: <strong>{{ $mReq->odometer ?: 'N/A' }}</strong>
+                            </div>
                         </div>
-                        <div class="row g-2 text-dark">
-                            <div class="col-md-4">
-                                <div class="p-2.5 rounded bg-light border">
-                                    <small class="text-muted d-block text-uppercase fw-semibold" style="font-size:0.7rem;">Money Needed</small>
-                                    <strong class="text-success fs-6 font-monospace">ETB {{ number_format($mReq->money_amount ?? 0, 2) }}</strong>
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="p-2.5 rounded bg-light border">
-                                    <small class="text-muted d-block text-uppercase fw-semibold" style="font-size:0.7rem;">Time Estimate</small>
-                                    <strong class="text-dark fs-6">{{ $mReq->estimated_time ?? 'Standard' }}</strong>
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="p-2.5 rounded bg-light border">
-                                    <small class="text-muted d-block text-uppercase fw-semibold" style="font-size:0.7rem;">Petty Cash Custodian</small>
-                                    <strong class="text-primary fs-6">{{ $mReq->pettyCashOwner->name ?? 'Unassigned' }}</strong>
-                                </div>
-                            </div>
-                            @if($mReq->material_description)
-                                <div class="col-12 mt-2">
-                                    <div class="p-2.5 rounded bg-light border">
-                                        <small class="text-muted d-block text-uppercase fw-semibold" style="font-size:0.7rem;">Material / Spare Parts Requirements (Will appear in Store PR)</small>
-                                        <div class="small text-dark fw-semibold" style="white-space: pre-wrap;">{{ $mReq->material_description }}</div>
-                                    </div>
-                                </div>
-                            @endif
+                        <div class="d-flex gap-2 flex-wrap">
+                            <span class="badge bg-info bg-opacity-15 text-info-emphasis border px-2.5 py-1">
+                                Past Repairs: <strong>{{ $historySummary['total_repairs'] }}</strong>
+                            </span>
+                            <span class="badge bg-success bg-opacity-15 text-success border px-2.5 py-1 font-monospace fw-bold">
+                                Lifetime Spent: <strong>{{ number_format($historySummary['total_spent'], 2) }} ETB</strong>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Financials Overview --}}
+                <div class="row g-3 mb-3">
+                    <div class="col-md-4">
+                        <div class="p-3 rounded-3 bg-white border h-100">
+                            <small class="text-muted text-uppercase fw-bold d-block mb-1" style="font-size:0.75rem;">Labor Cost (To Finance Head)</small>
+                            <span class="fs-4 fw-bold text-success font-monospace">{{ number_format($mReq->labor_cost ?? $mReq->money_amount ?? 0, 2) }} ETB</span>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="p-3 rounded-3 bg-white border h-100">
+                            <small class="text-muted text-uppercase fw-bold d-block mb-1" style="font-size:0.75rem;">Parts Cost (To Store Manager)</small>
+                            <span class="fs-4 fw-bold text-primary font-monospace">{{ number_format($mReq->material_cost ?? 0, 2) }} ETB</span>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="p-3 rounded-3 bg-success bg-opacity-10 border border-success border-opacity-25 h-100">
+                            <small class="text-success text-uppercase fw-bold d-block mb-1" style="font-size:0.75rem;">Total Approved Budget</small>
+                            <span class="fs-4 fw-bold text-dark font-monospace">{{ number_format($mReq->total_cost ?? (($mReq->labor_cost ?? 0) + ($mReq->material_cost ?? 0)), 2) }} ETB</span>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Itemized Materials List --}}
+                @if(!empty($mReq->materials_data))
+                    <div class="card border-0 shadow-xs rounded-3 bg-white p-3 mb-3">
+                        <h6 class="fw-bold text-dark mb-2 small text-uppercase"><i class="fa-solid fa-boxes-stacked me-1 text-primary"></i>Itemized Spare Parts (Auto-Routed to Store)</h6>
+                        <div class="table-responsive rounded border">
+                            <table class="table table-sm table-hover align-middle mb-0" style="font-size: 0.82rem;">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Part / Item Name</th>
+                                        <th>Quantity</th>
+                                        <th>Unit</th>
+                                        <th>Unit Cost</th>
+                                        <th>Line Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach($mReq->materials_data as $mat)
+                                        <tr>
+                                            <td><strong>{{ $mat['name'] ?? '—' }}</strong></td>
+                                            <td>{{ $mat['quantity'] ?? 1 }}</td>
+                                            <td>{{ $mat['unit'] ?? 'pcs' }}</td>
+                                            <td class="font-monospace">{{ number_format($mat['estimated_unit_cost'] ?? 0, 2) }} ETB</td>
+                                            <td class="font-monospace fw-bold text-success">{{ number_format($mat['total_cost'] ?? 0, 2) }} ETB</td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 @endif
 
-                {{-- Personnel Contact Info (Record-keeping only) --}}
+                {{-- Technician & Bank Details --}}
                 <div class="card border-0 shadow-xs rounded-3 bg-white p-3 mb-3 border-top border-3 border-primary">
-                    <h6 class="fw-bold text-dark mb-2 small text-uppercase"><i class="fa-solid fa-address-card me-1 text-primary"></i>Technician &amp; Payment Account Information</h6>
+                    <h6 class="fw-bold text-dark mb-2 small text-uppercase"><i class="fa-solid fa-building-columns me-1 text-primary"></i>Technician Payment &amp; Bank Account Information</h6>
                     <div class="row g-2">
                         <div class="col-md-4">
-                            <div class="p-2 rounded bg-light border">
-                                <small class="text-muted d-block" style="font-size:0.75rem;"><i class="fa-solid fa-user-wrench me-1 text-primary"></i>Technician Name:</small>
-                                <strong class="text-dark fs-6">{{ $mReq->maintenance_person_name ?? 'N/A' }}</strong>
+                            <div class="p-2.5 rounded bg-light border">
+                                <small class="text-muted d-block" style="font-size:0.75rem;">Technician / Workshop Name:</small>
+                                <strong class="text-dark fs-6">{{ $mReq->technician_name ?: ($mReq->maintenance_person_name ?: 'N/A') }}</strong>
                             </div>
                         </div>
                         <div class="col-md-4">
-                            <div class="p-2 rounded bg-success bg-opacity-10 border border-success border-opacity-25">
-                                <small class="text-success d-block" style="font-size:0.75rem;"><i class="fa-solid fa-credit-card me-1"></i>Account No / Bank Account:</small>
-                                <strong class="text-success font-monospace fs-6">{{ $mReq->maintenance_person_account ?? 'N/A' }}</strong>
+                            <div class="p-2.5 rounded bg-success bg-opacity-10 border border-success border-opacity-25">
+                                <small class="text-success d-block" style="font-size:0.75rem;">Bank &amp; Account Number:</small>
+                                <strong class="text-dark">{{ $mReq->technician_bank_name ?: 'Bank Transfer' }}</strong>
+                                <div class="font-monospace fw-bold text-success">{{ $mReq->technician_account_number ?: ($mReq->maintenance_person_account ?: 'N/A') }}</div>
+                                <small class="text-muted">Holder: {{ $mReq->technician_account_name ?: 'N/A' }}</small>
                             </div>
                         </div>
                         <div class="col-md-4">
-                            <div class="p-2 rounded bg-light border">
-                                <small class="text-muted d-block" style="font-size:0.75rem;"><i class="fa-solid fa-phone me-1 text-info"></i>Phone Number:</small>
-                                @if($mReq->maintenance_person_phone)
-                                    <a href="tel:{{ $mReq->maintenance_person_phone }}" class="text-dark fw-bold text-decoration-none fs-6">
-                                        {{ $mReq->maintenance_person_phone }}
-                                    </a>
-                                @else
-                                    <strong class="text-muted fs-6">N/A</strong>
-                                @endif
+                            <div class="p-2.5 rounded bg-light border">
+                                <small class="text-muted d-block" style="font-size:0.75rem;">Phone &amp; Condition Rating:</small>
+                                <div class="fw-bold text-primary">{{ $mReq->technician_phone ?: ($mReq->maintenance_person_phone ?: 'N/A') }}</div>
+                                <span class="badge bg-secondary text-uppercase mt-1">{{ str_replace('_', ' ', $mReq->condition_rating ?: 'repairable') }}</span>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                {{-- Routing Confirmation Cards --}}
+                {{-- Proforma Attachments --}}
+                @if(!empty($mReq->quotation_attachments))
+                    <div class="card border-0 shadow-xs rounded-3 bg-white p-3 mb-3">
+                        <h6 class="fw-bold text-dark mb-2 small text-uppercase"><i class="fa-solid fa-paperclip me-1 text-secondary"></i>Quotation / Proforma Slips</h6>
+                        <div class="d-flex gap-2 flex-wrap">
+                            @foreach($mReq->quotation_attachments as $qUrl)
+                                <a href="{{ $qUrl }}" target="_blank" class="btn btn-sm btn-outline-secondary rounded-pill px-3 py-1">
+                                    <i class="fa-solid fa-file-pdf me-1 text-danger"></i>Proforma {{ $loop->iteration }}
+                                </a>
+                            @endforeach
+                        </div>
+                    </div>
+                @endif
+
+                {{-- Routing Information Cards --}}
                 <div class="row g-3 mb-3">
                     <div class="col-md-6">
                         <div class="p-3 bg-success bg-opacity-10 border border-success border-opacity-25 rounded-3 h-100">
                             <div class="d-flex align-items-center gap-2 mb-1 text-success">
-                                <i class="fa-solid fa-file-invoice-dollar fs-5"></i>
-                                <strong class="small text-uppercase">1. Finance &rarr; Expenses</strong>
+                                <i class="fa-solid fa-money-bill-transfer fs-5"></i>
+                                <strong class="small text-uppercase">1. Money &rarr; Finance Head Queue</strong>
                             </div>
                             <p class="small text-muted mb-0">
-                                Once approved, an Expense Request is confirmed under <strong>Maintenance</strong> for ETB {{ number_format($mReq->money_amount ?? 0, 2) }}, assigned to Petty Cash Custodian <strong>{{ $mReq->pettyCashOwner->name ?? 'Custodian' }}</strong>.
+                                Automatically creates an Expense Request for <strong>ETB {{ number_format($mReq->labor_cost ?? $mReq->money_amount ?? 0, 2) }}</strong> in the Finance Head's queue for assignment and electronic disbursement to the technician.
                             </p>
                         </div>
                     </div>
@@ -1176,38 +1408,99 @@
                         <div class="p-3 bg-primary bg-opacity-10 border border-primary border-opacity-25 rounded-3 h-100">
                             <div class="d-flex align-items-center gap-2 mb-1 text-primary">
                                 <i class="fa-solid fa-boxes-stacked fs-5"></i>
-                                <strong class="small text-uppercase">2. Store Manager &rarr; PR Section</strong>
+                                <strong class="small text-uppercase">2. Spare Parts &rarr; Store Manager</strong>
                             </div>
                             <p class="small text-muted mb-0">
-                                Material details are sent directly into the Store Manager's Purchase Request (PR) cycle for procurement or stock issue.
+                                Listed parts are sent to the Store Manager to issue with a Model 22 voucher or forward to Procurement.
                             </p>
                         </div>
                     </div>
                 </div>
 
-                <div class="mb-3">
-                    <label class="form-label small fw-bold text-secondary text-uppercase">Assign to Finance Officer / Cashier (Optional):</label>
-                    <select name="assigned_finance_staff_id" class="form-select rounded-3">
-                        <option value="">— Finance Disbursement Queue —</option>
-                        @foreach($financeStaff as $fStf)
-                            <option value="{{ $fStf->id }}">{{ $fStf->name }} ({{ $fStf->roles->pluck('name')->implode(', ') ?: 'Finance' }})</option>
-                        @endforeach
-                    </select>
-                </div>
+                {{-- GM Final Decision Actions (Approve, Hold, Reject) --}}
+                <div class="row g-3">
+                    {{-- Action 1: APPROVE --}}
+                    <div class="col-md-4">
+                        <div class="card h-100 border-success shadow-xs rounded-3 bg-white p-3 d-flex flex-column justify-content-between">
+                            <div>
+                                <h6 class="fw-bold text-success mb-1"><i class="fa-solid fa-check-circle me-1"></i>1. Final Approval</h6>
+                                <p class="small text-muted mb-2">Permanently locks decision and executes routing to Finance Head and Store.</p>
+                            </div>
+                            <form action="{{ route('gm.maintenance-approvals.final-approval', $mReq) }}" method="POST">
+                                @csrf
+                                <input type="hidden" name="action" value="approve">
+                                <div class="mb-2">
+                                    <label class="form-label small text-secondary fw-semibold mb-1">GM Directive (Optional):</label>
+                                    <input type="text" name="gm_notes" class="form-control form-control-sm rounded-3" placeholder="e.g. Approved for immediate execution.">
+                                </div>
+                                <button type="submit" class="btn btn-success fw-bold w-100 rounded-pill py-2 shadow-sm" onclick="return confirm('Authorize final approval and route to Finance Head & Store?')">
+                                    <i class="fa-solid fa-check-double me-1"></i>Approve &amp; Route
+                                </button>
+                            </form>
+                        </div>
+                    </div>
 
-                <div class="mb-0">
-                    <label class="form-label small fw-bold text-secondary text-uppercase">Executive Notes / Approval Directive (Optional):</label>
-                    <textarea name="gm_notes" class="form-control rounded-3" rows="2" placeholder="e.g. Petty cash assignment approved for immediate payout."></textarea>
+                    {{-- Action 2: HOLD --}}
+                    <div class="col-md-4">
+                        <div class="card h-100 border-secondary shadow-xs rounded-3 bg-white p-3 d-flex flex-column justify-content-between">
+                            <div>
+                                <h6 class="fw-bold text-dark mb-1"><i class="fa-solid fa-lock me-1"></i>2. Place On Hold</h6>
+                                <p class="small text-muted mb-2">Ticket remains locked. Visible as On Hold with reason. Decide later.</p>
+                            </div>
+                            @if($mReq->gs_status === 'gm_on_hold_final')
+                                <form action="{{ route('gm.maintenance-approvals.final-approval', $mReq) }}" method="POST">
+                                    @csrf
+                                    <input type="hidden" name="action" value="resume">
+                                    <div class="p-2 bg-light rounded small mb-2 text-secondary">
+                                        <strong>Current Hold Reason:</strong> {{ $mReq->hold_reason }}
+                                    </div>
+                                    <button type="submit" class="btn btn-warning text-dark fw-bold w-100 rounded-pill py-2">
+                                        <i class="fa-solid fa-play me-1"></i>Resume for Decision
+                                    </button>
+                                </form>
+                            @else
+                                <form action="{{ route('gm.maintenance-approvals.final-approval', $mReq) }}" method="POST">
+                                    @csrf
+                                    <input type="hidden" name="action" value="hold">
+                                    <div class="mb-2">
+                                        <label class="form-label small text-secondary fw-semibold mb-1">Hold Reason <span class="text-danger">*</span>:</label>
+                                        <input type="text" name="hold_reason" class="form-control form-control-sm rounded-3" placeholder="Specify reason..." required>
+                                    </div>
+                                    <button type="submit" class="btn btn-outline-secondary fw-bold w-100 rounded-pill py-2">
+                                        <i class="fa-solid fa-pause me-1"></i>Place Final Decision On Hold
+                                    </button>
+                                </form>
+                            @endif
+                        </div>
+                    </div>
+
+                    {{-- Action 3: REJECT --}}
+                    <div class="col-md-4">
+                        <div class="card h-100 border-danger shadow-xs rounded-3 bg-white p-3 d-flex flex-column justify-content-between">
+                            <div>
+                                <h6 class="fw-bold text-danger mb-1"><i class="fa-solid fa-ban me-1"></i>3. Final Rejection</h6>
+                                <p class="small text-muted mb-2">Permanently ends ticket and releases asset back to previous status.</p>
+                            </div>
+                            <form action="{{ route('gm.maintenance-approvals.final-approval', $mReq) }}" method="POST">
+                                @csrf
+                                <input type="hidden" name="action" value="reject">
+                                <div class="mb-2">
+                                    <label class="form-label small text-danger fw-semibold mb-1">Rejection Reason <span class="text-danger">*</span>:</label>
+                                    <textarea name="rejection_reason" class="form-control form-control-sm border-danger rounded-3" rows="2" placeholder="Specify mandatory rejection reason..." required></textarea>
+                                </div>
+                                <button type="submit" class="btn btn-outline-danger fw-bold w-100 rounded-pill py-2">
+                                    <i class="fa-solid fa-ban me-1"></i>Reject &amp; Release Asset
+                                </button>
+                            </form>
+                        </div>
+                    </div>
                 </div>
 
             </div>
-            <div class="modal-footer bg-white border-top py-3 px-4 d-flex justify-content-between align-items-center">
-                <button type="button" class="btn btn-light border rounded-pill px-4" data-bs-dismiss="modal">Cancel</button>
-                <button type="submit" class="btn btn-success fw-bold rounded-pill px-5 shadow-sm">
-                    <i class="fa-solid fa-check-double me-2"></i>Approve Petty Cash &amp; Authorize Maintenance
-                </button>
+            <div class="modal-footer bg-white border-top py-2.5 px-4">
+                <button type="button" class="btn btn-light border rounded-pill px-4" data-bs-dismiss="modal">Close</button>
             </div>
-        </form>
+        </div>
     </div>
 </div>
 

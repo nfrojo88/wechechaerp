@@ -85,7 +85,40 @@ class InventoryController extends Controller
         $inventory->withQueryString();
         $products  = Product::where('is_active', true)->orderBy('name')->get();
 
-        return view('inventory.index', compact('inventory', 'stores', 'products', 'sort', 'direction', 'isSiteEngineer', 'assignedStores'));
+        // ── Under Maintenance Section (Stage 2 GS Verified & Active Tickets) ──
+        \App\Models\MaintenanceRequest::ensureSchema();
+        $underMaintenanceQuery = \App\Models\MaintenanceRequest::with([
+                'fixedAssetUnit.parentAsset.store',
+                'employee',
+                'assignedTo'
+            ])
+            ->whereNotNull('fixed_asset_unit_id')
+            ->whereIn('gs_status', [
+                'gs_verified',
+                'submitted_to_gm',
+                'gm_on_hold',
+                'gm_approved_initial',
+                'pending_gm_final',
+                'gm_on_hold_final',
+                'approved'
+            ])
+            ->whereNotIn('status', ['resolved', 'closed', 'rejected']);
+
+        if ($isSiteEngineer) {
+            $assignedStoreIds = $user->getAssignedStoreIds();
+            $underMaintenanceQuery->whereHas('fixedAssetUnit.parentAsset', function ($fq) use ($assignedStoreIds) {
+                $fq->whereIn('store_id', $assignedStoreIds);
+            });
+        } elseif ($request->filled('store_id')) {
+            $filterStoreId = (int)$request->store_id;
+            $underMaintenanceQuery->whereHas('fixedAssetUnit.parentAsset', function ($fq) use ($filterStoreId) {
+                $fq->where('store_id', $filterStoreId);
+            });
+        }
+
+        $underMaintenanceRequests = $underMaintenanceQuery->latest()->get();
+
+        return view('inventory.index', compact('inventory', 'stores', 'products', 'sort', 'direction', 'isSiteEngineer', 'assignedStores', 'underMaintenanceRequests'));
     }
 
     /**

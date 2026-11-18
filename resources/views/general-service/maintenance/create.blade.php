@@ -204,172 +204,69 @@
 
             </div>
 
-            {{-- Right Column: Direct Ask Material & Ask Money Options --}}
+            {{-- Right Column: Workflow Overview & Actions --}}
             <div class="col-lg-5">
 
-                {{-- 3. Ask Material / Spare Parts Box --}}
-                <div class="card border-0 shadow-sm rounded-4 mb-4" style="border-top: 4px solid #3b82f6 !important;">
+                <div class="card border-0 shadow-sm rounded-4 mb-4 border-top border-4 border-primary">
                     <div class="card-header bg-white border-0 py-3 px-4 rounded-top-4">
-                        <div class="form-check form-switch mb-0">
-                            <input class="form-check-input" type="checkbox" name="ask_material" id="ask_material_switch" value="1" {{ old('ask_material') ? 'checked' : '' }} onchange="toggleMaterialSection(this)">
-                            <label class="form-check-label fw-bold text-dark fs-6" for="ask_material_switch">
-                                <i class="fa-solid fa-boxes-stacked text-primary me-1"></i> Ask Material / Spare Parts
-                            </label>
-                        </div>
-                        <small class="text-muted d-block mt-1">Request spare parts from Store Manager or Procurement immediately.</small>
+                        <h6 class="fw-bold text-dark mb-0"><i class="fa-solid fa-diagram-project text-primary me-2"></i>Maintenance Workflow (7 Stages)</h6>
+                        <small class="text-muted">Structured approval &amp; verification lifecycle</small>
                     </div>
-
-                    <div id="material_section_container" class="card-body p-4 pt-0 {{ old('ask_material') ? '' : 'd-none' }}">
-                        <hr class="my-2 text-muted">
-
-                        <div class="row g-2 mb-3">
-                            <div class="col-md-6">
-                                <label class="form-label fw-bold small text-secondary">Destination Store</label>
-                                <select name="destination_store_id" class="form-select form-select-sm rounded-3">
-                                    @foreach($stores as $st)
-                                        <option value="{{ $st->id }}">{{ $st->name }}</option>
-                                    @endforeach
-                                </select>
+                    <div class="card-body p-4 pt-1">
+                        <div class="timeline-stepper d-flex flex-column gap-3">
+                            <div class="d-flex gap-3 align-items-start">
+                                <span class="badge bg-primary rounded-circle p-2 d-flex align-items-center justify-content-center" style="width: 28px; height: 28px;">1</span>
+                                <div>
+                                    <strong class="d-block text-dark small">Ticket Creation (Current Step)</strong>
+                                    <span class="text-muted small">Asset marked <code>in_maintenance</code>. Ticket submitted to GS inspection queue.</span>
+                                </div>
                             </div>
-                            <div class="col-md-6">
-                                <label class="form-label fw-bold small text-secondary">Required By Date</label>
-                                <input type="date" name="required_date" class="form-control form-control-sm rounded-3" value="{{ now()->addDays(2)->format('Y-m-d') }}">
+                            <div class="d-flex gap-3 align-items-start text-muted">
+                                <span class="badge bg-secondary rounded-circle p-2 d-flex align-items-center justify-content-center" style="width: 28px; height: 28px;">2</span>
+                                <div>
+                                    <strong class="d-block small">GS Inspection &amp; Verification</strong>
+                                    <span class="small">GS inspects the fault, writes diagnosis, and confirms maintenance (Accept or Reject).</span>
+                                </div>
                             </div>
-                        </div>
-
-                        {{-- Item rows --}}
-                        <div class="mb-3">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <label class="form-label fw-bold small text-secondary mb-0">Requested Spare Parts / Items</label>
-                                <button type="button" class="btn btn-xs btn-outline-primary rounded-pill px-2 py-0" onclick="addMaterialRow()">
-                                    <i class="fa-solid fa-plus me-1"></i>Add Row
-                                </button>
+                            <div class="d-flex gap-3 align-items-start text-muted">
+                                <span class="badge bg-secondary rounded-circle p-2 d-flex align-items-center justify-content-center" style="width: 28px; height: 28px;">3</span>
+                                <div>
+                                    <strong class="d-block small">GM First Review</strong>
+                                    <span class="small">GM reviews asset maintenance history and diagnosis to grant initial permission.</span>
+                                </div>
                             </div>
-
-                            <div id="material_rows_container">
-                                <div class="material-item-row p-2 rounded-3 border bg-light mb-2" data-idx="0">
-                                    <div class="row g-2">
-                                        <div class="col-12">
-                                            <select name="items[0][product_id]" class="form-select form-select-sm" onchange="handleProductSelect(this, 0)">
-                                                <option value="">— Select Catalog Product —</option>
-                                                <option value="custom">✏️ + Custom / Unlisted Spare Part</option>
-                                                @foreach($products as $p)
-                                                    <option value="{{ $p->id }}" data-unit="{{ $p->unit ?? 'pcs' }}">{{ $p->name }} {{ $p->sku ? "({$p->sku})" : '' }}</option>
-                                                @endforeach
-                                            </select>
-                                            <input type="text" name="items[0][custom_name]" class="form-control form-control-sm custom-product-name mt-1 d-none" placeholder="Type custom spare part name...">
-                                        </div>
-                                        <div class="col-6">
-                                            <input type="number" step="0.01" min="0.01" name="items[0][quantity]" class="form-control form-control-sm" placeholder="Qty" value="1">
-                                        </div>
-                                        <div class="col-6">
-                                            <input type="text" name="items[0][unit]" class="form-control form-control-sm unit-field" placeholder="Unit" value="pcs">
-                                        </div>
-                                        <div class="col-12">
-                                            <input type="text" name="items[0][notes]" class="form-control form-control-sm" placeholder="Specs, part number, notes...">
-                                        </div>
-                                    </div>
+                            <div class="d-flex gap-3 align-items-start text-muted">
+                                <span class="badge bg-secondary rounded-circle p-2 d-flex align-items-center justify-content-center" style="width: 28px; height: 28px;">4</span>
+                                <div>
+                                    <strong class="d-block small">GS Fills Costs &amp; Tech Details</strong>
+                                    <span class="small">GS adds itemized spare parts, labor cost, workshop details, and proformas.</span>
+                                </div>
+                            </div>
+                            <div class="d-flex gap-3 align-items-start text-muted">
+                                <span class="badge bg-secondary rounded-circle p-2 d-flex align-items-center justify-content-center" style="width: 28px; height: 28px;">5-7</span>
+                                <div>
+                                    <strong class="d-block small">Lock, GM Decision &amp; Routing</strong>
+                                    <span class="small">Ticket locked, GM gives final sign-off, money routed to Finance Head &amp; parts to store.</span>
                                 </div>
                             </div>
                         </div>
 
-                        <div class="mb-0">
-                            <label class="form-label fw-bold small text-secondary">Material Notes for Store Manager</label>
-                            <textarea name="material_notes" class="form-control form-control-sm rounded-3" rows="2" placeholder="Notes for Store Manager / Purchasing officer...">{{ old('material_notes') }}</textarea>
+                        <div class="alert alert-info border-0 rounded-3 mt-3 mb-0 py-2 small">
+                            <i class="fa-solid fa-circle-info me-1"></i>
+                            <strong>Policy Notice:</strong> Spare parts and labor expenditure are added in Stage 4 after initial GM permission.
                         </div>
                     </div>
                 </div>
 
-                {{-- 4. Ask Money / Repair Budget Box --}}
-                <div class="card border-0 shadow-sm rounded-4 mb-4" style="border-top: 4px solid #10b981 !important;">
-                    <div class="card-header bg-white border-0 py-3 px-4 rounded-top-4">
-                        <div class="form-check form-switch mb-0">
-                            <input class="form-check-input" type="checkbox" name="ask_money" id="ask_money_switch" value="1" {{ old('ask_money') ? 'checked' : '' }} onchange="toggleMoneySection(this)">
-                            <label class="form-check-label fw-bold text-dark fs-6" for="ask_money_switch">
-                                <i class="fa-solid fa-hand-holding-dollar text-success me-1"></i> Ask Money (Expense Request)
-                            </label>
-                        </div>
-                        <small class="text-muted d-block mt-1">Request funds for technician labour, garage service, or local cash purchase.</small>
-                    </div>
-
-                    <div id="money_section_container" class="card-body p-4 pt-0 {{ old('ask_money') ? '' : 'd-none' }}">
-                        <hr class="my-2 text-muted">
-
-                        <div class="mb-3">
-                            <label class="form-label fw-bold small text-secondary">Requested Amount (ETB) <span class="text-danger">*</span></label>
-                            <div class="input-group">
-                                <span class="input-group-text fw-bold bg-light">ETB</span>
-                                <input type="number" step="0.01" min="1" name="money_amount" class="form-control fw-bold text-success" placeholder="0.00" value="{{ old('money_amount') }}">
-                            </div>
-                        </div>
-
-                        <div class="mb-3">
-                            <label class="form-label fw-bold small text-secondary">Purpose &amp; Quotation Details</label>
-                            <textarea name="money_description" class="form-control form-control-sm rounded-3" rows="2" placeholder="Technician quotation, garage service details, labour fees...">{{ old('money_description') }}</textarea>
-                        </div>
-
-                        <div class="mb-3">
-                            <label class="form-label fw-bold small text-secondary">Proforma / Quotation Attachment <small class="text-muted">(Optional)</small></label>
-                            <input type="file" name="money_attachment" class="form-control form-control-sm rounded-3" accept="image/jpeg,image/png,image/jpg,application/pdf,image/webp">
-                        </div>
-
-                        {{-- Direct Ask Money Bank Payment Destination --}}
-                        <div class="p-3 bg-light rounded-3 border border-primary-subtle shadow-xs">
-                            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                                <div class="form-check form-switch mb-0">
-                                    <input class="form-check-input" type="checkbox" role="switch" name="money_is_bank_payment" id="money_bank_toggle" value="1" {{ old('money_is_bank_payment') ? 'checked' : '' }} onchange="toggleDirectMoneyBank(this)">
-                                    <label class="form-check-label fw-bold text-dark small" for="money_bank_toggle">
-                                        <i class="fa-solid fa-building-columns text-primary me-1"></i>Pay to Bank Account / Electronic Transfer (በባንክ ሂሳብ ይከፈል)
-                                    </label>
-                                </div>
-                                <span class="badge bg-secondary-subtle text-secondary border px-2 py-0.5 rounded-pill font-monospace small" id="money_bank_badge">
-                                    <i class="fa-solid fa-lock me-1"></i>Optional
-                                </span>
-                            </div>
-
-                            <div id="money_bank_fields" class="mt-2 pt-2 border-top {{ old('money_is_bank_payment') ? '' : 'd-none' }}">
-                                <div class="row g-2">
-                                    <div class="col-md-4">
-                                        <label class="form-label small fw-bold text-dark mb-0">Bank Name (የባንክ ስም)</label>
-                                        <input type="text" list="directMaintBanks" name="money_bank_name" class="form-control form-control-sm" placeholder="e.g. CBE, Telebirr..." value="{{ old('money_bank_name') }}">
-                                        <datalist id="directMaintBanks">
-                                            <option value="Commercial Bank of Ethiopia (CBE)">
-                                            <option value="Telebirr">
-                                            <option value="Awash Bank">
-                                            <option value="Bank of Abyssinia">
-                                            <option value="Dashen Bank">
-                                            <option value="Cooperative Bank of Oromia (Coop)">
-                                            <option value="Hibret Bank (United)">
-                                            <option value="Nib International Bank">
-                                            <option value="Amhara Bank">
-                                            <option value="CBE Birr">
-                                        </datalist>
-                                    </div>
-                                    <div class="col-md-4">
-                                        <label class="form-label small fw-bold text-dark mb-0">Account Number (የሂሳብ ቁጥር)</label>
-                                        <input type="text" name="money_account_number" class="form-control form-control-sm font-monospace fw-bold" placeholder="e.g. 1000..." value="{{ old('money_account_number') }}">
-                                    </div>
-                                    <div class="col-md-4">
-                                        <label class="form-label small fw-bold text-dark mb-0">Account Holder Name (የባለቤቱ ስም)</label>
-                                        <input type="text" name="money_account_name" class="form-control form-control-sm" placeholder="e.g. Technician / Garage Name" value="{{ old('money_account_name') }}">
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {{-- Action Buttons --}}
-                <div class="card border-0 shadow-sm rounded-4">
+                {{-- Action Card --}}
+                <div class="card border-0 shadow-sm rounded-4 mb-4">
                     <div class="card-body p-4">
-                        <div class="d-grid gap-2">
-                            <button type="submit" class="btn btn-warning btn-lg fw-bold text-dark rounded-pill shadow-sm">
-                                <i class="fa-solid fa-paper-plane me-2"></i>Create Service Request &amp; Start Workflow
-                            </button>
-                            <a href="{{ route('general-service.maintenance.index') }}" class="btn btn-light rounded-pill text-muted">
-                                Cancel
-                            </a>
-                        </div>
+                        <button type="submit" class="btn btn-primary btn-lg w-100 fw-bold rounded-3 shadow-sm py-2.5 mb-2">
+                            <i class="fa-solid fa-paper-plane me-2"></i>Create Ticket &amp; Send to GS Queue
+                        </button>
+                        <a href="{{ route('general-service.maintenance.index') }}" class="btn btn-outline-secondary w-100 rounded-3">
+                            <i class="fa-solid fa-arrow-left me-1"></i>Cancel &amp; Return to List
+                        </a>
                     </div>
                 </div>
 

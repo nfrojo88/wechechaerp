@@ -26,58 +26,57 @@
         </div>
     @endif
 
-    {{-- Stats Cards --}}
-    {{-- Stats Cards for 6-Step Workflow --}}
+    {{-- Stats Cards for 7-Stage Workflow --}}
     <div class="row g-3 mb-4">
         <div class="col-xl-2 col-md-4 col-sm-6">
             <div class="card border-0 shadow-sm rounded-4 h-100" style="border-left: 4px solid #f59e0b !important;">
                 <div class="card-body p-3">
-                    <span class="text-muted small text-uppercase fw-semibold d-block" style="font-size:0.7rem;">Step 1: Awaiting GS</span>
-                    <div class="fs-4 fw-bold text-dark mt-1">{{ $stats['pending_gs'] ?? 0 }}</div>
-                    <small class="text-muted">Awaiting initial review</small>
+                    <span class="text-muted small text-uppercase fw-semibold d-block" style="font-size:0.7rem;">Stage 2: GS Inspection</span>
+                    <div class="fs-4 fw-bold text-dark mt-1">{{ ($stats['pending_gs'] ?? 0) + ($stats['gs_verified'] ?? 0) }}</div>
+                    <small class="text-muted">Awaiting Inspection</small>
                 </div>
             </div>
         </div>
         <div class="col-xl-2 col-md-4 col-sm-6">
             <div class="card border-0 shadow-sm rounded-4 h-100" style="border-left: 4px solid #3b82f6 !important;">
                 <div class="card-body p-3">
-                    <span class="text-muted small text-uppercase fw-semibold d-block" style="font-size:0.7rem;">Step 2: Sent to GM</span>
+                    <span class="text-muted small text-uppercase fw-semibold d-block" style="font-size:0.7rem;">Stage 3: GM 1st Review</span>
                     <div class="fs-4 fw-bold text-primary mt-1">{{ $stats['submitted_to_gm'] ?? 0 }}</div>
-                    <small class="text-muted">Awaiting permission</small>
+                    <small class="text-muted">Awaiting Initial Sign-off</small>
                 </div>
             </div>
         </div>
         <div class="col-xl-2 col-md-4 col-sm-6">
             <div class="card border-0 shadow-sm rounded-4 h-100" style="border-left: 4px solid #06b6d4 !important;">
                 <div class="card-body p-3">
-                    <span class="text-muted small text-uppercase fw-semibold d-block" style="font-size:0.7rem;">Step 3: GM Approved</span>
+                    <span class="text-muted small text-uppercase fw-semibold d-block" style="font-size:0.7rem;">Stage 4: Add Details</span>
                     <div class="fs-4 fw-bold text-info mt-1">{{ $stats['gm_approved_initial'] ?? 0 }}</div>
-                    <small class="text-muted">Assign Petty Cash</small>
+                    <small class="text-muted">Parts, Labor &amp; Tech Details</small>
                 </div>
             </div>
         </div>
         <div class="col-xl-2 col-md-4 col-sm-6">
             <div class="card border-0 shadow-sm rounded-4 h-100" style="border-left: 4px solid #ef4444 !important;">
                 <div class="card-body p-3">
-                    <span class="text-muted small text-uppercase fw-semibold d-block" style="font-size:0.7rem;">Step 5: GM Returned</span>
-                    <div class="fs-4 fw-bold text-danger mt-1">{{ $stats['gm_returned_to_gs'] ?? 0 }}</div>
-                    <small class="text-muted">Provide Money/Time/Parts</small>
+                    <span class="text-muted small text-uppercase fw-semibold d-block" style="font-size:0.7rem;">Paused: On Hold</span>
+                    <div class="fs-4 fw-bold text-danger mt-1">{{ $stats['gm_on_hold'] ?? 0 }}</div>
+                    <small class="text-muted">GM Held with Reason</small>
                 </div>
             </div>
         </div>
         <div class="col-xl-2 col-md-4 col-sm-6">
             <div class="card border-0 shadow-sm rounded-4 h-100" style="border-left: 4px solid #8b5cf6 !important;">
                 <div class="card-body p-3">
-                    <span class="text-muted small text-uppercase fw-semibold d-block" style="font-size:0.7rem;">Step 4/5: Final GM Review</span>
+                    <span class="text-muted small text-uppercase fw-semibold d-block" style="font-size:0.7rem;">Stage 5/6: GM Final Decision</span>
                     <div class="fs-4 fw-bold text-purple mt-1" style="color:#8b5cf6;">{{ $stats['pending_gm_final'] ?? 0 }}</div>
-                    <small class="text-muted">Finance &amp; PR sign-off</small>
+                    <small class="text-muted">Locked &amp; Under GM Review</small>
                 </div>
             </div>
         </div>
         <div class="col-xl-2 col-md-4 col-sm-6">
             <div class="card border-0 shadow-sm rounded-4 h-100" style="border-left: 4px solid #10b981 !important;">
                 <div class="card-body p-3">
-                    <span class="text-muted small text-uppercase fw-semibold d-block" style="font-size:0.7rem;">Active &amp; In Progress</span>
+                    <span class="text-muted small text-uppercase fw-semibold d-block" style="font-size:0.7rem;">Stage 7: Active Repairs</span>
                     <div class="fs-4 fw-bold text-success mt-1">{{ $stats['in_progress'] ?? 0 }}</div>
                     <small class="text-muted">Total: {{ $stats['total'] ?? 0 }}</small>
                 </div>
@@ -98,12 +97,16 @@
                     <label class="form-label small fw-semibold mb-1">Workflow Stage</label>
                     <select name="gs_status" class="form-select form-select-sm rounded-3">
                         <option value="">All Workflow Stages</option>
-                        <option value="pending_gs" {{ request('gs_status') == 'pending_gs' ? 'selected' : '' }}>Step 1: Awaiting GS Review</option>
-                        <option value="submitted_to_gm" {{ request('gs_status') == 'submitted_to_gm' ? 'selected' : '' }}>Step 2: Sent to GM for Permission</option>
-                        <option value="gm_approved_initial" {{ request('gs_status') == 'gm_approved_initial' ? 'selected' : '' }}>Step 3: GM Approved (Assign Petty Cash)</option>
-                        <option value="gm_returned_to_gs" {{ request('gs_status') == 'gm_returned_to_gs' ? 'selected' : '' }}>Step 5: Returned by GM (Needs Details)</option>
-                        <option value="pending_gm_final" {{ request('gs_status') == 'pending_gm_final' ? 'selected' : '' }}>Step 4/5: Pending GM Final Approval</option>
-                        <option value="approved" {{ request('gs_status') == 'approved' ? 'selected' : '' }}>Approved &amp; Active</option>
+                        <option value="pending_gs" {{ request('gs_status') == 'pending_gs' ? 'selected' : '' }}>Stage 1/2: Awaiting GS Inspection</option>
+                        <option value="gs_verified" {{ request('gs_status') == 'gs_verified' ? 'selected' : '' }}>Stage 2: GS Verified (Ready for GM)</option>
+                        <option value="submitted_to_gm" {{ request('gs_status') == 'submitted_to_gm' ? 'selected' : '' }}>Stage 3: Sent to GM (1st Review)</option>
+                        <option value="gm_on_hold" {{ request('gs_status') == 'gm_on_hold' ? 'selected' : '' }}>Stage 3: GM On Hold</option>
+                        <option value="gm_approved_initial" {{ request('gs_status') == 'gm_approved_initial' ? 'selected' : '' }}>Stage 4: GM Initial Approved (GS Adds Details)</option>
+                        <option value="pending_gm_final" {{ request('gs_status') == 'pending_gm_final' ? 'selected' : '' }}>Stage 5: Pending GM Final Decision (Locked)</option>
+                        <option value="gm_on_hold_final" {{ request('gs_status') == 'gm_on_hold_final' ? 'selected' : '' }}>Stage 6: GM Final On Hold</option>
+                        <option value="approved" {{ request('gs_status') == 'approved' ? 'selected' : '' }}>Stage 7: Approved &amp; Active</option>
+                        <option value="gs_rejected" {{ request('gs_status') == 'gs_rejected' ? 'selected' : '' }}>Rejected by GS</option>
+                        <option value="rejected" {{ request('gs_status') == 'rejected' ? 'selected' : '' }}>Rejected by GM</option>
                     </select>
                 </div>
                 <div class="col-md-2">
@@ -151,7 +154,7 @@
                             <th class="py-3">Asset</th>
                             <th class="py-3">Workflow Lifecycle</th>
                             <th class="py-3">Status &amp; Urgency</th>
-                            <th class="py-3">Petty Cash &amp; Tech</th>
+                            <th class="py-3">Financials &amp; Workshop</th>
                             <th class="py-3 pe-4 text-center">Action</th>
                         </tr>
                     </thead>
@@ -162,7 +165,7 @@
                             $ub = $req->urgency_badge; 
                             $gsb = $req->gs_status_badge;
                         @endphp
-                        <tr class="{{ $req->gs_status === 'gm_returned_to_gs' ? 'table-danger' : ($req->gs_status === 'gm_approved_initial' ? 'table-info' : '') }}">
+                        <tr class="{{ in_array($req->gs_status, ['gm_on_hold', 'gm_on_hold_final']) ? 'table-warning' : ($req->gs_status === 'gm_approved_initial' ? 'table-info' : ($req->gs_status === 'pending_gm_final' ? 'table-light' : '')) }}">
                             <td class="ps-4 py-3">
                                 <a href="{{ route('general-service.maintenance.show', $req) }}" class="font-monospace fw-bold text-primary text-decoration-none">
                                     {{ $req->request_no }}
@@ -174,7 +177,7 @@
                                     <i class="fa-solid fa-user-pen me-1 text-primary"></i>{{ $req->reportedBy->name ?? ($req->employee->full_name ?? 'Requester') }}
                                 </div>
                                 <div class="text-muted small mt-0.5" style="font-size:0.75rem;">
-                                    <i class="fa-solid fa-gavel me-1 text-warning"></i>To: {{ $req->assignedTo->name ?? 'Wondimagnhu Siyum' }}
+                                    <i class="fa-solid fa-gavel me-1 text-warning"></i>To: {{ $req->assignedTo->name ?? 'GS Team' }}
                                 </div>
                             </td>
                             <td class="py-3">
@@ -197,17 +200,21 @@
                                 </div>
                             </td>
                             <td class="py-3">
-                                @if($req->pettyCashOwner || $req->maintenance_person_name)
+                                @if($req->total_cost || $req->labor_cost || $req->technician_name)
                                     <div class="small">
-                                        @if($req->pettyCashOwner)
-                                            <div class="text-success fw-semibold"><i class="fa-solid fa-wallet me-1"></i>{{ $req->pettyCashOwner->name }}</div>
+                                        @if($req->total_cost > 0)
+                                            <div class="text-success fw-bold"><i class="fa-solid fa-money-bill-wave me-1"></i>{{ number_format($req->total_cost, 2) }} ETB</div>
+                                        @elseif($req->estimated_cost > 0)
+                                            <div class="text-secondary fw-semibold">{{ number_format($req->estimated_cost, 2) }} ETB</div>
                                         @endif
-                                        @if($req->maintenance_person_name)
+                                        @if($req->technician_name)
+                                            <div class="text-dark fw-semibold" style="font-size:0.75rem;"><i class="fa-solid fa-user-gear me-1"></i>{{ $req->technician_name }}</div>
+                                        @elseif($req->maintenance_person_name)
                                             <div class="text-muted" style="font-size:0.75rem;"><i class="fa-solid fa-wrench me-1"></i>{{ $req->maintenance_person_name }}</div>
                                         @endif
                                     </div>
                                 @else
-                                    <span class="text-muted small fst-italic">—</span>
+                                    <span class="text-muted small fst-italic">Pending estimates</span>
                                 @endif
                             </td>
                             <td class="py-3 pe-4 text-center">
@@ -215,13 +222,21 @@
                                     <a href="{{ route('general-service.maintenance.show', $req) }}"
                                        class="btn btn-sm btn-primary rounded-pill px-3 me-1 shadow-xs fw-semibold">
                                         @if(in_array($req->gs_status, ['pending_gs', null]))
-                                            <i class="fa-solid fa-paper-plane me-1"></i>Review &amp; Send to GM
+                                            <i class="fa-solid fa-magnifying-glass me-1"></i>Inspect &amp; Verify
+                                        @elseif($req->gs_status === 'gs_verified')
+                                            <i class="fa-solid fa-paper-plane me-1"></i>Send to GM
+                                        @elseif($req->gs_status === 'submitted_to_gm')
+                                            <i class="fa-solid fa-hourglass-half me-1"></i>Awaiting GM
                                         @elseif($req->gs_status === 'gm_approved_initial')
-                                            <i class="fa-solid fa-user-plus me-1"></i>Assign Petty Cash
-                                        @elseif($req->gs_status === 'gm_returned_to_gs')
-                                            <i class="fa-solid fa-rotate-left me-1"></i>Provide Details
+                                            <i class="fa-solid fa-pencil me-1"></i>Add Details &amp; Costs
+                                        @elseif($req->gs_status === 'pending_gm_final')
+                                            <i class="fa-solid fa-lock me-1"></i>Locked (GM Final)
+                                        @elseif(in_array($req->gs_status, ['gm_on_hold', 'gm_on_hold_final']))
+                                            <i class="fa-solid fa-circle-pause me-1"></i>On Hold
+                                        @elseif($req->gs_status === 'approved')
+                                            <i class="fa-solid fa-screwdriver-wrench me-1"></i>Manage Repair
                                         @else
-                                            <i class="fa-solid fa-eye me-1"></i>Manage
+                                            <i class="fa-solid fa-eye me-1"></i>View
                                         @endif
                                     </a>
                                     <a href="{{ Route::has('general-service.maintenance.report') ? route('general-service.maintenance.report', $req) : url('/general-service/maintenance/' . $req->id . '/report') }}"

@@ -93,6 +93,89 @@
     </div>
 </div>
 
+{{-- Under Maintenance Fixed Assets (Stage 2 GS Verified & Active Tickets) --}}
+@if(!empty($underMaintenanceRequests) && $underMaintenanceRequests->isNotEmpty())
+<div class="card border-0 shadow-sm mb-4 border-start border-4 border-warning">
+    <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+        <div>
+            <h5 class="card-title mb-0 text-dark fw-bold">
+                <i class="fa-solid fa-screwdriver-wrench text-warning me-2"></i>Under Maintenance Fixed Assets
+            </h5>
+            <small class="text-muted">Equipment &amp; machinery verified and currently undergoing service or repair for this site store.</small>
+        </div>
+        <span class="badge bg-warning text-dark px-3 py-1.5 rounded-pill fw-bold">
+            {{ $underMaintenanceRequests->count() }} In Maintenance
+        </span>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0" style="font-size: 0.88rem;">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-3">Ticket #</th>
+                        <th>Asset Code / Tag</th>
+                        <th>Equipment / Machine Name</th>
+                        <th>Site Store</th>
+                        <th>Assigned User</th>
+                        <th>Current Stage</th>
+                        <th>Est. Cost</th>
+                        <th class="text-end pe-3">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach($underMaintenanceRequests as $mReq)
+                    @php
+                        $gsBadge = $mReq->gs_status_badge;
+                        $unit = $mReq->fixedAssetUnit;
+                        $storeName = $unit?->parentAsset?->store?->name ?? 'Site Store';
+                    @endphp
+                    <tr>
+                        <td class="ps-3">
+                            <span class="font-monospace fw-bold text-primary">{{ $mReq->request_no }}</span>
+                        </td>
+                        <td>
+                            <span class="badge bg-dark font-monospace">{{ $mReq->asset_code ?: ($unit?->unit_code ?? '—') }}</span>
+                        </td>
+                        <td>
+                            <div class="fw-semibold text-dark">{{ $mReq->asset_name }}</div>
+                            @if($unit && ($unit->brand || $unit->model))
+                                <small class="text-muted">{{ $unit->brand }} {{ $unit->model }}</small>
+                            @endif
+                        </td>
+                        <td>
+                            <span class="badge bg-light text-dark border">
+                                <i class="fa-solid fa-location-dot me-1 text-danger"></i>{{ $storeName }}
+                            </span>
+                        </td>
+                        <td>
+                            <small class="text-muted">{{ $mReq->employee?->full_name ?? ($unit?->assignedEmployee?->full_name ?? '—') }}</small>
+                        </td>
+                        <td>
+                            <span class="badge {{ $gsBadge['class'] }} px-2 py-1">
+                                <i class="fa-solid {{ $gsBadge['icon'] }} me-1"></i>{{ $gsBadge['label'] }}
+                            </span>
+                        </td>
+                        <td class="font-monospace">
+                            @if($mReq->total_cost > 0)
+                                <span class="fw-bold text-success">{{ number_format($mReq->total_cost, 2) }} ETB</span>
+                            @else
+                                <span class="text-muted">—</span>
+                            @endif
+                        </td>
+                        <td class="text-end pe-3">
+                            <a href="{{ route('general-service.maintenance.show', $mReq->id) }}" class="btn btn-outline-primary btn-sm px-2 py-1">
+                                <i class="fa-solid fa-eye me-1"></i>View Ticket
+                            </a>
+                        </td>
+                    </tr>
+                    @endforeach
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+@endif
+
 <div class="card border-0 shadow-sm">
     <div class="card-body p-0">
         <div class="table-responsive">

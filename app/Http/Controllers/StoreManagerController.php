@@ -409,9 +409,35 @@ class StoreManagerController extends Controller
             $isGrouped = true;
         }
 
+        // ── Under Maintenance Section for Site Inventory ──────────────────────
+        \App\Models\MaintenanceRequest::ensureSchema();
+        $underMaintenanceQuery = \App\Models\MaintenanceRequest::with([
+                'fixedAssetUnit.parentAsset.store',
+                'employee',
+                'assignedTo'
+            ])
+            ->whereNotNull('fixed_asset_unit_id')
+            ->whereIn('gs_status', [
+                'gs_verified',
+                'submitted_to_gm',
+                'gm_on_hold',
+                'gm_approved_initial',
+                'pending_gm_final',
+                'gm_on_hold_final',
+                'approved'
+            ])
+            ->whereNotIn('status', ['resolved', 'closed', 'rejected']);
+
+        if ($selectedStoreId) {
+            $underMaintenanceQuery->whereHas('fixedAssetUnit.parentAsset', function ($fq) use ($selectedStoreId) {
+                $fq->where('store_id', $selectedStoreId);
+            });
+        }
+        $underMaintenanceRequests = $underMaintenanceQuery->latest()->get();
+
         return view('store-manager.inventory.all', compact(
             'inventory', 'stores', 'products', 'isGrouped', 'isStoreKeeper', 'assignedStore',
-            'categoryFilter', 'countAll', 'countConsumable', 'countFixedAsset'
+            'categoryFilter', 'countAll', 'countConsumable', 'countFixedAsset', 'underMaintenanceRequests'
         ));
     }
 

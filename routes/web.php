@@ -1797,6 +1797,9 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/maintenance/{maintenanceRequest}/report',          [App\Http\Controllers\Admin\GeneralServiceController::class, 'report'])->name('maintenance.report');
         Route::match(['put', 'post'], '/maintenance/{maintenanceRequest}/status', [App\Http\Controllers\Admin\GeneralServiceController::class, 'updateStatus'])->name('maintenance.status');
         Route::post('/maintenance/{maintenanceRequest}/update-status',  [App\Http\Controllers\Admin\GeneralServiceController::class, 'updateStatus'])->name('maintenance.update-status');
+        Route::post('/maintenance/{maintenanceRequest}/verify',         [App\Http\Controllers\Admin\GeneralServiceController::class, 'gsVerify'])->name('maintenance.verify');
+        Route::post('/maintenance/{maintenanceRequest}/reject',         [App\Http\Controllers\Admin\GeneralServiceController::class, 'gsReject'])->name('maintenance.reject');
+        Route::post('/maintenance/{maintenanceRequest}/submit-details', [App\Http\Controllers\Admin\GeneralServiceController::class, 'submitDetails'])->name('maintenance.submit-details');
         Route::post('/maintenance/{maintenanceRequest}/submit-to-gm',      [App\Http\Controllers\Admin\GeneralServiceController::class, 'submitToGm'])->name('maintenance.submit-to-gm');
         Route::post('/maintenance/{maintenanceRequest}/assign-petty-cash', [App\Http\Controllers\Admin\GeneralServiceController::class, 'assignPettyCash'])->name('maintenance.assign-petty-cash');
         Route::post('/maintenance/{maintenanceRequest}/resubmit-returned', [App\Http\Controllers\Admin\GeneralServiceController::class, 'resubmitReturned'])->name('maintenance.resubmit-returned');

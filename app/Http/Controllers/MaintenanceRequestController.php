@@ -19,6 +19,8 @@ class MaintenanceRequestController extends Controller
      */
     public function store(Request $request)
     {
+        MaintenanceRequest::ensureSchema();
+
         $validated = $request->validate([
             'asset_name'          => 'required|string|max:255',
             'asset_code'          => 'nullable|string|max:100',
@@ -51,11 +53,21 @@ class MaintenanceRequestController extends Controller
             ]);
         }
 
+        $prevStatus = null;
+        if (!empty($validated['fixed_asset_unit_id'])) {
+            $unit = \App\Models\FixedAssetUnit::find($validated['fixed_asset_unit_id']);
+            if ($unit) {
+                $prevStatus = $unit->status;
+                $unit->update(['status' => 'in_maintenance']);
+            }
+        }
+
         $mr = MaintenanceRequest::create(array_merge($validated, [
-            'employee_id'         => $employee->id,
-            'status'              => 'pending',
-            'gs_status'           => 'pending_gs',
-            'reported_by_user_id' => $user->id,
+            'employee_id'           => $employee->id,
+            'status'                => 'pending',
+            'gs_status'             => 'pending_gs',
+            'previous_asset_status' => $prevStatus,
+            'reported_by_user_id'   => $user->id,
         ]));
 
         \App\Models\ActivityLog::log(
@@ -64,6 +76,25 @@ class MaintenanceRequestController extends Controller
             'Maintenance Requests',
             $mr
         );
+
+        // Notify General Service team
+        try {
+            $gsUsers = \App\Models\User::whereHas('roles', fn($q) => $q->where('name', 'general_service'))->get();
+            foreach ($gsUsers as $gsUser) {
+                \App\Models\NotificationLog::create([
+                    'request_type'      => 'maintenance_request',
+                    'request_id'        => $mr->id,
+                    'action'            => 'created',
+                    'sender_user_id'    => $user->id,
+                    'recipient_user_id' => $gsUser->id,
+                    'role'              => 'general_service',
+                    'message'           => "New maintenance request #{$mr->request_no} submitted for {$mr->asset_name}. Awaiting GS inspection.",
+                    'status'            => 'sent',
+                ]);
+            }
+        } catch (\Throwable $e) {
+            // Ignore notification error
+        }
 
         return redirect()->route('profile.edit')
             ->with('success', '✅ Maintenance request ' . $mr->request_no . ' submitted successfully. General Service team will be notified.');

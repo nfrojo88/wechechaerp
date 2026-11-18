@@ -6,6 +6,8 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Database\Schema\Blueprint;
 
 class MaintenanceRequest extends Model
 {
@@ -23,6 +25,29 @@ class MaintenanceRequest extends Model
         'urgency',
         'status',
         'gs_status',
+        'diagnosis',
+        'diagnosis_attachments',
+        'gs_verified_at',
+        'gs_verified_by',
+        'gs_rejected_at',
+        'gs_rejected_by',
+        'materials_data',
+        'material_cost',
+        'labor_cost',
+        'total_cost',
+        'technician_name',
+        'technician_phone',
+        'technician_bank_name',
+        'technician_account_name',
+        'technician_account_number',
+        'condition_rating',
+        'quotation_attachments',
+        'remarks',
+        'gs_details_locked',
+        'hold_reason',
+        'hold_review_date',
+        'previous_asset_status',
+        'odometer',
         'maintenance_person_name',
         'maintenance_person_account',
         'maintenance_person_phone',
@@ -51,17 +76,113 @@ class MaintenanceRequest extends Model
     ];
 
     protected $casts = [
-        'resolved_at' => 'datetime',
-        'sent_to_store_manager_at' => 'datetime',
-        'gm_approved_at' => 'datetime',
-        'gm_initial_action_at' => 'datetime',
-        'gm_final_approved_at' => 'datetime',
-        'gm_decision_locked' => 'boolean',
-        'is_returned_flow' => 'boolean',
-        'money_amount' => 'decimal:2',
+        'resolved_at'             => 'datetime',
+        'sent_to_store_manager_at'=> 'datetime',
+        'gm_approved_at'          => 'datetime',
+        'gm_initial_action_at'    => 'datetime',
+        'gm_final_approved_at'    => 'datetime',
+        'gs_verified_at'          => 'datetime',
+        'gs_rejected_at'          => 'datetime',
+        'hold_review_date'        => 'date',
+        'gm_decision_locked'      => 'boolean',
+        'gs_details_locked'       => 'boolean',
+        'is_returned_flow'        => 'boolean',
+        'money_amount'            => 'decimal:2',
+        'material_cost'           => 'decimal:2',
+        'labor_cost'              => 'decimal:2',
+        'total_cost'              => 'decimal:2',
+        'materials_data'          => 'array',
+        'diagnosis_attachments'   => 'array',
+        'quotation_attachments'   => 'array',
     ];
 
-    // ─── Boot ─────────────────────────────────────────────────────────────────
+    // ─── Boot & Schema Self-Healing ──────────────────────────────────────────
+
+    public static function ensureSchema(): void
+    {
+        if (!Schema::hasTable('maintenance_requests')) {
+            return;
+        }
+
+        $neededColumns = [
+            'diagnosis'                  => 'text',
+            'diagnosis_attachments'      => 'json',
+            'gs_verified_at'             => 'timestamp',
+            'gs_verified_by'             => 'unsignedBigInteger',
+            'gs_rejected_at'             => 'timestamp',
+            'gs_rejected_by'             => 'unsignedBigInteger',
+            'materials_data'             => 'json',
+            'material_cost'              => 'decimal',
+            'labor_cost'                 => 'decimal',
+            'total_cost'                 => 'decimal',
+            'technician_name'            => 'string',
+            'technician_phone'           => 'string',
+            'technician_bank_name'       => 'string',
+            'technician_account_name'    => 'string',
+            'technician_account_number'  => 'string',
+            'condition_rating'           => 'string',
+            'quotation_attachments'      => 'json',
+            'remarks'                    => 'text',
+            'gs_details_locked'          => 'boolean',
+            'hold_reason'                => 'text',
+            'hold_review_date'           => 'date',
+            'previous_asset_status'      => 'string',
+            'odometer'                   => 'string',
+            'gs_status'                  => 'string',
+            'rejection_reason'           => 'text',
+            'gm_approved_at'             => 'timestamp',
+            'gm_approver_id'             => 'unsignedBigInteger',
+            'gm_decision_locked'         => 'boolean',
+            'gm_decision_summary'        => 'text',
+            'maintenance_person_name'    => 'string',
+            'maintenance_person_account' => 'string',
+            'maintenance_person_phone'   => 'string',
+            'petty_cash_owner_id'        => 'unsignedBigInteger',
+            'money_amount'               => 'decimal',
+            'estimated_time'             => 'string',
+            'material_description'       => 'text',
+            'gm_initial_status'          => 'string',
+            'gm_initial_action_at'       => 'timestamp',
+            'gm_initial_notes'           => 'text',
+            'gm_return_reason'           => 'text',
+            'gm_final_approved_at'       => 'timestamp',
+            'is_returned_flow'           => 'boolean',
+        ];
+
+        Schema::table('maintenance_requests', function (Blueprint $table) use ($neededColumns) {
+            foreach ($neededColumns as $column => $type) {
+                if (!Schema::hasColumn('maintenance_requests', $column)) {
+                    switch ($type) {
+                        case 'text':
+                            $table->text($column)->nullable();
+                            break;
+                        case 'json':
+                            $table->json($column)->nullable();
+                            break;
+                        case 'timestamp':
+                            $table->timestamp($column)->nullable();
+                            break;
+                        case 'unsignedBigInteger':
+                            $table->unsignedBigInteger($column)->nullable();
+                            break;
+                        case 'decimal':
+                            $table->decimal($column, 15, 2)->nullable()->default(0);
+                            break;
+                        case 'boolean':
+                            $table->boolean($column)->default(false);
+                            break;
+                        case 'date':
+                            $table->date($column)->nullable();
+                            break;
+                        case 'string':
+                        default:
+                            $table->string($column, 255)->nullable();
+                            break;
+                    }
+                }
+            }
+        });
+    }
 
     protected static function boot()
     {
@@ -117,6 +238,16 @@ class MaintenanceRequest extends Model
         return $this->belongsTo(User::class, 'petty_cash_owner_id');
     }
 
+    public function gsVerifiedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'gs_verified_by');
+    }
+
+    public function gsRejectedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'gs_rejected_by');
+    }
+
     public function expenseRequests()
     {
         return $this->hasMany(ExpenseRequest::class, 'maintenance_request_id');
@@ -127,39 +258,105 @@ class MaintenanceRequest extends Model
         return $this->hasMany(MaterialRequest::class, 'maintenance_request_id');
     }
 
+    // ─── Stage & Permission Helpers ──────────────────────────────────────────
+
+    /**
+     * Check if the ticket is locked awaiting GM decision or finalized.
+     * When locked, no one (GS, Admin, or via API) can edit the ticket fields.
+     */
+    public function isLocked(): bool
+    {
+        if ($this->gs_details_locked || $this->gm_decision_locked) {
+            return true;
+        }
+
+        return in_array($this->gs_status, [
+            'pending_gm_final',
+            'gm_on_hold_final',
+            'approved',
+            'rejected',
+            'gs_rejected',
+        ]);
+    }
+
+    /**
+     * Check if GS is allowed to fill in materials, labor cost, and technician details (Stage 4).
+     */
+    public function canGsAddDetails(): bool
+    {
+        if ($this->isLocked()) {
+            return false;
+        }
+
+        return in_array($this->gs_status, ['gm_approved_initial', 'gm_returned_to_gs']);
+    }
+
+    /**
+     * Check if GS is at Stage 2 (inspection & accept/reject only).
+     */
+    public function canGsVerify(): bool
+    {
+        if ($this->isLocked()) {
+            return false;
+        }
+
+        return in_array($this->gs_status, ['pending_gs', null]) && $this->status === 'pending';
+    }
+
+    /**
+     * Check if this asset is currently under maintenance.
+     */
+    public function isUnderMaintenance(): bool
+    {
+        if (in_array($this->status, ['resolved', 'closed', 'rejected'])) {
+            return false;
+        }
+
+        return in_array($this->gs_status, [
+            'gs_verified',
+            'submitted_to_gm',
+            'gm_on_hold',
+            'gm_approved_initial',
+            'pending_gm_final',
+            'gm_on_hold_final',
+            'approved',
+        ]);
+    }
+
     // ─── Accessors ────────────────────────────────────────────────────────────
 
     public function getGsStatusBadgeAttribute(): array
     {
         return match($this->gs_status ?? 'pending_gs') {
-            'pending_gs'           => ['class' => 'bg-secondary bg-opacity-25 text-secondary border', 'label' => 'Awaiting General Service Review', 'icon' => 'fa-clock'],
-            'submitted_to_gm'      => ['class' => 'bg-warning text-dark', 'label' => 'Awaiting GM Permission', 'icon' => 'fa-paper-plane'],
-            'gm_approved_initial'  => ['class' => 'bg-info text-white', 'label' => 'GM Approved — Awaiting Petty Cash Assignment', 'icon' => 'fa-user-check'],
-            'gm_returned_to_gs'    => ['class' => 'bg-danger text-white', 'label' => 'Returned by GM (Details Needed)', 'icon' => 'fa-rotate-left'],
-            'pending_gm_final'     => ['class' => 'bg-primary text-white', 'label' => 'Pending GM Final Approval', 'icon' => 'fa-gavel'],
-            'approved'             => ['class' => 'bg-success text-white', 'label' => 'Approved &amp; Active', 'icon' => 'fa-circle-check'],
-            'rejected'             => ['class' => 'bg-dark text-white', 'label' => 'Rejected', 'icon' => 'fa-circle-xmark'],
-            default                => ['class' => 'bg-light text-dark border', 'label' => ucfirst(str_replace('_', ' ', $this->gs_status ?? 'pending')), 'icon' => 'fa-circle'],
+            'pending_gs'          => ['class' => 'bg-secondary bg-opacity-25 text-secondary border', 'label' => 'Awaiting GS Inspection', 'icon' => 'fa-clipboard-check'],
+            'gs_rejected'         => ['class' => 'bg-danger text-white', 'label' => 'Rejected by GS', 'icon' => 'fa-circle-xmark'],
+            'gs_verified'         => ['class' => 'bg-info bg-opacity-25 text-info-emphasis border border-info border-opacity-25', 'label' => 'GS Verified (Ready for GM)', 'icon' => 'fa-check-double'],
+            'submitted_to_gm'     => ['class' => 'bg-warning text-dark', 'label' => 'Awaiting GM First Review', 'icon' => 'fa-paper-plane'],
+            'gm_on_hold'          => ['class' => 'bg-secondary text-white', 'label' => 'On Hold (GM First Review)', 'icon' => 'fa-pause-circle'],
+            'gm_approved_initial' => ['class' => 'bg-primary text-white', 'label' => 'GM Approved — GS Adding Details', 'icon' => 'fa-user-pen'],
+            'pending_gm_final'    => ['class' => 'bg-warning text-dark border border-warning', 'label' => 'Locked: Awaiting GM Final Approval', 'icon' => 'fa-lock'],
+            'gm_on_hold_final'    => ['class' => 'bg-secondary text-white', 'label' => 'Locked: On Hold (GM Final Decision)', 'icon' => 'fa-lock'],
+            'approved'            => ['class' => 'bg-success text-white', 'label' => 'Approved & Active', 'icon' => 'fa-circle-check'],
+            'rejected'            => ['class' => 'bg-danger text-white', 'label' => 'Rejected by GM', 'icon' => 'fa-circle-xmark'],
+            default               => ['class' => 'bg-light text-dark border', 'label' => ucfirst(str_replace('_', ' ', $this->gs_status ?? 'pending')), 'icon' => 'fa-circle'],
         };
     }
-
-    // ─── Accessors ────────────────────────────────────────────────────────────
 
     public function getStatusBadgeAttribute(): array
     {
         return match($this->status) {
             'pending'                  => ['class' => 'bg-warning text-dark', 'label' => 'Pending', 'icon' => 'fa-clock'],
-            'in_progress'              => ['class' => 'bg-primary',           'label' => 'In Progress', 'icon' => 'fa-wrench'],
+            'in_progress'              => ['class' => 'bg-primary text-white', 'label' => 'In Progress', 'icon' => 'fa-wrench'],
             'sent_to_store_manager'    => ['class' => 'bg-info text-dark',    'label' => 'Sent to Store Manager', 'icon' => 'fa-paper-plane'],
-            'resolved'                 => ['class' => 'bg-success',           'label' => 'Resolved', 'icon' => 'fa-circle-check'],
-            'closed'                   => ['class' => 'bg-secondary',         'label' => 'Closed', 'icon' => 'fa-xmark-circle'],
+            'resolved'                 => ['class' => 'bg-success text-white','label' => 'Resolved', 'icon' => 'fa-circle-check'],
+            'closed'                   => ['class' => 'bg-secondary text-white', 'label' => 'Closed', 'icon' => 'fa-xmark-circle'],
             'rejected'                 => ['class' => 'bg-danger text-white', 'label' => 'Rejected', 'icon' => 'fa-circle-xmark'],
             default                    => ['class' => 'bg-light text-dark border', 'label' => ucfirst(str_replace('_', ' ', $this->status)), 'icon' => 'fa-circle'],
         };
     }
 
     /**
-     * Retrieve all previous maintenance requests for this asset.
+     * Retrieve all previous maintenance requests for this asset with full details.
      */
     public function getMaintenanceHistoryAttribute()
     {
@@ -167,7 +364,7 @@ class MaintenanceRequest extends Model
         $assetCode = $this->asset_code;
         $assetName = $this->asset_name;
 
-        return static::with(['assignedTo', 'expenseRequests', 'materialRequests.items.product', 'employee'])
+        return static::with(['assignedTo', 'reportedBy', 'expenseRequests', 'materialRequests.items.product', 'employee'])
             ->where('id', '!=', $this->id)
             ->where(function ($q) use ($assetUnitId, $assetCode, $assetName) {
                 $hasCond = false;
@@ -188,8 +385,41 @@ class MaintenanceRequest extends Model
                 }
             })
             ->latest()
-            ->take(15)
+            ->take(25)
             ->get();
+    }
+
+    /**
+     * Compute summary statistics for previous repairs on this asset.
+     */
+    public function getHistorySummaryAttribute(): array
+    {
+        $history = $this->maintenance_history;
+
+        $totalRepairs = $history->count();
+        $totalSpent = 0.0;
+        $lastRepairDate = null;
+
+        foreach ($history as $h) {
+            $hSpent = (float) ($h->total_cost ?: 0);
+            if ($hSpent <= 0) {
+                $hSpent += (float) ($h->labor_cost ?: 0) + (float) ($h->material_cost ?: 0) + (float) ($h->money_amount ?: 0);
+            }
+            if ($hSpent <= 0 && $h->expenseRequests->isNotEmpty()) {
+                $hSpent += (float) $h->expenseRequests->sum('amount');
+            }
+            $totalSpent += $hSpent;
+
+            if (!$lastRepairDate && $h->created_at) {
+                $lastRepairDate = $h->created_at;
+            }
+        }
+
+        return [
+            'total_repairs'    => $totalRepairs,
+            'total_spent'      => $totalSpent,
+            'last_repair_date' => $lastRepairDate,
+        ];
     }
 
     public function getUrgencyBadgeAttribute(): array
