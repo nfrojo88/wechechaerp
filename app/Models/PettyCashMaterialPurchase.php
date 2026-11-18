@@ -77,4 +77,15 @@ class PettyCashMaterialPurchase extends Model
     {
         return $this->morphMany(Receipt::class, 'purchasable');
     }
+
+    public function getAttachmentUrlAttribute(): ?string
+    {
+        if (empty($this->attachment_path)) {
+            return null;
+        }
+        if (class_exists(\App\Services\FileUploadService::class)) {
+            return \App\Services\FileUploadService::url($this->attachment_path);
+        }
+        return asset('storage/' . ltrim($this->attachment_path, '/'));
+    }
 }

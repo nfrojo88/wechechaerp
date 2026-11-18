@@ -19,6 +19,8 @@ use App\Models\Store;
 use App\Models\Project;
 use App\Models\Product;
 use App\Models\User;
+use App\Models\PettyCashMaterialPurchase;
+use App\Models\PettyCashMaterialPurchaseItem;
 use App\Models\NotificationLog;
 use App\Services\FileUploadService;
 use App\Services\EthiopianDate;
@@ -463,223 +465,374 @@ class StoreAuditController extends Controller
         AuditFinding::ensureSchema();
         PurchaseRequestItem::ensureFulfillmentColumns();
 
-        $tab         = $request->input('tab', 'unfulfilled'); // unfulfilled, paid_not_received, completed, all
-        $storeId     = $request->input('store_id');
-        $projectId   = $request->input('project_id');
-        $supplierId  = $request->input('supplier_id');
-        $status      = $request->input('status'); // fully_fulfilled, partially_fulfilled, not_received, over_received, closed_not_accepted, partially_accepted_closed
-        $search      = $request->input('search');
+        $tab          = $request->input('tab', 'unfulfilled'); // unfulfilled, paid_not_received, completed, petty_cash, all
+        $purchaseType = $request->input('purchase_type', 'all'); // all, pr, petty_cash
+        $storeId      = $request->input('store_id');
+        $projectId    = $request->input('project_id');
+        $supplierId   = $request->input('supplier_id');
+        $status       = $request->input('status'); // fully_fulfilled, partially_fulfilled, not_received, over_received, closed_not_accepted, partially_accepted_closed
+        $search       = $request->input('search');
 
-        // Query Purchase Request Items with related PR, Product, Payments, and Delivery Receipts
-        $query = PurchaseRequestItem::with([
-            'purchaseRequest.project',
-            'purchaseRequest.store',
-            'purchaseRequest.supplier',
-            'purchaseRequest.payments',
-            'purchaseRequest.payment',
-            'purchaseRequest.deliveryReceipts.items',
-            'product',
-            'supplier',
-        ])->whereHas('purchaseRequest', function ($q) {
-            $q->whereNotIn('status', [PurchaseRequest::STATUS_CANCELLED, PurchaseRequest::STATUS_REJECTED]);
-        });
-
-        if ($storeId) {
-            $query->whereHas('purchaseRequest', function ($q) use ($storeId) {
-                $q->where('store_id', $storeId);
+        // 1. Query Standard Purchase Request Items
+        $prProcessed = collect();
+        if ($purchaseType !== 'petty_cash' && $tab !== 'petty_cash') {
+            $query = PurchaseRequestItem::with([
+                'purchaseRequest.project',
+                'purchaseRequest.store',
+                'purchaseRequest.supplier',
+                'purchaseRequest.payments',
+                'purchaseRequest.payment',
+                'purchaseRequest.deliveryReceipts.items',
+                'product',
+                'supplier',
+            ])->whereHas('purchaseRequest', function ($q) {
+                $q->whereNotIn('status', [PurchaseRequest::STATUS_CANCELLED, PurchaseRequest::STATUS_REJECTED]);
             });
-        }
 
-        if ($projectId) {
-            $query->whereHas('purchaseRequest', function ($q) use ($projectId) {
-                $q->where('project_id', $projectId);
-            });
-        }
-
-        if ($supplierId) {
-            $query->where(function ($q) use ($supplierId) {
-                $q->where('supplier_id', $supplierId)
-                  ->orWhereHas('purchaseRequest', function ($sq) use ($supplierId) {
-                      $sq->where('supplier_id', $supplierId);
-                  });
-            });
-        }
-
-        if ($search) {
-            $query->where(function ($q) use ($search) {
-                $q->whereHas('purchaseRequest', function ($sq) use ($search) {
-                    $sq->where(function ($subPr) use ($search) {
-                        $subPr->where('pr_no', 'like', "%{$search}%");
-                        if (Schema::hasColumn('purchase_requests', 'request_number')) {
-                            $subPr->orWhere('request_number', 'like', "%{$search}%");
-                        }
-                        if (Schema::hasColumn('purchase_requests', 'title')) {
-                            $subPr->orWhere('title', 'like', "%{$search}%");
-                        }
-                    });
-                })->orWhereHas('product', function ($pq) use ($search) {
-                    $pq->where('name', 'like', "%{$search}%")
-                      ->orWhere('sku', 'like', "%{$search}%");
+            if ($storeId) {
+                $query->whereHas('purchaseRequest', function ($q) use ($storeId) {
+                    $q->where('store_id', $storeId);
                 });
+            }
+
+            if ($projectId) {
+                $query->whereHas('purchaseRequest', function ($q) use ($projectId) {
+                    $q->where('project_id', $projectId);
+                });
+            }
+
+            if ($supplierId) {
+                $query->where(function ($q) use ($supplierId) {
+                    $q->where('supplier_id', $supplierId)
+                      ->orWhereHas('purchaseRequest', function ($sq) use ($supplierId) {
+                          $sq->where('supplier_id', $supplierId);
+                      });
+                });
+            }
+
+            if ($search) {
+                $query->where(function ($q) use ($search) {
+                    $q->whereHas('purchaseRequest', function ($sq) use ($search) {
+                        $sq->where(function ($subPr) use ($search) {
+                            $subPr->where('pr_no', 'like', "%{$search}%");
+                            if (Schema::hasColumn('purchase_requests', 'request_number')) {
+                                $subPr->orWhere('request_number', 'like', "%{$search}%");
+                            }
+                            if (Schema::hasColumn('purchase_requests', 'title')) {
+                                $subPr->orWhere('title', 'like', "%{$search}%");
+                            }
+                        });
+                    })->orWhereHas('product', function ($pq) use ($search) {
+                        $pq->where('name', 'like', "%{$search}%")
+                          ->orWhere('sku', 'like', "%{$search}%");
+                    });
+                });
+            }
+
+            // Fetch collection to compute fulfillment metrics
+            $allPrItems = $query->latest('id')->get();
+
+            // Process line items with accurate metrics
+            $prProcessed = $allPrItems->map(function ($item) {
+                $pr = $item->purchaseRequest;
+
+                $requestedQty = (float) $item->quantity;
+                $approvedQty  = (float) $item->quantity;
+
+                // Purchased Qty
+                $purchasedQty = (float) $item->purchased_quantity;
+                if ($purchasedQty <= 0) {
+                    // If PR advanced past procurement/marketing, default to quantity
+                    if ($pr && in_array($pr->status, [
+                        PurchaseRequest::STATUS_PENDING_PAYMENT,
+                        PurchaseRequest::STATUS_PENDING_RECEIPT_UPLOAD,
+                        PurchaseRequest::STATUS_INTAKE_COMPLETE,
+                        PurchaseRequest::STATUS_COMPLETED
+                    ])) {
+                        $purchasedQty = $requestedQty;
+                    }
+                }
+
+                // Received Qty calculation from Delivery Receipts
+                $receivedFromReceipts = 0.0;
+                if ($pr && $pr->deliveryReceipts) {
+                    foreach ($pr->deliveryReceipts as $dr) {
+                        if ($dr->is_void) continue;
+                        foreach ($dr->items as $drItem) {
+                            if ($drItem->product_id == $item->product_id) {
+                                $receivedFromReceipts += (float) ($drItem->accepted_quantity ?? $drItem->quantity_received ?? 0);
+                            }
+                        }
+                    }
+                }
+                $receivedQty = max((float)$item->received_quantity, $receivedFromReceipts);
+
+                $unacceptedQty = (float)($item->unaccepted_quantity ?? 0);
+                $isFulfillmentClosed = (bool)($item->is_fulfillment_closed ?? false);
+
+                // Remaining Qty
+                $targetQty = $purchasedQty > 0 ? $purchasedQty : $approvedQty;
+                $remainingQty = max(0.0, $targetQty - $receivedQty - $unacceptedQty);
+                if ($isFulfillmentClosed) {
+                    $remainingQty = 0.0;
+                }
+
+                // Fulfillment Status
+                if ($isFulfillmentClosed) {
+                    if ($unacceptedQty > 0 && $receivedQty == 0) {
+                        $fulfillmentStatus = 'closed_not_accepted';
+                    } elseif ($unacceptedQty > 0 && $receivedQty > 0) {
+                        $fulfillmentStatus = 'partially_accepted_closed';
+                    } else {
+                        $fulfillmentStatus = 'fully_fulfilled';
+                    }
+                } elseif ($receivedQty >= $targetQty && $targetQty > 0) {
+                    $fulfillmentStatus = 'fully_fulfilled';
+                } elseif ($receivedQty > 0 && $remainingQty > 0) {
+                    $fulfillmentStatus = 'partially_fulfilled';
+                } elseif ($receivedQty == 0 && $targetQty > 0) {
+                    $fulfillmentStatus = 'not_received';
+                } elseif ($receivedQty > $targetQty && $targetQty > 0) {
+                    $fulfillmentStatus = 'over_received';
+                } else {
+                    $fulfillmentStatus = 'pending';
+                }
+
+                // Payment check
+                $isPaid = false;
+                $paidAmount = 0.0;
+                if ($pr) {
+                    if ($pr->payments && $pr->payments->isNotEmpty()) {
+                        foreach ($pr->payments as $p) {
+                            if ($p->status === 'paid' || $p->paid_at !== null) {
+                                $isPaid = true;
+                                $paidAmount += (float)$p->amount;
+                            }
+                        }
+                    }
+                    if (!$isPaid && $pr->payment && ($pr->payment->status === 'paid' || $pr->payment->paid_at !== null)) {
+                        $isPaid = true;
+                        $paidAmount = (float)$pr->payment->amount;
+                    }
+                }
+
+                // Critical Audit Flag: "Paid But Not Received"
+                $isPaidButNotReceived = $isPaid && ($remainingQty > 0) && !$isFulfillmentClosed;
+
+                // Unit cost & Outstanding monetary value
+                $unitCost = (float) ($item->estimated_unit_cost ?? 0);
+                $outstandingValue = round($remainingQty * $unitCost, 2);
+
+                // Days since purchase/creation
+                $dateBasis = $pr?->created_at;
+                $daysSincePurchase = $dateBasis ? now()->diffInDays($dateBasis) : 0;
+
+                return (object) [
+                    'type'                    => 'pr',
+                    'purchase_type'           => 'pr',
+                    'item'                    => $item,
+                    'pr'                      => $pr,
+                    'petty_cash_purchase'     => null,
+                    'product'                 => $item->product,
+                    'requested_qty'           => $requestedQty,
+                    'approved_qty'            => $approvedQty,
+                    'purchased_qty'           => $purchasedQty,
+                    'received_qty'            => $receivedQty,
+                    'unaccepted_qty'          => $unacceptedQty,
+                    'is_fulfillment_closed'   => $isFulfillmentClosed,
+                    'rejection_reason'        => $item->rejection_reason ?? null,
+                    'remaining_qty'           => $remainingQty,
+                    'fulfillment_status'      => $fulfillmentStatus,
+                    'is_paid'                 => $isPaid,
+                    'paid_amount'             => $paidAmount,
+                    'is_paid_but_not_received'=> $isPaidButNotReceived,
+                    'unit_cost'               => $unitCost,
+                    'outstanding_value'       => $outstandingValue,
+                    'days_since_purchase'     => $daysSincePurchase,
+                    'created_at'              => $pr?->created_at,
+                ];
             });
         }
 
-        // Fetch collection to compute fulfillment metrics
-        $allItems = $query->latest('id')->get();
+        // 2. Query Petty Cash Material Purchase Items (materials bought with petty cash by storekeeper)
+        $pcProcessed = collect();
+        if ($purchaseType !== 'pr' && class_exists(PettyCashMaterialPurchaseItem::class)) {
+            $pcQuery = PettyCashMaterialPurchaseItem::with([
+                'purchase.store.project',
+                'purchase.purchaser',
+                'purchase.deliveryReceipt.items',
+                'purchase.chartOfAccount',
+                'product',
+            ])->whereHas('purchase', function ($q) {
+                $q->whereNotIn('status', ['cancelled', 'rejected']);
+            });
 
-        // Process line items with accurate metrics
-        $processed = $allItems->map(function ($item) {
-            $pr = $item->purchaseRequest;
+            if ($storeId) {
+                $pcQuery->whereHas('purchase', function ($q) use ($storeId) {
+                    $q->where('store_id', $storeId);
+                });
+            }
 
-            $requestedQty = (float) $item->quantity;
-            $approvedQty  = (float) $item->quantity;
+            if ($projectId) {
+                $pcQuery->whereHas('purchase.store', function ($q) use ($projectId) {
+                    $q->where('project_id', $projectId);
+                });
+            }
 
-            // Purchased Qty
-            $purchasedQty = (float) $item->purchased_quantity;
-            if ($purchasedQty <= 0) {
-                // If PR advanced past procurement/marketing, default to quantity
-                if ($pr && in_array($pr->status, [
-                    PurchaseRequest::STATUS_PENDING_PAYMENT,
-                    PurchaseRequest::STATUS_PENDING_RECEIPT_UPLOAD,
-                    PurchaseRequest::STATUS_INTAKE_COMPLETE,
-                    PurchaseRequest::STATUS_COMPLETED
-                ])) {
-                    $purchasedQty = $requestedQty;
+            if ($supplierId) {
+                $sup = class_exists(\App\Models\Supplier::class) ? \App\Models\Supplier::find($supplierId) : null;
+                if ($sup) {
+                    $pcQuery->whereHas('purchase', function ($q) use ($sup) {
+                        $q->where('supplier_name', 'like', "%{$sup->name}%");
+                    });
                 }
             }
 
-            // Received Qty calculation from Delivery Receipts
-            $receivedFromReceipts = 0.0;
-            if ($pr && $pr->deliveryReceipts) {
-                foreach ($pr->deliveryReceipts as $dr) {
-                    if ($dr->is_void) continue;
-                    foreach ($dr->items as $drItem) {
-                        if ($drItem->product_id == $item->product_id) {
-                            $receivedFromReceipts += (float) ($drItem->accepted_quantity ?? $drItem->quantity_received ?? 0);
-                        }
+            if ($search) {
+                $pcQuery->where(function ($q) use ($search) {
+                    $q->whereHas('purchase', function ($sq) use ($search) {
+                        $sq->where('purchase_no', 'like', "%{$search}%")
+                           ->orWhere('receipt_no', 'like', "%{$search}%")
+                           ->orWhere('fs_no', 'like', "%{$search}%")
+                           ->orWhere('supplier_name', 'like', "%{$search}%");
+                    })
+                    ->orWhereHas('product', function ($pq) use ($search) {
+                        $pq->where('name', 'like', "%{$search}%")
+                           ->orWhere('sku', 'like', "%{$search}%");
+                    })
+                    ->orWhereHas('purchase.purchaser', function ($uq) use ($search) {
+                        $uq->where('name', 'like', "%{$search}%");
+                    });
+                });
+            }
+
+            $allPcItems = $pcQuery->latest('id')->get();
+
+            $pcProcessed = $allPcItems->map(function ($item) {
+                $purchase = $item->purchase;
+                $dr = $purchase?->deliveryReceipt;
+
+                $requestedQty = (float) $item->quantity;
+                $approvedQty  = (float) $item->quantity;
+                $purchasedQty = (float) $item->quantity;
+
+                // Received quantity from Delivery Receipt
+                $receivedQty = 0.0;
+                if ($dr && !$dr->is_void) {
+                    $drItem = $dr->items?->firstWhere('product_id', $item->product_id);
+                    if ($drItem) {
+                        $receivedQty = (float) ($drItem->accepted_quantity ?? $drItem->quantity_received ?? 0);
+                    } else {
+                        $receivedQty = $purchasedQty;
                     }
                 }
-            }
-            $receivedQty = max((float)$item->received_quantity, $receivedFromReceipts);
 
-            $unacceptedQty = (float)($item->unaccepted_quantity ?? 0);
-            $isFulfillmentClosed = (bool)($item->is_fulfillment_closed ?? false);
+                $remainingQty = max(0.0, $purchasedQty - $receivedQty);
+                $isFulfillmentClosed = ($remainingQty == 0.0) || ($purchase?->status === 'completed' && $receivedQty > 0);
 
-            // Remaining Qty
-            $targetQty = $purchasedQty > 0 ? $purchasedQty : $approvedQty;
-            $remainingQty = max(0.0, $targetQty - $receivedQty - $unacceptedQty);
-            if ($isFulfillmentClosed) {
-                $remainingQty = 0.0;
-            }
-
-            // Fulfillment Status
-            if ($isFulfillmentClosed) {
-                if ($unacceptedQty > 0 && $receivedQty == 0) {
-                    $fulfillmentStatus = 'closed_not_accepted';
-                } elseif ($unacceptedQty > 0 && $receivedQty > 0) {
-                    $fulfillmentStatus = 'partially_accepted_closed';
-                } else {
+                if ($receivedQty >= $purchasedQty && $purchasedQty > 0) {
                     $fulfillmentStatus = 'fully_fulfilled';
+                } elseif ($receivedQty > 0 && $remainingQty > 0) {
+                    $fulfillmentStatus = 'partially_fulfilled';
+                } elseif ($receivedQty == 0 && $purchasedQty > 0) {
+                    $fulfillmentStatus = 'not_received';
+                } else {
+                    $fulfillmentStatus = 'pending';
                 }
-            } elseif ($receivedQty >= $targetQty && $targetQty > 0) {
-                $fulfillmentStatus = 'fully_fulfilled';
-            } elseif ($receivedQty > 0 && $remainingQty > 0) {
-                $fulfillmentStatus = 'partially_fulfilled';
-            } elseif ($receivedQty == 0 && $targetQty > 0) {
-                $fulfillmentStatus = 'not_received';
-            } elseif ($receivedQty > $targetQty && $targetQty > 0) {
-                $fulfillmentStatus = 'over_received';
-            } else {
-                $fulfillmentStatus = 'pending';
-            }
 
-            // Payment check
-            $isPaid = false;
-            $paidAmount = 0.0;
-            if ($pr) {
-                if ($pr->payments && $pr->payments->isNotEmpty()) {
-                    foreach ($pr->payments as $p) {
-                        if ($p->status === 'paid' || $p->paid_at !== null) {
-                            $isPaid = true;
-                            $paidAmount += (float)$p->amount;
-                        }
-                    }
-                }
-                if (!$isPaid && $pr->payment && ($pr->payment->status === 'paid' || $pr->payment->paid_at !== null)) {
-                    $isPaid = true;
-                    $paidAmount = (float)$pr->payment->amount;
-                }
-            }
+                // Petty cash is immediately disbursed upon purchase
+                $isPaid = true;
+                $unitCost = (float) ($item->unit_price ?? 0);
+                $paidAmount = (float) ($item->total_price ?: ($purchasedQty * $unitCost));
+                $outstandingValue = round($remainingQty * $unitCost, 2);
 
-            // Critical Audit Flag: "Paid But Not Received"
-            $isPaidButNotReceived = $isPaid && ($remainingQty > 0) && !$isFulfillmentClosed;
+                // Critical audit risk: cash disbursed, but goods not received or delivery slip is voided
+                $isPaidButNotReceived = ($remainingQty > 0) || ($dr && $dr->is_void);
 
-            // Unit cost & Outstanding monetary value
-            $unitCost = (float) ($item->estimated_unit_cost ?? 0);
-            $outstandingValue = round($remainingQty * $unitCost, 2);
+                $dateBasis = $purchase?->purchase_date ?? $purchase?->created_at;
+                $daysSincePurchase = $dateBasis ? now()->diffInDays($dateBasis) : 0;
 
-            // Days since purchase/creation
-            $dateBasis = $pr?->created_at;
-            $daysSincePurchase = $dateBasis ? now()->diffInDays($dateBasis) : 0;
+                return (object) [
+                    'type'                    => 'petty_cash',
+                    'purchase_type'           => 'petty_cash',
+                    'item'                    => $item,
+                    'pr'                      => null,
+                    'petty_cash_purchase'     => $purchase,
+                    'product'                 => $item->product,
+                    'requested_qty'           => $requestedQty,
+                    'approved_qty'            => $approvedQty,
+                    'purchased_qty'           => $purchasedQty,
+                    'received_qty'            => $receivedQty,
+                    'unaccepted_qty'          => 0.0,
+                    'is_fulfillment_closed'   => $isFulfillmentClosed,
+                    'rejection_reason'        => null,
+                    'remaining_qty'           => $remainingQty,
+                    'fulfillment_status'      => $fulfillmentStatus,
+                    'is_paid'                 => $isPaid,
+                    'paid_amount'             => $paidAmount,
+                    'is_paid_but_not_received'=> $isPaidButNotReceived,
+                    'unit_cost'               => $unitCost,
+                    'outstanding_value'       => $outstandingValue,
+                    'days_since_purchase'     => $daysSincePurchase,
+                    'created_at'              => $purchase?->purchase_date ?? $purchase?->created_at,
+                ];
+            });
+        }
 
-            return (object) [
-                'item'                   => $item,
-                'pr'                     => $pr,
-                'product'                => $item->product,
-                'requested_qty'          => $requestedQty,
-                'approved_qty'           => $approvedQty,
-                'purchased_qty'          => $purchasedQty,
-                'received_qty'           => $receivedQty,
-                'unaccepted_qty'         => $unacceptedQty,
-                'is_fulfillment_closed'  => $isFulfillmentClosed,
-                'rejection_reason'       => $item->rejection_reason ?? null,
-                'remaining_qty'          => $remainingQty,
-                'fulfillment_status'     => $fulfillmentStatus,
-                'is_paid'                => $isPaid,
-                'paid_amount'            => $paidAmount,
-                'is_paid_but_not_received'=> $isPaidButNotReceived,
-                'unit_cost'              => $unitCost,
-                'outstanding_value'      => $outstandingValue,
-                'days_since_purchase'    => $daysSincePurchase,
-            ];
-        });
+        // Merge PR and Petty Cash collections
+        $allProcessed = $prProcessed->concat($pcProcessed);
 
-        // Compute KPIs across entire filtered set
-        $kpiTotalLines           = $processed->count();
-        $kpiUnfulfilledCount     = $processed->filter(function ($row) {
+        // Dedicated Petty Cash KPI Metrics
+        $kpiPettyCashCount = $pcProcessed->count();
+        $kpiPettyCashValue = $pcProcessed->sum('paid_amount');
+
+        // Compute KPIs across all matching items
+        $kpiTotalLines           = $allProcessed->count();
+        $kpiUnfulfilledCount     = $allProcessed->filter(function ($row) {
             return $row->remaining_qty > 0 && !$row->is_fulfillment_closed;
         })->count();
-        $kpiUnfulfilledValue     = $processed->filter(function ($row) {
+        $kpiUnfulfilledValue     = $allProcessed->filter(function ($row) {
             return $row->remaining_qty > 0 && !$row->is_fulfillment_closed;
         })->sum('outstanding_value');
-        $kpiPaidNotReceivedCount = $processed->where('is_paid_but_not_received', true)->count();
-        $kpiPaidNotReceivedValue = $processed->where('is_paid_but_not_received', true)->sum('outstanding_value');
-        $kpiCompletedCount       = $processed->filter(function ($row) {
+        $kpiPaidNotReceivedCount = $allProcessed->where('is_paid_but_not_received', true)->count();
+        $kpiPaidNotReceivedValue = $allProcessed->where('is_paid_but_not_received', true)->sum('outstanding_value');
+        $kpiCompletedCount       = $allProcessed->filter(function ($row) {
             return $row->is_fulfillment_closed
                 || in_array($row->fulfillment_status, ['fully_fulfilled', 'closed_not_accepted', 'partially_accepted_closed'])
-                || in_array($row->pr?->status, [PurchaseRequest::STATUS_INTAKE_COMPLETE, PurchaseRequest::STATUS_COMPLETED]);
+                || in_array($row->pr?->status, [PurchaseRequest::STATUS_INTAKE_COMPLETE, PurchaseRequest::STATUS_COMPLETED])
+                || ($row->type === 'petty_cash' && $row->fulfillment_status === 'fully_fulfilled');
         })->count();
         $kpiFulfilledCount       = $kpiCompletedCount;
 
         // Apply Tab Filter
-        if ($tab === 'unfulfilled') {
-            $processed = $processed->filter(function ($row) {
+        if ($tab === 'petty_cash') {
+            $processed = $allProcessed->where('type', 'petty_cash');
+        } elseif ($tab === 'unfulfilled') {
+            $processed = $allProcessed->filter(function ($row) {
                 return $row->remaining_qty > 0 && !$row->is_fulfillment_closed;
             });
         } elseif ($tab === 'paid_not_received') {
-            $processed = $processed->where('is_paid_but_not_received', true);
+            $processed = $allProcessed->where('is_paid_but_not_received', true);
         } elseif ($tab === 'completed') {
-            $processed = $processed->filter(function ($row) {
+            $processed = $allProcessed->filter(function ($row) {
                 return $row->is_fulfillment_closed
                     || in_array($row->fulfillment_status, ['fully_fulfilled', 'closed_not_accepted', 'partially_accepted_closed'])
-                    || in_array($row->pr?->status, [PurchaseRequest::STATUS_INTAKE_COMPLETE, PurchaseRequest::STATUS_COMPLETED]);
+                    || in_array($row->pr?->status, [PurchaseRequest::STATUS_INTAKE_COMPLETE, PurchaseRequest::STATUS_COMPLETED])
+                    || ($row->type === 'petty_cash' && $row->fulfillment_status === 'fully_fulfilled');
             });
+        } else {
+            $processed = $allProcessed;
         }
 
         // Apply Status Filter
         if ($status) {
             $processed = $processed->where('fulfillment_status', $status);
         }
+
+        // Sort: newest first
+        $processed = $processed->sortByDesc(function ($row) {
+            return $row->created_at ? $row->created_at->timestamp : 0;
+        })->values();
 
         // Export
         if ($request->input('export') === 'csv' || $request->input('export') === 'excel') {
@@ -707,13 +860,16 @@ class StoreAuditController extends Controller
             'projects',
             'assignees',
             'tab',
+            'purchaseType',
             'kpiTotalLines',
             'kpiUnfulfilledCount',
             'kpiUnfulfilledValue',
             'kpiPaidNotReceivedCount',
             'kpiPaidNotReceivedValue',
             'kpiFulfilledCount',
-            'kpiCompletedCount'
+            'kpiCompletedCount',
+            'kpiPettyCashCount',
+            'kpiPettyCashValue'
         ));
     }
 
@@ -1049,9 +1205,248 @@ class StoreAuditController extends Controller
      * - Inventory stock movements (intake ledger, before/after balances, performer)
      * - Finance payments disbursed
      */
-    public function fulfillmentDetails(int $id)
+    public function fulfillmentDetails(Request $request, int $id)
     {
         $this->authorizeAuditorOrAdmin();
+
+        $type = $request->input('type', 'pr');
+
+        if ($type === 'petty_cash') {
+            $purchase = PettyCashMaterialPurchase::with([
+                'store.project',
+                'purchaser',
+                'deliveryReceipt.store',
+                'deliveryReceipt.items.product',
+                'deliveryReceipt.receivedBy',
+                'deliveryReceipt.voidedBy',
+                'items.product',
+                'chartOfAccount',
+                'materialRequest',
+            ])->findOrFail($id);
+
+            $dr = $purchase->deliveryReceipt;
+            $intakeSlips = collect();
+
+            if ($dr) {
+                $flags = [];
+
+                if ($dr->is_void) {
+                    $flags[] = [
+                        'type'    => 'danger',
+                        'title'   => 'VOID SLIP',
+                        'message' => 'This intake slip has been VOIDED' . ($dr->void_reason ? ': ' . $dr->void_reason : '.') . ($dr->voidedBy ? ' (Voided by ' . $dr->voidedBy->name . ')' : ''),
+                    ];
+                }
+
+                $slipReceiptPath = $dr->slip_receipt_path ?: $purchase->attachment_path;
+                if (empty($slipReceiptPath)) {
+                    $flags[] = [
+                        'type'    => 'danger',
+                        'title'   => 'Missing Physical Slip / Receipt Photo',
+                        'message' => 'No scan or photo of the physical delivery slip (Model 19 / GRN) or purchase receipt was attached by storekeeper.',
+                    ];
+                }
+
+                if (empty($dr->slip_no)) {
+                    $flags[] = [
+                        'type'    => 'warning',
+                        'title'   => 'Missing Sequence Number',
+                        'message' => 'Delivery slip has no registered sequential slip number.',
+                    ];
+                }
+
+                if ($dr->is_physical_store_only || $purchase->is_physical_store_only) {
+                    $flags[] = [
+                        'type'    => 'info',
+                        'title'   => 'Store-Only Physical Slip',
+                        'message' => 'Physical slip recorded for store internal stock intake only (excluded from VAT declarations).',
+                    ];
+                }
+
+                $isImage = !empty($slipReceiptPath) && (bool) preg_match('/\.(jpe?g|png|webp|gif|bmp)$/i', $slipReceiptPath);
+                $slipReceiptUrl = $dr->slip_receipt_url;
+                if (empty($slipReceiptUrl) && !empty($slipReceiptPath)) {
+                    $slipReceiptUrl = class_exists(\App\Services\FileUploadService::class)
+                        ? \App\Services\FileUploadService::url($slipReceiptPath)
+                        : asset('storage/' . ltrim($slipReceiptPath, '/'));
+                }
+
+                $intakeSlips->push([
+                    'id'                  => $dr->id,
+                    'dr_no'               => $dr->dr_no,
+                    'slip_no'             => $dr->slip_no,
+                    'store_name'          => $dr->store?->name ?? $purchase->store?->name ?? 'Store',
+                    'received_date'       => $dr->received_date ? $dr->received_date->format('d M Y') : ($purchase->purchase_date ? $purchase->purchase_date->format('d M Y') : 'N/A'),
+                    'received_by'         => $dr->receivedBy?->name ?? $purchase->purchaser?->name ?? 'Storekeeper',
+                    'slip_receipt_url'    => $slipReceiptUrl,
+                    'slip_receipt_path'   => $slipReceiptPath,
+                    'is_image'            => $isImage,
+                    'is_store_only'       => (bool) ($dr->is_physical_store_only || $purchase->is_physical_store_only),
+                    'physical_slip_notes' => $dr->physical_slip_notes ?? $purchase->notes,
+                    'notes'               => $dr->notes ?? $purchase->notes,
+                    'is_void'             => (bool) $dr->is_void,
+                    'void_reason'         => $dr->void_reason,
+                    'voided_by'           => $dr->voidedBy?->name,
+                    'voided_at'           => $dr->voided_at ? $dr->voided_at->format('d M Y H:i') : null,
+                    'status'              => $dr->status ?? 'received',
+                    'flags'               => $flags,
+                    'items'               => ($dr->items && $dr->items->isNotEmpty())
+                        ? $dr->items->map(fn($it) => [
+                            'product_name'      => $it->product?->name ?? 'N/A',
+                            'product_sku'       => $it->product?->sku ?? $it->product?->item_code ?? '—',
+                            'quantity_received' => (float)$it->quantity_received,
+                            'accepted_quantity' => (float)$it->accepted_quantity,
+                            'rejected_quantity' => (float)($it->rejected_quantity ?? 0),
+                            'unit'              => $it->unit ?? $it->product?->unit ?? 'pcs',
+                            'rejection_reason'  => $it->rejection_reason,
+                        ])
+                        : $purchase->items->map(fn($it) => [
+                            'product_name'      => $it->product?->name ?? 'N/A',
+                            'product_sku'       => $it->product?->sku ?? $it->product?->item_code ?? '—',
+                            'quantity_received' => (float)$it->quantity,
+                            'accepted_quantity' => (float)$it->quantity,
+                            'rejected_quantity' => 0.0,
+                            'unit'              => $it->unit ?? $it->product?->unit ?? 'pcs',
+                            'rejection_reason'  => null,
+                        ]),
+                ]);
+            } elseif (!empty($purchase->attachment_path)) {
+                $slipReceiptPath = $purchase->attachment_path;
+                $isImage = !empty($slipReceiptPath) && (bool) preg_match('/\.(jpe?g|png|webp|gif|bmp)$/i', $slipReceiptPath);
+                $slipReceiptUrl = class_exists(\App\Services\FileUploadService::class)
+                    ? \App\Services\FileUploadService::url($slipReceiptPath)
+                    : asset('storage/' . ltrim($slipReceiptPath, '/'));
+
+                $intakeSlips->push([
+                    'id'                  => 0,
+                    'dr_no'               => 'PC-SLIP-' . $purchase->id,
+                    'slip_no'             => $purchase->receipt_no ?? ('PC-' . $purchase->id),
+                    'store_name'          => $purchase->store?->name ?? 'Store',
+                    'received_date'       => $purchase->purchase_date ? $purchase->purchase_date->format('d M Y') : 'N/A',
+                    'received_by'         => $purchase->purchaser?->name ?? 'Storekeeper',
+                    'slip_receipt_url'    => $slipReceiptUrl,
+                    'slip_receipt_path'   => $slipReceiptPath,
+                    'is_image'            => $isImage,
+                    'is_store_only'       => (bool) $purchase->is_physical_store_only,
+                    'physical_slip_notes' => $purchase->notes,
+                    'notes'               => $purchase->notes,
+                    'is_void'             => false,
+                    'void_reason'         => null,
+                    'voided_by'           => null,
+                    'voided_at'           => null,
+                    'status'              => 'received',
+                    'flags'               => [
+                        [
+                            'type'    => 'warning',
+                            'title'   => 'Intake via Direct Petty Cash Receipt',
+                            'message' => 'Material purchase recorded directly with attached storekeeper receipt/slip.',
+                        ]
+                    ],
+                    'items'               => $purchase->items->map(fn($it) => [
+                        'product_name'      => $it->product?->name ?? 'N/A',
+                        'product_sku'       => $it->product?->sku ?? $it->product?->item_code ?? '—',
+                        'quantity_received' => (float)$it->quantity,
+                        'accepted_quantity' => (float)$it->quantity,
+                        'rejected_quantity' => 0.0,
+                        'unit'              => $it->unit ?? $it->product?->unit ?? 'pcs',
+                        'rejection_reason'  => null,
+                    ]),
+                ]);
+            }
+
+            // Query Inventory Movements associated with this Petty Cash purchase
+            $movements = InventoryMovement::with([
+                'inventory.product',
+                'inventory.store',
+                'performer',
+            ])->where(function ($query) use ($purchase) {
+                $query->where(function ($sub) use ($purchase) {
+                    $sub->whereIn('reference_type', [
+                        PettyCashMaterialPurchase::class,
+                        'App\Models\PettyCashMaterialPurchase',
+                        'PettyCashMaterialPurchase',
+                        'petty_cash_material_purchase',
+                    ])->where('reference_id', $purchase->id);
+                });
+
+                if ($purchase->delivery_receipt_id) {
+                    $query->orWhere(function ($sub) use ($purchase) {
+                        $sub->whereIn('reference_type', [
+                            DeliveryReceipt::class,
+                            'App\Models\DeliveryReceipt',
+                            'DeliveryReceipt',
+                            'delivery_receipt',
+                        ])->where('reference_id', $purchase->delivery_receipt_id);
+                    });
+                }
+
+                $query->orWhere('remarks', 'like', "%{$purchase->purchase_no}%");
+                if ($purchase->receipt_no) {
+                    $query->orWhere('remarks', 'like', "%{$purchase->receipt_no}%");
+                }
+            })
+            ->orderBy('id', 'desc')
+            ->get();
+
+            $formattedMovements = $movements->map(function ($mov) {
+                return [
+                    'id'             => $mov->id,
+                    'date'           => $mov->created_at ? $mov->created_at->format('d M Y H:i') : 'N/A',
+                    'type'           => $mov->type,
+                    'type_label'     => strtoupper(str_replace('_', ' ', $mov->type ?? 'movement')),
+                    'quantity'       => (float) $mov->quantity,
+                    'balance_before' => $mov->balance_before !== null ? (float) $mov->balance_before : null,
+                    'balance_after'  => $mov->balance_after !== null ? (float) $mov->balance_after : null,
+                    'store_name'     => $mov->inventory?->store?->name ?? 'Store',
+                    'product_name'   => $mov->inventory?->product?->name ?? 'Material',
+                    'product_sku'    => $mov->inventory?->product?->sku ?? $mov->inventory?->product?->item_code ?? '—',
+                    'product_unit'   => $mov->inventory?->product?->unit_of_measure ?? $mov->inventory?->product?->unit ?? 'pcs',
+                    'performed_by'   => $mov->performer?->name ?? 'Storekeeper',
+                    'remarks'        => $mov->remarks ?? '—',
+                    'reference_type' => class_basename($mov->reference_type ?? ''),
+                    'reference_id'   => $mov->reference_id,
+                ];
+            });
+
+            // Disbursed upfront from Store Site Petty Cash
+            $payments = [
+                [
+                    'amount'      => (float) $purchase->total_amount,
+                    'method'      => 'Petty Cash (' . ($purchase->chartOfAccount?->name ?? 'Site Petty Cash') . ')',
+                    'status'      => 'Disbursed / Paid',
+                    'paid_at'     => $purchase->purchase_date ? $purchase->purchase_date->format('d M Y') : ($purchase->created_at ? $purchase->created_at->format('d M Y') : 'N/A'),
+                    'paid_by'     => $purchase->purchaser?->name ?? 'Storekeeper',
+                    'gross'       => (float) $purchase->total_amount,
+                    'vat'         => 0.0,
+                    'withholding' => 0.0,
+                ]
+            ];
+
+            return response()->json([
+                'success'         => true,
+                'pr'              => [
+                    'id'             => $purchase->id,
+                    'is_petty_cash'  => true,
+                    'request_number' => $purchase->purchase_no,
+                    'pr_no'          => $purchase->purchase_no,
+                    'title'          => 'Petty Cash Buy: ' . ($purchase->supplier_name ?: 'Materials') . ' (Rcpt: ' . ($purchase->receipt_no ?? '—') . ')',
+                    'status'         => strtoupper($purchase->status ?? 'COMPLETED'),
+                    'project_name'   => $purchase->store?->project?->name ?? 'Head Office',
+                    'store_name'     => $purchase->store?->name ?? 'Main Store',
+                    'supplier_name'  => $purchase->supplier_name ?? 'N/A',
+                    'receipt_no'     => $purchase->receipt_no ?? '—',
+                    'fs_no'          => $purchase->fs_no ?? '—',
+                    'supplier_tin'   => $purchase->supplier_tin ?? '—',
+                    'created_at'     => $purchase->purchase_date ? $purchase->purchase_date->format('d M Y') : ($purchase->created_at ? $purchase->created_at->format('d M Y') : 'N/A'),
+                    'requested_by'   => $purchase->purchaser?->name ?? 'Storekeeper',
+                ],
+                'payments'        => $payments,
+                'intake_slips'    => $intakeSlips,
+                'movements'       => $formattedMovements,
+                'total_slips'     => $intakeSlips->count(),
+                'total_movements' => $formattedMovements->count(),
+            ]);
+        }
 
         $pr = PurchaseRequest::with([
             'project',
@@ -1851,10 +2246,11 @@ class StoreAuditController extends Controller
             fprintf($handle, chr(0xEF).chr(0xBB).chr(0xBF));
 
             fputcsv($handle, [
-                'PR #',
+                'Purchase Type',
+                'Ref / PR #',
                 'Project',
                 'Store',
-                'Supplier',
+                'Supplier / Purchaser',
                 'Product Name',
                 'SKU',
                 'Unit',
@@ -1868,16 +2264,35 @@ class StoreAuditController extends Controller
                 'Payment Status',
                 'Paid Amount (ETB)',
                 'Outstanding Value (ETB)',
-                'Rejection Reason',
+                'Rejection Reason / Receipt',
                 'Audit Risk Alert',
             ]);
 
             foreach ($collection as $row) {
+                $isPetty = ($row->type === 'petty_cash');
+                $refNo = $isPetty
+                    ? ($row->petty_cash_purchase?->purchase_no ?? ('PCMP-' . $row->petty_cash_purchase?->id))
+                    : ($row->pr?->request_number ?? ('PR-' . $row->pr?->id));
+                $projectName = $isPetty
+                    ? ($row->petty_cash_purchase?->store?->project?->name ?? 'Head Office')
+                    : ($row->pr?->project?->name ?? 'N/A');
+                $storeName = $isPetty
+                    ? ($row->petty_cash_purchase?->store?->name ?? 'Main Store')
+                    : ($row->pr?->store?->name ?? 'N/A');
+                $supplierName = $isPetty
+                    ? ($row->petty_cash_purchase?->supplier_name . ($row->petty_cash_purchase?->purchaser ? ' (Storekeeper: ' . $row->petty_cash_purchase->purchaser->name . ')' : ''))
+                    : ($row->pr?->supplier?->name ?? 'N/A');
+                $paymentStatus = $isPetty ? 'PAID (Petty Cash)' : ($row->is_paid ? 'PAID' : 'PENDING PAYMENT');
+                $notes = $isPetty
+                    ? ('Rcpt: ' . ($row->petty_cash_purchase?->receipt_no ?? '—') . ($row->petty_cash_purchase?->fs_no ? ', FS: ' . $row->petty_cash_purchase->fs_no : ''))
+                    : ($row->rejection_reason ?? '');
+
                 fputcsv($handle, [
-                    $row->pr?->request_number ?? ('PR-' . $row->pr?->id),
-                    $row->pr?->project?->name ?? 'N/A',
-                    $row->pr?->store?->name ?? 'N/A',
-                    $row->pr?->supplier?->name ?? 'N/A',
+                    $isPetty ? 'Petty Cash Buy' : 'Standard PR',
+                    $refNo,
+                    $projectName,
+                    $storeName,
+                    $supplierName,
                     $row->product?->name ?? 'N/A',
                     $row->product?->sku ?? 'N/A',
                     $row->product?->unit ?? 'pcs',
@@ -1888,10 +2303,10 @@ class StoreAuditController extends Controller
                     number_format((float)($row->unaccepted_qty ?? 0), 2, '.', ''),
                     number_format((float)$row->remaining_qty, 2, '.', ''),
                     strtoupper(str_replace('_', ' ', $row->fulfillment_status)),
-                    $row->is_paid ? 'PAID' : 'PENDING PAYMENT',
+                    $paymentStatus,
                     number_format((float)$row->paid_amount, 2, '.', ''),
                     number_format((float)$row->outstanding_value, 2, '.', ''),
-                    $row->rejection_reason ?? '',
+                    $notes,
                     $row->is_paid_but_not_received ? 'PAID BUT NOT RECEIVED (CRITICAL RISK)' : 'OK',
                 ]);
             }

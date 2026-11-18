@@ -62,7 +62,7 @@
 
     <!-- Top KPI Row -->
     <div class="row g-3 mb-4">
-        <div class="col-12 col-sm-6 col-xl-3">
+        <div class="col-12 col-sm-6 col-lg-4 col-xl">
             <x-kpi-card
                 title="Unfulfilled Materials"
                 :value="number_format($kpiUnfulfilledCount) . ' Items'"
@@ -72,7 +72,7 @@
             />
         </div>
 
-        <div class="col-12 col-sm-6 col-xl-3">
+        <div class="col-12 col-sm-6 col-lg-4 col-xl">
             <x-kpi-card
                 title="🚨 Paid But Not Received"
                 :value="number_format($kpiPaidNotReceivedCount) . ' Items'"
@@ -82,7 +82,7 @@
             />
         </div>
 
-        <div class="col-12 col-sm-6 col-xl-3">
+        <div class="col-12 col-sm-6 col-lg-4 col-xl">
             <a href="{{ request()->fullUrlWithQuery(['tab' => 'completed', 'page' => 1]) }}" class="text-decoration-none">
                 <x-kpi-card
                     title="Completed &amp; Fulfilled"
@@ -94,12 +94,24 @@
             </a>
         </div>
 
-        <div class="col-12 col-sm-6 col-xl-3">
+        <div class="col-12 col-sm-6 col-lg-4 col-xl">
+            <a href="{{ request()->fullUrlWithQuery(['tab' => 'petty_cash', 'page' => 1]) }}" class="text-decoration-none">
+                <x-kpi-card
+                    title="Petty Cash Store Buys"
+                    :value="number_format($kpiPettyCashCount ?? 0) . ' Items'"
+                    :subtitle="'Disbursed: ETB ' . number_format($kpiPettyCashValue ?? 0, 2)"
+                    icon="fa-solid fa-money-bill-wave"
+                    tone="info"
+                />
+            </a>
+        </div>
+
+        <div class="col-12 col-sm-6 col-lg-4 col-xl">
             <a href="{{ request()->fullUrlWithQuery(['tab' => 'all', 'page' => 1]) }}" class="text-decoration-none">
                 <x-kpi-card
                     title="Total Lines Tracked"
                     :value="number_format($kpiTotalLines) . ' Lines'"
-                    subtitle="Active procurement purchase items"
+                    subtitle="All procurement &amp; petty cash items"
                     icon="fa-solid fa-boxes-stacked"
                     tone="primary"
                 />
@@ -109,7 +121,7 @@
 
     <!-- Fulfillment Primary Filter & Category Tabs -->
     <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
-        <div class="btn-group shadow-xs rounded-pill p-1 bg-white border">
+        <div class="btn-group shadow-xs rounded-pill p-1 bg-white border flex-wrap">
             <a href="{{ request()->fullUrlWithQuery(['tab' => 'unfulfilled', 'page' => 1]) }}" class="btn btn-sm rounded-pill px-3 fw-bold {{ $tab === 'unfulfilled' ? 'btn-warning text-dark' : 'btn-light text-muted border-0' }}">
                 <i class="fa-solid fa-boxes-stacked me-1"></i> Unfulfilled Materials
                 <span class="badge bg-dark text-white rounded-pill ms-1">{{ $kpiUnfulfilledCount }}</span>
@@ -121,6 +133,10 @@
             <a href="{{ request()->fullUrlWithQuery(['tab' => 'completed', 'page' => 1]) }}" class="btn btn-sm rounded-pill px-3 fw-bold {{ $tab === 'completed' ? 'btn-success text-white' : 'btn-light text-muted border-0' }}">
                 <i class="fa-solid fa-circle-check me-1"></i> Completed &amp; Fulfilled
                 <span class="badge bg-white text-success rounded-pill ms-1 fw-bold">{{ $kpiCompletedCount ?? $kpiFulfilledCount }}</span>
+            </a>
+            <a href="{{ request()->fullUrlWithQuery(['tab' => 'petty_cash', 'page' => 1]) }}" class="btn btn-sm rounded-pill px-3 fw-bold {{ $tab === 'petty_cash' ? 'btn-info text-dark' : 'btn-light text-muted border-0' }}">
+                <i class="fa-solid fa-money-bill-wave me-1 text-success"></i> 💵 Petty Cash Store Purchases
+                <span class="badge bg-dark text-white rounded-pill ms-1">{{ $kpiPettyCashCount ?? 0 }}</span>
             </a>
             <a href="{{ request()->fullUrlWithQuery(['tab' => 'all', 'page' => 1]) }}" class="btn btn-sm rounded-pill px-3 fw-bold {{ $tab === 'all' ? 'btn-primary' : 'btn-light text-muted border-0' }}">
                 <i class="fa-solid fa-list-check me-1"></i> All Materials
@@ -135,7 +151,16 @@
             <form method="GET" action="{{ route('audit.fulfillment') }}" class="row g-2 align-items-end">
                 <input type="hidden" name="tab" value="{{ $tab }}">
 
-                <div class="col-md-3">
+                <div class="col-md-2">
+                    <label class="form-label small fw-bold text-muted mb-1">PURCHASE TYPE</label>
+                    <select name="purchase_type" class="form-select form-select-sm">
+                        <option value="all" {{ request('purchase_type', $purchaseType ?? 'all') == 'all' ? 'selected' : '' }}>All Purchases</option>
+                        <option value="pr" {{ request('purchase_type', $purchaseType ?? 'all') == 'pr' ? 'selected' : '' }}>Standard PRs Only</option>
+                        <option value="petty_cash" {{ request('purchase_type', $purchaseType ?? 'all') == 'petty_cash' ? 'selected' : '' }}>Petty Cash Buys Only</option>
+                    </select>
+                </div>
+
+                <div class="col-md-2">
                     <label class="form-label small fw-bold text-muted mb-1">PROJECT / SITE</label>
                     <select name="project_id" class="form-select form-select-sm">
                         <option value="">All Projects</option>
@@ -147,7 +172,7 @@
                     </select>
                 </div>
 
-                <div class="col-md-3">
+                <div class="col-md-2">
                     <label class="form-label small fw-bold text-muted mb-1">DESTINATION STORE</label>
                     <select name="store_id" class="form-select form-select-sm">
                         <option value="">All Destination Stores</option>
@@ -174,14 +199,14 @@
 
                 <div class="col-md-3">
                     <label class="form-label small fw-bold text-muted mb-1">SEARCH</label>
-                    <input type="text" name="search" class="form-control form-select-sm" placeholder="PR #, Item name, SKU..." value="{{ request('search') }}">
+                    <input type="text" name="search" class="form-control form-select-sm" placeholder="PR #, Petty Cash #, Item, SKU..." value="{{ request('search') }}">
                 </div>
 
                 <div class="col-md-1 d-flex gap-1">
                     <button type="submit" class="btn btn-primary btn-sm rounded-pill w-100 fw-semibold" style="height: 31px;">
                         <i class="fa-solid fa-filter me-1"></i> Filter
                     </button>
-                    @if(request()->hasAny(['project_id', 'store_id', 'status', 'search']))
+                    @if(request()->hasAny(['purchase_type', 'project_id', 'store_id', 'status', 'search']))
                         <a href="{{ route('audit.fulfillment', ['tab' => $tab]) }}" class="btn btn-light btn-sm border rounded-pill" title="Reset Filters" style="height: 31px;">
                             <i class="fa-solid fa-rotate-left"></i>
                         </a>
@@ -210,7 +235,7 @@
                 <table class="table table-hover align-middle mb-0 small">
                     <thead class="bg-light text-muted text-uppercase" style="font-size: 0.75rem;">
                         <tr>
-                            <th class="ps-4 py-2.5">PR # &amp; Date</th>
+                            <th class="ps-4 py-2.5">Ref # &amp; Type &amp; Date</th>
                             <th class="py-2.5">Item &amp; SKU</th>
                             <th class="py-2.5">Project / Store</th>
                             <th class="py-2.5 text-end">Requested</th>
@@ -226,22 +251,59 @@
                         @forelse($paginatedItems as $row)
                             @php
                                 $isPaidNotRecv = $row->is_paid_but_not_received;
+                                $isPetty = ($row->type === 'petty_cash');
                             @endphp
-                            <tr class="{{ $isPaidNotRecv ? 'table-danger bg-opacity-10' : '' }}">
-                                <td data-label="PR #" class="ps-4 py-3">
-                                    <span class="fw-bold font-monospace text-primary d-block">{{ $row->pr?->pr_no ?? $row->pr?->request_number }}</span>
-                                    <small class="text-muted">{{ $row->pr?->created_at?->format('M d, Y') }} ({{ $row->days_since_purchase }}d ago)</small>
+                            <tr class="{{ $isPaidNotRecv ? 'table-danger bg-opacity-10' : ($isPetty ? 'table-info bg-opacity-10' : '') }}">
+                                <td data-label="Ref #" class="ps-4 py-3">
+                                    @if($isPetty)
+                                        <div class="d-flex align-items-center gap-1 mb-1">
+                                            <span class="badge bg-info bg-opacity-20 text-dark border border-info-subtle font-monospace px-2 py-0.5">
+                                                <i class="fa-solid fa-money-bill-wave me-1 text-success"></i>Petty Cash Buy
+                                            </span>
+                                            @if($row->petty_cash_purchase?->is_physical_store_only)
+                                                <span class="badge bg-warning bg-opacity-25 text-dark border border-warning-subtle font-monospace px-1.5 py-0.5" title="Physical store slip only (Excluded from VAT)">
+                                                    Store-Only
+                                                </span>
+                                            @endif
+                                        </div>
+                                        <span class="fw-bold font-monospace text-primary d-block">{{ $row->petty_cash_purchase?->purchase_no ?? ('PCMP-' . $row->petty_cash_purchase?->id) }}</span>
+                                        <small class="text-muted d-block">{{ $row->petty_cash_purchase?->purchase_date?->format('M d, Y') ?? $row->petty_cash_purchase?->created_at?->format('M d, Y') }} ({{ $row->days_since_purchase }}d ago)</small>
+                                        @if($row->petty_cash_purchase?->receipt_no)
+                                            <small class="text-secondary font-monospace d-block" title="Storekeeper Receipt Number"><i class="fa-solid fa-receipt me-1"></i>Rcpt: {{ $row->petty_cash_purchase->receipt_no }}</small>
+                                        @endif
+                                        @if($row->petty_cash_purchase?->fs_no)
+                                            <small class="text-secondary font-monospace d-block" title="Fiscal / FS Number"><i class="fa-solid fa-file-invoice me-1"></i>FS: {{ $row->petty_cash_purchase->fs_no }}</small>
+                                        @endif
+                                    @else
+                                        <span class="badge bg-secondary bg-opacity-15 text-dark font-monospace px-2 py-0.5 mb-1 d-inline-block">Standard PR</span>
+                                        <span class="fw-bold font-monospace text-primary d-block">{{ $row->pr?->pr_no ?? $row->pr?->request_number }}</span>
+                                        <small class="text-muted">{{ $row->pr?->created_at?->format('M d, Y') }} ({{ $row->days_since_purchase }}d ago)</small>
+                                    @endif
                                 </td>
                                 <td data-label="Item" class="py-3">
                                     <strong class="text-dark d-block">{{ $row->product?->name ?? 'Unknown Product' }}</strong>
                                     <small class="text-muted font-monospace">SKU: {{ $row->product?->sku ?? 'N/A' }}</small>
-                                    @if($row->item->supplier)
-                                        <small class="text-secondary d-block"><i class="fa-solid fa-truck-field me-1"></i>{{ $row->item->supplier->name }}</small>
+                                    @if($isPetty)
+                                        @if($row->petty_cash_purchase?->supplier_name)
+                                            <small class="text-secondary d-block"><i class="fa-solid fa-truck-field me-1"></i>{{ $row->petty_cash_purchase->supplier_name }}</small>
+                                        @endif
+                                        @if($row->petty_cash_purchase?->purchaser)
+                                            <small class="text-info d-block"><i class="fa-solid fa-user-tag me-1"></i>Storekeeper: <strong>{{ $row->petty_cash_purchase->purchaser->name }}</strong></small>
+                                        @endif
+                                    @else
+                                        @if($row->item->supplier)
+                                            <small class="text-secondary d-block"><i class="fa-solid fa-truck-field me-1"></i>{{ $row->item->supplier->name }}</small>
+                                        @endif
                                     @endif
                                 </td>
                                 <td data-label="Project / Store" class="py-3">
-                                    <span class="d-block text-dark fw-semibold">{{ $row->pr?->project?->name ?? 'Head Office' }}</span>
-                                    <small class="text-muted"><i class="fa-solid fa-warehouse me-1"></i>{{ $row->pr?->store?->name ?? 'Main Store' }}</small>
+                                    @if($isPetty)
+                                        <span class="d-block text-dark fw-semibold">{{ $row->petty_cash_purchase?->store?->project?->name ?? 'Head Office' }}</span>
+                                        <small class="text-muted"><i class="fa-solid fa-warehouse me-1"></i>{{ $row->petty_cash_purchase?->store?->name ?? 'Main Store' }}</small>
+                                    @else
+                                        <span class="d-block text-dark fw-semibold">{{ $row->pr?->project?->name ?? 'Head Office' }}</span>
+                                        <small class="text-muted"><i class="fa-solid fa-warehouse me-1"></i>{{ $row->pr?->store?->name ?? 'Main Store' }}</small>
+                                    @endif
                                 </td>
                                 <td data-label="Requested" class="py-3 text-end font-monospace font-tabular text-muted">
                                     {{ number_format($row->requested_qty, 2) }} {{ $row->product?->unit ?? 'pcs' }}
@@ -308,9 +370,9 @@
                                     @endif
                                 </td>
                                 <td data-label="Payment" class="py-3 text-center">
-                                    @if($row->is_paid)
+                                    @if($isPetty)
                                         <span class="badge bg-success bg-opacity-15 text-success border border-success-subtle font-monospace px-2 py-1 d-block mb-1">
-                                            <i class="fa-solid fa-check-circle me-1"></i>DISBURSED (ETB {{ number_format($row->paid_amount, 2) }})
+                                            <i class="fa-solid fa-money-bill-wave me-1"></i>PETTY CASH (ETB {{ number_format($row->paid_amount, 2) }})
                                         </span>
                                         @if($isPaidNotRecv)
                                             <span class="badge bg-danger text-white rounded-pill font-monospace px-2.5 py-1">
@@ -318,55 +380,94 @@
                                             </span>
                                         @endif
                                     @else
-                                        <span class="badge bg-light text-muted border font-monospace px-2 py-1">
-                                            Pending Payment
-                                        </span>
+                                        @if($row->is_paid)
+                                            <span class="badge bg-success bg-opacity-15 text-success border border-success-subtle font-monospace px-2 py-1 d-block mb-1">
+                                                <i class="fa-solid fa-check-circle me-1"></i>DISBURSED (ETB {{ number_format($row->paid_amount, 2) }})
+                                            </span>
+                                            @if($isPaidNotRecv)
+                                                <span class="badge bg-danger text-white rounded-pill font-monospace px-2.5 py-1">
+                                                    🚨 PAID NOT RECEIVED
+                                                </span>
+                                            @endif
+                                        @else
+                                            <span class="badge bg-light text-muted border font-monospace px-2 py-1">
+                                                Pending Payment
+                                            </span>
+                                        @endif
                                     @endif
                                 </td>
                                 <td data-label="Action" class="pe-4 py-3 text-end">
                                     <div class="btn-group btn-group-sm shadow-xs">
-                                        @if(!$row->is_fulfillment_closed && $row->remaining_qty > 0)
-                                            <button type="button" class="btn btn-success fw-bold px-2.5 btn-open-fulfill-modal" style="min-height: 32px;"
-                                                data-item-id="{{ $row->item->id }}"
-                                                data-pr-id="{{ $row->pr?->id }}"
-                                                data-pr-no="{{ $row->pr?->pr_no ?? $row->pr?->request_number ?? ('PR #' . $row->pr?->id) }}"
-                                                data-product-name="{{ $row->product?->name ?? 'Material' }}"
-                                                data-sku="{{ $row->product?->sku ?? '' }}"
-                                                data-unit="{{ $row->product?->unit ?? 'pcs' }}"
-                                                data-target-qty="{{ $row->purchased_qty > 0 ? $row->purchased_qty : $row->approved_qty }}"
-                                                data-received-qty="{{ $row->received_qty }}"
-                                                data-unaccepted-qty="{{ $row->unaccepted_qty ?? 0 }}"
-                                                data-remaining-qty="{{ $row->remaining_qty }}"
-                                                data-unit-cost="{{ $row->unit_cost }}"
-                                                data-store-id="{{ $row->pr?->store_id }}"
-                                                data-store-name="{{ $row->pr?->store?->name ?? 'Main Store' }}"
-                                                title="Fulfill / Close intake for this line"
+                                        @if($isPetty)
+                                            @if($row->petty_cash_purchase?->attachment_url)
+                                                <a href="{{ $row->petty_cash_purchase->attachment_url }}" target="_blank" class="btn btn-outline-secondary px-2.5" style="min-height: 32px;" title="View Storekeeper Physical Receipt / Slip Attachment">
+                                                    <i class="fa-solid fa-paperclip me-1"></i> Receipt
+                                                </a>
+                                            @endif
+                                            <button type="button" class="btn btn-outline-primary px-3 fw-semibold view-fulfillment-details" style="min-height: 32px;"
+                                                data-type="petty_cash"
+                                                data-pr-id="{{ $row->petty_cash_purchase?->id }}"
+                                                title="View Store Intake Slips & Stock Movements">
+                                                <i class="fa-solid fa-receipt me-1"></i> Trail
+                                            </button>
+                                            <button type="button" class="btn btn-outline-warning text-dark px-2.5" style="min-height: 32px;"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#raiseFindingModal"
+                                                data-source-type="fulfillment"
+                                                data-source-id="{{ $row->item->id }}"
+                                                data-store-id="{{ $row->petty_cash_purchase?->store_id }}"
+                                                data-project-id="{{ $row->petty_cash_purchase?->store?->project_id }}"
+                                                data-title="Petty Cash Fulfillment Query: {{ $row->petty_cash_purchase?->purchase_no }} - {{ $row->product?->name }}"
+                                                data-severity="{{ $isPaidNotRecv ? 'critical' : ($row->remaining_qty > 0 ? 'high' : 'medium') }}"
+                                                data-observation="{{ $isPaidNotRecv ? 'CRITICAL AUDIT RISK: Petty Cash purchase ' . $row->petty_cash_purchase?->purchase_no . ' for item ' . $row->product?->name . ' has disbursed ETB ' . number_format($row->paid_amount, 2) . ', but remaining quantity of ' . number_format($row->remaining_qty, 2) . ' is not received in ' . ($row->petty_cash_purchase?->store?->name ?? 'store') . '. Storekeeper buyer: ' . ($row->petty_cash_purchase?->purchaser?->name ?? 'Storekeeper') . '. Receipt: ' . ($row->petty_cash_purchase?->receipt_no ?? '—') . '. Days elapsed: ' . $row->days_since_purchase . '.' : 'Observation regarding Petty Cash purchase ' . $row->petty_cash_purchase?->purchase_no . ' of ' . $row->product?->name . ' by storekeeper ' . ($row->petty_cash_purchase?->purchaser?->name ?? 'Storekeeper') }}"
+                                                title="Raise Audit Query"
                                             >
-                                                <i class="fa-solid fa-boxes-packing me-1"></i> Fulfill
+                                                <i class="fa-solid fa-clipboard-question"></i>
                                             </button>
                                         @else
-                                            <span class="badge bg-success bg-opacity-15 text-success border border-success-subtle px-2 py-1.5 rounded-pill d-inline-flex align-items-center" title="Fulfillment closed">
-                                                <i class="fa-solid fa-circle-check me-1"></i> Closed
-                                            </span>
-                                        @endif
+                                            @if(!$row->is_fulfillment_closed && $row->remaining_qty > 0)
+                                                <button type="button" class="btn btn-success fw-bold px-2.5 btn-open-fulfill-modal" style="min-height: 32px;"
+                                                    data-item-id="{{ $row->item->id }}"
+                                                    data-pr-id="{{ $row->pr?->id }}"
+                                                    data-pr-no="{{ $row->pr?->pr_no ?? $row->pr?->request_number ?? ('PR #' . $row->pr?->id) }}"
+                                                    data-product-name="{{ $row->product?->name ?? 'Material' }}"
+                                                    data-sku="{{ $row->product?->sku ?? '' }}"
+                                                    data-unit="{{ $row->product?->unit ?? 'pcs' }}"
+                                                    data-target-qty="{{ $row->purchased_qty > 0 ? $row->purchased_qty : $row->approved_qty }}"
+                                                    data-received-qty="{{ $row->received_qty }}"
+                                                    data-unaccepted-qty="{{ $row->unaccepted_qty ?? 0 }}"
+                                                    data-remaining-qty="{{ $row->remaining_qty }}"
+                                                    data-unit-cost="{{ $row->unit_cost }}"
+                                                    data-store-id="{{ $row->pr?->store_id }}"
+                                                    data-store-name="{{ $row->pr?->store?->name ?? 'Main Store' }}"
+                                                    title="Fulfill / Close intake for this line"
+                                                >
+                                                    <i class="fa-solid fa-boxes-packing me-1"></i> Fulfill
+                                                </button>
+                                            @else
+                                                <span class="badge bg-success bg-opacity-15 text-success border border-success-subtle px-2 py-1.5 rounded-pill d-inline-flex align-items-center" title="Fulfillment closed">
+                                                    <i class="fa-solid fa-circle-check me-1"></i> Closed
+                                                </span>
+                                            @endif
 
-                                        <button type="button" class="btn btn-outline-primary px-3 fw-semibold view-fulfillment-details" style="min-height: 32px;" data-pr-id="{{ $row->pr?->id }}" title="View Intake Slips & Photos">
-                                            <i class="fa-solid fa-receipt me-1"></i> Trail
-                                        </button>
-                                        <button type="button" class="btn btn-outline-warning text-dark px-2.5" style="min-height: 32px;"
-                                            data-bs-toggle="modal"
-                                            data-bs-target="#raiseFindingModal"
-                                            data-source-type="fulfillment"
-                                            data-source-id="{{ $row->item->id }}"
-                                            data-store-id="{{ $row->pr?->store_id }}"
-                                            data-project-id="{{ $row->pr?->project_id }}"
-                                            data-title="Fulfillment Observation: PR #{{ $row->pr?->pr_no ?? $row->pr?->request_number }} - {{ $row->product?->name }}"
-                                            data-severity="{{ $isPaidNotRecv ? 'critical' : ($row->remaining_qty > 0 ? 'high' : 'medium') }}"
-                                            data-observation="{{ $isPaidNotRecv ? 'CRITICAL AUDIT RISK: Item ' . $row->product?->name . ' on PR #' . ($row->pr?->pr_no ?? $row->pr?->request_number) . ' has been PAID in finance, but remaining quantity of ' . number_format($row->remaining_qty, 2) . ' is unfulfilled at ' . ($row->pr?->store?->name ?? 'store') . '. Days elapsed since purchase: ' . $row->days_since_purchase . '. Please provide delivery receipt or refund.' : 'Observation regarding fulfillment of ' . $row->product?->name . ' on PR #' . ($row->pr?->pr_no ?? $row->pr?->request_number) }}"
-                                            title="Raise Audit Query"
-                                        >
-                                            <i class="fa-solid fa-clipboard-question"></i>
-                                        </button>
+                                            <button type="button" class="btn btn-outline-primary px-3 fw-semibold view-fulfillment-details" style="min-height: 32px;" data-type="pr" data-pr-id="{{ $row->pr?->id }}" title="View Intake Slips & Photos">
+                                                <i class="fa-solid fa-receipt me-1"></i> Trail
+                                            </button>
+                                            <button type="button" class="btn btn-outline-warning text-dark px-2.5" style="min-height: 32px;"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#raiseFindingModal"
+                                                data-source-type="fulfillment"
+                                                data-source-id="{{ $row->item->id }}"
+                                                data-store-id="{{ $row->pr?->store_id }}"
+                                                data-project-id="{{ $row->pr?->project_id }}"
+                                                data-title="Fulfillment Observation: PR #{{ $row->pr?->pr_no ?? $row->pr?->request_number }} - {{ $row->product?->name }}"
+                                                data-severity="{{ $isPaidNotRecv ? 'critical' : ($row->remaining_qty > 0 ? 'high' : 'medium') }}"
+                                                data-observation="{{ $isPaidNotRecv ? 'CRITICAL AUDIT RISK: Item ' . $row->product?->name . ' on PR #' . ($row->pr?->pr_no ?? $row->pr?->request_number) . ' has been PAID in finance, but remaining quantity of ' . number_format($row->remaining_qty, 2) . ' is unfulfilled at ' . ($row->pr?->store?->name ?? 'store') . '. Days elapsed since purchase: ' . $row->days_since_purchase . '. Please provide delivery receipt or refund.' : 'Observation regarding fulfillment of ' . $row->product?->name . ' on PR #' . ($row->pr?->pr_no ?? $row->pr?->request_number) }}"
+                                                title="Raise Audit Query"
+                                            >
+                                                <i class="fa-solid fa-clipboard-question"></i>
+                                            </button>
+                                        @endif
                                     </div>
                                 </td>
                             </tr>
@@ -374,7 +475,7 @@
                             <tr>
                                 <td colspan="10" class="text-center py-5 text-muted">
                                     <i class="fa-solid fa-boxes-packing fa-2x mb-2 d-block text-secondary"></i>
-                                    No procurement items found matching your filters.
+                                    No material purchase items found matching your filters.
                                 </td>
                             </tr>
                         @endforelse
@@ -447,6 +548,7 @@ document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll('.view-fulfillment-details').forEach(btn => {
         btn.addEventListener('click', function () {
             const prId = this.getAttribute('data-pr-id');
+            const purchaseType = this.getAttribute('data-type') || 'pr';
             if (!prId) return;
 
             actionContainer.innerHTML = '';
@@ -458,7 +560,7 @@ document.addEventListener('DOMContentLoaded', function () {
             `;
             detailModal.show();
 
-            fetch(`/audit/fulfillment/${prId}/details`)
+            fetch(`/audit/fulfillment/${prId}/details?type=${encodeURIComponent(purchaseType)}`)
                 .then(res => res.json())
                 .then(data => {
                     if (!data.success) {
@@ -466,14 +568,19 @@ document.addEventListener('DOMContentLoaded', function () {
                         return;
                     }
 
-                    const prRef = data.pr.pr_no || data.pr.request_number || ('PR #' + data.pr.id);
-                    modalTitle.textContent = `PR #${prRef} — ${data.pr.title || 'Purchase Fulfillment Trail'}`;
-                    modalSub.textContent  = `Project: ${data.pr.project_name} | Store: ${data.pr.store_name} | Supplier: ${data.pr.supplier_name}`;
+                    const isPetty = !!data.pr.is_petty_cash;
+                    const prRef = data.pr.pr_no || data.pr.request_number || (isPetty ? ('PCMP-' + data.pr.id) : ('PR #' + data.pr.id));
+                    modalTitle.textContent = isPetty
+                        ? `Petty Cash Buy #${prRef} — ${data.pr.title || 'Storekeeper Material Purchase'}`
+                        : `PR #${prRef} — ${data.pr.title || 'Purchase Fulfillment Trail'}`;
+                    modalSub.textContent = isPetty
+                        ? `Project: ${data.pr.project_name} | Store: ${data.pr.store_name} | Supplier: ${data.pr.supplier_name} | Storekeeper: ${data.pr.requested_by}`
+                        : `Project: ${data.pr.project_name} | Store: ${data.pr.store_name} | Supplier: ${data.pr.supplier_name}`;
 
                     // Modal action button (Raise Audit Query)
                     actionContainer.innerHTML = `
                         <button type="button" class="btn btn-outline-warning text-dark rounded-pill px-3 shadow-xs" id="btnRaiseFindingFromModal">
-                            <i class="fa-solid fa-clipboard-question me-1 text-warning"></i> Raise Audit Finding on PR #${escapeHtml(prRef)}
+                            <i class="fa-solid fa-clipboard-question me-1 text-warning"></i> Raise Audit Finding on ${isPetty ? 'Petty Cash Buy #' : 'PR #'}${escapeHtml(prRef)}
                         </button>
                     `;
                     document.getElementById('btnRaiseFindingFromModal')?.addEventListener('click', function() {
@@ -489,7 +596,9 @@ document.addEventListener('DOMContentLoaded', function () {
                                     const tInput = form.querySelector('[name="title"]');
                                     if (srcType) srcType.value = 'fulfillment';
                                     if (srcId) srcId.value = data.pr.id;
-                                    if (tInput) tInput.value = `Fulfillment Observation: PR #${prRef} (${data.pr.title})`;
+                                    if (tInput) tInput.value = isPetty
+                                        ? `Petty Cash Observation: ${prRef} (${data.pr.title})`
+                                        : `Fulfillment Observation: PR #${prRef} (${data.pr.title})`;
                                 }
                                 fModal.show();
                             }
@@ -498,14 +607,16 @@ document.addEventListener('DOMContentLoaded', function () {
 
                     let html = '';
 
-                    // Top PR Overview Card with KPI summary
+                    // Top Overview Card with KPI summary
                     html += `
                         <div class="card border-0 shadow-xs rounded-3 mb-3 bg-white">
                             <div class="card-body p-3">
                                 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
                                     <div>
                                         <div class="d-flex align-items-center gap-2 mb-1">
-                                            <span class="badge bg-primary fs-6 px-2.5 py-1 font-monospace">PR #${escapeHtml(prRef)}</span>
+                                            <span class="badge ${isPetty ? 'bg-info text-dark' : 'bg-primary'} fs-6 px-2.5 py-1 font-monospace">
+                                                ${isPetty ? '<i class="fa-solid fa-money-bill-wave me-1 text-success"></i>Petty Cash #' : 'PR #'}${escapeHtml(prRef)}
+                                            </span>
                                             <span class="badge bg-secondary rounded-pill px-2.5 py-1">${escapeHtml(data.pr.status || 'Active')}</span>
                                         </div>
                                         <h6 class="fw-bold mb-1 text-dark">${escapeHtml(data.pr.title || 'No Title')}</h6>
@@ -513,8 +624,11 @@ document.addEventListener('DOMContentLoaded', function () {
                                             <span><i class="fa-solid fa-diagram-project text-secondary me-1"></i><strong>Project:</strong> ${escapeHtml(data.pr.project_name)}</span>
                                             <span><i class="fa-solid fa-warehouse text-primary me-1"></i><strong>Store:</strong> ${escapeHtml(data.pr.store_name)}</span>
                                             <span><i class="fa-solid fa-truck-field text-secondary me-1"></i><strong>Supplier:</strong> ${escapeHtml(data.pr.supplier_name)}</span>
-                                            <span><i class="fa-solid fa-user me-1"></i><strong>Requester:</strong> ${escapeHtml(data.pr.requested_by)}</span>
+                                            <span><i class="fa-solid fa-user me-1"></i><strong>${isPetty ? 'Storekeeper Buyer' : 'Requester'}:</strong> ${escapeHtml(data.pr.requested_by)}</span>
                                             <span><i class="fa-solid fa-calendar me-1"></i><strong>Date:</strong> ${escapeHtml(data.pr.created_at)}</span>
+                                            ${isPetty && data.pr.receipt_no ? `<span><i class="fa-solid fa-receipt text-warning me-1"></i><strong>Receipt #:</strong> ${escapeHtml(data.pr.receipt_no)}</span>` : ''}
+                                            ${isPetty && data.pr.fs_no ? `<span><i class="fa-solid fa-file-invoice text-info me-1"></i><strong>FS #:</strong> ${escapeHtml(data.pr.fs_no)}</span>` : ''}
+                                            ${isPetty && data.pr.supplier_tin ? `<span><i class="fa-solid fa-id-card text-muted me-1"></i><strong>TIN:</strong> ${escapeHtml(data.pr.supplier_tin)}</span>` : ''}
                                         </div>
                                     </div>
                                     <div class="d-flex align-items-center gap-2">
@@ -528,7 +642,7 @@ document.addEventListener('DOMContentLoaded', function () {
                                         </div>
                                         <div class="text-center px-3 py-1.5 bg-light rounded-3 border">
                                             <span class="d-block fs-5 fw-bold text-success font-monospace">${data.payments.length}</span>
-                                            <small class="text-muted" style="font-size: 0.72rem;">Payments</small>
+                                            <small class="text-muted" style="font-size: 0.72rem;">${isPetty ? 'Petty Disbursed' : 'Payments'}</small>
                                         </div>
                                     </div>
                                 </div>
