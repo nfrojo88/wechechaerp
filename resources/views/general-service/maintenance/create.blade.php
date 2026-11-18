@@ -124,7 +124,7 @@
                                 </label>
                                 <select name="assigned_to_user_id" class="form-select rounded-3">
                                     <option value="">— Assign to General Service Staff —</option>
-                                    @foreach($staff as $st)
+                                    @foreach(($staff ?? []) as $st)
                                         <option value="{{ $st->id }}" {{ (old('assigned_to_user_id') == $st->id || auth()->id() == $st->id) ? 'selected' : '' }}>
                                             {{ $st->name }}
                                         </option>
@@ -378,7 +378,7 @@ function addMaterialRow() {
                 <select name="items[${idx}][product_id]" class="form-select form-select-sm" onchange="handleProductSelect(this, ${idx})">
                     <option value="">— Select Catalog Product —</option>
                     <option value="custom">✏️ + Custom / Unlisted Spare Part</option>
-                    @foreach($products as $p)
+                    @foreach(($products ?? []) as $p)
                         <option value="{{ $p->id }}" data-unit="{{ $p->unit ?? 'pcs' }}">{{ $p->name }} {{ $p->sku ? "({$p->sku})" : '' }}</option>
                     @endforeach
                 </select>

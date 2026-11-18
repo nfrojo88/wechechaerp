@@ -136,8 +136,12 @@ class GeneralServiceController extends Controller
 
         $employees = Employee::where('status', 'active')->orderBy('full_name')->get();
         $stores = Store::where('is_active', true)->orderBy('name')->get();
+        $staff = User::whereHas('roles', fn($q) => $q->whereIn('name', [
+            'global_admin', 'admin', 'store_manager', 'general_service'
+        ]))->get(['id', 'name']);
+        $products = Product::where('is_active', true)->orderBy('name')->get(['id', 'name', 'sku', 'unit', 'category']);
 
-        return view('general-service.maintenance.create', compact('fixedAssetUnits', 'employees', 'stores'));
+        return view('general-service.maintenance.create', compact('fixedAssetUnits', 'employees', 'stores', 'staff', 'products'));
     }
 
     /**
