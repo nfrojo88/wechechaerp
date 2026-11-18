@@ -221,7 +221,7 @@ class ExpenseRequestController extends Controller
                     $pq->where('requested_by', $user->id);
                 });
                 $sub->orWhereHas('coa', function ($cq) use ($user) {
-                    $cq->where('assigned_to', $user->id)->orWhere('manager_id', $user->id);
+                    $cq->where('assigned_to', $user->id);
                 });
             });
         };

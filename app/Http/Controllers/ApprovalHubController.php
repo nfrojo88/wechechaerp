@@ -725,8 +725,7 @@ class ApprovalHubController extends Controller
                     return true;
                 }
                 if ($raw && isset($raw->payment) && $raw->payment && $raw->payment->coaAccount && (
-                    (int)($raw->payment->coaAccount->assigned_to ?? 0) === $userId ||
-                    (int)($raw->payment->coaAccount->manager_id ?? 0) === $userId
+                    (int)($raw->payment->coaAccount->assigned_to ?? 0) === $userId
                 )) {
                     return true;
                 }
@@ -798,8 +797,7 @@ class ApprovalHubController extends Controller
                     return true;
                 }
                 if ($raw && isset($raw->payment) && $raw->payment && $raw->payment->coaAccount && (
-                    (int)($raw->payment->coaAccount->assigned_to ?? 0) === $userId ||
-                    (int)($raw->payment->coaAccount->manager_id ?? 0) === $userId
+                    (int)($raw->payment->coaAccount->assigned_to ?? 0) === $userId
                 )) {
                     return true;
                 }
