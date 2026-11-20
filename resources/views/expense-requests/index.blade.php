@@ -293,11 +293,39 @@
                                         @if($req->purchaseRequest->items->count() > 2)
                                             <small class="text-muted" style="font-size: 0.68rem;">+{{ $req->purchaseRequest->items->count() - 2 }} more</small>
                                         @endif
+
+                                        @php
+                                            $expPrAssignedStaff = $req->assignedFinanceStaff->name 
+                                                ?? ($req->financeStaff->name 
+                                                ?? (optional(optional($req->purchaseRequest)->payment)->assignedStaff->name ?? null));
+                                            $expPrCoaName = $req->coa ? ('[' . $req->coa->code . '] ' . $req->coa->name)
+                                                : (optional(optional($req->purchaseRequest)->payment)->coaAccount ? ('[' . optional($req->purchaseRequest->payment->coaAccount)->code . '] ' . optional($req->purchaseRequest->payment->coaAccount)->name) : null);
+                                        @endphp
+                                        @if($expPrAssignedStaff)
+                                            <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle py-0.5 px-1.5" style="font-size: 0.68rem;" title="Assigned Custodian / Finance Staff">
+                                                <i class="fa-solid fa-user-check me-1"></i>Assigned: {{ $expPrAssignedStaff }}
+                                            </span>
+                                        @endif
+                                        @if($expPrCoaName)
+                                            <span class="badge bg-light text-dark border py-0.5 px-1.5" style="font-size: 0.68rem;" title="Funding Account">
+                                                <i class="fa-solid fa-wallet text-secondary me-1"></i>{{ $expPrCoaName }}
+                                            </span>
+                                        @endif
                                     </div>
                                 @endif
                             </td>
                             <td>
                                 {!! $req->status_badge !!}
+                                @php
+                                    $rowAssignedName = $req->assignedFinanceStaff->name 
+                                        ?? ($req->financeStaff->name 
+                                        ?? (optional(optional($req->purchaseRequest)->payment)->assignedStaff->name ?? null));
+                                @endphp
+                                @if($rowAssignedName)
+                                    <div class="mt-1 small text-dark fw-semibold" style="font-size: 0.70rem;" title="Assigned Handler: {{ $rowAssignedName }}">
+                                        <i class="fa-solid fa-user-tag text-primary me-0.5"></i>{{ $rowAssignedName }}
+                                    </div>
+                                @endif
                                 @if($req->status === 'Rejected')
                                     <div class="mt-1 p-1 bg-danger bg-opacity-10 border border-danger border-opacity-25 rounded small text-danger" style="max-width: 220px; font-size: 0.76rem;">
                                         <div class="fw-bold">

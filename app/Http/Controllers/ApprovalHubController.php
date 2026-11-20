@@ -16,6 +16,10 @@ use App\Models\UtilityExpense;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Carbon\Carbon;
 
 class ApprovalHubController extends Controller
@@ -972,7 +976,8 @@ class ApprovalHubController extends Controller
             'isAuditor',
             'isHR',
             'isGM',
-            'isFinance'
+            'isFinance',
+            'isFinanceHead'
         ));
     }
 
@@ -1041,5 +1046,241 @@ class ApprovalHubController extends Controller
         ]);
 
         return back()->with('success', "Office Supply Request #{$officeRequest->id} has been sent back to Finance Head.");
+    }
+
+    /**
+     * Delete Forever (permanent purge) an expense or request item from Expense Track & Approve.
+     */
+    public function deleteForever(Request $request, string $type, $id)
+    {
+        $user = Auth::user();
+        if (!$user) {
+            abort(401);
+        }
+
+        $rolesStr = strtolower(implode(' ', $user->getRoleNames()->toArray()));
+        $isAdmin = $user->hasAnyRole(['admin', 'global_admin', 'super_admin', 'Admin', 'Global Admin', 'gm', 'general_manager'])
+            || str_contains($rolesStr, 'admin')
+            || (method_exists($user, 'isGlobalAdmin') && $user->isGlobalAdmin());
+        $isFinanceHead = $user->hasAnyRole(['Finance head', 'finance_head', 'finance_manager', 'Finance Manager', 'Finance Head'])
+            || str_contains($rolesStr, 'finance_head')
+            || str_contains($rolesStr, 'finance_manager');
+
+        $reason = $request->input('reason') ?: ('Deleted forever by ' . $user->name . ' on ' . now()->format('M d, Y H:i'));
+        $deletedIdentifier = "#{$id}";
+
+        try {
+            DB::transaction(function () use ($type, $id, $user, $isAdmin, $isFinanceHead, $reason, &$deletedIdentifier) {
+                switch ($type) {
+                    case 'expense_request':
+                        $expReq = \App\Models\ExpenseRequest::withTrashed()->findOrFail($id);
+                        $deletedIdentifier = $expReq->request_number ?? ('REQ-' . $expReq->id);
+
+                        // Owner can only delete if in draft or pending
+                        if (!$isAdmin && !$isFinanceHead && ($expReq->user_id !== $user->id || !in_array($expReq->status, [
+                            \App\Models\ExpenseRequest::STATUS_PENDING_EMPLOYEE,
+                            \App\Models\ExpenseRequest::STATUS_PENDING_HR,
+                            \App\Models\ExpenseRequest::STATUS_PENDING_GM,
+                            'draft',
+                            'rejected',
+                            'Pending (HR Review)',
+                            'Pending (GM Review)'
+                        ]))) {
+                            abort(403, 'Unauthorized to delete this expense request.');
+                        }
+
+                        $expId = $expReq->id;
+
+                        // 1. Delete linked vehicle fuel request if any
+                        if (Schema::hasTable('vehicle_fuel_requests')) {
+                            DB::table('vehicle_fuel_requests')->where('expense_request_id', $expId)->delete();
+                        }
+
+                        // 2. Delete linked receipts and items
+                        if (Schema::hasTable('receipts')) {
+                            $receipts = DB::table('receipts')
+                                ->where('purchasable_id', $expId)
+                                ->where(function ($c) {
+                                    $c->where('purchasable_type', 'like', '%ExpenseRequest%')
+                                      ->orWhere('purchasable_type', 'expense_request');
+                                })
+                                ->get();
+                            $rcpIds = $receipts->pluck('id')->toArray();
+                            if (!empty($rcpIds)) {
+                                if (Schema::hasTable('receipt_items')) {
+                                    DB::table('receipt_items')->whereIn('receipt_id', $rcpIds)->delete();
+                                }
+                                DB::table('receipts')->whereIn('id', $rcpIds)->delete();
+                            }
+                        }
+
+                        // 3. Delete linked VAT decisions & audit logs
+                        if (Schema::hasTable('expense_hub_vat_decisions')) {
+                            $decisions = DB::table('expense_hub_vat_decisions')
+                                ->where('source_type', 'expense_request')
+                                ->where('source_id', $expId)
+                                ->get();
+                            $decIds = $decisions->pluck('id')->toArray();
+                            if (!empty($decIds)) {
+                                if (Schema::hasTable('expense_hub_vat_audit_logs')) {
+                                    DB::table('expense_hub_vat_audit_logs')->whereIn('decision_id', $decIds)->delete();
+                                }
+                                DB::table('expense_hub_vat_decisions')->whereIn('id', $decIds)->delete();
+                            }
+                        }
+
+                        // 4. Clean foreign keys
+                        if (Schema::hasTable('letters') && Schema::hasColumn('letters', 'expense_request_id')) {
+                            DB::table('letters')->where('expense_request_id', $expId)->update(['expense_request_id' => null]);
+                        }
+                        if (Schema::hasTable('credit_store_payments') && Schema::hasColumn('credit_store_payments', 'expense_request_id')) {
+                            DB::table('credit_store_payments')->where('expense_request_id', $expId)->update(['expense_request_id' => null]);
+                        }
+                        if (Schema::hasTable('maintenance_requests') && Schema::hasColumn('maintenance_requests', 'expense_request_id')) {
+                            DB::table('maintenance_requests')->where('expense_request_id', $expId)->update(['expense_request_id' => null]);
+                        }
+
+                        // 5. Force delete
+                        $expReq->forceDelete();
+                        break;
+
+                    case 'expense':
+                        if (!$isAdmin && !$isFinanceHead) {
+                            abort(403, 'Unauthorized to delete this direct expense.');
+                        }
+                        $expense = \App\Models\Expense::findOrFail($id);
+                        $deletedIdentifier = 'EXP-' . $expense->id . ' (' . ($expense->description ?? 'Direct Expense') . ')';
+
+                        if (!empty($expense->receipt_path)) {
+                            Storage::disk('public')->delete($expense->receipt_path);
+                        }
+
+                        $expense->delete();
+                        break;
+
+                    case 'utility_expense':
+                        if (!$isAdmin && !$isFinanceHead) {
+                            abort(403, 'Unauthorized to delete this utility expense.');
+                        }
+                        $uExp = \App\Models\UtilityExpense::withTrashed()->findOrFail($id);
+                        $deletedIdentifier = $uExp->expense_number ?? ('UTIL-' . $uExp->id);
+
+                        if (!empty($uExp->payment_receipt)) {
+                            Storage::disk('public')->delete($uExp->payment_receipt);
+                        }
+
+                        if (Schema::hasTable('expense_hub_vat_decisions')) {
+                            $decisions = DB::table('expense_hub_vat_decisions')
+                                ->where('source_type', 'utility_expense')
+                                ->where('source_id', $uExp->id)
+                                ->get();
+                            $decIds = $decisions->pluck('id')->toArray();
+                            if (!empty($decIds)) {
+                                if (Schema::hasTable('expense_hub_vat_audit_logs')) {
+                                    DB::table('expense_hub_vat_audit_logs')->whereIn('decision_id', $decIds)->delete();
+                                }
+                                DB::table('expense_hub_vat_decisions')->whereIn('id', $decIds)->delete();
+                            }
+                        }
+
+                        $uExp->forceDelete();
+                        break;
+
+                    case 'office_supply_request':
+                        if (!$isAdmin && !$isFinanceHead) {
+                            abort(403, 'Unauthorized to delete this office supply request.');
+                        }
+                        $officeReq = \App\Models\OfficeMaterialRequest::findOrFail($id);
+                        $deletedIdentifier = $officeReq->request_no ?? ('OMR-' . $officeReq->id);
+
+                        if (Schema::hasTable('office_material_request_items')) {
+                            DB::table('office_material_request_items')->where('request_id', $officeReq->id)->delete();
+                        }
+
+                        $officeReq->delete();
+                        break;
+
+                    case 'purchase_request':
+                        if (!$isAdmin && !$isFinanceHead) {
+                            abort(403, 'Unauthorized to delete this purchase request.');
+                        }
+                        $pr = \App\Models\PurchaseRequest::withTrashed()->findOrFail($id);
+                        $deletedIdentifier = $pr->pr_no ?? ('PR-' . $pr->id);
+
+                        if (Schema::hasTable('purchase_request_items')) {
+                            DB::table('purchase_request_items')->where('purchase_request_id', $pr->id)->delete();
+                        }
+                        if (Schema::hasTable('pr_workflow_logs')) {
+                            DB::table('pr_workflow_logs')->where('purchase_request_id', $pr->id)->delete();
+                        }
+                        if (Schema::hasTable('procurement_payments')) {
+                            DB::table('procurement_payments')->where('purchase_request_id', $pr->id)->delete();
+                        }
+                        if (Schema::hasTable('expense_requests')) {
+                            DB::table('expense_requests')->where('purchase_request_id', $pr->id)->delete();
+                        }
+
+                        $pr->forceDelete();
+                        break;
+
+                    case 'emergency_fund':
+                        if (!$isAdmin && !$isFinanceHead) {
+                            abort(403, 'Unauthorized to delete this emergency fund request.');
+                        }
+                        if (class_exists(\App\Models\EmergencyFund::class)) {
+                            $ef = \App\Models\EmergencyFund::findOrFail($id);
+                            $deletedIdentifier = $ef->request_no ?? ('EF-' . $ef->id);
+                            $ef->delete();
+                        }
+                        break;
+
+                    case 'purchase_order':
+                        if (!$isAdmin && !$isFinanceHead) {
+                            abort(403, 'Unauthorized to delete this purchase order.');
+                        }
+                        if (class_exists(\App\Models\PurchaseOrder::class)) {
+                            $po = \App\Models\PurchaseOrder::findOrFail($id);
+                            $deletedIdentifier = $po->po_number ?? ('PO-' . $po->id);
+                            if (Schema::hasTable('purchase_order_items')) {
+                                DB::table('purchase_order_items')->where('purchase_order_id', $po->id)->delete();
+                            }
+                            $po->delete();
+                        }
+                        break;
+
+                    default:
+                        abort(400, "Unknown expense type: {$type}");
+                }
+
+                // Log Activity
+                try {
+                    \App\Models\ActivityLog::log(
+                        'expense_deleted_forever',
+                        "Permanently deleted {$type} '{$deletedIdentifier}' by {$user->name}. Reason: {$reason}",
+                        'Finance',
+                        null,
+                        ['type' => $type, 'id' => $id, 'user_id' => $user->id, 'reason' => $reason]
+                    );
+                } catch (\Throwable $e) {}
+            });
+
+            if ($request->wantsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => "Record {$deletedIdentifier} has been permanently deleted from the database."
+                ]);
+            }
+
+            return back()->with('success', "Record {$deletedIdentifier} has been permanently deleted from the database.");
+        } catch (\Throwable $e) {
+            Log::error("Failed to delete forever {$type} #{$id}: " . $e->getMessage());
+            if ($request->wantsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "Failed to delete record: " . $e->getMessage()
+                ], 500);
+            }
+            return back()->with('error', "Failed to delete record: " . $e->getMessage());
+        }
     }
 }

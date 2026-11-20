@@ -2560,6 +2560,7 @@ Route::middleware(['auth'])->group(function () {
         [App\Http\Controllers\ExpenseController::class, 'reject'])->name('expenses.reject');
     Route::post('expenses/purchase-requests/{purchaseRequest}/send-back-to-finance-head', [App\Http\Controllers\ApprovalHubController::class, 'sendBackPrToFinanceHead'])->name('expenses.pr-send-back-to-finance-head');
     Route::post('expenses/office-requests/{officeRequest}/send-back-to-finance-head', [App\Http\Controllers\ApprovalHubController::class, 'sendBackOfficeToFinanceHead'])->name('expenses.office-send-back-to-finance-head');
+    Route::match(['post', 'delete'], 'expenses/delete-forever/{type}/{id}', [App\Http\Controllers\ApprovalHubController::class, 'deleteForever'])->name('expenses.delete-forever');
 
     // Central Approval Hub
     Route::get('approvals', [App\Http\Controllers\ApprovalHubController::class, 'index'])->name('approvals.index');

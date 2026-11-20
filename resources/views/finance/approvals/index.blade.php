@@ -183,8 +183,8 @@
                             <th class="py-3" style="width: 13%;">Category</th>
                             <th class="py-3" style="width: 20%;">Description</th>
                             <th class="text-end py-3" style="width: 10%;">Amount</th>
-                            <th class="text-center py-3" style="width: 10%;">Status</th>
-                            <th class="text-end pe-4 py-3" style="width: 8%;">Actions</th>
+                            <th class="text-center py-3" style="width: 9%;">Status</th>
+                            <th class="text-end pe-4 py-3" style="width: 10%; min-width: 105px;">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -205,6 +205,19 @@
                                     <span class="text-muted" style="font-size: .75rem;">
                                         <i class="fa-solid fa-building me-1 opacity-50"></i>{{ $item->project }}
                                     </span>
+                                    @if($item->assigned_staff_name)
+                                        <div class="mt-1" style="font-size: 0.72rem;">
+                                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-1.5 py-0.5" title="Assigned Finance Staff / Handler">
+                                                <i class="fa-solid fa-user-check me-1"></i>Assigned: <strong>{{ $item->assigned_staff_name }}</strong>
+                                            </span>
+                                        </div>
+                                    @elseif($item->type === 'purchase_request' && $item->status_key === 'finance_queue')
+                                        <div class="mt-1" style="font-size: 0.72rem;">
+                                            <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-1.5 py-0.5" title="Awaiting Finance Staff Assignment">
+                                                <i class="fa-solid fa-clock me-1"></i>Pending Assignment
+                                            </span>
+                                        </div>
+                                    @endif
                                 </td>
                                 <td>
                                     @php
@@ -279,6 +292,20 @@
                                             @endif
                                         </div>
                                     @endif
+                                    @if($item->type === 'purchase_request')
+                                        <div class="mt-1 d-flex flex-wrap gap-1 align-items-center">
+                                            @if($item->assigned_staff_name)
+                                                <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle px-1.5 py-0.5" style="font-size: 0.68rem;" title="Assigned Handler">
+                                                    <i class="fa-solid fa-hand-holding-dollar text-primary me-1"></i>Assigned: <strong>{{ $item->assigned_staff_name }}</strong>
+                                                </span>
+                                            @endif
+                                            @if($item->coa_name)
+                                                <span class="badge bg-light text-dark border px-1.5 py-0.5" style="font-size: 0.68rem;" title="Funding Source">
+                                                    <i class="fa-solid fa-wallet text-secondary me-1"></i>Funding: <strong>{{ $item->coa_name }}</strong>
+                                                </span>
+                                            @endif
+                                        </div>
+                                    @endif
                                     @if(!empty($item->rejection_reason))
                                         <div class="small text-danger fw-semibold" style="font-size: .72rem;">
                                             <i class="fa-solid fa-triangle-exclamation me-1"></i>{{ Str::limit($item->rejection_reason, 45) }}
@@ -311,6 +338,11 @@
                                     <span class="badge bg-{{ $item->color }} rounded-pill px-2 py-1" style="font-size: .75rem;">
                                         {{ $item->status }}
                                     </span>
+                                    @if($item->assigned_staff_name)
+                                        <div class="mt-1 small text-dark fw-semibold text-truncate" style="font-size: 0.70rem; max-width: 140px;" title="Assigned Custodian: {{ $item->assigned_staff_name }}">
+                                            <i class="fa-solid fa-user-tag text-primary me-0.5"></i>{{ $item->assigned_staff_name }}
+                                        </div>
+                                    @endif
                                 </td>
                                 <td class="text-end pe-4">
                                     <div class="btn-group btn-group-sm">
@@ -447,6 +479,14 @@
                                                             <i class="fa-solid fa-arrow-left me-1"></i> Return
                                                         </button>
                                                     @endif
+                                                    @if($prIsFinHeadOrAdmin)
+                                                        <button type="button" class="btn btn-primary btn-sm text-white fw-semibold ms-1"
+                                                                data-bs-toggle="modal"
+                                                                data-bs-target="#financePrAssignModal{{ $item->id_raw }}"
+                                                                title="{{ $item->assigned_staff_name ? 'Re-assign Funding COA & Staff' : 'Assign Funding COA & Staff' }}">
+                                                            <i class="fa-solid fa-user-tag me-1"></i> {{ $item->assigned_staff_name ? 'Re-assign' : 'Assign' }}
+                                                        </button>
+                                                    @endif
                                                     <a href="{{ $item->route_show }}" class="btn btn-outline-primary btn-sm" title="View Purchase Request details">
                                                         <i class="fa-solid fa-eye me-1"></i> PR
                                                     </a>
@@ -528,6 +568,21 @@
                                             @endif
                                         @endif
 
+                                        @php
+                                            $canDeleteForever = !$isAuditorUser && (
+                                                !empty($isAdmin) 
+                                                || !empty($isFinanceHead) 
+                                                || ($authUser && ($authUser->isGlobalAdmin() || (in_array($item->type, ['expense_request']) && ($item->raw_model->user_id ?? 0) === $authUser->id)))
+                                            );
+                                        @endphp
+                                        @if($canDeleteForever)
+                                            <button type="button" class="btn btn-outline-danger btn-sm ms-1 rounded-3"
+                                                    data-bs-toggle="modal"
+                                                    data-bs-target="#deleteForeverModal{{ $item->id_raw }}_{{ $item->type }}"
+                                                    title="Delete Forever">
+                                                <i class="fa-solid fa-trash-can"></i>
+                                            </button>
+                                        @endif
 
                                     </div>
                                 </td>
@@ -556,6 +611,13 @@
 <!-- MODALS RENDERED OUTSIDE TABLE (CLEAN DOM)  -->
 <!-- ========================================== -->
 @foreach($paginatedItems as $item)
+    @php
+        $canDeleteForever = !$isAuditorUser && (
+            !empty($isAdmin) 
+            || !empty($isFinanceHead) 
+            || ($authUser && ($authUser->isGlobalAdmin() || (in_array($item->type, ['expense_request']) && ($item->raw_model->user_id ?? 0) === $authUser->id)))
+        );
+    @endphp
     <!-- 1. Detail Modal -->
     <div class="modal fade" id="detailModal{{ $item->id_raw }}_{{ $item->type }}" tabindex="-1" aria-labelledby="detailModalLabel{{ $item->id_raw }}" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered modal-lg">
@@ -1429,6 +1491,31 @@
                                     </div>
                                 </div>
 
+                                {{-- PR Assignment Information Card --}}
+                                <div class="card border border-info border-opacity-25 rounded-3 mb-3 bg-info bg-opacity-10">
+                                    <div class="card-body p-2.5 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                        <div class="d-flex align-items-center gap-2">
+                                            <span class="rounded-circle p-1.5 text-white bg-primary d-flex align-items-center justify-content-center" style="width:30px;height:30px;">
+                                                <i class="fa-solid fa-user-tag fs-6"></i>
+                                            </span>
+                                            <div>
+                                                <small class="text-muted text-uppercase fw-bold d-block" style="font-size:0.68rem;">Finance Payment Assignment</small>
+                                                <div class="fw-bold text-dark" style="font-size:0.85rem;">
+                                                    @if($item->assigned_staff_name)
+                                                        <i class="fa-solid fa-user-check text-success me-1"></i>Assigned Staff: <span class="text-primary">{{ $item->assigned_staff_name }}</span>
+                                                    @else
+                                                        <span class="text-warning-emphasis"><i class="fa-solid fa-clock me-1"></i>Pending Assignment by Finance Head</span>
+                                                    @endif
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="text-end">
+                                            <small class="text-muted text-uppercase fw-bold d-block" style="font-size:0.68rem;">Funding Account (COA)</small>
+                                            <strong class="text-dark font-monospace" style="font-size:0.82rem;">{{ $item->coa_name ?: 'Pending Account Selection' }}</strong>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 @if($gmDecision && $gmDecision->notes)
                                     <div class="alert alert-info border-start border-4 border-info py-2 px-3 mb-3 small d-flex align-items-center gap-2">
                                         <i class="fa-solid fa-user-shield text-info flex-shrink-0 fs-5"></i>
@@ -1530,11 +1617,92 @@
                             <i class="fa-solid fa-arrow-left me-1"></i> Send Back to Finance Head
                         </button>
                     @endif
-                    <button type="button" class="btn btn-secondary rounded-3 px-4 ms-auto" data-bs-dismiss="modal">Close</button>
+                    <div class="d-flex gap-2 ms-auto">
+                        @if($canDeleteForever)
+                            <button type="button" class="btn btn-outline-danger rounded-pill px-3"
+                                    data-bs-dismiss="modal"
+                                    data-bs-toggle="modal"
+                                    data-bs-target="#deleteForeverModal{{ $item->id_raw }}_{{ $item->type }}">
+                                <i class="fa-solid fa-trash-can me-1"></i> Delete Forever
+                            </button>
+                        @endif
+                        <button type="button" class="btn btn-secondary rounded-3 px-4" data-bs-dismiss="modal">Close</button>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
+
+    <!-- Delete Forever Modal -->
+    @if($canDeleteForever)
+    <div class="modal fade" id="deleteForeverModal{{ $item->id_raw }}_{{ $item->type }}" tabindex="-1" aria-labelledby="deleteForeverModalLabel{{ $item->id_raw }}_{{ $item->type }}" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+                <form action="{{ route('expenses.delete-forever', ['type' => $item->type, 'id' => $item->id_raw]) }}" method="POST">
+                    @csrf
+                    @method('DELETE')
+                    <div class="modal-header bg-danger text-white py-3 px-4">
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="rounded-circle p-2 bg-white bg-opacity-25 d-flex align-items-center justify-content-center" style="width:34px;height:34px;">
+                                <i class="fa-solid fa-trash-can fs-6"></i>
+                            </span>
+                            <div>
+                                <h5 class="modal-title fw-bold mb-0" id="deleteForeverModalLabel{{ $item->id_raw }}_{{ $item->type }}">
+                                    Delete Forever
+                                </h5>
+                                <span class="small text-white-50">Permanent Database Purge</span>
+                            </div>
+                        </div>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body p-4 bg-white">
+                        <div class="alert alert-danger d-flex align-items-start gap-2 mb-3">
+                            <i class="fa-solid fa-triangle-exclamation fs-5 mt-0.5 flex-shrink-0"></i>
+                            <div class="small">
+                                <strong>Warning: This action is irreversible!</strong><br>
+                                You are about to permanently delete this record from the database. All linked files, receipts, line items, and tax entries will be permanently removed.
+                            </div>
+                        </div>
+
+                        <div class="p-3 bg-light rounded-3 border mb-3">
+                            <div class="d-flex justify-content-between mb-1">
+                                <span class="text-muted small">ID / Ref:</span>
+                                <strong class="text-dark font-monospace">{{ $item->id_formatted }}</strong>
+                            </div>
+                            <div class="d-flex justify-content-between mb-1">
+                                <span class="text-muted small">Type:</span>
+                                <span class="badge bg-secondary-subtle text-secondary border text-uppercase" style="font-size:0.65rem;">{{ str_replace('_', ' ', $item->type) }}</span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-1">
+                                <span class="text-muted small">Requester:</span>
+                                <strong class="text-dark">{{ $item->applicant_name }}</strong>
+                            </div>
+                            <div class="d-flex justify-content-between mb-1">
+                                <span class="text-muted small">Amount:</span>
+                                <strong class="text-danger font-monospace">ETB {{ number_format($item->net_amount, 2) }}</strong>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span class="text-muted small">Category:</span>
+                                <span class="text-dark">{{ $item->category }}</span>
+                            </div>
+                        </div>
+
+                        <div class="mb-2">
+                            <label class="form-label small text-muted text-uppercase fw-bold">Reason for Deletion (Optional):</label>
+                            <input type="text" name="reason" class="form-control" placeholder="e.g. Duplicate entry, erroneous request, cancelled by management...">
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light border-0 py-3 px-4 d-flex justify-content-end gap-2">
+                        <button type="button" class="btn btn-light rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-danger rounded-pill px-4 fw-bold shadow-sm">
+                            <i class="fa-solid fa-trash-can me-1"></i> Confirm Delete Forever
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    @endif
 
     @if($item->type === 'expense_request')
         @php
@@ -2817,6 +2985,100 @@
     </div>
     @endif
 
+    <!-- Modal: Finance Head PR Assignment Portal -->
+    @if($item->type === 'purchase_request' && $item->status_key === 'finance_queue')
+    <div class="modal fade" id="financePrAssignModal{{ $item->id_raw }}" tabindex="-1" aria-labelledby="financePrAssignModalLabel{{ $item->id_raw }}" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-md">
+            <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+                <div class="modal-header text-white py-3 px-4" style="background:#2563eb;">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="badge bg-white bg-opacity-20 text-white p-2 rounded-3 fs-6">
+                            <i class="fa-solid fa-user-tag"></i>
+                        </span>
+                        <div>
+                            <h5 class="modal-title fw-bold mb-0" id="financePrAssignModalLabel{{ $item->id_raw }}">
+                                Assign PR Payment: {{ $item->id_formatted }}
+                            </h5>
+                            <span class="text-white-50 small">Amount: <strong>ETB {{ number_format($item->net_amount, 2) }}</strong> &bull; Requester: <strong>{{ $item->applicant_name }}</strong></span>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4 bg-white">
+                    <div class="p-3 bg-light rounded-3 border mb-3">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="fa-solid fa-building-columns text-primary fs-5"></i>
+                            <div>
+                                <strong class="text-dark d-block">Finance Head PR Assignment Portal</strong>
+                                <small class="text-muted">Designate the funding Chart of Account and assign the finance custodian staff to disburse funds.</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <form method="POST" action="{{ route('purchase-requests.assign-payment', $item->id_raw) }}">
+                        @csrf
+                        @php
+                            $prPayment = optional($item->raw_model)->payment;
+                            $currentCoaId = optional($prPayment)->coa_account_id ?? optional(optional($item->raw_model)->expenseRequest)->coa_id;
+                            $currentStaffId = $item->assigned_staff_id ?? optional($prPayment)->assigned_finance_staff_id;
+                        @endphp
+
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-dark text-uppercase">
+                                Funding Account (COA) <span class="text-danger">*</span>
+                            </label>
+                            <select name="coa_account_id" id="modalPrCoaSelect{{ $item->id_raw }}" class="form-select form-select-sm bg-light border-0" onchange="syncModalPrCoaToStaff('{{ $item->id_raw }}')" required>
+                                <option value="" disabled {{ !$currentCoaId ? 'selected' : '' }}>-- Select Funding Account (COA) --</option>
+                                @foreach($chartOfAccounts as $coa)
+                                    <option value="{{ $coa->id }}"
+                                            data-staff-id="{{ $coa->assigned_to }}"
+                                            data-staff-name="{{ $coa->manager ? ($coa->manager->name ?? '') : '' }}"
+                                            {{ $currentCoaId == $coa->id ? 'selected' : '' }}>
+                                        [{{ $coa->code }}] {{ $coa->name }} {{ $coa->manager ? ' — Assigned: ' . $coa->manager->name : '' }}
+                                    </option>
+                                @endforeach
+                            </select>
+                            <div id="modalPrStaffAutoBadge{{ $item->id_raw }}" class="mt-1" style="display: none;"></div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-dark text-uppercase">
+                                Payment Amount (ETB) <span class="text-danger">*</span>
+                            </label>
+                            <input type="number" step="0.01" min="0.01" name="amount" id="modalPrAssignAmount{{ $item->id_raw }}"
+                                   class="form-control form-control-sm bg-light border-0 fw-bold font-monospace"
+                                   value="{{ $item->net_amount }}" required>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-dark text-uppercase">
+                                Assign Finance Staff / Custodian
+                            </label>
+                            <select name="staff_user_id" id="modalPrStaffSelect{{ $item->id_raw }}" class="form-select form-select-sm bg-light border-0">
+                                <option value="">Auto-assigned from COA or Select Staff...</option>
+                                @foreach($financeStaff as $st)
+                                    <option value="{{ $st->id }}" {{ $currentStaffId == $st->id ? 'selected' : '' }}>
+                                        {{ $st->name }} ({{ ucfirst(str_replace('_', ' ', optional(optional($st->roles)->first())->name ?? 'Staff')) }})
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-dark text-uppercase">Payment Instructions / Notes</label>
+                            <textarea name="notes" class="form-control form-control-sm bg-light border-0" rows="2" placeholder="Cheque number, payment instructions, remarks...">{{ optional($prPayment)->notes }}</textarea>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary btn-sm w-100 rounded-3 py-2 fw-semibold shadow-sm">
+                            <i class="fa-solid fa-floppy-disk me-1"></i> Save PR Assignment &amp; Send to Queue
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    @endif
+
     @if($item->type === 'office_supply_request' && $item->status_key === 'finance_queue')
     @php
         $officeReq = $item->raw_model;
@@ -3309,6 +3571,35 @@ function autoSelectFinanceStaff(selectEl, requestId) {
     const staffName = selectedOption.getAttribute('data-staff-name');
     const staffSelect = document.getElementById('financeStaffSelect' + requestId);
     const badgeEl = document.getElementById('autoStaffBadge' + requestId);
+
+    if (staffSelect) {
+        if (staffId && staffId !== '') {
+            staffSelect.value = staffId;
+            if (badgeEl) {
+                badgeEl.innerHTML = '<span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1" style="font-size: .75rem;"><i class="fa-solid fa-link me-1"></i>Auto-assigned from COA: <strong>' + (staffName || 'Staff #' + staffId) + '</strong></span>';
+                badgeEl.style.display = 'block';
+            }
+        } else {
+            if (badgeEl) {
+                badgeEl.style.display = 'none';
+            }
+        }
+    }
+}
+
+/**
+ * Automatically select the assigned staff custodian linked to COA in PR Assignment Modal
+ */
+function syncModalPrCoaToStaff(prId) {
+    const coaSelect = document.getElementById('modalPrCoaSelect' + prId);
+    if (!coaSelect) return;
+    const selectedOption = coaSelect.options[coaSelect.selectedIndex];
+    if (!selectedOption) return;
+
+    const staffId = selectedOption.getAttribute('data-staff-id');
+    const staffName = selectedOption.getAttribute('data-staff-name');
+    const staffSelect = document.getElementById('modalPrStaffSelect' + prId);
+    const badgeEl = document.getElementById('modalPrStaffAutoBadge' + prId);
 
     if (staffSelect) {
         if (staffId && staffId !== '') {
