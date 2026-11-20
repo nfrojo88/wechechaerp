@@ -205,7 +205,7 @@
                                     <span class="text-muted" style="font-size: .75rem;">
                                         <i class="fa-solid fa-building me-1 opacity-50"></i>{{ $item->project }}
                                     </span>
-                                    @if($item->assigned_staff_name)
+                                    @if(!empty($item->assigned_staff_name))
                                         <div class="mt-1" style="font-size: 0.72rem;">
                                             <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-1.5 py-0.5" title="Assigned Finance Staff / Handler">
                                                 <i class="fa-solid fa-user-check me-1"></i>Assigned: <strong>{{ $item->assigned_staff_name }}</strong>
@@ -294,12 +294,12 @@
                                     @endif
                                     @if($item->type === 'purchase_request')
                                         <div class="mt-1 d-flex flex-wrap gap-1 align-items-center">
-                                            @if($item->assigned_staff_name)
+                                            @if(!empty($item->assigned_staff_name))
                                                 <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle px-1.5 py-0.5" style="font-size: 0.68rem;" title="Assigned Handler">
                                                     <i class="fa-solid fa-hand-holding-dollar text-primary me-1"></i>Assigned: <strong>{{ $item->assigned_staff_name }}</strong>
                                                 </span>
                                             @endif
-                                            @if($item->coa_name)
+                                            @if(!empty($item->coa_name))
                                                 <span class="badge bg-light text-dark border px-1.5 py-0.5" style="font-size: 0.68rem;" title="Funding Source">
                                                     <i class="fa-solid fa-wallet text-secondary me-1"></i>Funding: <strong>{{ $item->coa_name }}</strong>
                                                 </span>
@@ -338,7 +338,7 @@
                                     <span class="badge bg-{{ $item->color }} rounded-pill px-2 py-1" style="font-size: .75rem;">
                                         {{ $item->status }}
                                     </span>
-                                    @if($item->assigned_staff_name)
+                                    @if(!empty($item->assigned_staff_name))
                                         <div class="mt-1 small text-dark fw-semibold text-truncate" style="font-size: 0.70rem; max-width: 140px;" title="Assigned Custodian: {{ $item->assigned_staff_name }}">
                                             <i class="fa-solid fa-user-tag text-primary me-0.5"></i>{{ $item->assigned_staff_name }}
                                         </div>
@@ -483,8 +483,8 @@
                                                         <button type="button" class="btn btn-primary btn-sm text-white fw-semibold ms-1"
                                                                 data-bs-toggle="modal"
                                                                 data-bs-target="#financePrAssignModal{{ $item->id_raw }}"
-                                                                title="{{ $item->assigned_staff_name ? 'Re-assign Funding COA & Staff' : 'Assign Funding COA & Staff' }}">
-                                                            <i class="fa-solid fa-user-tag me-1"></i> {{ $item->assigned_staff_name ? 'Re-assign' : 'Assign' }}
+                                                                title="{{ !empty($item->assigned_staff_name) ? 'Re-assign Funding COA & Staff' : 'Assign Funding COA & Staff' }}">
+                                                            <i class="fa-solid fa-user-tag me-1"></i> {{ !empty($item->assigned_staff_name) ? 'Re-assign' : 'Assign' }}
                                                         </button>
                                                     @endif
                                                     <a href="{{ $item->route_show }}" class="btn btn-outline-primary btn-sm" title="View Purchase Request details">
@@ -1501,7 +1501,7 @@
                                             <div>
                                                 <small class="text-muted text-uppercase fw-bold d-block" style="font-size:0.68rem;">Finance Payment Assignment</small>
                                                 <div class="fw-bold text-dark" style="font-size:0.85rem;">
-                                                    @if($item->assigned_staff_name)
+                                                    @if(!empty($item->assigned_staff_name))
                                                         <i class="fa-solid fa-user-check text-success me-1"></i>Assigned Staff: <span class="text-primary">{{ $item->assigned_staff_name }}</span>
                                                     @else
                                                         <span class="text-warning-emphasis"><i class="fa-solid fa-clock me-1"></i>Pending Assignment by Finance Head</span>
@@ -2732,7 +2732,7 @@
                                 <span class="text-muted">Funding Account:</span>
                                 <strong class="text-dark">{{ $item->coa_name ?? 'COA Assigned' }}</strong>
                             </div>
-                            @if($item->assigned_staff_name)
+                            @if(!empty($item->assigned_staff_name))
                             <div class="d-flex justify-content-between">
                                 <span class="text-muted">Assigned Staff:</span>
                                 <strong class="text-dark">{{ $item->assigned_staff_name }}</strong>
