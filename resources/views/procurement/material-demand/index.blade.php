@@ -9,9 +9,11 @@
         title="Material Demand & Forecast" 
         subtitle="30-day forward demand requirements aggregated across active project schedules and Bill of Quantities">
         <x-slot name="actions">
+            @if(auth()->check() && auth()->user()->canCreatePurchaseRequest())
             <a href="{{ route('purchase-requests.create') }}" class="btn btn-primary btn-sm rounded-pill px-3 shadow-xs">
                 <i class="fa-solid fa-plus me-1"></i>Create Purchase Request
             </a>
+            @endif
             <button class="btn btn-outline-secondary btn-sm rounded-pill px-3 shadow-xs" onclick="window.print()">
                 <i class="fa-solid fa-file-export me-1"></i>Export Forecast
             </button>
@@ -125,9 +127,11 @@
                                 @endif
                             </td>
                             <td class="pe-4 py-3 text-end" data-label="Action">
+                                @if(auth()->check() && auth()->user()->canCreatePurchaseRequest())
                                 <a href="{{ route('purchase-requests.create') }}" class="btn btn-sm btn-primary rounded-pill px-3 shadow-xs">
                                     <i class="fa-solid fa-cart-shopping me-1"></i>Create PR
                                 </a>
+                                @endif
                             </td>
                         </tr>
                         @empty

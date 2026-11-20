@@ -147,6 +147,12 @@ class MaintenanceRequest extends Model
             'gm_return_reason'           => 'text',
             'gm_final_approved_at'       => 'timestamp',
             'is_returned_flow'           => 'boolean',
+            'replacement_condition'      => 'string',
+            'replacement_action'         => 'string',
+            'sent_to_store_manager_at'   => 'timestamp',
+            'resolved_at'                => 'timestamp',
+            'reported_by_user_id'        => 'unsignedBigInteger',
+            'assigned_to_user_id'        => 'unsignedBigInteger',
         ];
 
         Schema::table('maintenance_requests', function (Blueprint $table) use ($neededColumns) {

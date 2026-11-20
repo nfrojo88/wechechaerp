@@ -892,6 +892,7 @@ class GMMaintenanceApprovalController extends Controller
      */
     public function approveTicket(Request $request, MaintenanceRequest $maintenanceRequest)
     {
+        MaintenanceRequest::ensureSchema();
         $this->checkGmAuthorization();
 
         $validated = $request->validate([
@@ -974,9 +975,15 @@ class GMMaintenanceApprovalController extends Controller
         ];
 
         if ($validated['status'] === 'sent_to_store_manager') {
-            $data['replacement_action'] = 'sent_to_store_manager';
-            $data['replacement_condition'] = $validated['replacement_condition'] ?? 'in_maintenance';
-            $data['sent_to_store_manager_at'] = now();
+            if (\Illuminate\Support\Facades\Schema::hasColumn('maintenance_requests', 'replacement_action')) {
+                $data['replacement_action'] = 'sent_to_store_manager';
+            }
+            if (\Illuminate\Support\Facades\Schema::hasColumn('maintenance_requests', 'replacement_condition')) {
+                $data['replacement_condition'] = $validated['replacement_condition'] ?? 'in_maintenance';
+            }
+            if (\Illuminate\Support\Facades\Schema::hasColumn('maintenance_requests', 'sent_to_store_manager_at')) {
+                $data['sent_to_store_manager_at'] = now();
+            }
         }
 
         if ($validated['status'] === 'resolved' && !$maintenanceRequest->resolved_at) {

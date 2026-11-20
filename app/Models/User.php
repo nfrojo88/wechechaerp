@@ -226,6 +226,39 @@ class User extends Authenticatable
             || in_array('superadmin', $roleNames);
     }
 
+    /**
+     * Check if the user is authorized to create Purchase Requests.
+     * Allowed roles: coordinator, planning_manager, planning, global_admin (and admin).
+     */
+    public function canCreatePurchaseRequest(): bool
+    {
+        if ($this->isGlobalAdmin()) {
+            return true;
+        }
+
+        try {
+            if ($this->hasAnyRole([
+                'global_admin', 'admin', 'super_admin', 'Global Admin', 'Admin',
+                'coordinator', 'Coordinator',
+                'planning_manager', 'Planning Manager', 'planning-manager',
+                'planning', 'Planning', 'planner', 'planning_officer'
+            ])) {
+                return true;
+            }
+        } catch (\Throwable $e) {}
+
+        $roleNames = $this->roles ? $this->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-', '_'], '', trim($r))))->toArray() : [];
+        $allowed = ['globaladmin', 'admin', 'superadmin', 'coordinator', 'planningmanager', 'planning', 'planner', 'planningofficer'];
+
+        foreach ($allowed as $role) {
+            if (in_array($role, $roleNames)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public function accessUnblockedByUser()
     {
         return $this->belongsTo(User::class, 'access_unblocked_by');

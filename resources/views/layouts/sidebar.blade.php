@@ -236,6 +236,9 @@
         <ul class="sidebar-sub-nav">
             <li><a href="{{ route('dashboard.purchase') }}" class="sidebar-nav-link {{ request()->routeIs('dashboard.purchase') ? 'active' : '' }}"><i class="fa-solid fa-chart-line text-info"></i><span>Purchase Dashboard</span></a></li>
             <li><a href="{{ route('procurement.my-queue') }}" class="sidebar-nav-link {{ request()->routeIs('procurement.*') || request()->routeIs('purchase-requests.*') ? 'active' : '' }}"><i class="fa-solid fa-tasks text-primary"></i><span>Procurement — My Queue</span></a></li>
+            @if(auth()->check() && auth()->user()->canCreatePurchaseRequest())
+            <li><a href="{{ route('purchase-requests.create') }}" class="sidebar-nav-link {{ request()->routeIs('purchase-requests.create') ? 'active' : '' }}"><i class="fa-solid fa-cart-plus text-success"></i><span>New Purchase Request</span></a></li>
+            @endif
             <li><a href="{{ route('material-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('material-requests.*') && !request()->routeIs('admin.scratch-material-requests.*') ? 'active' : '' }}"><i class="fa-solid fa-cart-flatbed text-danger"></i><span>Material Requests</span></a></li>
             <li><a href="{{ route('coordinator.emergency-requests') }}" class="sidebar-nav-link {{ request()->routeIs('coordinator.emergency-requests*') ? 'active' : '' }}"><i class="fa-solid fa-bolt text-danger"></i><span>Emergency Material Requests</span></a></li>
             <li><a href="{{ route('admin.scratch-material-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('admin.scratch-material-requests.*') ? 'active' : '' }}"><i class="fa-solid fa-file-circle-question text-warning"></i><span>Scratch Material Requests</span><span class="badge bg-warning text-dark rounded-pill ms-auto" style="font-size:0.55rem;">Scratch</span></a></li>
@@ -1179,6 +1182,7 @@
                 <i class="fa-solid fa-building me-1 text-primary"></i> Head Office Procurement
             </small>
         </li>
+        @if(auth()->check() && auth()->user()->canCreatePurchaseRequest())
         <li class="sidebar-nav-item">
             <a href="{{ route('purchase-requests.create') }}" class="sidebar-nav-link {{ request()->routeIs('purchase-requests.create') ? 'active' : '' }}">
                 <i class="fa-solid fa-cart-plus text-success"></i>
@@ -1186,6 +1190,7 @@
                 <span class="badge bg-primary-subtle text-primary border border-primary rounded-pill ms-auto" style="font-size:0.65rem;">HO Only</span>
             </a>
         </li>
+        @endif
         <li class="sidebar-nav-item">
             <a href="{{ route('procurement.my-queue') }}" class="sidebar-nav-link {{ request()->routeIs('procurement.my-queue') || (request()->routeIs('purchase-requests.*') && !request()->routeIs('purchase-requests.create')) ? 'active' : '' }}">
                 <i class="fa-solid fa-clipboard-list text-info"></i>
@@ -1900,6 +1905,14 @@
                 @endif
             </a>
         </li>
+        @if(auth()->check() && auth()->user()->canCreatePurchaseRequest())
+        <li class="sidebar-nav-item">
+            <a href="{{ route('purchase-requests.create') }}" class="sidebar-nav-link {{ request()->routeIs('purchase-requests.create') ? 'active' : '' }}">
+                <i class="fa-solid fa-cart-plus text-success"></i>
+                <span>New Purchase Request</span>
+            </a>
+        </li>
+        @endif
         <li class="sidebar-nav-item">
             <a href="{{ route('expenses.index') }}?tab=pending_hr" class="sidebar-nav-link {{ (request()->routeIs('expenses.*') || request()->is('expenses*') || request()->routeIs('approvals.*')) && request('tab') === 'pending_hr' ? 'active' : '' }}">
                 <i class="fa-solid fa-file-invoice-dollar text-warning"></i>

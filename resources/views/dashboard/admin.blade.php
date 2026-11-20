@@ -1461,9 +1461,11 @@
                                                 </span>
                                             </td>
                                             <td class="text-end pe-3">
+                                                @if(auth()->check() && auth()->user()->canCreatePurchaseRequest())
                                                 <a href="{{ route('purchase-requests.create') }}" class="btn btn-sm btn-outline-primary py-0 px-2 text-xs">
                                                     Reorder PR
                                                 </a>
+                                                @endif
                                             </td>
                                         </tr>
                                     @endforeach

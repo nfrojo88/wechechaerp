@@ -15,9 +15,11 @@
                 <span class="badge bg-white text-secondary border px-3 py-2 shadow-xs rounded-pill d-none d-sm-inline-flex align-items-center">
                     <i class="fa-regular fa-calendar text-primary me-2"></i>{{ now()->format('l, F j, Y') }}
                 </span>
+                @if(auth()->check() && auth()->user()->canCreatePurchaseRequest())
                 <a href="{{ route('purchase-requests.create') }}" class="btn btn-success btn-sm shadow-xs" style="min-height: 38px; display: inline-flex; align-items: center;">
                     <i class="fa-solid fa-cart-plus me-1"></i> New PR (HO)
                 </a>
+                @endif
                 <a href="{{ route('letters.create') }}" class="btn btn-primary btn-sm shadow-xs" style="min-height: 38px; display: inline-flex; align-items: center;">
                     <i class="fa-solid fa-pen-to-square me-1"></i> Register Letter
                 </a>
@@ -117,9 +119,11 @@
                     <i class="fa-solid fa-bolt text-warning me-1"></i>Quick Actions:
                 </span>
                 <div class="d-flex flex-wrap gap-2">
+                    @if(auth()->check() && auth()->user()->canCreatePurchaseRequest())
                     <a href="{{ route('purchase-requests.create') }}" class="btn btn-success btn-sm px-3" style="min-height: 38px; display: inline-flex; align-items: center;">
                         <i class="fa-solid fa-cart-plus me-1"></i> Create PR (HO)
                     </a>
+                    @endif
                     <a href="{{ route('procurement.my-queue') }}" class="btn btn-outline-primary btn-sm px-3" style="min-height: 38px; display: inline-flex; align-items: center;">
                         <i class="fa-solid fa-list-check me-1"></i> My PRs ({{ $myPurchaseRequestsCount ?? 0 }})
                     </a>
@@ -590,9 +594,11 @@
                         <i class="fa-solid fa-cart-shopping text-primary me-2"></i>Head Office Purchase Requests
                     </h6>
                     <div class="d-flex gap-1">
+                        @if(auth()->check() && auth()->user()->canCreatePurchaseRequest())
                         <a href="{{ route('purchase-requests.create') }}" class="btn btn-sm btn-outline-success rounded-pill px-2" style="min-height: 30px; display: inline-flex; align-items: center;" title="New Purchase Request">
                             <i class="fa-solid fa-plus me-1"></i> New
                         </a>
+                        @endif
                         <a href="{{ route('procurement.my-queue') }}" class="btn btn-sm btn-outline-primary rounded-pill px-2" style="min-height: 30px; display: inline-flex; align-items: center;" title="View All in My Queue">
                             <i class="fa-solid fa-list me-1"></i> All
                         </a>
@@ -613,7 +619,9 @@
                         @empty
                             <div class="p-3 text-center text-muted small">
                                 No Head Office purchase requests created yet.
+                                @if(auth()->check() && auth()->user()->canCreatePurchaseRequest())
                                 <a href="{{ route('purchase-requests.create') }}" class="d-block mt-1">Create one now &rarr;</a>
+                                @endif
                             </div>
                         @endforelse
                     </div>

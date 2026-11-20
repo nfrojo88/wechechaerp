@@ -68,11 +68,11 @@
                 <i class="fas fa-code-merge me-1"></i> Merge Requests
             </button>
             @endif
-            @if(!$isAuditorUser)
+            @if(auth()->check() && auth()->user()->canCreatePurchaseRequest())
             <a href="{{ route('purchase-requests.create') }}" class="btn btn-primary shadow-sm fw-bold">
                 <i class="fas fa-plus me-1"></i> New Purchase Request
             </a>
-            @else
+            @elseif($isAuditorUser)
             <span class="badge bg-info text-dark px-3 py-2 fs-6 rounded-pill fw-bold">
                 <i class="fa-solid fa-eye me-1"></i> Read-Only Audit Stream
             </span>
@@ -1219,9 +1219,11 @@
                                     @else
                                         <h6 class="fw-bold text-dark">No created purchase requests found in your history.</h6>
                                         <p class="small text-muted mb-3">When you create new purchase or material requests, they will be tracked here through every stage.</p>
+                                        @if(auth()->check() && auth()->user()->canCreatePurchaseRequest())
                                         <a href="{{ route('purchase-requests.create') }}" class="btn btn-sm btn-primary">
                                             <i class="fas fa-plus me-1"></i> Create First Purchase Request
                                         </a>
+                                        @endif
                                     @endif
                                 </td>
                             </tr>

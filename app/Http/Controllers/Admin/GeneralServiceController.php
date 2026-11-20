@@ -498,7 +498,7 @@ class GeneralServiceController extends Controller
         // Summary text of materials
         $materialDescription = collect($materialsData)->map(fn($m) => "{$m['name']} ({$m['quantity']} {$m['unit']} @ ETB {$m['estimated_unit_cost']})")->implode(', ');
 
-        $maintenanceRequest->update([
+        $updateData = [
             'technician_name'            => $validated['technician_name'],
             'technician_phone'           => $validated['technician_phone'],
             'technician_bank_name'       => $validated['technician_bank_name'],
@@ -515,7 +515,6 @@ class GeneralServiceController extends Controller
             'materials_data'             => $materialsData,
             'material_description'       => $materialDescription,
             'condition_rating'           => $validated['condition_rating'],
-            'replacement_condition'      => $validated['condition_rating'],
             'estimated_time'             => $validated['estimated_time'] ?? $maintenanceRequest->estimated_time,
             'quotation_attachments'      => $quotationUrls,
             'remarks'                    => $validated['remarks'] ?? null,
@@ -523,7 +522,13 @@ class GeneralServiceController extends Controller
             // Stage 5 Lock: IMMEDIATELY LOCK TICKET
             'gs_status'                  => 'pending_gm_final',
             'gs_details_locked'          => true,
-        ]);
+        ];
+
+        if (Schema::hasColumn('maintenance_requests', 'replacement_condition')) {
+            $updateData['replacement_condition'] = $validated['condition_rating'];
+        }
+
+        $maintenanceRequest->update($updateData);
 
         ActivityLog::log(
             'submitted',
@@ -633,6 +638,18 @@ class GeneralServiceController extends Controller
             'admin_notes'         => $validated['admin_notes'] ?? $maintenanceRequest->admin_notes,
             'assigned_to_user_id' => $validated['assigned_to_user_id'] ?? $maintenanceRequest->assigned_to_user_id,
         ];
+
+        if ($validated['status'] === 'sent_to_store_manager') {
+            if (Schema::hasColumn('maintenance_requests', 'replacement_action')) {
+                $data['replacement_action'] = $validated['replacement_action'] ?? 'sent_to_store_manager';
+            }
+            if (Schema::hasColumn('maintenance_requests', 'replacement_condition')) {
+                $data['replacement_condition'] = $validated['replacement_condition'] ?? 'in_maintenance';
+            }
+            if (Schema::hasColumn('maintenance_requests', 'sent_to_store_manager_at')) {
+                $data['sent_to_store_manager_at'] = now();
+            }
+        }
 
         if ($validated['status'] === 'resolved' && !$maintenanceRequest->resolved_at) {
             $data['resolved_at'] = now();

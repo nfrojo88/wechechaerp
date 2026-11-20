@@ -788,9 +788,11 @@
                     <a id="sdBtnTransfer" href="{{ route('transfers.create') }}" class="btn btn-outline-primary btn-sm fw-semibold">
                         <i class="fas fa-truck-ramp-box me-1"></i>Transfer Stock
                     </a>
+                    @if(auth()->check() && auth()->user()->canCreatePurchaseRequest())
                     <a href="{{ route('purchase-requests.create') }}" class="btn btn-outline-success btn-sm fw-semibold">
                         <i class="fas fa-cart-plus me-1"></i>Create PR
                     </a>
+                    @endif
                 </div>
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
             </div>
@@ -999,9 +1001,11 @@
                     <a href="{{ route('transfers.create') }}" class="btn btn-outline-primary btn-sm fw-semibold" id="gdBtnTransfer">
                         <i class="fas fa-truck-ramp-box me-1"></i>Create Transfer
                     </a>
+                    @if(auth()->check() && auth()->user()->canCreatePurchaseRequest())
                     <a href="{{ route('purchase-requests.create') }}" class="btn btn-outline-success btn-sm fw-semibold">
                         <i class="fas fa-cart-plus me-1"></i>Create PR
                     </a>
+                    @endif
                 </div>
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
             </div>

@@ -129,24 +129,17 @@ class PurchaseRequestController extends Controller
     public function create()
     {
         $user = Auth::user();
-        $isSecretary = $user && $user->hasRole('secretary') && !$user->hasAnyRole(['admin', 'global_admin', 'gm', 'purchase_manager', 'coordinator']);
-
-        if ($isSecretary) {
-            $hoProject = $this->getHeadOfficeProject();
-            $hoStore = $this->getHeadOfficeStore($hoProject);
-
-            $projects = collect([$hoProject]);
-            $stores = $hoStore ? collect([$hoStore]) : Store::where('is_active', true)->where('project_id', $hoProject->id)->get();
-            if ($stores->isEmpty() && $hoStore) {
-                $stores = collect([$hoStore]);
-            }
-        } else {
-            $projects = Project::whereIn('status', ['active', 'planning', 'in_progress', 'on_hold'])->orderBy('name')->get();
-            if ($projects->isEmpty()) {
-                $projects = Project::orderBy('name')->get();
-            }
-            $stores = Store::where('is_active', true)->get();
+        if (!$user || !$user->canCreatePurchaseRequest()) {
+            abort(403, 'Unauthorized. Purchase Requests can only be created by Coordinator, Planning Manager, Planning, or Global Admin.');
         }
+
+        $isSecretary = false;
+
+        $projects = Project::whereIn('status', ['active', 'planning', 'in_progress', 'on_hold'])->orderBy('name')->get();
+        if ($projects->isEmpty()) {
+            $projects = Project::orderBy('name')->get();
+        }
+        $stores = Store::where('is_active', true)->get();
 
         $products = Product::orderBy('name')->get()->map(function($product) {
             $latestPriceRecord = \App\Models\MaterialPrice::where('product_id', $product->id)
@@ -164,7 +157,9 @@ class PurchaseRequestController extends Controller
     public function store(Request $request)
     {
         $user = Auth::user();
-        $isSecretary = $user && $user->hasRole('secretary') && !$user->hasAnyRole(['admin', 'global_admin', 'gm', 'purchase_manager', 'coordinator']);
+        if (!$user || !$user->canCreatePurchaseRequest()) {
+            abort(403, 'Unauthorized. Purchase Requests can only be created by Coordinator, Planning Manager, Planning, or Global Admin.');
+        }
 
         if ($isSecretary) {
             $hoProject = $this->getHeadOfficeProject();

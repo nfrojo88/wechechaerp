@@ -13,9 +13,11 @@
                 <a href="{{ route('procurement.my-queue') }}" class="btn btn-outline-primary btn-sm shadow-xs" style="min-height: 38px; display: inline-flex; align-items: center;">
                     <i class="fa-solid fa-list-check me-1"></i> My Sourcing Queue
                 </a>
+                @if(auth()->check() && auth()->user()->canCreatePurchaseRequest())
                 <a href="{{ route('purchase-requests.create') }}" class="btn btn-primary btn-sm shadow-xs" style="min-height: 38px; display: inline-flex; align-items: center;">
                     <i class="fas fa-plus me-1"></i> New Request
                 </a>
+                @endif
             </div>
         </x-slot>
     </x-page-header>
