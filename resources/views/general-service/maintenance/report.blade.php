@@ -194,50 +194,141 @@
         </div>
         @endif
 
-        {{-- 3. Materials & Spare Parts Requested from Store --}}
+        {{-- 3. Materials & Spare Parts Requested from Store / Direct Replacement --}}
         <div class="section-title">
             <i class="fa-solid fa-boxes-stacked me-1 text-primary"></i> 3. Spare Parts &amp; Material Issuance (Store / Procurement)
         </div>
-        @if($maintenanceRequest->materialRequests->isNotEmpty())
-            <table class="table table-sm table-bordered align-middle mb-3" style="font-size: 0.85rem;">
-                <thead class="table-light">
-                    <tr>
-                        <th>Material Request #</th>
-                        <th>Store Location</th>
-                        <th>Requested Item &amp; Specifications</th>
-                        <th class="text-center">Quantity</th>
-                        <th>Status</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach($maintenanceRequest->materialRequests as $mr)
-                        @foreach($mr->items as $item)
+
+        {{-- Direct Workshop Parts (Stage 4 / Technician Specs) --}}
+        @if(!empty($maintenanceRequest->materials_data) && is_array($maintenanceRequest->materials_data))
+            <div class="mb-3">
+                <div class="fw-bold small text-secondary text-uppercase mb-2">
+                    <i class="fa-solid fa-wrench me-1"></i> Workshop Specified Replacement Parts / Materials
+                </div>
+                <table class="table table-sm table-bordered align-middle mb-2" style="font-size: 0.85rem;">
+                    <thead class="table-light">
                         <tr>
-                            <td class="font-monospace fw-semibold text-primary">{{ $mr->reference_number }}</td>
-                            <td>{{ $mr->store->name ?? 'General Store' }}</td>
+                            <th>#</th>
+                            <th>Part / Material Description</th>
+                            <th class="text-center">Quantity</th>
+                            <th class="text-end">Est. Unit Cost</th>
+                            <th class="text-end">Est. Total Cost</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach($maintenanceRequest->materials_data as $idx => $part)
+                        <tr>
+                            <td class="text-muted small text-center" style="width:40px;">{{ $idx + 1 }}</td>
                             <td>
-                                <strong>{{ $item->product->name ?? 'Spare Part' }}</strong>
-                                @if($item->notes)
-                                    <small class="text-muted d-block">{{ $item->notes }}</small>
-                                @endif
+                                <strong>{{ $part['name'] ?? 'Part' }}</strong>
                             </td>
-                            <td class="text-center fw-bold">{{ (float)$item->quantity_requested }} {{ $item->product->unit ?? 'pcs' }}</td>
-                            <td>
-                                <span class="badge bg-light text-dark border">{{ ucfirst(str_replace('_', ' ', $mr->status)) }}</span>
-                            </td>
+                            <td class="text-center fw-bold">{{ $part['quantity'] ?? 1 }} {{ $part['unit'] ?? 'pcs' }}</td>
+                            <td class="text-end font-monospace">ETB {{ number_format((float)($part['estimated_unit_cost'] ?? 0), 2) }}</td>
+                            <td class="text-end font-monospace fw-bold">ETB {{ number_format((float)($part['total_cost'] ?? 0), 2) }}</td>
                         </tr>
                         @endforeach
-                    @endforeach
-                </tbody>
-            </table>
-        @else
+                    </tbody>
+                    <tfoot>
+                        <tr class="table-light fw-bold">
+                            <td colspan="4" class="text-end">Subtotal Spare Parts &amp; Materials:</td>
+                            <td class="text-end font-monospace text-primary">ETB {{ number_format((float)($maintenanceRequest->material_cost ?? 0), 2) }}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        @elseif($maintenanceRequest->material_description)
+            <div class="p-3 bg-light rounded-3 mb-3 border">
+                <div class="fw-bold small text-secondary text-uppercase mb-1">
+                    <i class="fa-solid fa-wrench me-1"></i> Workshop Specified Replacement Parts / Materials
+                </div>
+                <p class="mb-0 font-monospace small">{{ $maintenanceRequest->material_description }}</p>
+            </div>
+        @endif
+
+        {{-- Linked Store Material Requests --}}
+        @if($maintenanceRequest->materialRequests->isNotEmpty())
+            <div class="mb-3">
+                <div class="fw-bold small text-secondary text-uppercase mb-2">
+                    <i class="fa-solid fa-warehouse me-1"></i> Linked Requisitions Sent to Store Manager / Procurement
+                </div>
+                <table class="table table-sm table-bordered align-middle mb-2" style="font-size: 0.85rem;">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Material Request #</th>
+                            <th>Store Location</th>
+                            <th>Requested Item &amp; Specifications</th>
+                            <th class="text-center">Quantity</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach($maintenanceRequest->materialRequests as $mr)
+                            @foreach($mr->items as $item)
+                            <tr>
+                                <td class="font-monospace fw-semibold text-primary">{{ $mr->reference_number }}</td>
+                                <td>{{ $mr->store->name ?? 'General Store' }}</td>
+                                <td>
+                                    <strong>{{ $item->product->name ?? 'Spare Part' }}</strong>
+                                    @if($item->notes)
+                                        <small class="text-muted d-block">{{ $item->notes }}</small>
+                                    @endif
+                                </td>
+                                <td class="text-center fw-bold">{{ (float)$item->quantity_requested }} {{ $item->product->unit ?? 'pcs' }}</td>
+                                <td>
+                                    <span class="badge bg-light text-dark border">{{ ucfirst(str_replace('_', ' ', $mr->status)) }}</span>
+                                </td>
+                            </tr>
+                            @endforeach
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+        @endif
+
+        @if(empty($maintenanceRequest->materials_data) && !$maintenanceRequest->material_description && $maintenanceRequest->materialRequests->isEmpty())
             <p class="text-muted fst-italic small mb-3">No spare parts or material requests attached to this maintenance ticket.</p>
         @endif
 
-        {{-- 4. Expenses & Repair Budget (Ask Money) --}}
+        {{-- 4. Financial & Labour Expenses (Ask Money / Technician Details) --}}
         <div class="section-title">
-            <i class="fa-solid fa-hand-holding-dollar me-1 text-success"></i> 4. Financial &amp; Labour Expenses (Ask Money)
+            <i class="fa-solid fa-hand-holding-dollar me-1 text-success"></i> 4. Financial, Labour &amp; Technician Expenses
         </div>
+
+        {{-- Direct Labor & Workshop Breakdown --}}
+        @if($maintenanceRequest->labor_cost || $maintenanceRequest->total_cost || $maintenanceRequest->technician_name)
+            <div class="info-grid mb-3">
+                <div class="info-item">
+                    <div class="label">Assigned Technician</div>
+                    <div class="value">{{ $maintenanceRequest->technician_name ?? $maintenanceRequest->maintenance_person_name ?? 'N/A' }}</div>
+                    @if($maintenanceRequest->technician_phone ?? $maintenanceRequest->maintenance_person_phone)
+                        <small class="text-muted font-monospace d-block">{{ $maintenanceRequest->technician_phone ?? $maintenanceRequest->maintenance_person_phone }}</small>
+                    @endif
+                </div>
+                <div class="info-item">
+                    <div class="label">Technician Bank Account</div>
+                    <div class="value font-monospace">
+                        {{ $maintenanceRequest->technician_account_number ?? $maintenanceRequest->maintenance_person_account ?? 'N/A' }}
+                    </div>
+                    @if($maintenanceRequest->technician_bank_name)
+                        <small class="text-muted d-block">{{ $maintenanceRequest->technician_bank_name }}</small>
+                    @endif
+                </div>
+                <div class="info-item">
+                    <div class="label">Labour Cost</div>
+                    <div class="value font-monospace text-primary">ETB {{ number_format((float)($maintenanceRequest->labor_cost ?? 0), 2) }}</div>
+                </div>
+                <div class="info-item">
+                    <div class="label">Spare Parts Cost</div>
+                    <div class="value font-monospace text-secondary">ETB {{ number_format((float)($maintenanceRequest->material_cost ?? 0), 2) }}</div>
+                </div>
+                <div class="info-item">
+                    <div class="label">Total Approved Budget</div>
+                    <div class="value font-monospace text-success fw-bold">ETB {{ number_format((float)($maintenanceRequest->total_cost ?? $maintenanceRequest->money_amount ?? 0), 2) }}</div>
+                </div>
+            </div>
+        @endif
+
+        {{-- Linked Cash Expense Requests --}}
         @if($maintenanceRequest->expenseRequests->isNotEmpty())
             <table class="table table-sm table-bordered align-middle mb-3" style="font-size: 0.85rem;">
                 <thead class="table-light">
@@ -268,7 +359,7 @@
                     </tr>
                 </tfoot>
             </table>
-        @else
+        @elseif(!$maintenanceRequest->labor_cost && !$maintenanceRequest->total_cost && !$maintenanceRequest->technician_name)
             <p class="text-muted fst-italic small mb-3">No direct cash or external expense requests attached to this maintenance ticket.</p>
         @endif
 

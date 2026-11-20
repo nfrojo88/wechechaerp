@@ -698,4 +698,247 @@ class GeneralServiceController extends Controller
             }
         } catch (\Throwable $e) {}
     }
+
+    /**
+     * Step 5: If GM Returns request, General Service provides Money, Time, Material details + technician and Petty Cash Owner.
+     */
+    public function resubmitReturned(Request $request, MaintenanceRequest $maintenanceRequest)
+    {
+        $this->ensureWorkflowColumns();
+
+        $validated = $request->validate([
+            'maintenance_person_name'    => 'required|string|max:255',
+            'maintenance_person_account' => 'required|string|max:255',
+            'maintenance_person_phone'   => 'required|string|max:100',
+            'petty_cash_owner_id'        => 'required|exists:users,id',
+            'money_amount'               => 'required|numeric|min:0',
+            'estimated_time'             => 'required|string|max:150',
+            'material_description'       => 'required|string|max:3000',
+            'notes'                      => 'nullable|string|max:2000',
+        ]);
+
+        $pettyCashOwner = User::find($validated['petty_cash_owner_id']);
+        $user = auth()->user();
+        $timestamp = now()->format('d M Y, H:i');
+
+        $existingNotes = $maintenanceRequest->admin_notes ? ($maintenanceRequest->admin_notes . "\n") : '';
+        $newNotes = $existingNotes . "[GS Resubmitted Returned Ticket {$timestamp} by {$user->name}]: Money: ETB " . number_format($validated['money_amount'], 2) . ", Est. Time: {$validated['estimated_time']}, Materials: {$validated['material_description']}. Assigned Petty Cash: {$pettyCashOwner->name}. Technician: {$validated['maintenance_person_name']} (Acc: {$validated['maintenance_person_account']}, Tel: {$validated['maintenance_person_phone']}).";
+        if (!empty($validated['notes'])) {
+            $newNotes .= " Remarks: {$validated['notes']}";
+        }
+
+        $maintenanceRequest->update([
+            'maintenance_person_name'    => $validated['maintenance_person_name'],
+            'maintenance_person_account' => $validated['maintenance_person_account'],
+            'maintenance_person_phone'   => $validated['maintenance_person_phone'],
+            'petty_cash_owner_id'        => $validated['petty_cash_owner_id'],
+            'money_amount'               => $validated['money_amount'],
+            'estimated_time'             => $validated['estimated_time'],
+            'material_description'       => $validated['material_description'],
+            'is_returned_flow'           => true,
+            'gs_status'                  => 'pending_gm_final',
+            'admin_notes'                => $newNotes,
+        ]);
+
+        // Auto-create/sync MaterialRequest if material details provided so Store Manager can fulfill/PR
+        if (!empty($validated['material_description'])) {
+            $defaultStore = Store::where('is_active', true)->first();
+            $project = \App\Models\Project::whereIn('status', ['active', 'in_progress'])->first() ?? \App\Models\Project::first();
+
+            $refNumber = 'MR-MNT-' . str_replace('MNT-', '', $maintenanceRequest->request_no) . '-' . strtoupper(Str::random(3));
+            while (MaterialRequest::where('reference_number', $refNumber)->exists()) {
+                $refNumber = 'MR-MNT-' . str_replace('MNT-', '', $maintenanceRequest->request_no) . '-' . strtoupper(Str::random(4));
+            }
+
+            $matReq = MaterialRequest::firstOrCreate(
+                ['maintenance_request_id' => $maintenanceRequest->id],
+                [
+                    'project_id'             => $project?->id,
+                    'destination_store_id'   => $defaultStore?->id,
+                    'reference_number'       => $refNumber,
+                    'source'                 => 'Maintenance — ' . $maintenanceRequest->request_no,
+                    'status'                 => 'sent_to_store_manager',
+                    'required_date'          => now()->addDays(2),
+                    'notes'                  => "Maintenance Materials: {$validated['material_description']}. Asset: {$maintenanceRequest->asset_name}. Est. Time: {$validated['estimated_time']}.",
+                    'created_by'             => $user->id,
+                ]
+            );
+
+            // Add standard material product line if empty
+            if ($matReq->items()->count() === 0) {
+                $product = Product::firstOrCreate(
+                    ['name' => "Parts/Materials for {$maintenanceRequest->asset_name}"],
+                    [
+                        'sku'       => 'MAT-MNT-' . strtoupper(Str::random(5)),
+                        'unit'      => 'pcs',
+                        'category'  => 'Maintenance / Spare Parts',
+                        'is_active' => true,
+                    ]
+                );
+                $matReq->items()->create([
+                    'product_id'         => $product->id,
+                    'quantity_requested' => 1,
+                    'notes'              => $validated['material_description'],
+                ]);
+            }
+        }
+
+        ActivityLog::log(
+            'updated',
+            "General Service resubmitted returned Maintenance #{$maintenanceRequest->request_no} with Money (ETB {$validated['money_amount']}), Time ({$validated['estimated_time']}), Materials, and Petty Cash Owner ({$pettyCashOwner->name}) to GM",
+            'Maintenance Requests',
+            $maintenanceRequest
+        );
+
+        return back()->with('success', "Returned Maintenance Request #{$maintenanceRequest->request_no} updated with Money, Time, Material & Petty Cash assignment, and submitted to General Manager!");
+    }
+
+    /**
+     * Ask Money (Expense Request) for this specific maintenance ticket.
+     */
+    public function askMoney(Request $request, MaintenanceRequest $maintenanceRequest)
+    {
+        $validated = $request->validate([
+            'amount'      => 'required|numeric|min:1',
+            'description' => 'required|string|max:2000',
+            'attachment'  => 'nullable|file|mimes:jpeg,png,jpg,pdf,webp|max:10240',
+        ]);
+
+        $user = auth()->user();
+        $employee = $user->employee ?? null;
+        $requestNumber = 'REQ-' . date('Ymd') . '-' . strtoupper(Str::random(4));
+
+        $attachmentUrl = null;
+        if ($request->hasFile('attachment')) {
+            try {
+                $cloudinary = app(CloudinaryService::class);
+                $attachmentUrl = $cloudinary->upload($request->file('attachment'), 'expense_receipts');
+            } catch (\Throwable $e) {
+                Log::error('Maintenance Ask Money attachment upload error: ' . $e->getMessage());
+            }
+        }
+
+        $expense = ExpenseRequest::create([
+            'request_number'         => $requestNumber,
+            'user_id'                => $user->id,
+            'employee_id'            => $employee ? $employee->id : null,
+            'maintenance_request_id' => $maintenanceRequest->id,
+            'category'               => 'Maintenance',
+            'other_reason'           => 'Maintenance for ' . $maintenanceRequest->request_no . ' (' . $maintenanceRequest->asset_name . ')',
+            'amount'                 => $validated['amount'],
+            'description'            => $validated['description'],
+            'attachment'             => $attachmentUrl,
+            'status'                 => ExpenseRequest::STATUS_PENDING_HR,
+        ]);
+
+        ActivityLog::log(
+            'created',
+            "General Service submitted Expense Request #{$expense->request_number} for ETB " . number_format($expense->amount, 2) . " linked to Maintenance {$maintenanceRequest->request_no}",
+            'Maintenance Requests',
+            $maintenanceRequest
+        );
+
+        return back()->with('success', "Expense Request #{$expense->request_number} for ETB " . number_format($expense->amount, 2) . " submitted and linked to {$maintenanceRequest->request_no}!");
+    }
+
+    /**
+     * Ask Material / Purchase for this specific maintenance ticket — sent to Store Manager.
+     */
+    public function askMaterial(Request $request, MaintenanceRequest $maintenanceRequest)
+    {
+        if (Schema::hasTable('material_requests') && !Schema::hasColumn('material_requests', 'maintenance_request_id')) {
+            Schema::table('material_requests', function ($table) {
+                $table->unsignedBigInteger('maintenance_request_id')->nullable()->index();
+            });
+        }
+
+        $validated = $request->validate([
+            'destination_store_id' => 'nullable|exists:stores,id',
+            'required_date'        => 'required|date',
+            'notes'                => 'nullable|string|max:3000',
+            'items'                => 'required|array|min:1',
+            'items.*.product_id'   => 'nullable',
+            'items.*.custom_name'  => 'nullable|string|max:255',
+            'items.*.quantity'     => 'required|numeric|min:0.01',
+            'items.*.unit'         => 'nullable|string|max:50',
+            'items.*.notes'        => 'nullable|string|max:500',
+        ]);
+
+        // Resolve store
+        $storeId = $validated['destination_store_id'] ?? null;
+        $store = null;
+        if ($storeId) {
+            $store = Store::find($storeId);
+        } else {
+            $store = Store::where('is_active', true)->first();
+            $storeId = $store?->id;
+        }
+
+        if (!$storeId) {
+            return back()->withErrors(['destination_store_id' => 'Please create or configure at least one active store.']);
+        }
+
+        // Resolve project
+        $projectId = $store?->project_id;
+        if (!$projectId) {
+            $project = \App\Models\Project::whereIn('status', ['active', 'planning', 'in_progress'])->first() ?? \App\Models\Project::first();
+            $projectId = $project?->id;
+        }
+
+        // Generate unique reference number
+        $refNumber = 'MR-MNT-' . str_replace('MNT-', '', $maintenanceRequest->request_no) . '-' . strtoupper(Str::random(3));
+        while (MaterialRequest::where('reference_number', $refNumber)->exists()) {
+            $refNumber = 'MR-MNT-' . str_replace('MNT-', '', $maintenanceRequest->request_no) . '-' . strtoupper(Str::random(4));
+        }
+
+        $materialRequest = MaterialRequest::create([
+            'project_id'             => $projectId,
+            'destination_store_id'   => $storeId,
+            'maintenance_request_id' => $maintenanceRequest->id,
+            'reference_number'       => $refNumber,
+            'source'                 => 'Maintenance — ' . $maintenanceRequest->request_no,
+            'status'                 => 'sent_to_store_manager',
+            'required_date'          => $validated['required_date'],
+            'notes'                  => $validated['notes'] ?? ("Maintenance for {$maintenanceRequest->request_no} — {$maintenanceRequest->asset_name}"),
+            'created_by'             => auth()->id(),
+        ]);
+
+        // Add requested items
+        $itemCount = 0;
+        foreach ($validated['items'] as $itemData) {
+            $productId = $itemData['product_id'] ?? null;
+
+            // If a custom material name is provided and no existing product chosen
+            if ((!$productId || $productId === 'custom') && !empty($itemData['custom_name'])) {
+                $product = Product::firstOrCreate(
+                    ['name' => trim($itemData['custom_name'])],
+                    [
+                        'sku'      => 'MAT-' . strtoupper(Str::random(6)),
+                        'unit'     => $itemData['unit'] ?? 'pcs',
+                        'category' => 'Maintenance / Spare Parts',
+                        'is_active'=> true,
+                    ]
+                );
+                $productId = $product->id;
+            }
+
+            if ($productId && $productId !== 'custom') {
+                $materialRequest->items()->create([
+                    'product_id'         => $productId,
+                    'quantity_requested' => $itemData['quantity'],
+                    'notes'              => trim(($itemData['unit'] ? ('[' . $itemData['unit'] . '] ') : '') . ($itemData['notes'] ?? '')),
+                ]);
+                $itemCount++;
+            }
+        }
+
+        ActivityLog::log(
+            'created',
+            "General Service submitted Material Request #{$materialRequest->reference_number} ({$itemCount} item(s)) linked to Maintenance {$maintenanceRequest->request_no} and routed to Store Manager for procurement/issuance",
+            'Maintenance Requests',
+            $maintenanceRequest
+        );
+
+        return back()->with('success', "Material Request #{$materialRequest->reference_number} with {$itemCount} item(s) created and sent to Store Manager for procurement & stock fulfillment!");
+    }
 }
