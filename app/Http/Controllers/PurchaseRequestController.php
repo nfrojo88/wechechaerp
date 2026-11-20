@@ -161,6 +161,8 @@ class PurchaseRequestController extends Controller
             abort(403, 'Unauthorized. Purchase Requests can only be created by Coordinator, Planning Manager, Planning, or Global Admin.');
         }
 
+        $isSecretary = false;
+
         if ($isSecretary) {
             $hoProject = $this->getHeadOfficeProject();
             $hoStore = $this->getHeadOfficeStore($hoProject);
@@ -1923,7 +1925,9 @@ class PurchaseRequestController extends Controller
         $userRoles = $user ? $user->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray() : [];
         $isGlobalAdmin = in_array('global_admin', $userRoles) || in_array('admin', $userRoles);
         $isFinanceHead = in_array('finance_head', $userRoles) || in_array('finance_manager', $userRoles);
-        $isAssigned = $purchaseRequest->payment && $purchaseRequest->payment->assigned_finance_staff_id === $user->id;
+        $isAssigned = ($purchaseRequest->payment && (int)$purchaseRequest->payment->assigned_finance_staff_id === (int)$user->id)
+            || ($purchaseRequest->expenseRequest && (int)$purchaseRequest->expenseRequest->assigned_finance_staff_id === (int)$user->id)
+            || ($purchaseRequest->expenseRequest && (int)$purchaseRequest->expenseRequest->finance_staff_id === (int)$user->id);
 
         if (!$isGlobalAdmin && !$isFinanceHead && !$isAssigned) {
             abort(403, 'Unauthorized: You are not assigned to execute this payment.');
