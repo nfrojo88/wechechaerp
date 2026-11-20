@@ -31,6 +31,7 @@ class ProcurementPayment extends Model
     public function coaAccount()           { return $this->belongsTo(ChartOfAccount::class, 'coa_account_id'); }
     public function assignedStaff()        { return $this->belongsTo(User::class, 'assigned_finance_staff_id'); }
     public function paidByUser()           { return $this->belongsTo(User::class, 'paid_by'); }
+    public function paidBy()               { return $this->belongsTo(User::class, 'paid_by'); }
     public function journalEntry()         { return $this->belongsTo(JournalEntry::class); }
     public function createdBy()            { return $this->belongsTo(User::class, 'created_by'); }
 }

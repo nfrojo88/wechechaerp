@@ -356,8 +356,8 @@ class ApprovalHubController extends Controller
                 ) {
                     $statusKey = 'finance_queue';
                     $isAssigned = ($payment && !empty($payment->assigned_finance_staff_id)) || ($pr->expenseRequest && !empty($pr->expenseRequest->assigned_finance_staff_id));
-                    $statusLabel = $isAssigned ? 'Payment Queue (Assigned)' : 'Payment Queue';
-                    $badgeColor = 'primary';
+                    $statusLabel = $isAssigned ? 'Payment Queue (Assigned)' : 'Payment Queue (Pending Assignment)';
+                    $badgeColor = $isAssigned ? 'primary' : 'warning';
                 } elseif (in_array($statusRaw, [
                     PurchaseRequest::STATUS_PENDING_COORDINATOR_APPROVAL,
                     PurchaseRequest::STATUS_PENDING_PLANNING,
@@ -380,6 +380,8 @@ class ApprovalHubController extends Controller
                 $amount = 0.0;
                 if ($payment && (float)$payment->amount > 0) {
                     $amount = (float)$payment->amount;
+                } elseif ($pr->expenseRequest && (float)$pr->expenseRequest->amount > 0) {
+                    $amount = (float)$pr->expenseRequest->amount;
                 } elseif ((float)($pr->direct_buy_amount ?? 0) > 0) {
                     $amount = (float)$pr->direct_buy_amount;
                 } elseif ((float)($pr->estimated_total_cost ?? 0) > 0) {
@@ -454,7 +456,7 @@ class ApprovalHubController extends Controller
                     'paid_at'             => $payment?->paid_at,
                     'paid_by_name'        => $payment?->paidBy?->name ?? null,
                     'payment_reference'   => $payment?->notes,
-                    'coa_name'            => $payment?->coaAccount?->name ?? ($pr->expenseRequest?->coa?->name ?? null),
+                    'coa_name'            => $payment?->coaAccount ? ('[' . $payment->coaAccount->code . '] ' . $payment->coaAccount->name) : ($pr->expenseRequest?->coa ? ('[' . $pr->expenseRequest->coa->code . '] ' . $pr->expenseRequest->coa->name) : null),
                     'bank_name'           => null,
                     'assigned_staff_id'   => $payment?->assigned_finance_staff_id ?? ($pr->expenseRequest?->assigned_finance_staff_id ?? ($pr->expenseRequest?->finance_staff_id ?? null)),
                     'assigned_staff_name' => $payment?->assignedStaff?->name ?? ($pr->expenseRequest?->assignedFinanceStaff?->name ?? ($pr->expenseRequest?->financeStaff?->name ?? null)),
@@ -467,7 +469,9 @@ class ApprovalHubController extends Controller
                 ];
             });
             $items = $items->concat($prs);
-        } catch (\Throwable $e) {}
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Error loading PRs in ApprovalHub: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+        }
 
         // 6. Office Material Requests (Mapped to HR, Finance Queue, Paid, and Rejected)
         try {
@@ -732,7 +736,8 @@ class ApprovalHubController extends Controller
                 if ($raw && isset($raw->expenseRequest) && $raw->expenseRequest && (
                     (int)($raw->expenseRequest->assigned_finance_staff_id ?? 0) === $userId ||
                     (int)($raw->expenseRequest->finance_staff_id ?? 0) === $userId ||
-                    (int)($raw->expenseRequest->user_id ?? 0) === $userId
+                    (int)($raw->expenseRequest->user_id ?? 0) === $userId ||
+                    ($raw->expenseRequest->coa && (int)($raw->expenseRequest->coa->assigned_to ?? 0) === $userId)
                 )) {
                     return true;
                 }
@@ -803,7 +808,8 @@ class ApprovalHubController extends Controller
                 }
                 if ($raw && isset($raw->expenseRequest) && $raw->expenseRequest && (
                     (int)($raw->expenseRequest->assigned_finance_staff_id ?? 0) === $userId ||
-                    (int)($raw->expenseRequest->finance_staff_id ?? 0) === $userId
+                    (int)($raw->expenseRequest->finance_staff_id ?? 0) === $userId ||
+                    ($raw->expenseRequest->coa && (int)($raw->expenseRequest->coa->assigned_to ?? 0) === $userId)
                 )) {
                     return true;
                 }

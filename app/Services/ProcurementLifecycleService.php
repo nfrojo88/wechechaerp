@@ -876,6 +876,17 @@ class ProcurementLifecycleService
             );
         } catch (\Throwable $e) {}
 
+        // Synchronize linked ExpenseRequest if present
+        try {
+            \App\Models\ExpenseRequest::where('purchase_request_id', $pr->id)->update([
+                'assigned_finance_staff_id' => $staffUserId,
+                'finance_staff_id'          => $staffUserId,
+                'chart_of_account_id'       => $coaAccountId,
+                'coa_id'                    => $coaAccountId,
+                'status'                    => \App\Models\ExpenseRequest::STATUS_APPROVED_ASSIGNED,
+            ]);
+        } catch (\Throwable $e) {}
+
         $targetRole = $this->resolveOwnerRole('finance', $pr);
         $pr->update([
             'status'             => PurchaseRequest::STATUS_PENDING_PAYMENT,
@@ -921,6 +932,19 @@ class ProcurementLifecycleService
             $coaAccountId = \App\Models\ChartOfAccount::where('code', '1010')
                 ->orWhere('name', 'like', '%Cash%')
                 ->value('id');
+        }
+
+        if (!$payment) {
+            $payment = ProcurementPayment::create([
+                'purchase_request_id'       => $pr->id,
+                'method'                    => 'cash',
+                'coa_account_id'            => $coaAccountId,
+                'amount'                    => $disbursedAmount,
+                'assigned_finance_staff_id' => Auth::id(),
+                'status'                    => 'pending_payment',
+                'created_by'                => Auth::id(),
+            ]);
+            $pr->setRelation('payment', $payment);
         }
 
         if ($payment) {
