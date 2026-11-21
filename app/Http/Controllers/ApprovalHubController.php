@@ -369,7 +369,8 @@ class ApprovalHubController extends Controller
                     $badgeColor = 'danger';
                 } elseif (
                     $statusRaw === PurchaseRequest::STATUS_PENDING_PAYMENT
-                    || in_array($statusRaw, ['pending_payment', 'pending_assignment', 'finance_assigned', 'assigned_to_finance', 'assigned'])
+                    || $statusRaw === PurchaseRequest::STATUS_PENDING_FINANCE
+                    || in_array($statusRaw, ['pending_payment', 'pending_finance', 'pending_assignment', 'finance_assigned', 'assigned_to_finance', 'assigned'])
                     || ($payment && in_array(strtolower($payment->status), ['pending_assignment', 'pending_payment', 'assigned']))
                     || ($payment && !empty($payment->assigned_finance_staff_id) && $payment->status !== 'paid')
                     || ($pr->expenseRequest && in_array($pr->expenseRequest->status, [\App\Models\ExpenseRequest::STATUS_APPROVED_ASSIGNED, \App\Models\ExpenseRequest::STATUS_ASSIGNED]))
@@ -392,7 +393,7 @@ class ApprovalHubController extends Controller
                     $statusKey = 'pending_gm';
                     $statusLabel = in_array($statusRaw, [PurchaseRequest::STATUS_PENDING_GM, 'pending_gm_decision'])
                         ? 'Pending GM Decision'
-                        : 'Pending Procurement / GM';
+                        : (in_array($statusRaw, [PurchaseRequest::STATUS_APPROVED_PETTY_CASH, 'approved_petty_cash']) ? 'Approved (Site Petty Cash)' : 'Pending Procurement / GM');
                     $badgeColor = 'info';
                 }
 
@@ -703,19 +704,20 @@ class ApprovalHubController extends Controller
 
 
         $user = Auth::user();
-        $rolesStr = strtolower(implode(' ', $user ? $user->getRoleNames()->toArray() : []));
-        $isAdmin = $user && ($user->hasAnyRole(['admin', 'global_admin', 'super_admin']) || str_contains($rolesStr, 'admin'));
+        $rawRoles = $user ? $user->getRoleNames()->toArray() : [];
+        $rolesStr = strtolower(str_replace([' ', '-'], '_', implode(' ', $rawRoles)));
+        $isAdmin = $user && ($user->hasAnyRole(['admin', 'global_admin', 'super_admin', 'Admin', 'Global Admin', 'Super Admin']) || str_contains($rolesStr, 'admin'));
         $isAuditor = $user && ($user->hasAnyRole(['auditor', 'Auditor', 'audit_team', 'audit']) || str_contains($rolesStr, 'audit'));
         $isHR = $user && ($user->hasAnyRole(['HR Manager', 'hr_manager', 'HR Officer', 'hr_officer', 'hr', 'Coordinator', 'coordinator']) || str_contains($rolesStr, 'hr') || str_contains($rolesStr, 'coordinator') || $user->can('hr.view'));
-        $isGM = $user && ($user->hasAnyRole(['General Manager', 'general_manager', 'gm']) || str_contains($rolesStr, 'gm'));
+        $isGM = $user && ($user->hasAnyRole(['General Manager', 'general_manager', 'gm', 'GM']) || str_contains($rolesStr, 'gm'));
         $isFinanceHead = $user && ($user->hasAnyRole(['Finance head', 'finance_head', 'finance_manager', 'Finance Manager', 'Finance Head']) || str_contains($rolesStr, 'finance_head') || str_contains($rolesStr, 'finance_manager') || (str_contains($rolesStr, 'head') && str_contains($rolesStr, 'finance')));
-        $isFinance = $user && ($user->hasAnyRole(['Finance head', 'finance_head', 'finance_manager', 'Finance staff', 'finance_staff', 'finance', 'cashier', 'accountant']) || str_contains($rolesStr, 'finance') || str_contains($rolesStr, 'cashier') || str_contains($rolesStr, 'accountant'));
+        $isFinance = $user && ($user->hasAnyRole(['Finance head', 'finance_head', 'finance_manager', 'Finance staff', 'finance_staff', 'Finance Staff', 'finance', 'Finance', 'cashier', 'Cashier', 'accountant', 'Accountant']) || str_contains($rolesStr, 'finance') || str_contains($rolesStr, 'cashier') || str_contains($rolesStr, 'accountant'));
 
         // Role-based visibility scoping
         if ($isAuditor || $isAdmin) {
             // Auditor and Admin see all items across all stages for audit and oversight
         } elseif ($isFinance && !$isFinanceHead && !$isHR && !$isGM) {
-            // STRICT LAW: Regular Finance Staff ONLY see expenses assigned to their staff ID to pay, or paid/requested by them
+            // Regular Finance Staff: see assigned expenses, requests created/paid by them, and PR questions in payment queue
             $userId = (int) $user->id;
             $items = $items->filter(function ($item) use ($userId) {
                 $raw = $item->raw_model ?? null;
@@ -729,8 +731,18 @@ class ApprovalHubController extends Controller
                     return true;
                 }
 
+                // Any PR question in finance queue or paid/rejected
+                if ($item->type === 'purchase_request' && in_array($item->status_key, ['finance_queue', 'paid', 'rejected'])) {
+                    return true;
+                }
+
                 if (!in_array($item->status_key, ['finance_queue', 'paid', 'rejected'])) {
                     return false;
+                }
+
+                // Any unassigned item in finance queue
+                if ($item->status_key === 'finance_queue' && empty($item->assigned_staff_id)) {
+                    return true;
                 }
 
                 // 1. Direct assignment to this finance staff to pay
@@ -777,24 +789,30 @@ class ApprovalHubController extends Controller
                 return false;
             });
         } elseif ($isFinance && ($isFinanceHead || $isAdmin)) {
-            // Finance Head & Admin see all finance queue, paid, and rejected items
+            // Finance Head & Admin see all finance queue, paid, and rejected items, plus all PR questions
             $items = $items->filter(function ($item) {
-                return in_array($item->status_key, ['finance_queue', 'paid', 'rejected']);
+                return in_array($item->status_key, ['finance_queue', 'paid', 'rejected']) || $item->type === 'purchase_request';
             });
         } elseif ($isHR && !$isAdmin && !$isGM) {
             // HR & Coordinator see pending HR reviews and approved/rejected history
             $items = $items->filter(function ($item) {
-                return in_array($item->status_key, ['pending_hr', 'paid', 'rejected', 'finance_queue']);
+                return in_array($item->status_key, ['pending_hr', 'paid', 'rejected', 'finance_queue']) || $item->type === 'purchase_request';
             });
         } elseif ($isGM && !$isAdmin) {
-            // GM only sees pending GM reviews and approved/rejected history
+            // GM sees pending GM reviews and approved/rejected history and all PR questions
             $items = $items->filter(function ($item) {
-                return in_array($item->status_key, ['pending_gm', 'finance_queue', 'paid', 'rejected']);
+                return in_array($item->status_key, ['pending_gm', 'finance_queue', 'paid', 'rejected']) || $item->type === 'purchase_request';
             });
         } else {
-            // Any other authenticated user (e.g. Requester, Account Manager) only sees items assigned to them or created/paid by them
+            // Any other authenticated user (e.g. Requester, Store Keeper, Site Engineer, Procurement)
             $userId = (int) ($user ? $user->id : 0);
-            $items = $items->filter(function ($item) use ($userId) {
+            $userRoleNamesArray = $user ? $user->getRoleNames()->map(fn($r) => strtolower(str_replace([' ', '-'], '_', $r)))->toArray() : [];
+            $canViewProcurementPrs = count(array_intersect($userRoleNamesArray, [
+                'store_keeper', 'store_manager', 'purchase', 'purchase_manager', 'procurement',
+                'site_engineer', 'office_engineer', 'project_manager'
+            ])) > 0;
+
+            $items = $items->filter(function ($item) use ($userId, $canViewProcurementPrs) {
                 $raw = $item->raw_model ?? null;
 
                 // Requesters can see their own created requests across all stages
@@ -804,6 +822,11 @@ class ApprovalHubController extends Controller
                     (isset($raw->user_id) && (int)$raw->user_id === $userId) ||
                     (isset($raw->purchaseRequest) && $raw->purchaseRequest && (int)($raw->purchaseRequest->requested_by ?? 0) === $userId)
                 )) {
+                    return true;
+                }
+
+                // Store keepers, site engineers, project managers, and procurement staff can view PR questions
+                if ($canViewProcurementPrs && $item->type === 'purchase_request') {
                     return true;
                 }
 

@@ -5,11 +5,12 @@
 @section('content')
 @php
     $user = auth()->user();
-    $userRoleStr = $user ? strtolower(implode(' ', $user->getRoleNames()->toArray())) : '';
-    $isHrUser = $user && ($user->can('hr.view') || str_contains($userRoleStr, 'hr') || str_contains($userRoleStr, 'coordinator') || $user->hasAnyRole(['admin', 'global_admin', 'coordinator', 'Coordinator']));
-    $isGmUser = $user && (str_contains($userRoleStr, 'gm') || $user->hasAnyRole(['admin', 'global_admin']));
-    $isFinanceHeadUser = $user && (str_contains($userRoleStr, 'finance_head') || str_contains($userRoleStr, 'finance_manager') || $user->hasAnyRole(['finance_head', 'admin', 'global_admin']));
-    $isFinanceStaffUser = $user && (str_contains($userRoleStr, 'finance') || str_contains($userRoleStr, 'cashier') || str_contains($userRoleStr, 'accountant') || $user->hasAnyRole(['admin', 'global_admin']));
+    $rawUserRoles = $user ? $user->getRoleNames()->toArray() : [];
+    $userRoleStr = strtolower(str_replace([' ', '-'], '_', implode(' ', $rawUserRoles)));
+    $isHrUser = $user && ($user->can('hr.view') || str_contains($userRoleStr, 'hr') || str_contains($userRoleStr, 'coordinator') || $user->hasAnyRole(['admin', 'global_admin', 'coordinator', 'Coordinator', 'hr', 'hr_manager', 'hr_officer', 'HR Manager', 'HR Officer']));
+    $isGmUser = $user && (str_contains($userRoleStr, 'gm') || $user->hasAnyRole(['admin', 'global_admin', 'gm', 'General Manager', 'general_manager', 'GM']));
+    $isFinanceHeadUser = $user && (str_contains($userRoleStr, 'finance_head') || str_contains($userRoleStr, 'finance_manager') || (str_contains($userRoleStr, 'finance') && str_contains($userRoleStr, 'head')) || $user->hasAnyRole(['Finance Head', 'finance_head', 'Finance head', 'Finance Manager', 'finance_manager', 'admin', 'global_admin', 'Admin', 'Global Admin']));
+    $isFinanceStaffUser = $user && (str_contains($userRoleStr, 'finance') || str_contains($userRoleStr, 'cashier') || str_contains($userRoleStr, 'accountant') || $user->hasAnyRole(['Finance staff', 'finance_staff', 'Finance Staff', 'finance', 'Finance', 'cashier', 'Cashier', 'accountant', 'Accountant', 'admin', 'global_admin']));
 @endphp
 
 <div class="container-fluid py-3">
@@ -103,6 +104,7 @@
 
                     <select name="category" class="form-select form-select-sm" style="max-width: 200px;" onchange="this.form.submit()">
                         <option value="">All Categories</option>
+                        <option value="Material" {{ in_array(request('category'), ['Material', 'Material Purchase', 'Purchase Request']) ? 'selected' : '' }}>🛒 Material / PR Question (የግዢ ጥያቄ)</option>
                         <option value="Service" {{ request('category') === 'Service' ? 'selected' : '' }}>Service (አገልግሎት)</option>
                         <option value="Transport" {{ request('category') === 'Transport' ? 'selected' : '' }}>Transport (ትራንስፖርት)</option>
                         <option value="Loading & Unloading" {{ (request('category') === 'Loading & Unloading' || request('category') === 'Loading / Unloading' || request('category') === 'Loading Unloading') ? 'selected' : '' }}>Loading &amp; Unloading (መጫን/ማውረድ)</option>

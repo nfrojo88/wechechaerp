@@ -434,41 +434,45 @@ class ExpenseRequest extends Model
      */
     public function scopePaidHistoryForUser(\Illuminate\Database\Eloquent\Builder $query, User $user): \Illuminate\Database\Eloquent\Builder
     {
-        $roleNames = strtolower(implode(' ', $user->getRoleNames()->toArray()));
+        $rawRoleNames = $user->getRoleNames()->toArray();
+        $roleNames = strtolower(str_replace([' ', '-'], '_', implode(' ', $rawRoleNames)));
 
-        $query->whereNull('purchase_request_id')
-              ->where('request_number', 'not like', 'EXP-PR-%')
-              ->where('category', '!=', 'Material');
-
-        // Admin & Finance Head see ALL paid requests
-        if ($user->hasAnyRole(['admin', 'global_admin', 'finance_head', 'finance_manager']) || 
+        // Admin & Finance Head see ALL paid requests (including Purchase Requests / Material PR)
+        if ($user->hasAnyRole(['admin', 'global_admin', 'Admin', 'Global Admin', 'finance_head', 'Finance Head', 'Finance head', 'finance_manager', 'Finance Manager']) || 
             str_contains($roleNames, 'finance_head') || 
-            str_contains($roleNames, 'finance_manager')) {
+            str_contains($roleNames, 'finance_manager') ||
+            (str_contains($roleNames, 'finance') && str_contains($roleNames, 'head')) ||
+            str_contains($roleNames, 'admin')) {
             return $query->where('status', self::STATUS_PAID);
         }
 
         return $query->where('status', self::STATUS_PAID)->where(function ($q) use ($user, $roleNames) {
-            $conditions = [];
-
-            // 1. Employee's own submitted requests
-            $q->where('user_id', $user->id);
+            // 1. Employee's own submitted requests OR requests linked to their Purchase Request
+            $q->where('user_id', $user->id)
+              ->orWhereHas('purchaseRequest', function ($pq) use ($user) {
+                  $pq->where('requested_by', $user->id);
+              });
 
             // 2. HR: paid requests they personally reviewed
-            if ($user->can('hr.view') || str_contains($roleNames, 'hr')) {
+            if ($user->can('hr.view') || str_contains($roleNames, 'hr') || str_contains($roleNames, 'coordinator')) {
                 $q->orWhere('hr_reviewer_id', $user->id);
             }
 
-            // 3. GM: paid requests they personally approved (> 5,000 ETB)
-            if (str_contains($roleNames, 'gm') || $user->hasRole('gm')) {
+            // 3. GM: paid requests they personally approved (> 5,000 ETB) or PR questions
+            if (str_contains($roleNames, 'gm') || $user->hasAnyRole(['gm', 'General Manager', 'general_manager'])) {
                 $q->orWhere('gm_approver_id', $user->id)
-                  ->orWhere('gm_reviewer_id', $user->id);
+                  ->orWhere('gm_reviewer_id', $user->id)
+                  ->orWhereNotNull('purchase_request_id')
+                  ->orWhere('request_number', 'like', 'EXP-PR-%');
             }
 
-            // 4. Finance Staff: paid requests assigned to them or processed by them
+            // 4. Finance Staff: paid requests assigned to them or processed by them, or PR questions paid by finance
             if (str_contains($roleNames, 'finance') || str_contains($roleNames, 'cashier') || str_contains($roleNames, 'accountant')) {
                 $q->orWhere('assigned_finance_staff_id', $user->id)
                   ->orWhere('finance_staff_id', $user->id)
-                  ->orWhere('paid_by', $user->id);
+                  ->orWhere('paid_by', $user->id)
+                  ->orWhereNotNull('purchase_request_id')
+                  ->orWhere('request_number', 'like', 'EXP-PR-%');
             }
         });
     }

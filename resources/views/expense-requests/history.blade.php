@@ -67,6 +67,7 @@
                             <td>
                                 @php
                                     $catIcon = match($req->category) {
+                                        'Material', 'Material Purchase' => 'fa-cart-shopping',
                                         'Transport' => 'fa-car',
                                         'Office Material' => 'fa-boxes-packing',
                                         'Loading & Unloading', 'Loading / Unloading', 'Loading Unloading' => 'fa-truck-ramp-box',

@@ -188,12 +188,13 @@ class ExpenseRequestController extends Controller
         $employee = $user->employee ?? null;
         $userEmpId = $employee ? $employee->id : null;
 
-        $userRoleNames = strtolower(implode(' ', $user->getRoleNames()->toArray()));
-        $isHr = $user->can('hr.view') || str_contains($userRoleNames, 'hr') || str_contains($userRoleNames, 'coordinator') || $user->hasAnyRole(['admin', 'global_admin', 'coordinator', 'Coordinator']);
-        $isGm = str_contains($userRoleNames, 'gm') || $user->hasAnyRole(['gm', 'admin', 'global_admin']);
-        $isFinanceHead = str_contains($userRoleNames, 'finance_head') || str_contains($userRoleNames, 'finance_manager') || $user->hasAnyRole(['finance_head', 'admin', 'global_admin']);
-        $isFinanceStaff = str_contains($userRoleNames, 'finance') || str_contains($userRoleNames, 'cashier') || str_contains($userRoleNames, 'accountant') || $user->hasAnyRole(['admin', 'global_admin']);
-        $isAdminOrFinanceHead = $isFinanceHead || $user->hasAnyRole(['admin', 'global_admin']);
+        $rawRoleNames = $user->getRoleNames()->toArray();
+        $userRoleNames = strtolower(str_replace([' ', '-'], '_', implode(' ', $rawRoleNames)));
+        $isHr = $user->can('hr.view') || str_contains($userRoleNames, 'hr') || str_contains($userRoleNames, 'coordinator') || $user->hasAnyRole(['admin', 'global_admin', 'coordinator', 'Coordinator', 'hr', 'hr_manager', 'hr_officer', 'HR Manager', 'HR Officer']);
+        $isGm = str_contains($userRoleNames, 'gm') || $user->hasAnyRole(['gm', 'admin', 'global_admin', 'General Manager', 'general_manager', 'GM']);
+        $isFinanceHead = str_contains($userRoleNames, 'finance_head') || str_contains($userRoleNames, 'finance_manager') || (str_contains($userRoleNames, 'finance') && str_contains($userRoleNames, 'head')) || $user->hasAnyRole(['finance_head', 'Finance Head', 'Finance head', 'finance_manager', 'Finance Manager', 'admin', 'global_admin', 'Admin', 'Global Admin']);
+        $isFinanceStaff = str_contains($userRoleNames, 'finance') || str_contains($userRoleNames, 'cashier') || str_contains($userRoleNames, 'accountant') || $user->hasAnyRole(['finance', 'Finance', 'finance_staff', 'Finance staff', 'Finance Staff', 'cashier', 'Cashier', 'accountant', 'Accountant', 'admin', 'global_admin']);
+        $isAdminOrFinanceHead = $isFinanceHead || $user->hasAnyRole(['admin', 'global_admin', 'Admin', 'Global Admin']);
 
         // Tab selection
         $tab = $request->query('tab', 'my_requests');
@@ -202,12 +203,12 @@ class ExpenseRequestController extends Controller
         }
 
         // Scope to match requests submitted by this user OR assigned to this employee profile OR assigned to this user as finance staff
-        $baseUserScope = function ($q) use ($user, $userEmpId, $isAdminOrFinanceHead) {
+        $baseUserScope = function ($q) use ($user, $userEmpId, $isAdminOrFinanceHead, $isFinanceStaff, $isGm, $isHr) {
             if ($isAdminOrFinanceHead) {
                 // Global admin and finance head can see all department requests for processing
                 return;
             }
-            $q->where(function ($sub) use ($user, $userEmpId) {
+            $q->where(function ($sub) use ($user, $userEmpId, $isFinanceStaff, $isGm, $isHr) {
                 $sub->where('user_id', $user->id);
                 if ($userEmpId) {
                     $sub->orWhere('employee_id', $userEmpId);
@@ -223,6 +224,25 @@ class ExpenseRequestController extends Controller
                 $sub->orWhereHas('coa', function ($cq) use ($user) {
                     $cq->where('assigned_to', $user->id);
                 });
+
+                // Finance staff can view any PR questions awaiting assignment or processing
+                if ($isFinanceStaff) {
+                    $sub->orWhereNotNull('purchase_request_id')
+                        ->orWhere('request_number', 'like', 'EXP-PR-%');
+                }
+
+                // GM can view PR questions and approved requests
+                if ($isGm) {
+                    $sub->orWhereNotNull('gm_approver_id')
+                        ->orWhereNotNull('gm_reviewer_id')
+                        ->orWhereNotNull('purchase_request_id')
+                        ->orWhere('request_number', 'like', 'EXP-PR-%');
+                }
+
+                // HR can view reviewed requests
+                if ($isHr) {
+                    $sub->orWhereNotNull('hr_reviewer_id');
+                }
             });
         };
 
@@ -235,6 +255,7 @@ class ExpenseRequestController extends Controller
             // Allow Purchase Request ("PR question") expense requests
             ->orWhereNotNull('purchase_request_id')
             ->orWhere('request_number', 'like', 'EXP-PR-%')
+            ->orWhere('category', 'Material')
             // Always allow Credit Store Settlement expense requests
             ->orWhere('request_number', 'like', 'EXP-CR-%')
             ->orWhere('other_reason', 'Credit Store Purchase Settlement');
@@ -319,6 +340,12 @@ class ExpenseRequestController extends Controller
         if ($request->filled('category')) {
             if (in_array($request->category, ['Utility Expense', 'Utility'])) {
                 $query->whereIn('category', ['Utility Expense', 'Utility']);
+            } elseif (in_array($request->category, ['Material', 'Material Purchase', 'Purchase Request'])) {
+                $query->where(function ($q) {
+                    $q->whereIn('category', ['Material', 'Material Purchase'])
+                      ->orWhereNotNull('purchase_request_id')
+                      ->orWhere('request_number', 'like', 'EXP-PR-%');
+                });
             } else {
                 $query->where('category', $request->category);
             }
@@ -1929,6 +1956,12 @@ class ExpenseRequestController extends Controller
         if ($request->filled('category')) {
             if (in_array($request->category, ['Utility Expense', 'Utility'])) {
                 $query->whereIn('category', ['Utility Expense', 'Utility']);
+            } elseif (in_array($request->category, ['Material', 'Material Purchase', 'Purchase Request'])) {
+                $query->where(function ($q) {
+                    $q->whereIn('category', ['Material', 'Material Purchase'])
+                      ->orWhereNotNull('purchase_request_id')
+                      ->orWhere('request_number', 'like', 'EXP-PR-%');
+                });
             } else {
                 $query->where('category', $request->category);
             }
