@@ -32,11 +32,31 @@ class ProcurementLifecycleController extends Controller
         try {
             $unlinkedMrs = MaterialRequest::whereHas('items')
                 ->whereDoesntHave('purchaseRequests')
+                ->whereNotIn('status', ['approved_for_petty_cash', 'completed', 'fulfilled', 'rejected', 'cancelled'])
+                ->where(function($q) {
+                    $q->whereNull('purchase_method')->orWhere('purchase_method', '!=', 'petty_cash');
+                })
                 ->with(['items.product', 'project'])
                 ->get();
             foreach ($unlinkedMrs as $uMr) {
                 $uMr->createOrGetPurchaseRequest();
             }
+
+            // Ensure any companion PR linked to a Petty Cash MR is marked approved_petty_cash and removed from active procurement queues
+            PurchaseRequest::whereIn('status', [
+                PurchaseRequest::STATUS_PENDING_PLANNING,
+                PurchaseRequest::STATUS_PENDING_COORDINATOR_APPROVAL,
+                PurchaseRequest::STATUS_DRAFT,
+                PurchaseRequest::STATUS_PENDING_STORE_REVIEW,
+            ])
+            ->whereHas('materialRequest', function($mq) {
+                $mq->where('status', 'approved_for_petty_cash')
+                   ->orWhere('purchase_method', 'petty_cash');
+            })
+            ->update([
+                'status'             => PurchaseRequest::STATUS_APPROVED_PETTY_CASH,
+                'current_owner_role' => 'store_keeper',
+            ]);
 
             // Also ensure any planning-approved MR has companion PR forwarded to Coordinator
             $approvedMrsToSync = MaterialRequest::whereHas('items')
@@ -45,6 +65,9 @@ class ProcurementLifecycleController extends Controller
                       ->orWhere('planning_approval_status', 'approved');
                 })
                 ->whereNotIn('status', ['approved_for_petty_cash', 'sent_to_store_manager', 'sent_to_pr', 'transferred', 'transfer_created', 'approved', 'rejected', 'cancelled', 'completed'])
+                ->where(function($q) {
+                    $q->whereNull('purchase_method')->orWhere('purchase_method', '!=', 'petty_cash');
+                })
                 ->with('purchaseRequests')
                 ->get();
 
@@ -320,14 +343,21 @@ class ProcurementLifecycleController extends Controller
         }
 
         // 2. Fetch PRs awaiting action by this user's role(s) (must have items)
+        // Strictly exclude petty cash approved PRs (handled directly by Store Keeper via Site Petty Cash)
         $prQuery = PurchaseRequest::with(['project', 'requestedBy', 'store', 'materialRequest.project', 'materialRequest.creator', 'items.product'])
             ->whereHas('items')
             ->whereNotIn('status', [
                 PurchaseRequest::STATUS_INTAKE_COMPLETE,
                 PurchaseRequest::STATUS_COMPLETED,
                 PurchaseRequest::STATUS_REJECTED,
-                PurchaseRequest::STATUS_CANCELLED
+                PurchaseRequest::STATUS_CANCELLED,
+                PurchaseRequest::STATUS_APPROVED_PETTY_CASH,
+                'approved_petty_cash',
             ])
+            ->whereDoesntHave('materialRequest', function($mq) {
+                $mq->where('status', 'approved_for_petty_cash')
+                   ->orWhere('purchase_method', 'petty_cash');
+            })
             ->latest();
 
         if (!$isAdmin && !$isAuditor) {
@@ -426,6 +456,9 @@ class ProcurementLifecycleController extends Controller
                 ->where('planning_approval_status', 'pending')
                 ->whereNotIn('status', ['planning_approved', 'approved_for_petty_cash', 'sent_to_store_manager', 'sent_to_pr', 'transferred', 'transfer_created', 'approved', 'rejected', 'cancelled', 'completed'])
                 ->where(function($q) {
+                    $q->whereNull('purchase_method')->orWhere('purchase_method', '!=', 'petty_cash');
+                })
+                ->where(function($q) {
                     $q->whereDoesntHave('purchaseRequests')
                       ->orWhereHas('purchaseRequests', function($pq) {
                           $pq->whereIn('status', [PurchaseRequest::STATUS_PENDING_PLANNING, 'pending_planning', PurchaseRequest::STATUS_DRAFT]);
@@ -449,6 +482,9 @@ class ProcurementLifecycleController extends Controller
                 })
                 ->whereNotIn('status', ['approved_for_petty_cash', 'sent_to_store_manager', 'sent_to_pr', 'transferred', 'transfer_created', 'approved', 'rejected', 'cancelled', 'completed'])
                 ->where(function($q) {
+                    $q->whereNull('purchase_method')->orWhere('purchase_method', '!=', 'petty_cash');
+                })
+                ->where(function($q) {
                     $q->whereDoesntHave('purchaseRequests')
                       ->orWhereHas('purchaseRequests', function($pq) {
                           $pq->whereIn('status', [PurchaseRequest::STATUS_PENDING_COORDINATOR_APPROVAL, 'pending_coordinator_approval']);
@@ -465,7 +501,10 @@ class ProcurementLifecycleController extends Controller
         // STRICT RULE: Once an MR has been converted or sent to PR, it belongs strictly to PR lifecycle and must NOT show in this pending MR queue.
         $mrQuery = MaterialRequest::with(['project', 'store', 'creator', 'requestedBy', 'maintenanceRequest', 'items.product', 'purchaseRequests'])
             ->whereHas('items')
-            ->whereNotIn('status', ['sent_to_pr', 'completed', 'approved', 'rejected', 'cancelled'])
+            ->whereNotIn('status', ['sent_to_pr', 'completed', 'approved', 'rejected', 'cancelled', 'approved_for_petty_cash'])
+            ->where(function($q) {
+                $q->whereNull('purchase_method')->orWhere('purchase_method', '!=', 'petty_cash');
+            })
             ->whereDoesntHave('purchaseRequests')
             ->latest();
 
@@ -707,11 +746,37 @@ class ProcurementLifecycleController extends Controller
                 ->get(['id', 'pr_no', 'status', 'project_id', 'created_at'])
             : collect();
 
+        // Count pending petty cash materials awaiting Store Keeper purchase
+        $skPendingPettyCashCount = 0;
+        try {
+            $skPendingPettyCashCount = \App\Models\MaterialRequestItem::where(function ($q) {
+                $q->where('status', 'petty_cash')
+                  ->orWhere(function ($sub) {
+                      $sub->whereNotIn('status', ['approved', 'rejected', 'purchased'])
+                          ->whereHas('materialRequest', function ($mq) {
+                              $mq->where(function ($inner) {
+                                  $inner->where('status', 'approved_for_petty_cash')
+                                        ->orWhere('purchase_method', 'petty_cash');
+                              })->where(function ($inner2) {
+                                  $inner2->where('planning_approval_status', 'approved')
+                                         ->orWhereNotNull('planning_approved_by');
+                              });
+                          });
+                  });
+            })
+            ->where('status', '!=', 'purchased')
+            ->where('status', '!=', 'rejected')
+            ->when($isStoreKeeper && $assignedStoreIds->isNotEmpty(), function ($q) use ($assignedStoreIds) {
+                $q->whereHas('materialRequest', fn($mq) => $mq->whereIn('destination_store_id', $assignedStoreIds));
+            })
+            ->count();
+        } catch (\Throwable $e) {}
+
         return view('procurement.lifecycle.my-queue', compact(
             'myPrs', 'emergencyMrs', 'coordinatorEmergencyMrs', 'materialRequestsQueue', 'kpi', 'projects',
             'myCreatedPrs', 'myCreatedMrs', 'completedPrs', 'allPrs', 'deletedPrs', 'deletedMrs', 'activeTab',
             'isHr', 'isCoordinator', 'isStoreManager', 'isStoreKeeper', 'isPurchaseManager', 'isFinanceHead', 'isAuditor', 'isAdmin', 'isGm', 'isPlanning',
-            'assignedStore', 'mergeablePrs'
+            'assignedStore', 'mergeablePrs', 'skPendingPettyCashCount'
         ));
     }
 

@@ -146,6 +146,15 @@
                                 </button>
                             </form>
 
+                            <form method="POST" action="{{ route('material-requests.planning-approve-petty-cash', $mr->id) }}" class="d-inline m-0">
+                                @csrf
+                                <button type="submit" class="btn btn-warning text-dark btn-sm px-2 px-md-3 fw-bold shadow-xs"
+                                    onclick="return confirm('Approve {{ $mr->reference_number }} for direct Site Petty Cash purchase by Store Keeper? (Will bypass regular PR)')"
+                                    title="Approve for direct Spot Purchase via Site Petty Cash by Store Keeper (bypassing regular PR)">
+                                    <i class="fa-solid fa-coins me-1"></i><span class="d-none d-sm-inline">Buy with Petty Cash</span><span class="d-sm-none">Petty Cash</span>
+                                </button>
+                            </form>
+
                             <button type="button" class="btn btn-outline-danger btn-sm px-2 px-md-3 fw-semibold" data-bs-toggle="modal" data-bs-target="#rejectMrModal{{ $mr->id }}">
                                 <i class="fa-solid fa-xmark me-1"></i>Reject
                             </button>
@@ -374,6 +383,14 @@
                     </a>
                     <div class="d-flex gap-2">
                         <button type="button" class="btn btn-secondary btn-sm px-3 rounded-2" data-bs-dismiss="modal">Close</button>
+                        <form method="POST" action="{{ route('material-requests.planning-approve-petty-cash', $mr->id) }}" class="d-inline m-0">
+                            @csrf
+                            <button type="submit" class="btn btn-warning text-dark btn-sm px-3 rounded-2 fw-bold shadow-xs"
+                                onclick="return confirm('Approve Emergency Material Request {{ $mr->reference_number }} for direct Site Petty Cash purchase by Store Keeper? (Will bypass regular PR)')"
+                                title="Approve for direct Spot Purchase via Site Petty Cash by Store Keeper (bypassing regular PR)">
+                                <i class="fa-solid fa-coins me-1"></i>Buy with Petty Cash (Store Keeper)
+                            </button>
+                        </form>
                         <form method="POST" action="{{ route('planning-manager.emergency-requests.material.approve', $mr) }}" class="d-inline m-0">
                             @csrf
                             <input type="hidden" name="action" value="approve">

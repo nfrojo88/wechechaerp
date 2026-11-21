@@ -147,6 +147,9 @@ class MaterialRequest extends Model
             } elseif (in_array($this->status, ['needs_purchase', 'sent_to_pr'])) {
                 $initialStatus = PurchaseRequest::STATUS_PENDING_MARKETING;
                 $initialOwner = 'purchase_manager';
+            } elseif ($this->status === 'approved_for_petty_cash' || $this->purchase_method === 'petty_cash') {
+                $initialStatus = PurchaseRequest::STATUS_APPROVED_PETTY_CASH;
+                $initialOwner = 'store_keeper';
             } elseif ($this->status === 'planning_approved' || $this->planning_approval_status === 'approved') {
                 // Planning approved -> wait strictly for Coordinator review & dispatch
                 $initialStatus = PurchaseRequest::STATUS_PENDING_COORDINATOR_APPROVAL;

@@ -93,6 +93,24 @@
         </div>
     @endif
 
+    @if($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_APPROVED_PETTY_CASH || $purchaseRequest->status === 'approved_petty_cash' || $purchaseRequest->materialRequest?->status === 'approved_for_petty_cash' || $purchaseRequest->materialRequest?->purchase_method === 'petty_cash')
+        <div class="alert alert-warning border-warning d-flex align-items-center justify-content-between gap-3 shadow-sm mb-4">
+            <div class="d-flex align-items-center gap-3">
+                <i class="fa-solid fa-coins fa-2x text-warning"></i>
+                <div>
+                    <h5 class="mb-1 fw-bold text-dark">Approved for Direct Site Petty Cash Purchase</h5>
+                    <p class="mb-0 text-secondary">
+                        This requisition was approved by the Planning Manager for direct purchase using Site Petty Cash funds by the Store Keeper.
+                        It is bypassed from the regular PR procurement pipeline and routed directly to the Store Keeper.
+                    </p>
+                </div>
+            </div>
+            <a href="{{ route('store-keeper.petty-cash-purchases.index') }}" class="btn btn-warning text-dark btn-sm fw-bold shadow-xs text-nowrap">
+                <i class="fa-solid fa-cart-shopping me-1"></i> Open Petty Cash Purchases
+            </a>
+        </div>
+    @endif
+
     @if(session('success'))
         <div class="alert alert-success alert-dismissible fade show shadow-sm">{{ session('success') }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
     @endif

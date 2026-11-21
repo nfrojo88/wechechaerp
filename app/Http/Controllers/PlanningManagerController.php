@@ -43,6 +43,9 @@ class PlanningManagerController extends Controller
     public function approveMaterial(Request $request, MaterialRequest $materialRequest)
     {
         $action = $request->input('action', 'approve');
+        if ($action === 'petty_cash') {
+            return app(MaterialRequestController::class)->planningApprovePettyCash($materialRequest);
+        }
         if ($action === 'approve') {
             $materialRequest->update([
                 'status'                   => 'planning_approved',

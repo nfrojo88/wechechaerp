@@ -246,6 +246,30 @@
         </div>
     </div>
 
+    {{-- Store Keeper Site Petty Cash Notice --}}
+    @if(!empty($skPendingPettyCashCount) && $skPendingPettyCashCount > 0 && ($isStoreKeeperUser || $isGlobalAdmin || $isAdmin))
+    <div class="card border-0 shadow-sm rounded-3 mb-4 bg-white border-start border-4 border-warning">
+        <div class="card-body p-3 d-flex flex-wrap justify-content-between align-items-center gap-3">
+            <div class="d-flex align-items-center gap-3">
+                <div class="rounded-circle bg-warning bg-opacity-15 p-2 text-warning d-flex align-items-center justify-content-center flex-shrink-0" style="width: 44px; height: 44px;">
+                    <i class="fa-solid fa-coins fa-lg text-warning"></i>
+                </div>
+                <div>
+                    <div class="fw-bold text-dark">
+                        {{ $skPendingPettyCashCount }} Emergency Material Item(s) Approved for Site Petty Cash Purchase!
+                    </div>
+                    <small class="text-muted">
+                        Planning Manager approved direct site purchase using Petty Cash. These are routed directly to the Store Keeper and bypass regular PR procurement.
+                    </small>
+                </div>
+            </div>
+            <a href="{{ route('store-keeper.petty-cash-purchases.index') }}" class="btn btn-warning text-dark btn-sm fw-bold shadow-xs px-3" style="min-height: 36px; display: inline-flex; align-items: center;">
+                <i class="fa-solid fa-cart-shopping me-1"></i> Open Petty Cash Purchases ({{ $skPendingPettyCashCount }})
+            </a>
+        </div>
+    </div>
+    @endif
+
     <!-- Emergency MRs Section (Visible to Planning Team) -->
     @if($emergencyMrs->count() > 0)
     <div class="card border-warning shadow-sm mb-4">

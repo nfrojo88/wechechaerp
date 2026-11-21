@@ -409,23 +409,25 @@ class MaterialRequestController extends Controller
         try {
             $materialRequest->loadMissing('purchaseRequests');
             foreach ($materialRequest->purchaseRequests as $pr) {
-                if (in_array($pr->status, [PurchaseRequest::STATUS_PENDING_PLANNING, 'pending_planning', PurchaseRequest::STATUS_DRAFT])) {
+                if (!in_array($pr->status, [PurchaseRequest::STATUS_COMPLETED, PurchaseRequest::STATUS_REJECTED, PurchaseRequest::STATUS_CANCELLED])) {
+                    $fromStage = $pr->status;
                     $pr->update([
-                        'status'      => 'approved_petty_cash',
-                        'approved_by' => auth()->id(),
-                        'approved_at' => now(),
-                        'notes'       => ($pr->notes ? $pr->notes . "\n" : "") . "Approved by Planning Manager for direct Site Petty Cash purchase by Store Keeper.",
+                        'status'             => PurchaseRequest::STATUS_APPROVED_PETTY_CASH,
+                        'current_owner_role' => 'store_keeper',
+                        'approved_by'        => auth()->id(),
+                        'approved_at'        => now(),
+                        'notes'              => ($pr->notes ? $pr->notes . "\n" : "") . "Approved by Planning Manager for direct Site Petty Cash purchase by Store Keeper (bypassing regular PR).",
                     ]);
 
                     try {
                         PrWorkflowLog::create([
                             'purchase_request_id' => $pr->id,
-                            'from_stage'          => PurchaseRequest::STATUS_PENDING_PLANNING,
-                            'to_stage'            => 'approved_petty_cash',
+                            'from_stage'          => $fromStage,
+                            'to_stage'            => PurchaseRequest::STATUS_APPROVED_PETTY_CASH,
                             'action'              => 'planning_approve_petty_cash',
                             'actor_role'          => 'planning',
                             'actor_id'            => auth()->id(),
-                            'notes'               => "Planning Manager approved Emergency Material Request #{$materialRequest->reference_number} for Site Petty Cash purchase by Store Keeper.",
+                            'notes'               => "Planning Manager approved Emergency Material Request #{$materialRequest->reference_number} for Site Petty Cash purchase by Store Keeper (bypassing regular PR).",
                             'created_at'          => now(),
                         ]);
                     } catch (\Throwable $e) {}
@@ -435,7 +437,22 @@ class MaterialRequestController extends Controller
             Log::error("Failed to update companion PRs for MR #{$materialRequest->reference_number}: " . $e->getMessage());
         }
 
-        return back()->with('success', "Emergency Material Request #{$materialRequest->reference_number} approved for Site Petty Cash purchase! It is now waiting in the Store Keeper's Buy Material queue.");
+        // Trigger Instant Notification / Handoff to Store Keeper
+        try {
+            app(\App\Services\ProcurementHandoffNotificationService::class)->triggerHandoff(
+                'planning_approve_petty_cash',
+                $materialRequest,
+                [
+                    'sender_user'  => auth()->user(),
+                    'sender_role'  => 'planning',
+                    'target_roles' => ['store_keeper'],
+                    'project_id'   => $materialRequest->project_id,
+                    'store_id'     => $materialRequest->destination_store_id,
+                ]
+            );
+        } catch (\Throwable $e) {}
+
+        return back()->with('success', "Emergency Material Request #{$materialRequest->reference_number} approved for Site Petty Cash purchase! Sent to Store Keeper (bypassing regular PR).");
     }
 
     public function planningReject(Request $request, MaterialRequest $materialRequest)
@@ -687,8 +704,9 @@ class MaterialRequestController extends Controller
                     $materialRequest->loadMissing('purchaseRequests');
                     foreach ($materialRequest->purchaseRequests as $cPr) {
                         $cPr->update([
-                            'status' => 'approved_petty_cash',
-                            'notes'  => ($cPr->notes ? $cPr->notes . "\n" : "") . "Routed to Site Petty Cash purchase by Planning Manager during item split.",
+                            'status'             => PurchaseRequest::STATUS_APPROVED_PETTY_CASH,
+                            'current_owner_role' => 'store_keeper',
+                            'notes'              => ($cPr->notes ? $cPr->notes . "\n" : "") . "Routed to Site Petty Cash purchase by Planning Manager during item split (bypassing regular PR).",
                         ]);
                     }
                 }
@@ -863,30 +881,41 @@ class MaterialRequestController extends Controller
             'approved_at'     => now(),
         ]);
 
+        // Explicitly mark active items as petty cash lines
+        foreach ($materialRequest->items as $item) {
+            if ($item->status !== 'rejected') {
+                $item->update(['status' => 'petty_cash']);
+            }
+        }
+
         try {
             $materialRequest->loadMissing('purchaseRequests');
             foreach ($materialRequest->purchaseRequests as $pr) {
-                $pr->update([
-                    'status' => 'approved_petty_cash',
-                    'notes'  => ($pr->notes ? $pr->notes . "\n" : "") . "Routed by Coordinator to direct Site Petty Cash purchase by Store Keeper.",
-                ]);
-
-                try {
-                    PrWorkflowLog::create([
-                        'purchase_request_id' => $pr->id,
-                        'from_stage'          => $pr->status,
-                        'to_stage'            => 'approved_petty_cash',
-                        'action'              => 'coordinator_approve_petty_cash',
-                        'actor_role'          => 'coordinator',
-                        'actor_id'            => auth()->id(),
-                        'notes'               => "Coordinator routed Emergency Material Request #{$materialRequest->reference_number} to Site Petty Cash purchase by Store Keeper.",
-                        'created_at'          => now(),
+                if (!in_array($pr->status, [PurchaseRequest::STATUS_COMPLETED, PurchaseRequest::STATUS_REJECTED, PurchaseRequest::STATUS_CANCELLED])) {
+                    $fromStage = $pr->status;
+                    $pr->update([
+                        'status'             => PurchaseRequest::STATUS_APPROVED_PETTY_CASH,
+                        'current_owner_role' => 'store_keeper',
+                        'notes'              => ($pr->notes ? $pr->notes . "\n" : "") . "Routed by Coordinator to direct Site Petty Cash purchase by Store Keeper (bypassing regular PR).",
                     ]);
-                } catch (\Throwable $e) {}
+
+                    try {
+                        PrWorkflowLog::create([
+                            'purchase_request_id' => $pr->id,
+                            'from_stage'          => $fromStage,
+                            'to_stage'            => PurchaseRequest::STATUS_APPROVED_PETTY_CASH,
+                            'action'              => 'coordinator_approve_petty_cash',
+                            'actor_role'          => 'coordinator',
+                            'actor_id'            => auth()->id(),
+                            'notes'               => "Coordinator routed Emergency Material Request #{$materialRequest->reference_number} to Site Petty Cash purchase by Store Keeper (bypassing regular PR).",
+                            'created_at'          => now(),
+                        ]);
+                    } catch (\Throwable $e) {}
+                }
             }
         } catch (\Throwable $e) {}
 
-        return back()->with('success', "Emergency Material Request #{$materialRequest->reference_number} routed to Site Petty Cash purchase! Sent to Store Keeper.");
+        return back()->with('success', "Emergency Material Request #{$materialRequest->reference_number} routed to Site Petty Cash purchase! Sent to Store Keeper (bypassing regular PR).");
     }
 
     public function coordinatorReject(Request $request, MaterialRequest $materialRequest)

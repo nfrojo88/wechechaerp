@@ -30,6 +30,7 @@ class PurchaseRequest extends Model
     const STATUS_COMPLETED                  = 'completed';
     const STATUS_REJECTED                   = 'rejected';
     const STATUS_CANCELLED                  = 'cancelled';
+    const STATUS_APPROVED_PETTY_CASH        = 'approved_petty_cash';
 
     public static function allStatuses(): array
     {
@@ -54,6 +55,7 @@ class PurchaseRequest extends Model
             self::STATUS_COMPLETED,
             self::STATUS_REJECTED,
             self::STATUS_CANCELLED,
+            self::STATUS_APPROVED_PETTY_CASH,
         ];
     }
 
@@ -80,6 +82,7 @@ class PurchaseRequest extends Model
             self::STATUS_COMPLETED                  => 'Completed',
             self::STATUS_REJECTED                   => 'Rejected',
             self::STATUS_CANCELLED                  => 'Cancelled',
+            self::STATUS_APPROVED_PETTY_CASH        => 'Approved for Site Petty Cash (Store Keeper)',
         ];
     }
 
@@ -130,6 +133,7 @@ class PurchaseRequest extends Model
             self::STATUS_COMPLETED                  => 'success',
             self::STATUS_REJECTED                   => 'danger',
             self::STATUS_CANCELLED                  => 'dark',
+            self::STATUS_APPROVED_PETTY_CASH        => 'warning',
             default                                 => 'secondary',
         };
     }
@@ -151,6 +155,7 @@ class PurchaseRequest extends Model
             self::STATUS_PENDING_RECEIPT_VERIFY     => 'store_keeper',
             self::STATUS_PENDING_DRIVER             => 'general_service',
             self::STATUS_INTAKE_COMPLETE            => 'store_keeper',
+            self::STATUS_APPROVED_PETTY_CASH        => 'store_keeper',
             self::STATUS_COMPLETED, self::STATUS_CANCELLED => null,
             default                                 => null,
         };

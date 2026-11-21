@@ -1400,6 +1400,36 @@
             <a href="{{ route('store-keeper.petty-cash-purchases.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-keeper.petty-cash-purchases.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-cart-shopping text-warning"></i>
                 <span>Buy Material (Petty Cash)</span>
+                @php
+                    $skPettyCashBadgeCount = 0;
+                    try {
+                        $sbSkStoreId = auth()->user()->store_id ?? \App\Models\Store::where('manager_id', auth()->id())->value('id') ?? \App\Models\Store::whereHas('users', fn($u) => $u->where('users.id', auth()->id()))->value('id');
+                        $skPettyCashBadgeCount = \App\Models\MaterialRequestItem::where(function ($q) {
+                            $q->where('status', 'petty_cash')
+                              ->orWhere(function ($sub) {
+                                  $sub->whereNotIn('status', ['approved', 'rejected', 'purchased'])
+                                      ->whereHas('materialRequest', function ($mq) {
+                                          $mq->where(function ($inner) {
+                                              $inner->where('status', 'approved_for_petty_cash')
+                                                    ->orWhere('purchase_method', 'petty_cash');
+                                          })->where(function ($inner2) {
+                                              $inner2->where('planning_approval_status', 'approved')
+                                                     ->orWhereNotNull('planning_approved_by');
+                                          });
+                                      });
+                              });
+                        })
+                        ->where('status', '!=', 'purchased')
+                        ->where('status', '!=', 'rejected')
+                        ->when($sbSkStoreId, function($q, $sId) {
+                            $q->whereHas('materialRequest', fn($mq) => $mq->where('destination_store_id', $sId));
+                        })
+                        ->count();
+                    } catch (\Throwable $e) {}
+                @endphp
+                @if($skPettyCashBadgeCount > 0)
+                    <span class="badge bg-warning text-dark rounded-pill ms-auto fw-bold">{{ $skPettyCashBadgeCount }}</span>
+                @endif
             </a>
         </li>
         <li class="sidebar-nav-item">
